@@ -14,8 +14,8 @@ host = config["host"]
 database = config["database"]
 
 # Crea la cadena de conexión
-connection_string = f'mysql+pymysql://{user}:{password}@{host}/{database}'
+connection_string = f"mysql+pymysql://{user}:{password}@{host}/{database}"
 
 # Crear un motor SQLAlchemy
 engine = create_engine(connection_string)
-base  = declarative_base()
+base = declarative_base()

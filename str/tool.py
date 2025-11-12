@@ -1,18 +1,20 @@
 def _log(text, outputs: bool = True):
-    if outputs: print(text)
+    if outputs:
+        print(text)
 
-def validar_cuit_cuil(cuit: str) -> bool:
+
+def validar_cuit_cuil(doc: str | int) -> int:
     """
     Valida un CUIT/CUIL en formato numérico (puede contener guiones).
     Devuelve True si es válido, False si no.
     """
     # Normalizar: quitar guiones y espacios
-    s = ''.join(ch for ch in cuit if ch.isdigit())
+    s = "".join(ch for ch in str(doc) if ch.isdigit())
     if len(s) != 11:
-        return False
+        raise ValueError(f"{doc} no es un CUIT/CUIL.")
 
     # Multiplicadores (weights) según estándar argentino:
-    weights = [5,4,3,2,7,6,5,4,3,2]  # se aplican a los primeros 10 dígitos
+    weights = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2]  # se aplican a los primeros 10 dígitos
     digits = [int(ch) for ch in s]
     suma = 0
     for i, w in enumerate(weights):
@@ -23,4 +25,4 @@ def validar_cuit_cuil(cuit: str) -> bool:
         check = 0
     elif check == 10:
         check = 9
-    return check == digits[10]
+    return int(s)
