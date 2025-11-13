@@ -47,10 +47,10 @@ Tables = Literal[
 
 
 # --- Generic helpers --------------------------------------------------------
-def read_table(table: Tables, index_col: str | None = None) -> pd.DataFrame:
-    return pd.read_sql(table, ENGINE, index_col=index_col)
+def read_table(table: Tables, index_col: str | None = "ID") -> pd.DataFrame:
+    return pd.read_sql(table, ENGINE, index_col=index_col).sort_index()
 
 
-def write(df: pd.DataFrame, table: Tables) -> None:
+def write_table(df: pd.DataFrame, table: Tables) -> None:
     # Single choke point for persistence
     df.to_sql(table, ENGINE, index=False, if_exists="append")

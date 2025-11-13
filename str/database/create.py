@@ -6,8 +6,9 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 from str.categories import COLLECTION_TYPES, CREDIT_TYPES, GENDERS, MARITAL_STATUS
-from str.database.connection import ENGINE, read_table, write
-from str.tool import _log
+from str.database.connection import ENGINE, read_table, write_table
+from str.database.structure import City, Country, Province
+from str.tool import _log, log
 
 # Leer el contenido del archivo .sql
 ruta_sql_structure = "config/structure.sql"
@@ -37,7 +38,7 @@ try:
                     _log(f"    Detalle del error: {e}")
 
     if all_good:
-        _log("\n✔️ Base de datos creada correctamente.\n")
+        _log("\n✔️ Base de datos creada correctamente.\n", log)
     else:
         _log("🚨 No todas las sentencias del script se ejecutaron correctamente.")
 
@@ -49,24 +50,31 @@ except SQLAlchemyError as e:
 
 # Crear DataFrame de los sexos
 df_sexo = pd.DataFrame(GENDERS, columns=["Description"])
-write(df_sexo, "genders")
-_log("✔️ Tabla 'genders' actualizada correctamente.\n")
+write_table(df_sexo, "genders")
+_log("✔️ Tabla 'genders' actualizada correctamente.\n", log)
 
 # Crear DataFrame de estado civil
 df_estado_civil = pd.DataFrame(MARITAL_STATUS, columns=["Description"])
-write(df_estado_civil, "marital_status")
-_log("✔️ Tabla 'marital_status' actualizada correctamente.\n")
+write_table(df_estado_civil, "marital_status")
+_log("✔️ Tabla 'marital_status' actualizada correctamente.\n", log)
 
 # Crear DataFrame de tipos de créditos
 df_ct = pd.DataFrame(CREDIT_TYPES, columns=["Name"])
-write(df_ct, "credit_types")
-_log("✔️ Tabla 'credit_types' actualizada correctamente.\n")
+write_table(df_ct, "credit_types")
+_log("✔️ Tabla 'credit_types' actualizada correctamente.\n", log)
 
 # Crear DataFrame de tipos de cobranzas
 df_coll = pd.DataFrame(COLLECTION_TYPES, columns=["Type"])
-write(df_coll, "collection_types")
+write_table(df_coll, "collection_types")
 Collection_Types = read_table("collection_types", "Type").sort_values(by="ID")
-_log("✔️ Tabla 'collection_types' actualizada correctamente.\n")
+_log("✔️ Tabla 'collection_types' actualizada correctamente.\n", log)
+
+# Agregar país principal
+arg = Country("Argentina", "ARGENTINA/O")
+# Agregar una provincia
+prov = Province("Buenos Aires", "Argentina")
+# Agregar una ciudad
+city = City("Bahía Blanca", "Buenos Aires")
 
 # Access the values
 with open("config/owner.json", "r", encoding="utf-8") as file:
@@ -77,7 +85,7 @@ email = company_data["Email"]
 
 df_bp = read_table("business_partners", "ID")
 df_bp.loc[0] = {"Name": company, "CUIT": cuil, "Email": email, "Active": True}
-write(df_bp, "business_partners")
-_log(f"✔️ Sistema inicializado correctamente a nombre de {company}.\n")
+write_table(df_bp, "business_partners")
+_log(f"✔️ Sistema inicializado correctamente a nombre de {company}.\n", log)
 
 OUR_COMPANY_ID = int(read_table("business_partners", "ID").index.max())
