@@ -45,7 +45,7 @@ class Province:
             self.Country_ID = new_country.ID  # assign new ID
 
         # ---------- PROVINCE DOES NOT EXIST ----------
-        if name not in df["Name"].values:
+        if name not in df.loc[df["Country_ID"] == self.Country_ID, "Name"].values:
             _log("\n✏️ Adding a new province...", log)
 
             df = df.iloc[0:0]  # empty df to insert row
@@ -55,7 +55,7 @@ class Province:
             }
 
             write_table(df, table)
-            _log(f"✅ {name} added to the database.\n", log)
+            _log(f"    ✅ {name} added to the database.\n", log)
 
         # ---------- PROVINCE ALREADY EXISTS ----------
         else:
@@ -63,7 +63,14 @@ class Province:
 
         # Load indexed by Name for fast lookup
         df = read_table(table, "Name")
-        self.ID = df.at[self.Name, "ID"]  # assign Province ID
+        mask = (df.index == self.Name) & (df["Country_ID"] == self.Country_ID)
+
+        if len(df.loc[mask, "ID"]) == 1:
+            self.ID = df.loc[mask, "ID"].values[0]  # assign Province ID
+        else:
+            raise ValueError(
+                f"More than one province named {self.Name} in the country {country}"
+            )
 
     def __str__(self):
         """
@@ -77,9 +84,11 @@ class Province:
 
         df_countries = read_table("countries")  # load for lookup
         country_name = df_countries.at[self.Country_ID, "Name"]  # type: ignore
-
-        return (
-            f"\nℹ️ Province ID: {self.ID:03d}\n"
-            f"    ➡️ Name: {self.Name}\n"
-            f"    ➡️ Country: {country_name}\n"
-        )
+        try:
+            return (
+                f"\nℹ️ Province ID: {self.ID:03d}\n"
+                f"    ➡️ Name: {self.Name}\n"
+                f"    ➡️ Country: {country_name}\n"
+            )
+        except TypeError:
+            print(self.ID)

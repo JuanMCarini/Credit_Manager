@@ -69,12 +69,13 @@ write_table(df_coll, "collection_types")
 Collection_Types = read_table("collection_types", "Type").sort_values(by="ID")
 _log("✔️ Tabla 'collection_types' actualizada correctamente.\n", log)
 
-# Agregar país principal
+# Agregar países
 arg = Country("Argentina", "ARGENTINA/O")
+arg = Country("Brasil", "Brasilero/a")
 # Agregar una provincia
 prov = Province("Buenos Aires", "Argentina")
 # Agregar una ciudad
-city = City("Bahía Blanca", "Buenos Aires")
+city = City("Bahía Blanca", "Buenos Aires", "Argentina")
 
 # Access the values
 with open("config/owner.json", "r", encoding="utf-8") as file:

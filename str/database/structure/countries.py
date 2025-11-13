@@ -51,7 +51,7 @@ class Country:
             write_table(df, table)  # write into SQL
             df = read_table(table, "Name")  # reload indexed by Name
 
-            _log(f"✅ {name} added to the database.\n", log)
+            _log(f"    ✅ {name} added to the database.\n", log)
 
         # ========== Country already exists ==========
         else:

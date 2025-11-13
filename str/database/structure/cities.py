@@ -1,4 +1,5 @@
 from str.database.connection import read_table, write_table
+from str.database.structure.countries import Country
 from str.database.structure.provinces import Province
 from str.tool import _log, log
 
@@ -38,26 +39,40 @@ class City:
 
         # ---------- Load tables ----------
         df = read_table(table)
-        df_province = read_table("provinces", "Name")
+        df_provinces = read_table("provinces")
+        df_countries = read_table("countries", "Name")
 
-        # ---------- Province exists ----------
-        if province in df_province.index.values:
-            self.Province_ID = df_province.at[province, "ID"]
+        # Ask for country if missing
+        if country is None:
+            country = input("Ingrese el país donde está la ciudad: ")
+        country = str(country).upper().strip()
 
-        # ---------- Province does NOT exist ----------
+        if country in df_countries.index.values:
+            country_id = df_countries.at[country, "ID"]
         else:
-            # Ask for country if missing
-            if country is None:
-                country = input("Ingrese el país donde está la ciudad: ")
+            new_country = Country(country)
+            country_id = new_country.ID
 
-            country = str(country).upper().strip()  # FIXED: keep country, not province
-
+        # ---------- Province exists with this country? ----------
+        mask = (df_provinces["Name"] == province) & (
+            df_provinces["Country_ID"] == country_id
+        )
+        if len(df_provinces.loc[mask]) == 1:
+            row = df_provinces.loc[mask]
+            self.Province_ID = int(row.index[0])  # take scalar, not Series
+        elif len(df_provinces.loc[mask]) > 1:
+            raise ValueError(
+                f"The province {province} in the country {country} is repeat."
+            )
+        else:
             # Create province → will also create country if needed
+            print(province, country)
             new_province = Province(province, country)
+            print(new_province)
             self.Province_ID = new_province.ID
 
         # ---------- Insert new city ----------
-        if name not in df["Name"].values:
+        if name not in df.loc[df["Province_ID"] == self.Province_ID, "Name"].values:
             _log("\n✏️ Adding a new city...", log)
 
             df = df.iloc[0:0]  # empty frame to insert
