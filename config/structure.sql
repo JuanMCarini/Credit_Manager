@@ -13,7 +13,6 @@ USE credit_manager;
 -- DROP TABLE IF EXISTS installments;
 -- DROP TABLE IF EXISTS credits;
 -- DROP TABLE IF EXISTS organisms;
--- DROP TABLE IF EXISTS lines;
 -- DROP TABLE IF EXISTS phones;
 -- DROP TABLE IF EXISTS additional_addresses;
 -- DROP TABLE IF EXISTS employment_status;
@@ -32,10 +31,10 @@ USE credit_manager;
 CREATE TABLE business_partners (ID INT PRIMARY KEY NOT NULL AUTO_INCREMENT, Name VARCHAR(255), CUIT VARCHAR(20) UNIQUE, Email VARCHAR(100), Active BOOLEAN NOT NULL DEFAULT 1);
 
 -- Table: Purchases
-CREATE TABLE purchases (ID INT PRIMARY KEY NOT NULL AUTO_INCREMENT, Date DATE, APR DECIMAL(18,6), Resource BOOLEAN, VAT BOOLEAN, Supplier_ID INT, FOREIGN KEY (Supplier_ID) REFERENCES business_partners(ID));
+CREATE TABLE purchases (ID INT PRIMARY KEY NOT NULL AUTO_INCREMENT, Date DATE, APR DECIMAL(22,6), Resource BOOLEAN, VAT BOOLEAN, Supplier_ID INT, FOREIGN KEY (Supplier_ID) REFERENCES business_partners(ID));
 
 -- Table: Sales
-CREATE TABLE sales (ID INT PRIMARY KEY NOT NULL AUTO_INCREMENT, Date DATE, APR DECIMAL(18,6), Resource BOOLEAN, VAT BOOLEAN, Client_ID INT, FOREIGN KEY (Client_ID) REFERENCES business_partners(ID));
+CREATE TABLE sales (ID INT PRIMARY KEY NOT NULL AUTO_INCREMENT, Date DATE, APR DECIMAL(22,6), Resource BOOLEAN, VAT BOOLEAN, Client_ID INT, FOREIGN KEY (Client_ID) REFERENCES business_partners(ID));
 
 -- Categorical tables
 CREATE TABLE genders (ID INT PRIMARY KEY NOT NULL AUTO_INCREMENT, Description VARCHAR(50) UNIQUE);
@@ -70,13 +69,13 @@ CREATE TABLE business_lines (ID INT PRIMARY KEY NOT NULL AUTO_INCREMENT, Name VA
 CREATE TABLE organisms (ID INT PRIMARY KEY NOT NULL AUTO_INCREMENT, Name VARCHAR(255) UNIQUE, CUIT VARCHAR(20) UNIQUE, Line_ID INT, City_ID INT, Email VARCHAR(100), Active BOOLEAN NOT NULL DEFAULT 1, FOREIGN KEY (Line_ID) REFERENCES business_lines(ID), FOREIGN KEY (City_ID) REFERENCES cities(ID));
 
 -- Table: Credits
-CREATE TABLE credits (ID INT PRIMARY KEY NOT NULL AUTO_INCREMENT, Origin_ID INT, Disbursement_Date DATE, First_Due_Date DATE, Amount_Disbursed DECIMAL(18,6), Capital DECIMAL(18,6), Credit_Type_ID INT, TNA_C_IVA DECIMAL(18,6), Term INT, Client_ID INT, Organism_ID INT, Purchase_ID INT, Sale_ID INT, FOREIGN KEY (Credit_Type_ID) REFERENCES credit_types(ID), FOREIGN KEY (Client_ID) REFERENCES clients(ID), FOREIGN KEY (Organism_ID) REFERENCES organisms(ID), FOREIGN KEY (Purchase_ID) REFERENCES purchases(ID), FOREIGN KEY (Sale_ID) REFERENCES sales(ID));
+CREATE TABLE credits (ID INT PRIMARY KEY NOT NULL AUTO_INCREMENT, Origin_ID INT, Disbursement_Date DATE, First_Due_Date DATE, Amount_Disbursed DECIMAL(22,6), Capital DECIMAL(22,6), Credit_Type_ID INT, TNA_C_IVA DECIMAL(22,6), Term INT, Client_ID INT, Organism_ID INT, Purchase_ID INT, Sale_ID INT, FOREIGN KEY (Credit_Type_ID) REFERENCES credit_types(ID), FOREIGN KEY (Client_ID) REFERENCES clients(ID), FOREIGN KEY (Organism_ID) REFERENCES organisms(ID), FOREIGN KEY (Purchase_ID) REFERENCES purchases(ID), FOREIGN KEY (Sale_ID) REFERENCES sales(ID));
 
 -- Table: Installments
-CREATE TABLE installments (ID INT PRIMARY KEY NOT NULL AUTO_INCREMENT, Credit_ID INT, Inst_Num INT, Owner_ID INT, Due_Date DATE, Capital DECIMAL(18,6), Interest DECIMAL(18,6), IVA DECIMAL(18,6), Total DECIMAL(18,6), Settlement_Date DATE, FOREIGN KEY (Credit_ID) REFERENCES credits(ID), FOREIGN KEY (Owner_ID) REFERENCES business_partners(ID));
+CREATE TABLE installments (ID INT PRIMARY KEY NOT NULL AUTO_INCREMENT, Credit_ID INT, Inst_Num INT, Owner_ID INT, Due_Date DATE, Capital DECIMAL(22,6), Interest DECIMAL(22,6), IVA DECIMAL(22,6), Total DECIMAL(22,6), Settlement_Date DATE, FOREIGN KEY (Credit_ID) REFERENCES credits(ID), FOREIGN KEY (Owner_ID) REFERENCES business_partners(ID));
 
 -- Table: Collection Types
-CREATE TABLE collection_type (ID INT PRIMARY KEY AUTO_INCREMENT, Type VARCHAR(100));
+CREATE TABLE collection_types (ID INT PRIMARY KEY AUTO_INCREMENT, Type VARCHAR(100));
 
 -- Table: Collections
-CREATE TABLE collections (ID INT PRIMARY KEY, Installment_ID INT, Date DATE, Type_ID INT, Principal DECIMAL(18,6), Interest DECIMAL(18,6), VAT DECIMAL(18,6), Total DECIMAL(18,6), FOREIGN KEY (Installment_ID) REFERENCES installments(ID), FOREIGN KEY (Type_ID) REFERENCES collection_type(ID));
+CREATE TABLE collections (ID INT PRIMARY KEY NOT NULL AUTO_INCREMENT, Installment_ID INT, Date DATE, Type_ID INT, Capital DECIMAL(22,6), Interest DECIMAL(22,6), IVA DECIMAL(22,6), Total DECIMAL(22,6), FOREIGN KEY (Installment_ID) REFERENCES installments(ID), FOREIGN KEY (Type_ID) REFERENCES collection_types(ID));

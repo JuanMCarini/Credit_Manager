@@ -70,13 +70,22 @@ df_estado_civil.to_sql("marital_status", engine, if_exists="append", index=False
 _log("✔️ Tabla 'marital_status' actualizada correctamente.\n")
 
 # Crear DataFrame de tipos de créditos
-pd.DataFrame(["FRANCES", "ALEMAN"], columns=["Name"]).to_sql(
+pd.DataFrame(["FRANCES", "ALEMAN", "PENALTY"], columns=["Name"]).to_sql(
     "credit_types", engine, index=False, if_exists="append"
 )
 Credit_Types = pd.read_sql("credit_types", engine, index_col="Name").sort_values(
     by="ID"
 )
 _log("✔️ Tabla 'credit_types' actualizada correctamente.\n")
+
+# Crear DataFrame de tipos de cobranzas
+pd.DataFrame(
+    ["COMUN", "ANTICIPADA", "BONIFICACION", "PENALTY"], columns=["Type"]
+).to_sql("collection_types", engine, index=False, if_exists="append")
+Collection_Types = pd.read_sql(
+    "collection_types", engine, index_col="Type"
+).sort_values(by="ID")
+_log("✔️ Tabla 'collection_types' actualizada correctamente.\n")
 
 # Access the values
 with open("config/owner.json", "r", encoding="utf-8") as file:

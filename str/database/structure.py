@@ -130,6 +130,7 @@ class Client:
 class CreditType(StrEnum):
     FRANCES = ("Frances", 1)
     ALEMAN = ("Aleman", 2)
+    PENALTY = ("Penalty", 3)
 
     def __new__(cls, label: str, db_id: int):
         obj = str.__new__(cls, label)
@@ -153,21 +154,27 @@ def installment_values(
     elif credit_type == CreditType.FRANCES:
         inst = float(npf.pmt(r, Term, -Capital, 0))
         interest = float(npf.ipmt(r, Nro_Cta, Term, -Capital, 0))
-        capital = inst - interest
+        cap = inst - interest
         interest = interest / 1.21
-        iva = inst - (capital + interest)
+        iva = inst - (cap + interest)
 
     elif credit_type == CreditType.ALEMAN:
-        capital = Capital / Term
-        res_cap = Capital - capital * (Nro_Cta - 1)
+        cap = Capital / Term
+        res_cap = Capital - cap * (Nro_Cta - 1)
         interest = res_cap * r
         iva = interest / 1.21 * 0.21
-        inst = capital + interest + iva
+        inst = cap + interest + iva
+
+    elif credit_type == CreditType.PENALTY:
+        cap = 0.0
+        interest = Capital / 1.21
+        iva = Capital - interest
+        inst = Capital
 
     else:
         raise ValueError(f"{credit_type} no es un tipo de crédito valido")
 
-    return capital, interest, iva, inst
+    return cap, interest, iva, inst
 
 
 def installments(
@@ -284,18 +291,51 @@ class Credit:
         df_inst["Owner_ID"] = OUR_COMPANY_ID
         df_inst["Settlement_Date"] = df_inst["Due_Date"]
         df_inst.to_sql("installments", engine, index=False, if_exists="append")
+        self.Installments = df_inst
 
     def __str__(self):
         if self.Credit_Type_ID == Credit_Types.at["FRANCES", "ID"]:
             Credit_Type = CreditType.FRANCES
         elif self.Credit_Type_ID == Credit_Types.at["ALEMAN", "ID"]:
             Credit_Type = CreditType.ALEMAN
+        elif self.Credit_Type_ID == Credit_Types.at["PENALTY", "ID"]:
+            Credit_Type = CreditType.PENALTY
+        else:
+            raise ValueError(
+                """No se encontró el tipo de crédito en la tabla "Credit_Types"."""
+            )
 
         return f"""Crédito Nro. {self.ID:07d}:
-    -> ID Original: {self.Origin_ID:07d}
+    -> ID Original: {(self.Origin_ID if self.Origin_ID is not None else 0):07d}
     -> Emisión: {self.Disbursement_Date}
     -> Capital: $ {self.Capital:,.2f}
     -> Tipo de Crédito: {str(Credit_Type).title()}
     -> TNA c/IVA: {self.TNA_C_IVA:.2%}
     -> Plazo: {self.Term}
     -> Primer Vto.: {self.First_Due_Date}"""
+
+
+class Identifier(StrEnum):
+    DNI = ("DNI", 1)
+    CUIL = ("CUIL", 2)
+    ID_Credit = ("ID_Crédito", 3)
+    ID_Original = ("ID_Original", 4)
+
+    def __new__(cls, label: str, db_id: int):
+        obj = str.__new__(cls, label)
+        obj._value_ = label
+        obj.ID = db_id  # type: ignore
+        return obj
+
+
+class CollectionType(StrEnum):
+    COMUN = ("Común", 1)
+    ANTICIPADA = ("Anticipada", 2)
+    BONIFICACION = ("Bonificación", 3)
+    PENALTY = ("Penalty", 4)
+
+    def __new__(cls, label: str, db_id: int):
+        obj = str.__new__(cls, label)
+        obj._value_ = label
+        obj.ID = db_id  # type: ignore
+        return obj
