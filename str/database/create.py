@@ -5,9 +5,20 @@ import pandas as pd
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
-from str.categories import COLLECTION_TYPES, CREDIT_TYPES, GENDERS, MARITAL_STATUS
+from str.categories.main import (
+    COLLECTION_TYPES,
+    CREDIT_TYPES,
+    GENDERS,
+    MARITAL_STATUS,
+    PHONE_TYPES,
+    RELATIONSHIPS_TYPES,
+)
 from str.database.connection import ENGINE, read_table, write_table
-from str.database.structure import City, Country, Province
+from str.database.structure import (
+    City,
+    Country,
+    Province,
+)
 from str.tool import _log, log
 
 # Leer el contenido del archivo .sql
@@ -58,6 +69,16 @@ df_estado_civil = pd.DataFrame(MARITAL_STATUS, columns=["Description"])
 write_table(df_estado_civil, "marital_status")
 _log("✔️ Tabla 'marital_status' actualizada correctamente.\n", log)
 
+# Crear DataFrame de tipos de teléfonos
+df_phone_types = pd.DataFrame(PHONE_TYPES, columns=["Name"])
+write_table(df_phone_types, "phone_types")
+_log("✔️ Tabla 'phone_types' actualizada correctamente.\n", log)
+
+# Ceate DataFrame de tipos de relaciones
+df_relationships = pd.DataFrame(RELATIONSHIPS_TYPES, columns=["Name"])
+write_table(df_relationships, "relationships")
+_log("✔️ Tabla 'phone_types' y 'relationships' actualizadas correctamente.\n", log)
+
 # Crear DataFrame de tipos de créditos
 df_ct = pd.DataFrame(CREDIT_TYPES, columns=["Name"])
 write_table(df_ct, "credit_types")
@@ -70,12 +91,14 @@ Collection_Types = read_table("collection_types", "Type").sort_values(by="ID")
 _log("✔️ Tabla 'collection_types' actualizada correctamente.\n", log)
 
 # Agregar países
-arg = Country("Argentina", "ARGENTINA/O")
+arg = Country("Argentina", "ARGENTINO/A")
 arg = Country("Brasil", "Brasilero/a")
 # Agregar una provincia
 prov = Province("Buenos Aires", "Argentina")
+prov = Province("Cordoba", "Argentina")
 # Agregar una ciudad
 city = City("Bahía Blanca", "Buenos Aires", "Argentina")
+city = City("Cordoba", "Cordoba", "Argentina")
 
 # Access the values
 with open("config/owner.json", "r", encoding="utf-8") as file:
@@ -88,5 +111,3 @@ df_bp = read_table("business_partners", "ID")
 df_bp.loc[0] = {"Name": company, "CUIT": cuil, "Email": email, "Active": True}
 write_table(df_bp, "business_partners")
 _log(f"✔️ Sistema inicializado correctamente a nombre de {company}.\n", log)
-
-OUR_COMPANY_ID = int(read_table("business_partners", "ID").index.max())

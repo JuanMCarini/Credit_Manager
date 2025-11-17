@@ -29,5 +29,25 @@ COLLECTION_TYPES: tuple[CollectionTypes, ...] = (
     "PENALTY",
 )
 
+DocTypes = Literal["DNI", "CUIL"]
+DOC_TYPES: tuple[DocTypes, ...] = ("DNI", "CUIL")
+
+PhoneTypes = Literal["CELULAR", "FIJO", "TRABAJO", "OTRO"]
+PHONE_TYPES: tuple[PhoneTypes, ...] = ("CELULAR", "FIJO", "TRABAJO", "OTRO")
+
+RelationshipsTypes = Literal[
+    "NO CONSTA", "PERSONAL", "LABORAL", "ESPOSO/A", "PAREJA", "HERMANO/A", "OTRO"
+]
+RELATIONSHIPS_TYPES: tuple[RelationshipsTypes, ...] = (
+    "NO CONSTA",
+    "PERSONAL",
+    "LABORAL",
+    "ESPOSO/A",
+    "PAREJA",
+    "HERMANO/A",
+    "OTRO",
+)
+
 MoneyCol = Literal["Capital", "Interest", "IVA", "Total"]
+
 MONEY_COLS: tuple[MoneyCol, ...] = ("Capital", "Interest", "IVA", "Total")
