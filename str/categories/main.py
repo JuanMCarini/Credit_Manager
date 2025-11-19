@@ -21,12 +21,13 @@ MARITAL_STATUS: tuple[MaritalStatus, ...] = (
 CreditTypes = Literal["FRANCES", "ALEMAN", "PENALTY"]
 CREDIT_TYPES: tuple[CreditTypes, ...] = ("FRANCES", "ALEMAN", "PENALTY")
 
-CollectionTypes = Literal["COMUN", "ANTICIPADA", "BONIFICACION", "PENALTY"]
+CollectionTypes = Literal["COMUN", "ANTICIPADA", "BONIFICACION", "PENALTY", "REDONDEO"]
 COLLECTION_TYPES: tuple[CollectionTypes, ...] = (
     "COMUN",
     "ANTICIPADA",
     "BONIFICACION",
     "PENALTY",
+    "REDONDEO",
 )
 
 DocTypes = Literal["DNI", "CUIL"]

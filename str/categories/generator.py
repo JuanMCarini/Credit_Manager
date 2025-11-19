@@ -12,9 +12,9 @@ Country = Literal[
 """
 
 init_prim = """# categories/__init__.py
-from str.categories.main import Genders, MaritalStatus, DocTypes, PhoneTypes, RelationshipsTypes, CreditTypes
+from str.categories.main import Genders, MaritalStatus, DocTypes, PhoneTypes, RelationshipsTypes, CreditTypes, MONEY_COLS
 from str.categories.geo_types import Country, Province, City"""
-init_sec = """__all__ = ['Genders', 'MaritalStatus', 'DocTypes', 'PhoneTypes', 'RelationshipsTypes', 'CreditTypes', 'Country', 'Province', 'City'"""
+init_sec = """__all__ = ['Genders', 'MaritalStatus', 'DocTypes', 'PhoneTypes', 'RelationshipsTypes', 'CreditTypes', 'MONEY_COLS', 'Country', 'Province', 'City'"""
 for country in df_countries.index.values:
     geo_types += f"    '{country}',\n"
 geo_types += "    ]\n\n"

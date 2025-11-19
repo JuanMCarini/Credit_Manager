@@ -1,5 +1,5 @@
 # tool.py
-log = True
+log = False
 
 
 def _log(text, outputs: bool = True):

@@ -59,7 +59,19 @@ new_credit = Credit(
     Organism="MI",
     Term=12,
     TNA_C_IVA=1.3,
-    Origin_ID=1,
     Emission_Date=Period.now("D"),
+)
+_log("\n", log)
+
+new_credit = Credit(
+    Due_Date=Period("2026/04/28", freq="D"),
+    Capital_Requested=1000000.0,
+    Capital=100000.0,
+    Credit_Type="FRANCES",
+    Client=36329758,
+    Organism="MI",
+    Term=18,
+    TNA_C_IVA=1.45,
+    Emission_Date=Period("2026/02/01", "D"),
 )
 _log("\n", log)

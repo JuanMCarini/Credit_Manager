@@ -108,6 +108,12 @@ cuil = company_data["CUIL"]
 email = company_data["Email"]
 
 df_bp = read_table("business_partners", "ID")
-df_bp.loc[0] = {"Name": company, "CUIT": cuil, "Email": email, "Active": True}
+df_bp.loc[0] = {
+    "Name": company,
+    "CUIT": cuil,
+    "Email": email,
+    "Initials": "CR",
+    "Active": True,
+}
 write_table(df_bp, "business_partners")
 _log(f"✔️ Sistema inicializado correctamente a nombre de {company}.\n", log)
