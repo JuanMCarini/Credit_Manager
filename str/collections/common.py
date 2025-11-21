@@ -27,28 +27,26 @@ from pandas import DataFrame, Period, concat
 from str.balance import balance
 
 # Allowed document types (e.g. "DNI", "CUIL")
-from str.categories import DocTypes
+from str.categories import CollectionTypes, DocTypes
 
+# Function to generate penalty installments when necessary
+from str.collections.penalty import new as penalty
+
+# Helper: retrieve all installments for every credit linked to a document
 # Shared tools for formatting, saving, and installment operations
-from str.collections.general import (
+from str.collections.tools import (
     _save,
     basic_formatting,
     extra_formatting,
     first_inst,
+    get_client_balance_by_document,
     split,
 )
-
-# Function to generate penalty installments when necessary
-from str.collections.penalty import new as penalty
 
 # Identifier for common/regular collection type
 from str.collections.type_coll import common_id
 
 # Read tables from the database (clients, credits, etc.)
-from str.database import read_table
-
-# CUIL validator (normalizes and checks checksum)
-from str.database.structure.clients.tool import validate_cuil
 
 
 def credit(
@@ -142,6 +140,7 @@ def credit(
 def document(
     doc: int | str,
     doc_type: DocTypes,
+    collection_type: CollectionTypes,
     amount: float,
     date: str | datetime | Period = Period.now("D"),
     save: bool = False,
@@ -192,40 +191,8 @@ def document(
     ------------------------------------------------------------
     """
 
-    # --- Normalize and validate the document depending on its type ---
-    if doc_type == "CUIL":
-        doc = validate_cuil(doc)
-
-    elif doc_type == "DNI":
-        # Keep only digits and ensure it fits DNI length constraints
-        dni = "".join(ch for ch in str(doc) if ch.isdigit())
-        if len(dni) > 8:
-            raise ValueError(f"⚠️⚠️⚠️ {dni} no es un DNI. ⚠️⚠️⚠️")
-        else:
-            doc = int(dni)
-
-    # --- Look up the client ID by document in the clients table ---
-    df_clts = read_table("clients", doc_type)
-    client_id = df_clts.at[doc, "ID"]
-
-    # --- Get all credits for that client up to the given date ---
-    df_crts = read_table("credits")
-    credits_id = df_crts.loc[
-        (df_crts["Client_ID"] == client_id) & (df_crts["Disbursement_Date"] <= date)
-    ].index.values
-
-    # --- Load full balance and filter by the client's credits ---
-    df = balance(date)
-    df = df.loc[df["Credit_ID"].isin(credits_id)]
-
-    # Emission date = disbursement date of each credit (for sorting)
-    df["Emission_Date"] = df["Credit_ID"].map(df_crts["Disbursement_Date"])
-
-    # Global ordering: by due date, then emission date, then credit ID
-    df = df.sort_values(by=["Due_Date", "Emission_Date", "Credit_ID"])
-
-    # Running total across all installments (document-level)
-    df["Cum_Total"] = df["Total"].cumsum()
+    # Load all installments belonging to all credits of this client as of the given date
+    df = get_client_balance_by_document(doc, doc_type, date)
 
     # --- Split payment at document level ---
     df_up, df_down, surplus = split(df, amount, common_id)
@@ -247,6 +214,8 @@ def document(
     # Recompute surplus after summing per credit
     surplus = amount - df["Total"].sum()
 
+    if collection_type == "COMUN":
+        collection = credit
     # --- For each credit, call credit() with its allocated amount ---
     dfs: list[DataFrame] = []
     for id in df.index:
@@ -255,7 +224,7 @@ def document(
 
     # If there is remaining surplus, allocate it to the last credit
     if surplus > 0:
-        dfs.append(credit(max(credits_id), surplus, date, save))
+        dfs.append(credit(df.index.max(), surplus, date, save))
 
     # Concatenate all collection DataFrames into a single output
     df = concat([df for df in dfs])

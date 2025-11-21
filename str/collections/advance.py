@@ -22,17 +22,17 @@ from pandas import DataFrame, Period, concat
 # Load balances of installments
 from str.balance import balance
 
+# Penalty generator (used when surplus creates a new installment)
+from str.collections.penalty import new as penalty
+
 # Shared tools for collections: saving, formatting, splitting, etc.
-from str.collections.general import (
+from str.collections.tools import (
     _save,
     basic_formatting,
     extra_formatting,
     first_inst,
     split,
 )
-
-# Penalty generator (used when surplus creates a new installment)
-from str.collections.penalty import new as penalty
 
 # IDs representing advance/bonus collection types
 from str.collections.type_coll import advance_id, bonus_id
@@ -158,7 +158,7 @@ def credit(
 
     # Remove interest and IVA from future installments
     for col in ["Interest", "IVA"]:
-        df.loc[df["Due_Date"] >= date, col] = 0.0
+        df.loc[df["Due_Date"] > date, col] = 0.0
 
     # Recompute each installment's total after adjustment
     df["Total"] = df[["Capital", "Interest", "IVA"]].sum(axis=1)

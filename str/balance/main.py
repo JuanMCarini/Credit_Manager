@@ -7,7 +7,11 @@ from str.categories import MONEY_COLS
 from str.database import read_table
 
 
-def balance(date: str | datetime | Period = Period.now("D")) -> DataFrame:
+def balance(
+    date: str | datetime | Period = Period.now("D"),
+    overdue: bool = False,
+    vto: str | datetime | Period = Period.now("D"),
+) -> DataFrame:
     """
     Compute the outstanding balance of all installments up to a given date.
 
@@ -81,5 +85,10 @@ def balance(date: str | datetime | Period = Period.now("D")) -> DataFrame:
         columns=["Disbursement_Date", "Settlement_Date"],
         inplace=True,
     )
+
+    if overdue:
+        for col in ["Interest", "IVA"]:
+            df.loc[df["Due_Date"] > vto, col] = 0
+        df["Total"] = df[["Capital", "Interest", "IVA"]].sum(axis=1)
 
     return df

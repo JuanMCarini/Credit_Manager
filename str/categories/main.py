@@ -52,3 +52,12 @@ RELATIONSHIPS_TYPES: tuple[RelationshipsTypes, ...] = (
 MoneyCol = Literal["Capital", "Interest", "IVA", "Total"]
 
 MONEY_COLS: tuple[MoneyCol, ...] = ("Capital", "Interest", "IVA", "Total")
+
+IdentificationType = Literal["CUIL", "DNI", "Credit_ID", "Origin_ID"]
+
+IDENTIFICATION_TYPE: tuple[IdentificationType, ...] = (
+    "CUIL",
+    "DNI",
+    "Credit_ID",
+    "Origin_ID",
+)
