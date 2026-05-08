@@ -1,0 +1,21 @@
+{
+    "editor.wordWrap": "on",
+    "editor.renderWhitespace": "all",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+        "source.fixAll.ruff": "explicit",
+        "source.organizeImports.ruff": "explicit"
+    },
+    "cSpell.language": "en,es",
+    "cSpell.dictionaries": [
+        "spanish"
+    ],
+    "cSpell.words": [
+        "codigo",
+        "Credito",
+        "creditos",
+        "emision",
+        "remuneracion",
+        "telefono"
+    ]
+}
