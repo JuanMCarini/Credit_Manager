@@ -8,6 +8,7 @@ Date: 2026-05-08
 import enum
 
 from sqlalchemy import Boolean, Column, Date, Enum, Float, ForeignKey, Integer, String
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship
 
 from .connection import Base
@@ -76,9 +77,11 @@ class SocioComercial(Base):
     contacto_nombre = Column(String(100), nullable=True)
     mail = Column(String(150), nullable=True)
     telefono = Column(String(50), nullable=True)
+    dia_corte = Column(Integer, default=28)
 
     # Relationships
     carteras = relationship("Cartera", back_populates="socio")
+    creditos_originados = relationship("Credito", back_populates="socio_originador")
 
     def __repr__(self):
         return (
@@ -117,7 +120,7 @@ class Cartera(Base):
 
     # Valuation parameters
     tna_descuento = Column(
-        Float, nullable=True
+        Float, nullable=False
     )  # Annual nominal discount rate for purchase valuation
 
     # Field to define the nature of this batch
@@ -126,6 +129,7 @@ class Cartera(Base):
     )
 
     # Relationships
+    creditos_incluidos = relationship("Credito", back_populates="cartera")
     operaciones = relationship("OperacionCartera", back_populates="cartera")
     socio = relationship("SocioComercial", back_populates="carteras")
 
@@ -161,19 +165,48 @@ class Credito(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     cliente_cuil = Column(String(11), ForeignKey("clientes.cuil"), nullable=False)
 
+    # ESCENARIO 1: Socio Comercial que originó el crédito (Mutual, Sindicato, etc.)
+    # Si es generación propia, queda nullable=True.
+    socio_originador_id = Column(
+        Integer, ForeignKey("socios_comerciales.id"), nullable=True
+    )
+
+    # ESCENARIO 2: Si el crédito pertenece a una compra de cartera.
+    cartera_id = Column(Integer, ForeignKey("carteras.id"), nullable=True)
+
     capital = Column(Float, nullable=False)
     tna_c_iva = Column(Float, nullable=False)
     plazo = Column(Integer, nullable=False)
     fecha_emision = Column(Date, nullable=False)
 
-    origen = Column(Enum(OrigenCredito), default=OrigenCredito.ORIGINADO)
     estado = Column(Enum(EstadoCredito), default=EstadoCredito.APROBADO)
+
+    dia_vencimiento = Column(Integer, default=28, nullable=False)
+
+    @hybrid_property
+    def origen(self):
+        """
+        Determina el origen de forma dinámica.
+        """
+        if self.cartera_id is not None:
+            return OrigenCredito.COMPRADO
+        return OrigenCredito.ORIGINADO
 
     # Relationships
     cliente = relationship("Cliente", back_populates="creditos")
     cuotas = relationship(
         "Cuota", back_populates="credito", cascade="all, delete-orphan"
     )
+    socio_originador = relationship(
+        "SocioComercial", back_populates="creditos_originados"
+    )
+    cartera = relationship("Cartera", back_populates="creditos_incluidos")
+
+    def __repr__(self):
+        return (
+            f"<Credito(id={self.id}, cliente='{self.cliente_cuil}', "
+            f"monto={self.capital}, origen={self.origen.value})>"
+        )
 
 
 class Cuota(Base):
