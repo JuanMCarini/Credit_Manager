@@ -2,7 +2,6 @@
 Module: amortization.py
 Description: Fixed financial logic for loan amortization with forced due dates.
 Author: Juan Martín Carini
-Date: 2026-05-11
 """
 
 from datetime import date
@@ -31,50 +30,69 @@ class AmortizationEngine:
         dia_corte: int = 28,
     ):
         """
-        Generates a list of Cuota objects with forced payment days (e.g., every 28th).
+        =============================================================================
+        Method: generate_french_schedule
+        Description: Generates a list of Cuota objects with forced payment days.
+                     Ensures strict cent-level consistency by rounding the total PMT
+                     and deriving capital amortization by subtraction. Casts numpy
+                     types to native Python floats to prevent rounding exceptions.
+        =============================================================================
         """
-        # 1. FIX: Ensure rate is decimal for numpy_financial (tna * 30 /365)
-        # Periodic monthly rate with VAT
         monthly_rate_c_iva = tna_c_iva * 30 / 365
 
-        # 2. Calculate fixed PMT
-        pmt_total = abs(npf.pmt(monthly_rate_c_iva, plazo, capital))
+        # 1. Cast the theoretical PMT to a native float before rounding
+        pmt_teorico = float(abs(npf.pmt(monthly_rate_c_iva, plazo, capital)))
+        cuota_fija_total = round(pmt_teorico, 2)
 
         cuotas_list = []
-        remaining_balance = capital
+        remaining_balance = round(float(capital), 2)
 
         if fecha_emision.day <= dia_corte:
             gracia -= 1
 
         for i in range(1, plazo + 1):
-            interest_c_iva = abs(npf.ipmt(monthly_rate_c_iva, i, plazo, capital))
-            interest_net = interest_c_iva / (1 + tasa_iva)
-            iva_amount = interest_c_iva - interest_net
+            # 2. Interest is calculated on the actual remaining balance
+            interest_c_iva = float(abs(npf.ipmt(monthly_rate_c_iva, i, plazo, capital)))
+            interest_c_iva = round(interest_c_iva, 2)
 
-            principal_amort = pmt_total - interest_c_iva
+            # Tax breakdown and rounding
+            interest_net = round(interest_c_iva / (1 + tasa_iva), 2)
+            iva_amount = round(interest_c_iva - interest_net, 2)
+            interest_c_iva_rounded = round(interest_net + iva_amount, 2)
 
+            # 3. Capital is derived by subtraction to square the cents
+            principal_amort = round(cuota_fija_total - interest_c_iva_rounded, 2)
+
+            # 4. Final installment adjustment to close the balance at exactly zero
             if i == plazo:
                 principal_amort = remaining_balance
+                interest_c_iva = cuota_fija_total - principal_amort
+                interest_net = round(interest_c_iva / (1 + tasa_iva), 2)
+                iva_amount = interest_c_iva - interest_net
 
-            # 3. FIX: Force due date to dia_vencimiento (default 28)
+            diff = cuota_fija_total - (principal_amort + interest_net + iva_amount)
+            diff = round(diff, 2)
+            if diff != 0.00:
+                raise ValueError(
+                    f"\n⚠️ Diferencia en el valor de la cuota nro. {i} por $ {diff}."
+                )
+
             target_month = fecha_emision + relativedelta(months=i + gracia)
             try:
-                # Intentamos forzar el día elegido (ej: 28)
                 due_date = target_month.replace(day=dia_vencimiento)
             except ValueError:
-                # Caso borde: si el mes no tiene ese día, usamos el último día del mes
                 due_date = target_month + relativedelta(day=31)
 
             nueva_cuota = Cuota(
                 credito_id=credito_id,
                 nro_cuota=i,
                 fecha_vencimiento=due_date,
-                capital=round(principal_amort, 2),
-                interes=round(interest_net, 2),
-                iva=round(iva_amount, 2),
+                capital=principal_amort,
+                interes=interest_net,
+                iva=iva_amount,
             )
 
             cuotas_list.append(nueva_cuota)
-            remaining_balance -= principal_amort
+            remaining_balance = round(remaining_balance - principal_amort, 2)
 
         return cuotas_list

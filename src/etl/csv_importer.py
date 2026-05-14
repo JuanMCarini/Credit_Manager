@@ -473,12 +473,25 @@ class PortfolioImporter:
             for i, alerta in enumerate(alertas, 1):
                 print(f"  {i}. {alerta}")
 
+            # 1. Hacemos una copia independiente para no alterar los datos en memoria
             df_personas_alertas = self.df_personas[
                 self.df_personas["ALERTA_OPERATIVA"] != ""
-            ]
+            ].copy()
+
             df_prestamos_alertas = self.df_prestamos[
                 self.df_prestamos["ALERTA_OPERATIVA"] != ""
-            ]
+            ].copy()
+
+            # 2. Sanitización ETL: Truncamos celdas con texto corrupto al límite seguro de Excel
+            for col in df_personas_alertas.select_dtypes(include=["object"]):
+                df_personas_alertas[col] = (
+                    df_personas_alertas[col].astype(str).str[:32000]
+                )
+
+            for col in df_prestamos_alertas.select_dtypes(include=["object"]):
+                df_prestamos_alertas[col] = (
+                    df_prestamos_alertas[col].astype(str).str[:32000]
+                )
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             nombre_reporte = f"ALERTAS_OPERATIVAS_CARTERA_{timestamp}.xlsx"
@@ -498,7 +511,7 @@ class PortfolioImporter:
                 "✅ Auditoría operativa impecable. No hay datos faltantes ni discrepancias comerciales."
             )
 
-        # Drop temporary tracking columns
+        # Drop temporary tracking columns on the original DataFrames
         self.df_personas.drop(columns=["ALERTA_OPERATIVA"], inplace=True)
         self.df_prestamos.drop(
             columns=["ALERTA_OPERATIVA", "Remuneración", "Val. Cuota/Remuneración"],
