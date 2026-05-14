@@ -20,6 +20,42 @@ class SexoEnum(enum.Enum):
     OTRO = "O"
 
 
+class Empleador(Base):
+    """
+    Represents the employer or withholding agent (Agente de Retención)
+    for payroll deduction loans (Código de Descuento).
+    """
+
+    __tablename__ = "empleadores"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    cuit = Column(String(11), unique=True, nullable=True)
+    razon_social = Column(String(150), nullable=False)
+
+    # Relationships
+    empleados = relationship("Cliente", back_populates="empleador")
+
+    def __repr__(self):
+        return f"<Empleador(cuit='{self.cuit}', razon_social='{self.razon_social}')>"
+
+
+class Provincia(Base):
+    """
+    Represents a geographical province or state.
+    """
+
+    __tablename__ = "provincias"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    nombre = Column(String(100), unique=True, nullable=False)
+
+    # Relationships
+    clientes = relationship("Cliente", back_populates="provincia")
+
+    def __repr__(self):
+        return f"<Provincia(id={self.id}, nombre='{self.nombre}')>"
+
+
 class Cliente(Base):
     """
     Represents a client in the credit portfolio management system.
@@ -44,8 +80,10 @@ class Cliente(Base):
     calle_nro = Column(Integer, nullable=True)
     piso = Column(String(10), nullable=True)
     depto = Column(String(10), nullable=True)
-    id_provincia = Column(Integer, nullable=True)
-    id_codigo_postal = Column(String(20), nullable=True)
+
+    # Foreign Keys linking to geographical tables
+    id_provincia = Column(Integer, ForeignKey("provincias.id"), nullable=True)
+    id_codigo_postal = Column(String(10), nullable=True)
     localidad = Column(String(100), nullable=True)
 
     # Contact Information
@@ -56,8 +94,13 @@ class Cliente(Base):
     # Financial Data
     remuneracion = Column(Float, default=0.0)  # Monthly income for credit scoring
 
+    # New ForeignKey linking to Empleador
+    empleador_id = Column(Integer, ForeignKey("empleadores.id"), nullable=True)
+
     # Relationships
     creditos = relationship("Credito", back_populates="cliente")
+    provincia = relationship("Provincia", back_populates="clientes")
+    empleador = relationship("Empleador", back_populates="empleados")
 
     def __repr__(self):
         return f"<Cliente(cuil='{self.cuil}', apellido='{self.apellido}', nombre='{self.nombre}')>"
@@ -153,6 +196,7 @@ class EstadoCredito(enum.Enum):
     CANCELADO = "CANCELADO"  # Fully paid loan
     MORA = "MORA"  # Loan with overdue payments
     JUDICIAL = "JUDICIAL"  # Loan in legal recovery process
+    COMPRADO = "COMPRADO"
 
 
 class Credito(Base):
@@ -163,6 +207,7 @@ class Credito(Base):
     __tablename__ = "creditos"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    id_externo = Column(String(50), index=True, nullable=True)
     cliente_cuil = Column(String(11), ForeignKey("clientes.cuil"), nullable=False)
 
     # ESCENARIO 1: Socio Comercial que originó el crédito (Mutual, Sindicato, etc.)
@@ -218,12 +263,12 @@ class Cuota(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     credito_id = Column(Integer, ForeignKey("creditos.id"), nullable=False)
-    numero_cuota = Column(Integer, nullable=False)
+    nro_cuota = Column(Integer, nullable=False)
 
     fecha_vencimiento = Column(Date, nullable=False)
     capital = Column(Float, nullable=False)
     interes = Column(Float, nullable=False)
-    iva_interes = Column(Float, default=0.0)
+    iva = Column(Float, default=0.0)
 
     # Relationships
     credito = relationship("Credito", back_populates="cuotas")
@@ -231,7 +276,7 @@ class Cuota(Base):
     cobranzas = relationship("Cobranza", back_populates="cuota")
 
     def __repr__(self):
-        return f"<Cuota(credito_id={self.credito_id}, nro={self.numero_cuota})>"
+        return f"<Cuota(credito_id={self.credito_id}, nro={self.nro_cuota})>"
 
 
 class OperacionCartera(Base):
@@ -246,8 +291,8 @@ class OperacionCartera(Base):
 
     # Direct link to the individual installment instead of the whole credit
     cuota_id = Column(Integer, ForeignKey("cuotas.id"), nullable=False)
-    cartera_id = Column(Integer, ForeignKey("carteras.id"), nullable=False)
-
+    cartera_id = Column(Integer, ForeignKey("carteras.id"), nullable=True)
+    cuota_comercializada = Column(Boolean, default=False)
     fecha_registro = Column(Date, nullable=False)
 
     # Relationships
@@ -263,6 +308,7 @@ class TipoCobranzaEnum(enum.Enum):
     COMUN = "COMUN"
     CA = "CANCELACION ANTICIPADA"
     BCA = "BONIFICACION POR CANCELACION ANTICIPADA"
+    CNC = "CUOTA NO COMPRADA"
 
 
 class Cobranza(Base):
@@ -288,7 +334,13 @@ class Cobranza(Base):
     # Relationships
     cuota = relationship("Cuota", back_populates="cobranzas")
 
+    @property
+    def importe_total(self) -> float:
+        """
+        Calculates the total collected amount for this record.
+        """
+        return self.capital + self.interes + self.iva
+
     def __repr__(self):
         # Updated to reflect the new financial breakdown fields
-        total = self.capital + self.interes + self.iva
-        return f"<Cobranza(cuota_id={self.cuota_id}, tipo={self.tipo_cobranza}, total={total})>"
+        return f"<Cobranza(cuota_id={self.cuota_id}, tipo={self.tipo_cobranza}, total={self.importe_total})>"

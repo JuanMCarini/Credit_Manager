@@ -67,11 +67,11 @@ class AmortizationEngine:
 
             nueva_cuota = Cuota(
                 credito_id=credito_id,
-                numero_cuota=i,
+                nro_cuota=i,
                 fecha_vencimiento=due_date,
                 capital=round(principal_amort, 2),
                 interes=round(interest_net, 2),
-                iva_interes=round(iva_amount, 2),
+                iva=round(iva_amount, 2),
             )
 
             cuotas_list.append(nueva_cuota)
