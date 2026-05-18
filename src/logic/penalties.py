@@ -11,7 +11,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from src.database import SessionLocal
-from src.database.models import Credito, Cuota, TipoCredito
+from src.database.models import Credito, Cuota, EstadoCuota, TipoCredito
 from src.utils.dates import normalize_date
 
 
@@ -59,12 +59,10 @@ class PenaltyManager:
         vencimiento = normalize_date(fecha_vencimiento)
         emision = normalize_date(fecha_emision)
 
-        print(credito_origen_id)
         id_externo = str(credito_origen_id)
         if type(credito_origen_id) is list:
             credito_origen_id = credito_origen_id[0]
         id_externo = f"PEN-{id_externo}"
-        print(id_externo)
         # 0. Retrieve the original credit to extract cliente_cuil safely
         original_credit = (
             self.db.query(Credito).filter(Credito.id == credito_origen_id).first()
@@ -103,6 +101,7 @@ class PenaltyManager:
             capital=0.0,
             interes=interes_neto,
             iva=monto_iva,
+            estado=EstadoCuota.CANCELADA,
         )
         self.credit = penalty_credit
         self.cuota = penalty_cuota

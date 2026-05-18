@@ -55,7 +55,6 @@ def saldos(
         WHERE cr.fecha_emision <= :fecha
     """)
     df_ctas = pd.read_sql_query(ctas_query, engine, params=sql_params, index_col="id")
-
     df_cart = pd.read_sql("carteras", engine, index_col="id")
     df_socios = pd.read_sql("socios_comerciales", engine, index_col="id")
 
@@ -190,6 +189,10 @@ def saldos(
         "cartera_id": "ID Cartera",
     }
     df.rename(columns=renames, errors="ignore", inplace=True)
+
+    for col in ["ID Cartera", "Proveedor", "Originador"]:
+        if col in df.columns:
+            df[col] = df[col].replace(0.0, None)
     df.rename_axis(index=renames, inplace=True)
 
     return df

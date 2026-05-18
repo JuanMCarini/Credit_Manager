@@ -303,6 +303,74 @@ class CollectionManager:
             self.db.rollback()
             raise RuntimeError(f"Error persistiendo la transacción de cobranzas: {e}")
 
+    def _process_sobrante_as_penalty(
+        self,
+        df_cobr: pd.DataFrame,
+        sobrante: float,
+        payment_date: datetime | str,
+        tasa_iva: float = 0.21,
+    ) -> pd.DataFrame:
+        """
+        =============================================================================
+        Method: _process_sobrante_as_penalty
+        Description: Evaluates if there is a leftover amount (sobrante) and generates
+                     a PENALTY credit to absorb it. Safely appends the new penalty
+                     installment to the collections DataFrame.
+        Parameters:
+            df_cobr (pd.DataFrame): The current collections DataFrame.
+            sobrante (float): The unused payment amount.
+            payment_date (datetime | str): The date of the payment.
+            tasa_iva (float): Applicable tax rate.
+        Returns:
+            pd.DataFrame: The updated DataFrame including the penalty row.
+        Raises:
+            RuntimeError: If the penalty generation fails.
+        =============================================================================
+        """
+        if sobrante <= 0:
+            return df_cobr
+
+        import pandas as pd
+
+        from src.database.models import TipoCobranzaEnum
+
+        # 1. Compartir la sesión activa
+        new_penalty = PenaltyManager(self.db)
+
+        try:
+            # 2. Extraer un único ID válido (tomamos el crédito de la última cuota procesada)
+            credito_origen_real = int(df_cobr.iloc[-1]["credito_id"])
+
+            # 3. Generar el crédito y la cuota usando el sobrante
+            penalty_credito, penalty_cuota = new_penalty.generate_penalty_credit(
+                credito_origen_id=credito_origen_real,
+                monto_punitorio=sobrante,
+                fecha_emision=payment_date,
+                fecha_vencimiento=payment_date,
+                tasa_iva=tasa_iva,
+            )
+
+            # 4. Agregar la nueva fila usando el ID de la cuota como índice
+            df_cobr.loc[penalty_cuota.id] = {
+                "credito_id": penalty_credito.id,
+                "nro_cuota": penalty_cuota.nro_cuota,
+                # Mantener pd.Timestamp evita el TypeError de Pandas:
+                "fecha_vencimiento": pd.Timestamp(penalty_cuota.fecha_vencimiento),
+                "capital": penalty_cuota.capital,
+                "interes": penalty_cuota.interes,
+                "iva": penalty_cuota.iva,
+                "tipo_cobranza": TipoCobranzaEnum.PENALTY.value,
+                "total": round(
+                    penalty_cuota.capital + penalty_cuota.interes + penalty_cuota.iva, 2
+                ),
+            }
+
+        except Exception as e:
+            self.db.rollback()
+            raise RuntimeError(f"Error crítico generando PENALTY para sobrante: {e}")
+
+        return df_cobr
+
     def process_standard_payment(
         self,
         identificador: str,
@@ -364,47 +432,10 @@ class CollectionManager:
 
         sobrante = round(amount - df_cobr["total"].sum(), 2)
 
-        if sobrante > 0:
-            # 1. Share the existing active session (Do NOT use 'with')
-            new_penalty = PenaltyManager(self.db)
-
-            try:
-                # 2. Extract a single valid integer ID from the processed collections
-                credito_origen_real = [
-                    int(id_cred) for id_cred in df_cobr["credito_id"].unique()
-                ]
-
-                # 3. Generate the credit and quota using the actual sobrante (not 121)
-                penalty_credito, penalty_cuota = new_penalty.generate_penalty_credit(
-                    credito_origen_id=credito_origen_real,
-                    monto_punitorio=sobrante,
-                    fecha_emision=payment_date,
-                    fecha_vencimiento=payment_date,
-                    tasa_iva=tasa_iva,
-                )
-
-                # 4. INSIDE THE TRY: Only append if the generation was successful
-                df_cobr.loc[len(df_cobr) + 1] = {
-                    "credito_id": penalty_credito.id,
-                    "nro_cuota": penalty_cuota.nro_cuota,
-                    "fecha_vencimiento": str(penalty_cuota.fecha_vencimiento),
-                    "capital": penalty_cuota.capital,
-                    "interes": penalty_cuota.interes,
-                    "iva": penalty_cuota.iva,
-                    "tipo_cobranza": TipoCobranzaEnum.PENALTY.value,
-                    "total": round(
-                        penalty_cuota.capital
-                        + penalty_cuota.interes
-                        + penalty_cuota.iva,
-                        2,
-                    ),
-                }
-
-            except Exception as e:
-                self.db.rollback()
-                raise RuntimeError(
-                    f"Critical error generating PENALTY for sobrante: {e}"
-                )
+        # Delegamos la creación del punitorio (si sobrante es 0, la función devuelve el DF intacto)
+        df_cobr = self._process_sobrante_as_penalty(
+            df_cobr, sobrante, payment_date, tasa_iva
+        )
 
         # 7. Persistencia final delegada
         return self._persist_collections(df_cobr, payment_date)
@@ -424,6 +455,80 @@ class CollectionManager:
                      capital reduction and may involve interest waivers.
         =============================================================================
         """
-        # Aquí iría la lógica para TipoCobranzaEnum.CA y TipoCobranzaEnum.BCA
-        # Esta lógica suele requerir que el usuario defina si se bonifican intereses futuros.
-        pass
+
+        # 1. Normalización
+        payment_date = normalize_date(payment_date)
+
+        # 2. Extracción y cálculo de deuda (Salida temprana si no hay deuda)
+        df = self._get_pending_installments(identificador, id_val)
+        if df.empty:
+            return df
+
+        # 3. Identificación del saldo total a cubrir
+
+        a_vencer = df["fecha_vencimiento"] > payment_date
+        df_BCA = df.loc[a_vencer].copy()
+        df.loc[a_vencer, ["interes", "iva"]] = [0.0, 0.0]
+        df["total"] = df[["capital", "interes", "iva"]].sum(axis=1)
+
+        df["total_acum"] = df["total"].cumsum().round(2)
+        df_cobr = df[df["total_acum"] <= amount].copy()
+
+        cobr = df_cobr["total"].sum()
+        unuse_amount = round(amount - cobr, 2)
+
+        # 4. Cascada financiera para saldo sobrante (imputación parcial)
+        if unuse_amount > 0:
+            pending_rows = df[df["total_acum"] > amount]
+
+            if not pending_rows.empty:
+                partial_df = pending_rows.iloc[[0]].copy()
+                row = partial_df.index.values[0]
+                partial_df.loc[row, "total"] = unuse_amount
+
+                if unuse_amount < partial_df.loc[row, "interes"]:
+                    partial_df.loc[row, "interes"] = round(
+                        unuse_amount / (1 + tasa_iva), 2
+                    )
+                    partial_df.loc[row, "iva"] = round(
+                        unuse_amount - partial_df.loc[row, "interes"], 2
+                    )
+                    partial_df.loc[row, "capital"] = 0.0
+                else:
+                    partial_df.loc[row, "capital"] = unuse_amount - (
+                        partial_df.loc[row, ["interes", "iva"]].sum()
+                    )
+
+                df_cobr = pd.concat([df_cobr, partial_df], axis=0)
+
+        # 5. Limpieza de columnas temporales
+        if "total_acum" in df_cobr.columns:
+            df_cobr.drop(columns=["total_acum"], inplace=True)
+
+        # 6. Clasificación del tipo de cobranza
+        df_cobr["tipo_cobranza"] = np.where(
+            df_cobr["fecha_vencimiento"] <= pd.Timestamp(payment_date),
+            TipoCobranzaEnum.COMUN.value,
+            TipoCobranzaEnum.CA.value,
+        )
+
+        sobrante = round(amount - df_cobr["total"].sum(), 2)
+        df_BCA = df_BCA.merge(
+            df_cobr["capital"], left_index=True, right_index=True, suffixes=("", "_BCA")
+        )
+        df_BCA["capital"] -= df_BCA["capital_BCA"]
+        df_BCA.drop(columns=["capital_BCA"], inplace=True)
+        df_BCA = df_BCA.loc[df_BCA["capital"] == 0.0]
+        df_BCA["total"] = df_BCA[["capital", "interes", "iva"]].sum(axis=1)
+
+        if not df_BCA.empty:
+            df_BCA["tipo_cobranza"] = TipoCobranzaEnum.BCA.value
+            df_cobr = pd.concat([df_cobr, df_BCA])
+
+        # Delegamos la creación del punitorio (si sobrante es 0, la función devuelve el DF intacto)
+        df_cobr = self._process_sobrante_as_penalty(
+            df_cobr, sobrante, payment_date, tasa_iva
+        )
+
+        # 7. Persistencia final delegada
+        return self._persist_collections(df_cobr, payment_date)

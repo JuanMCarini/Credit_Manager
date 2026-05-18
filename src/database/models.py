@@ -461,7 +461,9 @@ class Cobranza(Base):
 
     # Updated to use the Enum directly
     tipo_cobranza = Column(
-        Enum(TipoCobranzaEnum), nullable=False, default=TipoCobranzaEnum.COMUN
+        Enum(TipoCobranzaEnum, values_callable=lambda obj: [e.value for e in obj]),
+        nullable=False,
+        default=TipoCobranzaEnum.COMUN.value,
     )
 
     capital = Column(Float, nullable=False)
