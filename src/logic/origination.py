@@ -8,7 +8,13 @@ from datetime import date
 from sqlalchemy.orm import Session
 
 from src.database.connection import SessionLocal
-from src.database.models import Cliente, Credito, EstadoCredito, SocioComercial
+from src.database.models import (
+    Cliente,
+    Credito,
+    EstadoCredito,
+    SocioComercial,
+    TipoCredito,
+)
 from src.logic.amortization import AmortizationEngine
 
 
@@ -63,6 +69,7 @@ class LoanOriginator:
         issuance_date: date,
         due_day: int,
         cutoff_day: int,
+        type: TipoCredito,
     ) -> None:
         """
         =============================================================================
@@ -79,20 +86,26 @@ class LoanOriginator:
             fecha_emision=issuance_date,
             estado=EstadoCredito.ACTIVO,
             dia_vencimiento=due_day,
+            tipo_credito=type,
         )
 
         self.db.add(self.credit)
         self.db.flush()  # Generate Credit ID for installments
 
-        installments = AmortizationEngine.generate_french_schedule(
-            credito_id=self.credit.id,
-            capital=capital,
-            tna_c_iva=tna_c_iva,
-            plazo=term,
-            fecha_emision=issuance_date,
-            dia_vencimiento=due_day,
-            dia_corte=cutoff_day,
-        )
+        if type == TipoCredito.FRANCES:
+            installments = AmortizationEngine.generate_french_schedule(
+                credito_id=self.credit.id,
+                capital=capital,
+                tna_c_iva=tna_c_iva,
+                plazo=term,
+                fecha_emision=issuance_date,
+                dia_vencimiento=due_day,
+                dia_corte=cutoff_day,
+            )
+        else:
+            raise ValueError(
+                f"Aún no esta configurado el tipo de crédito {type.value}."
+            )
 
         self.db.add_all(installments)
 
@@ -138,6 +151,7 @@ class LoanOriginator:
         partner_id: int | None = None,
         issuance_date: date | None = None,
         due_day: int = 28,
+        type: TipoCredito = TipoCredito.FRANCES,
     ) -> Credito:
         """
         =============================================================================
@@ -165,7 +179,14 @@ class LoanOriginator:
 
             cutoff_day = self._get_partner_cutoff_day(partner_id)
             self._generate_credit_and_schedule(
-                capital, tna_c_iva, term, partner_id, issuance_date, due_day, cutoff_day
+                capital,
+                tna_c_iva,
+                term,
+                partner_id,
+                issuance_date,
+                due_day,
+                cutoff_day,
+                type,
             )
 
             self.db.commit()

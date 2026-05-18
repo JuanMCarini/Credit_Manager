@@ -6,10 +6,22 @@ Date: 2026-05-08
 """
 
 import enum
+from datetime import datetime
 
-from sqlalchemy import Boolean, Column, Date, Enum, Float, ForeignKey, Integer, String
+from sqlalchemy import (
+    Boolean,
+    Column,
+    Date,
+    Enum,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+)
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship
+
+from src.utils.dates import normalize_date
 
 from .connection import Base
 
@@ -194,9 +206,22 @@ class EstadoCredito(enum.Enum):
     RECHAZADO = "RECHAZADO"  # Credito rechazado
     ACTIVO = "ACTIVO"  # Current loan with no arrears
     CANCELADO = "CANCELADO"  # Fully paid loan
-    MORA = "MORA"  # Loan with overdue payments
+    MOROSO = "MOROSO"  # Loan with overdue payments
     JUDICIAL = "JUDICIAL"  # Loan in legal recovery process
-    COMPRADO = "COMPRADO"
+
+
+class TipoCredito(enum.Enum):
+    """
+    =============================================================================
+    Enum: TipoCredito
+    Description: Defines the allowed amortization systems and structural credit
+                 types within the system, including isolated penalty debts.
+    =============================================================================
+    """
+
+    FRANCES = "SISTEMA FRANCES"
+    ALEMAN = "SISTEMA ALEMAN"
+    PENALTY = "PENALTY"
 
 
 class Credito(Base):
@@ -226,6 +251,10 @@ class Credito(Base):
 
     estado = Column(Enum(EstadoCredito), default=EstadoCredito.APROBADO)
 
+    tipo_credito = Column(
+        Enum(TipoCredito), nullable=False, default=TipoCredito.FRANCES
+    )
+
     dia_vencimiento = Column(Integer, default=28, nullable=False)
 
     @hybrid_property
@@ -247,11 +276,78 @@ class Credito(Base):
     )
     cartera = relationship("Cartera", back_populates="creditos_incluidos")
 
+    def actualizar_estado(self) -> str:
+        """
+        =============================================================================
+        Method: actualizar_estado
+        Description: Evaluates the statuses of all associated installments to determine
+                     the global credit status. Respects manual overrides for
+                     RECHAZADO and JUDICIAL states, printing a warning if an automatic
+                     update is attempted on them. Automates the flow for APROBADO,
+                     ACTIVO, MORA, and CANCELADO.
+        Returns:
+            str: The newly assigned global status of the credit.
+        =============================================================================
+        """
+        import logging  # Importado para la advertencia
+
+        from src.database.models import EstadoCredito, EstadoCuota
+
+        # 1. Cláusula de Guardia: Proteger estados manuales inmutables
+        estados_manuales = [EstadoCredito.RECHAZADO, EstadoCredito.JUDICIAL]
+
+        # Parseo seguro del estado actual
+        estado_actual = (
+            self.estado
+            if isinstance(self.estado, EstadoCredito)
+            else EstadoCredito(self.estado)
+        )
+
+        if estado_actual in estados_manuales:
+            # Imprimimos la advertencia. En producción, es ideal usar logging.warning()
+            mensaje_alerta = f"⚠️ Advertencia: Intento de actualización automática omitido para el Crédito ID {self.id}. Estado bloqueado: {estado_actual.value}."
+            print(mensaje_alerta)
+            logging.warning(mensaje_alerta)
+
+            return estado_actual.value
+
+        # 2. Filtrar las cuotas que pertenecen activamente a la cartera
+        cuotas_activas = [c for c in self.cuotas if c.estado != EstadoCuota.NO_COMPRADA]
+
+        if not cuotas_activas:
+            # Si todas fueron vendidas/cedidas, el crédito local se considera cancelado
+            self.estado = EstadoCredito.CANCELADO
+            return self.estado.value
+
+        # 3. Evaluación de jerarquía para el ciclo dinámico
+        # Regla 1: Si hay alguna cuota morosa, el crédito entero entra en mora
+        if any(c.estado == EstadoCuota.MOROSA for c in cuotas_activas):
+            self.estado = EstadoCredito.MOROSO
+
+        # Regla 2: Si todas están pagas, el crédito finalizó con éxito
+        elif all(c.estado == EstadoCuota.CANCELADA for c in cuotas_activas):
+            self.estado = EstadoCredito.CANCELADO
+
+        # Regla 3: Si hay cuotas pendientes pero ninguna vencida (aplica también a APROBADO)
+        else:
+            self.estado = EstadoCredito.ACTIVO
+
+        return (
+            self.estado.value if isinstance(self.estado, EstadoCredito) else self.estado
+        )
+
     def __repr__(self):
         return (
             f"<Credito(id={self.id}, cliente='{self.cliente_cuil}', "
             f"monto={self.capital}, origen={self.origen.value})>"
         )
+
+
+class EstadoCuota(enum.Enum):
+    NO_COMPRADA = "NO COMPRADA"
+    PENDIENTE = "PENDIENTE"
+    MOROSA = "MOROSA"
+    CANCELADA = "CANCELADA"
 
 
 class Cuota(Base):
@@ -270,10 +366,50 @@ class Cuota(Base):
     interes = Column(Float, nullable=False)
     iva = Column(Float, default=0.0)
 
+    estado = Column(Enum(EstadoCuota), nullable=False, default=EstadoCuota.PENDIENTE)
+
     # Relationships
     credito = relationship("Credito", back_populates="cuotas")
     movimientos_cartera = relationship("OperacionCartera", back_populates="cuota")
     cobranzas = relationship("Cobranza", back_populates="cuota")
+
+    def actualizar_estado(self, fecha_evaluacion: str | datetime) -> str:
+        """
+        =============================================================================
+        Method: actualizar_estado
+        Description: Evaluates the total paid amounts against the expected totals
+                     and the current date to determine the accurate status of the
+                     installment. Bypasses execution if the debt was sold.
+        Parameters:
+            fecha_evaluacion (date): The reference date to check for delinquency.
+        Returns:
+            str: The updated status of the installment.
+        =============================================================================
+        """
+        fecha_evaluacion = normalize_date(fecha_evaluacion)
+        # 1. Cláusula de guardia: Si la cuota nunca fue comprada, no la tocamos
+        if self.estado == EstadoCuota.NO_COMPRADA:
+            return self.estado.value
+
+        # 2. Matemática financiera con redondeo para evitar errores de coma flotante
+        total_esperado = round(self.capital + self.interes + self.iva, 2)
+
+        # Sumamos todo lo que ingresó por cobranzas asociadas a esta cuota
+        total_cobrado = sum(
+            round(c.capital + c.interes + c.iva, 2) for c in self.cobranzas
+        )
+
+        # 3. Lógica de transición de estados
+        if total_cobrado >= total_esperado:
+            self.estado = EstadoCuota.CANCELADA
+
+        elif fecha_evaluacion > normalize_date(self.fecha_vencimiento):
+            self.estado = EstadoCuota.MOROSA
+
+        else:
+            self.estado = EstadoCuota.PENDIENTE
+
+        return self.estado.value
 
     def __repr__(self):
         return f"<Cuota(credito_id={self.credito_id}, nro={self.nro_cuota})>"
@@ -306,9 +442,11 @@ class TipoCobranzaEnum(enum.Enum):
     """
 
     COMUN = "COMUN"
+    ANTICIPO = "ANTICIPO"
     CA = "CANCELACION ANTICIPADA"
     BCA = "BONIFICACION POR CANCELACION ANTICIPADA"
     CNC = "CUOTA NO COMPRADA"
+    PENALTY = "PENALTY"
 
 
 class Cobranza(Base):

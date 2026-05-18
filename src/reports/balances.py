@@ -33,7 +33,9 @@ def saldos(
                  Returns raw numeric DataFrames for API compatibility.
     =============================================================================
     """
-    if fecha is None:
+    if isinstance(fecha, str):
+        fecha = pd.to_datetime(fecha)
+    elif fecha is None:
         fecha = datetime.today()
 
     fecha_str = fecha.strftime("%Y-%m-%d")

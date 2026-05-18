@@ -20,6 +20,7 @@ from src.database.models import (
     Cuota,
     Empleador,
     EstadoCredito,
+    EstadoCuota,
     OperacionCartera,
     SexoEnum,
     SocioComercial,
@@ -712,7 +713,7 @@ class PortfolioImporter:
                 tna_c_iva=tna_calculada,
                 plazo=plazo,
                 fecha_emision=f_emision,
-                estado=EstadoCredito.COMPRADO,
+                estado=EstadoCredito.ACTIVO,
             )
             self.db.add(nuevo_credito)
             self.db.flush()
@@ -751,6 +752,11 @@ class PortfolioImporter:
                     float(row["Valor Actual"]) if pd.notna(row["Valor Actual"]) else 0.0
                 )
 
+                if va == 0:
+                    estado = EstadoCuota.NO_COMPRADA
+                else:
+                    estado = EstadoCuota.PENDIENTE
+
                 nueva_cuota = Cuota(
                     credito_id=cred_id_interno,
                     nro_cuota=int(row["ID Cuota"]) if pd.notna(row["ID Cuota"]) else 1,
@@ -758,6 +764,7 @@ class PortfolioImporter:
                     capital=cap,
                     interes=int_,
                     iva=iva_,
+                    estado=estado,
                 )
 
                 # --- VINCULACIÓN CON OPERACIÓN CARTERA ---

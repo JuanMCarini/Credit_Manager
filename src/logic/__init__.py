@@ -6,5 +6,6 @@ Date: 2026-05-11
 """
 
 from .amortization import AmortizationEngine
+from .origination import LoanOriginator
 
-__all__ = ["AmortizationEngine"]
+__all__ = ["AmortizationEngine", "LoanOriginator"]
