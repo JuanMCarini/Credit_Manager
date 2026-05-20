@@ -8,22 +8,27 @@ Description: Logic for processing different types of collections (standard,
 import enum
 from datetime import datetime
 
-import numpy as np
-import pandas as pd
-from sqlalchemy import text
-from sqlalchemy.orm import Session
+from IPython.display import display
 
-from src.database.connection import SessionLocal
-from src.database.models import Cobranza, Credito, Cuota, TipoCobranzaEnum
-from src.logic.penalties import PenaltyManager
-from src.utils.dates import normalize_date
+display()
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
+from sqlalchemy import text  # noqa: E402
+from sqlalchemy.orm import Session  # noqa: E402
+
+from src.database.connection import SessionLocal  # noqa: E402
+from src.database.models import Cobranza, Credito, Cuota, TipoCobranzaEnum  # noqa: E402
+from src.logic.penalties import PenaltyManager  # noqa: E402
+from src.utils.dates import normalize_date  # noqa: E402
 
 
 class IdentificadorEnum(enum.Enum):
     CREDITO_ID = "credito_id"
     ID_EXTERNO = "id_externo"
-    CLIENTE_CUIT = "cliente_cuit"
+    CLIENTE_CUIL = "cliente_cuil"
     CLIENTE_DNI = "cliente_dni"
+    PROVEEDOR_CUIT = "proveedor_cuit"
+    CARTERA_ID = "cartera_id"
 
 
 class CollectionManager:
@@ -109,6 +114,15 @@ class CollectionManager:
                 columns += ", cl.documento"
                 joins = " JOIN creditos cr ON c.credito_id = cr.id JOIN clientes cl ON cr.cliente_cuil = cl.cuil"
                 where = " WHERE cl.documento = :val_id"
+
+            case "PROVEEDOR_CUIT":
+                columns += ", sc.cuit as proveedor_cuit"
+                joins = (
+                    " JOIN creditos cr ON c.credito_id = cr.id"
+                    " JOIN carteras ca ON cr.cartera_id = ca.id"
+                    " JOIN socios_comerciales sc ON ca.socio_id = sc.id"
+                )
+                where = " WHERE sc.cuit = :val_id AND ca.recurso = 1 and c.estado IN ('PENDIENTE', 'MOROSA')"
 
             case _:
                 raise ValueError(
@@ -532,3 +546,109 @@ class CollectionManager:
 
         # 7. Persistencia final delegada
         return self._persist_collections(df_cobr, payment_date)
+
+    def process_resource(
+        self,
+        payment_date: str | datetime,
+        amount: float,
+        id_val: int | str,
+        identificador: str = "PROVEEDOR_CUIT",
+    ) -> pd.DataFrame:
+        """
+        =============================================================================
+        Method: process_resource
+        Description: Processes wholesale institutional resource collections. Tracks
+                     historical advances (anticipos), updates the available cash
+                     pool, filters fully covered installments ordered by due date,
+                     persists collections under RECURSO type, and stores any
+                     leftover amount as a new partner advance. Safe against DB locks.
+        Parameters:
+            payment_date (str | datetime): The settlement transaction date.
+            amount (float): Raw cash amount received from the partner.
+            id_val (int | str): The identification value (CUIT or Portfolio ID).
+            identificador (str): The dimension type (defaults to 'PROVEEDOR_CUIT').
+        Returns:
+            pd.DataFrame: Processed collections breakdown template or an empty template.
+        =============================================================================
+        """
+        from sqlalchemy import text
+
+        from src.database.models import TipoCobranzaEnum
+
+        payment_date = normalize_date(payment_date)
+        id_tipo = identificador.upper()
+
+        try:
+            # 1. Construcción dinámica de la query para consultar anticipos históricos
+            query_anticipos = "SELECT ant.* FROM anticipos_socios ant"
+            if id_tipo == "PROVEEDOR_CUIT":
+                query_anticipos += " JOIN socios_comerciales sc ON ant.socio_id = sc.id WHERE sc.cuit = :val_id"
+                id_val = str(id_val)
+            elif id_tipo == "CARTERA_ID":
+                query_anticipos += (
+                    " JOIN carteras c ON ant.cartera_id = c.id WHERE c.id = :val_id"
+                )
+                id_val = int(id_val)
+            # 2. Lectura de anticipos existentes y adición al monto disponible
+            anticipos = pd.read_sql(
+                query_anticipos,
+                self.db.get_bind(),
+                params={"val_id": id_val},
+                index_col="id",
+            )
+            monto_anticipos = (
+                float(anticipos["monto"].sum()) if "monto" in anticipos.columns else 0.0
+            )
+            amount += monto_anticipos
+            # 3. Extracción y cálculo de la deuda vigente filtrada
+            df = self._fetch_installments_by_identifier(identificador, id_val)
+            df = self._calculate_pending_balances(df)
+
+            # 4. Agrupación cronológica por vencimiento para determinar cobertura total
+            df_vto = df.groupby("fecha_vencimiento")[["total"]].sum().sort_index()
+            df_vto["total_acum"] = df_vto["total"].cumsum().round(2)
+            df_vto = df_vto[df_vto["total_acum"] <= amount]
+            sobrante = round(amount - df_vto["total"].sum() - monto_anticipos, 2)
+
+            # 5. Filtrado de cuotas que caen dentro de los vencimientos totalmente cubiertos
+            df = df.loc[df["fecha_vencimiento"].isin(df_vto.index)].copy()
+
+            # 6. Persistencia del remanente (sobrante) en la tabla anticipos_socios
+            if sobrante != 0:
+                fecha_iso = normalize_date(payment_date, as_type=str)
+                if id_tipo == "PROVEEDOR_CUIT":
+                    self.db.execute(
+                        text("""
+                            INSERT INTO anticipos_socios (socio_id, monto, fecha)
+                            SELECT id, :monto, :fecha FROM socios_comerciales WHERE cuit = :cuit
+                        """),
+                        {"monto": sobrante, "fecha": fecha_iso, "cuit": id_val},
+                    )
+                elif id_tipo == "CARTERA_ID":
+                    self.db.execute(
+                        text("""
+                            INSERT INTO anticipos_socios (socio_id, cartera_id, monto, fecha)
+                            SELECT socio_id, id, :monto, :fecha FROM carteras WHERE id = :cartera_id
+                        """),
+                        {
+                            "monto": sobrante,
+                            "fecha": fecha_iso,
+                            "cartera_id": id_val,
+                        },
+                    )
+                self.db.flush()
+
+            # 7. Cláusula de guardia: Si no se cobran cuotas, guardamos el anticipo y salimos
+            if df.empty:
+                self.db.commit()
+                return self._generate_empty_collections()
+
+            # 8. Clasificación final del tipo de cobranza y delegación de la persistencia (que incluye commit)
+            df["tipo_cobranza"] = TipoCobranzaEnum.RECURSO.value
+            return self._persist_collections(df, payment_date)
+
+        except Exception as e:
+            self.db.rollback()
+            raise RuntimeError(
+                f"Error procesando los recursos del socio comercial: {e}"
+            )

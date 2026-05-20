@@ -31,8 +31,8 @@ def normalize_date(
     if input_date is None:
         base_date = date.today()
     elif isinstance(input_date, str):
-        # Truncate to YYYY-MM-DD in case a full ISO string with time is passed
-        base_date = date.fromisoformat(input_date[:10])
+        # El uso de pandas permite digerir guiones (2026-03-30) y barras (2026/03/30) por igual
+        base_date = pd.to_datetime(input_date).date()
     elif isinstance(input_date, datetime) or isinstance(input_date, pd.Timestamp):
         base_date = input_date.date()
     else:
@@ -40,7 +40,7 @@ def normalize_date(
 
     # 2. Cast to the explicitly requested output type
     if as_type is date:
-        return base_date
+        return pd.to_datetime(base_date).date()
     elif as_type is datetime:
         return datetime.combine(base_date, datetime.min.time())
     elif as_type is pd.Timestamp:

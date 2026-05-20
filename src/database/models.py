@@ -144,6 +144,15 @@ class SocioComercial(Base):
         )
 
 
+class AnticiposSinAplicar(Base):
+    __tablename__ = "anticipos_socios"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    fecha = Column(Date, nullable=False)
+    socio_id = Column(Integer, ForeignKey("socios_comerciales.id"), nullable=False)
+    monto = Column(Float, nullable=False)
+
+
 class TipoOperacionCartera(enum.Enum):
     """
     Defines the type of wholesale portfolio transaction.
@@ -447,6 +456,7 @@ class TipoCobranzaEnum(enum.Enum):
     BCA = "BONIFICACION POR CANCELACION ANTICIPADA"
     CNC = "CUOTA NO COMPRADA"
     PENALTY = "PENALTY"
+    RECURSO = "RECURSO"
 
 
 class Cobranza(Base):

@@ -26,6 +26,7 @@ from src.database.models import (
     SocioComercial,
     TipoCobranzaEnum,
 )
+from src.utils.dates import normalize_date
 
 
 class PortfolioImporter:
@@ -59,7 +60,7 @@ class PortfolioImporter:
     def create_portfolio(
         self,
         nombre_cartera: str,
-        fecha_compra: date,
+        fecha_compra: str | date,
         tna_descuento: float,
         cuit_vendedor: str,
         razon_social_vendedor: str,
@@ -73,6 +74,10 @@ class PortfolioImporter:
                      entity to be linked during the atomic insertion phase.
         =============================================================================
         """
+
+        # 0. Normalize date
+        fecha_compra = normalize_date(fecha_compra, date)
+
         # 1. Retrieve or instantiate the selling commercial partner
         self.socio = self.db.query(SocioComercial).filter_by(cuit=cuit_vendedor).first()
 
