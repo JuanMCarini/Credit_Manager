@@ -7,6 +7,7 @@ Date: 2026-05-12
 
 import math
 from datetime import date, datetime
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -845,3 +846,141 @@ class PortfolioImporter:
         except Exception as e:
             self.db.rollback()
             raise RuntimeError(f"Error en inserción SQL: {e}")
+
+    def request_portfolio_paths() -> dict:
+        """
+        =============================================================================
+        Function: request_portfolio_paths
+        Description: Interactively prompts the user to input file paths for the
+                     required CSV files ('personas', 'prestamos', 'cuotas').
+                     Validates the existence of each file before accepting the input.
+        Returns:
+            dict: A dictionary containing the validated absolute or relative paths
+                  mapped to their respective keys.
+        =============================================================================
+        """
+
+        paths = {}
+        archivos_requeridos = {
+            "personas": "PERSONAS (ej: ../data/PERSONAS.CSV)",
+            "prestamos": "PRESTAMOS (ej: ../data/PRESTAMOS.CSV)",
+            "cuotas": "CUOTAS (ej: ../data/CUOTAS.CSV)",
+        }
+
+        print("\n--- Asistente de Carga de Archivos de Cartera ---")
+
+        for clave, descripcion in archivos_requeridos.items():
+            while True:
+                # Solicitamos la ruta y limpiamos espacios o comillas accidentales
+                ruta_ingresada = (
+                    input(f"📁 Ingrese la ruta para {descripcion}: ")
+                    .strip()
+                    .strip("\"'")
+                )
+                ruta_obj = Path(ruta_ingresada)
+
+                # Verificamos que la ruta exista y sea efectivamente un archivo
+                if ruta_obj.exists() and ruta_obj.is_file():
+                    # Guardamos la ruta resolviendo su ubicación absoluta
+                    paths[clave] = str(ruta_obj.resolve())
+                    print(f"   ✔️ Archivo detectado: {ruta_obj.name}\n")
+                    break
+                else:
+                    print(
+                        f"   ❌ Error: No se encontró ningún archivo en la ruta '{ruta_ingresada}'. Intente nuevamente.\n"
+                    )
+
+        print("--- Carga de rutas completada exitosamente ---")
+        return paths
+
+    def process_full_portfolio(
+        self,
+        portfolio_name: str,
+        portfolio_date: str,
+        rate: float,
+        cuit: int | str,
+        company_name: str,
+        paths: dict | None = None,
+        recurso: bool = True,
+        iva: bool = False,
+    ) -> bool:
+        """
+        =============================================================================
+        Method: process_full_portfolio
+        Description: Orchestrates the end-to-end portfolio importation process.
+                     If no paths dictionary is provided, it automatically invokes
+                     the interactive native file selection dialogs.
+        Parameters:
+            portfolio_name (str): The descriptive name of the portfolio.
+            portfolio_date (str | datetime): The acquisition or creation date.
+            rate (float): The base interest or discount rate for the portfolio.
+            cuit (int | str): The commercial partner's Tax ID (CUIT).
+            company_name (str): The name of the commercial partner.
+            paths (dict | None): Optional dictionary with keys 'personas',
+                                 'prestamos', and 'cuotas'. Defaults to None.
+            recurso (bool): Indicates if the portfolio has recourse. Defaults to True.
+            iva (bool): Indicates if tax (IVA) is applied. Defaults to False.
+        Returns:
+            bool: True if the entire process completes successfully, False otherwise.
+        =============================================================================
+        """
+        # 1. Si no se pasaron rutas, se activa la solicitud interactiva
+        if paths is None:
+            from src.utils.files import ask_portfolio_paths
+
+            paths = ask_portfolio_paths()
+
+            # Si el usuario canceló la selección de ventanas, abortamos limpiamente
+            if paths == {} or paths is None:
+                print(
+                    f"❌ Ingesta abortada: No se proporcionaron los archivos necesarios para '{portfolio_name}'."
+                )
+                return False
+
+        try:
+            # 2. Cláusula de Guardia: Validar estructura requerida del diccionario antes de operar
+            required_keys = {"personas", "prestamos", "cuotas"}
+            missing_keys = required_keys - set(paths.keys())
+            if missing_keys:
+                print(
+                    f"❌ Error: El diccionario 'paths' no contiene las claves obligatorias: {missing_keys}"
+                )
+                return False
+
+            # 3. Creación de la entidad Cartera y vinculación con el Socio Comercial
+            self.create_portfolio(
+                nombre_cartera=portfolio_name,
+                fecha_compra=portfolio_date,
+                tna_descuento=rate,
+                cuit_vendedor=cuit,
+                razon_social_vendedor=company_name,
+                recurso=recurso,
+                iva=iva,
+            )
+
+            # 4. Lectura y carga de archivos CSV mapeados desde el diccionario de rutas
+            self.read_csv(
+                personas_path=paths["personas"],
+                prestamos_path=paths["prestamos"],
+                cuotas_path=paths["cuotas"],
+            )
+
+            # 5. Ejecución del motor de validación de integridad referencial y de tipos
+            self.validation()
+
+            # 6. Verificación de alertas o inconsistencias no bloqueantes
+            self.check_warnings()
+
+            # 7. Persistencia final de los datos limpios en la base de datos
+            self.save_portfolio()
+
+            print(
+                f"✅ Proceso de ingesta finalizado con éxito para la cartera: '{portfolio_name}'"
+            )
+            return True
+
+        except Exception as e:
+            print(
+                f"❌ Fallo crítico durante la importación de la cartera '{portfolio_name}': {e}"
+            )
+            return False

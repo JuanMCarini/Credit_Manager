@@ -5,6 +5,7 @@ Description: Initialization file for the utils package. Exposes key utility
 """
 
 from .dates import normalize_date
+from .files import ask_portfolio_paths, select_file
 
 # Definimos explícitamente qué expone este paquete
-__all__ = ["normalize_date"]
+__all__ = ["normalize_date", "select_file", "ask_portfolio_paths"]
