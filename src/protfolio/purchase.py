@@ -22,7 +22,9 @@ from src.database.models import (
     Empleador,
     EstadoCredito,
     EstadoCuota,
+    EstadoCuotaCedida,
     OperacionCartera,
+    Relacion,
     SexoEnum,
     SocioComercial,
     TipoCobranzaEnum,
@@ -30,7 +32,7 @@ from src.database.models import (
 from src.utils.dates import normalize_date
 
 
-class PortfolioImporter:
+class PortfolioPurchase:
     """
     Handles the extraction, transformation, and atomic loading of portfolio data.
     """
@@ -192,10 +194,22 @@ class PortfolioImporter:
 
     def validation(self) -> None:
         """
-        Validates the referential integrity using internal DataFrames.
+        =============================================================================
+        Method: validation
+        Description: Validates referential integrity, financial consistency, and
+                     external geographical/entity mappings across loaded DataFrames.
+                     Directly replaces external IDs with native keys upon success,
+                     and logs inconsistencies into an Excel report if errors occur.
+        Parameters:
+            None
+        Returns:
+            None
+        Raises:
+            ValueError: If data has not been pre-loaded via read_csv().
+            RuntimeError: If data validation fails, generating an Excel error log.
+        =============================================================================
         """
 
-        # Verificamos que los datos existan usando la @property que creamos
         if not self.data_loaded:
             raise ValueError("Debe ejecutar read_csv() antes de validar.")
 
@@ -208,7 +222,82 @@ class PortfolioImporter:
         self.df_prestamos["VALIDACION"] = "OK"
         self.df_cuotas["VALIDACION"] = "OK"
 
-        # A. Validation: Orphan Loans (ID Operacion missing in Personas)
+        # A. Validation: External Province Mapping (Homologación Geográfica)
+        if "ID Provincia" in self.df_personas.columns:
+            mapeos_db = (
+                self.db.query(Relacion.id_foraneo, Relacion.id_local)
+                .filter(
+                    Relacion.socio_id == self.socio.id, Relacion.tabla == "provincias"
+                )
+                .all()
+            )
+            cache_provincias = {
+                str(m.id_foraneo).strip(): m.id_local for m in mapeos_db
+            }
+
+            id_prov_str = (
+                self.df_personas["ID Provincia"]
+                .astype(str)
+                .str.replace(r"\.0$", "", regex=True)
+                .str.strip()
+            )
+
+            # Mapeo a una serie temporal para poder evaluar fallos sin perder los datos originales
+            mapped_provincias = id_prov_str.map(cache_provincias)
+            mask_prov_error = mapped_provincias.isna()
+
+            if mask_prov_error.any():
+                self.df_personas.loc[mask_prov_error, "VALIDACION"] = (
+                    "ERROR: ID Provincia no encontrado en la tabla mapeos_externos"
+                )
+                errores_detectados = True
+            else:
+                # Si todos los mapeos son exitosos, sobrescribimos la columna original
+                self.df_personas["ID Provincia"] = mapped_provincias
+        else:
+            self.df_personas["VALIDACION"] = (
+                "ERROR: No se encontró la columna requerida 'ID Provincia'"
+            )
+            errores_detectados = True
+
+        # B. Validation: External Entity Mapping (Homologación de Socios Originadores)
+        if "ID Entidad" in self.df_prestamos.columns:
+            mapeos_entidades = (
+                self.db.query(Relacion.id_foraneo, Relacion.id_local)
+                .filter(
+                    Relacion.socio_id == self.socio.id,
+                    Relacion.tabla == "socios_comerciales",
+                )
+                .all()
+            )
+            cache_entidades = {
+                str(m.id_foraneo).strip(): m.id_local for m in mapeos_entidades
+            }
+
+            id_entidad_str = (
+                self.df_prestamos["ID Entidad"]
+                .astype(str)
+                .str.replace(r"\.0$", "", regex=True)
+                .str.strip()
+            )
+
+            mapped_entidades = id_entidad_str.map(cache_entidades)
+            mask_entidad_error = mapped_entidades.isna()
+
+            if mask_entidad_error.any():
+                self.df_prestamos.loc[mask_entidad_error, "VALIDACION"] = (
+                    "ERROR: ID Entidad no encontrado en la tabla mapeos_externos para 'socios_comerciales'"
+                )
+                errores_detectados = True
+            else:
+                self.df_prestamos["ID Entidad"] = mapped_entidades
+        else:
+            self.df_prestamos["VALIDACION"] = (
+                "ERROR: No se encontró la columna requerida 'ID Entidad'"
+            )
+            errores_detectados = True
+
+        # C. Validation: Orphan Loans (ID Operacion missing in Personas)
         ops_personas = set(self.df_personas["ID Operación"])
         mask_prestamos_huerfanos = ~self.df_prestamos["ID Operación"].isin(ops_personas)
 
@@ -218,14 +307,12 @@ class PortfolioImporter:
             )
             errores_detectados = True
 
-        # B. Validation: Capital Consistency (Loans vs Installments)
-        # Calculate the sum of installment capital per operation
+        # D. Validation: Capital Consistency (Loans vs Installments)
         capital_cuotas_sum = self.df_cuotas.groupby("ID Operación")["Capital"].sum()
         self.df_prestamos["Capital_Calculado_Cuotas"] = (
             self.df_prestamos["ID Operación"].map(capital_cuotas_sum).fillna(0)
         )
 
-        # Calculate difference (rounded to avoid floating point errors)
         self.df_prestamos["Diferencia_Capital"] = (
             self.df_prestamos["Capital_Calculado_Cuotas"] - self.df_prestamos["Capital"]
         ).round(2)
@@ -237,7 +324,7 @@ class PortfolioImporter:
             )
             errores_detectados = True
 
-        # C. Validation: Orphan Installments (Installments without an associated loan)
+        # E. Validation: Orphan Installments (Installments without an associated loan)
         ops_prestamos = set(self.df_prestamos["ID Operación"])
         mask_cuotas_huerfanas = ~self.df_cuotas["ID Operación"].isin(ops_prestamos)
 
@@ -247,30 +334,25 @@ class PortfolioImporter:
             )
             errores_detectados = True
 
-        # D. Validation: Actual Value
-        # 1. Asegurar tipos numéricos y aislar cuotas compradas (VA > 0)
+        # F. Validation: Actual Value
         self.df_cuotas["Valor Actual"] = pd.to_numeric(
             self.df_cuotas["Valor Actual"], errors="coerce"
         ).fillna(0)
         mask_compradas = self.df_cuotas["Valor Actual"] > 0
 
-        # 2. Fechas y Días (Convertimos la fecha de Pandas y la cruzamos con la fecha de la DB)
         fecha_compra_pd = pd.to_datetime(self.cartera.fecha_compra)
         fechas_vto = pd.to_datetime(
             self.df_cuotas["Fecha Vto. Pago"], dayfirst=False, errors="coerce"
         )
         dias_vto = (fechas_vto - fecha_compra_pd).dt.days
 
-        # 3. Componentes del flujo
         capital = pd.to_numeric(self.df_cuotas["Capital"], errors="coerce").fillna(0)
         interes = pd.to_numeric(self.df_cuotas["Interés"], errors="coerce").fillna(0)
         flujo_total = capital + interes
 
-        # 4. Cálculo vectorizado (solo se aplica la lógica a las filas compradas)
         tna = self.cartera.tna_descuento
         va = flujo_total / ((1 + (tna * 30 / 365)) ** (dias_vto / 30))
 
-        # 5. Registro y comparación (Tolerancia de 1 peso por posibles redondeos en el CSV original)
         self.df_cuotas.loc[mask_compradas, "VA_Calculado"] = va.round(2)
         self.df_cuotas.loc[mask_compradas, "Diferencia_VA"] = (
             self.df_cuotas["VA_Calculado"] - self.df_cuotas["Valor Actual"]
@@ -286,7 +368,7 @@ class PortfolioImporter:
         else:
             self.df_cuotas["Valor Actual"] = self.df_cuotas["VA_Calculado"]
 
-        # 3. EXCEL REPORT GENERATION (Only if errors exist)
+        # 3. EXCEL REPORT GENERATION
         if errores_detectados:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             nombre_reporte = f"REPORTE_ERRORES_IMPORTACION_{timestamp}.xlsx"
@@ -296,15 +378,12 @@ class PortfolioImporter:
             )
 
             with pd.ExcelWriter(nombre_reporte, engine="openpyxl") as writer:
-                # Personas Sheet
                 self.df_personas.to_excel(writer, sheet_name="PERSONAS", index=False)
 
-                # Prestamos Sheet (Sorted to show errors first)
                 self.df_prestamos.sort_values(
                     by="VALIDACION", ascending=False
                 ).to_excel(writer, sheet_name="PRESTAMOS", index=False)
 
-                # Cuotas Sheet (Sorted to show errors first)
                 self.df_cuotas.sort_values(by="VALIDACION", ascending=False).to_excel(
                     writer, sheet_name="CUOTAS", index=False
                 )
@@ -313,7 +392,7 @@ class PortfolioImporter:
                 f"Validación fallida. Por favor, revise el archivo {nombre_reporte} para corregir los datos."
             )
         else:
-            # Drop auxiliary validation columns to return clean DataFrames
+            # Limpieza final de columnas auxiliares de control
             self.df_personas.drop(columns=["VALIDACION"], inplace=True)
             self.df_prestamos.drop(
                 columns=[
@@ -420,7 +499,7 @@ class PortfolioImporter:
         mask_remuneracion_nula = self.df_prestamos["Remuneración"].isna() | (
             self.df_prestamos["Remuneración"] == 0.0
         )
-        mask_relacion = self.df_prestamos["Val. Cuota/Remuneración"] > 0.30
+        mask_relacion = self.df_prestamos["Val. Cuota/Remuneración"] > 0.40
 
         if mask_remuneracion_nula.any():
             self.df_prestamos.loc[mask_remuneracion_nula, "ALERTA_OPERATIVA"] += (
@@ -534,7 +613,7 @@ class PortfolioImporter:
         entes_csv = self.df_prestamos["Ente Pagador"].dropna().unique()
 
         # Mapeamos los existentes en la base
-        empleadores_db = {e.nombre: e.id for e in self.db.query(Empleador).all()}
+        empleadores_db = {e.razon_social: e.id for e in self.db.query(Empleador).all()}
 
         nuevos_empleadores = 0
         for ente in entes_csv:
@@ -760,8 +839,10 @@ class PortfolioImporter:
 
                 if va == 0:
                     estado = EstadoCuota.NO_COMPRADA
+                    estado_cesion = EstadoCuotaCedida.NO_COMPRADA
                 else:
                     estado = EstadoCuota.PENDIENTE
+                    estado_cesion = EstadoCuotaCedida.NO_VENDIDA
 
                 nueva_cuota = Cuota(
                     credito_id=cred_id_interno,
@@ -771,6 +852,7 @@ class PortfolioImporter:
                     interes=int_,
                     iva=iva_,
                     estado=estado,
+                    estado_cesion=estado_cesion,
                 )
 
                 # --- VINCULACIÓN CON OPERACIÓN CARTERA ---

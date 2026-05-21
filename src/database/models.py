@@ -17,13 +17,13 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    UniqueConstraint,
 )
 from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Session, relationship
 
+from src.database import Base, SessionLocal
 from src.utils.dates import normalize_date
-
-from .connection import Base
 
 
 class SexoEnum(enum.Enum):
@@ -120,7 +120,11 @@ class Cliente(Base):
 
 class SocioComercial(Base):
     """
-    Represents business partners such as banks, investment funds, or trusts.
+    =============================================================================
+    Model: SocioComercial
+    Description: Represents business partners such as banks, investment funds,
+                 or trusts (e.g., FCI Valiant, Fondosur).
+    =============================================================================
     """
 
     __tablename__ = "socios_comerciales"
@@ -137,11 +141,107 @@ class SocioComercial(Base):
     # Relationships
     carteras = relationship("Cartera", back_populates="socio")
     creditos_originados = relationship("Credito", back_populates="socio_originador")
+    relaciones = relationship(
+        "Relacion", back_populates="socio", cascade="all, delete-orphan"
+    )
 
     def __repr__(self):
         return (
             f"<SocioComercial(razon_social='{self.razon_social}', cuit='{self.cuit}')>"
         )
+
+    @classmethod
+    def create_socio(
+        cls, razon_social: str, cuit: str, db: Session = SessionLocal(), **kwargs
+    ) -> "SocioComercial":
+        """
+        =============================================================================
+        Method: create_socio
+        Description: Instantiates and persists a new commercial partner in the
+                     database. Validates that the CUIT and Company Name do not
+                     already exist to prevent unique constraint violations.
+        Parameters:
+            db (Session): Active SQLAlchemy database session.
+            razon_social (str): The legal name of the company.
+            cuit (str): The 11-digit Tax ID (without dashes).
+            **kwargs: Additional optional attributes (mail, telefono, dia_corte, etc.).
+        Returns:
+            SocioComercial: The newly created business partner instance.
+        Raises:
+            ValueError: If a partner with the same CUIT or Razón Social already exists.
+        =============================================================================
+        """
+        cuit_str = str(cuit).strip()
+        rs_str = str(razon_social).strip()
+
+        # 1. Validación de duplicados antes de insertar
+        existe = (
+            db.query(cls)
+            .filter((cls.cuit == cuit_str) | (cls.razon_social == rs_str))
+            .first()
+        )
+
+        if existe:
+            raise ValueError(
+                f"Ya existe un Socio Comercial registrado con el CUIT '{cuit_str}' "
+                f"o la Razón Social '{rs_str}'."
+            )
+
+        try:
+            # 2. Creación dinámica desempaquetando los atributos adicionales
+            nuevo_socio = cls(razon_social=rs_str, cuit=cuit_str, **kwargs)
+            db.add(nuevo_socio)
+            db.commit()
+            db.refresh(nuevo_socio)
+            return nuevo_socio
+
+        except Exception as e:
+            db.rollback()
+            raise RuntimeError(f"Fallo al registrar el nuevo socio comercial: {e}")
+
+    @classmethod
+    def update_socio(
+        cls, socio_id: int, db: Session = SessionLocal(), **kwargs
+    ) -> "SocioComercial":
+        """
+        =============================================================================
+        Method: update_socio
+        Description: Modifies specific attributes of an existing commercial partner
+                     based on its primary key. Ignores invalid attributes and
+                     protects the primary key from being overwritten.
+        Parameters:
+            db (Session): Active SQLAlchemy database session.
+            socio_id (int): Primary key of the commercial partner to modify.
+            **kwargs: Key-value pairs of the attributes to update.
+        Returns:
+            SocioComercial: The updated business partner instance.
+        Raises:
+            ValueError: If the socio_id is not found in the database.
+        =============================================================================
+        """
+        # 1. Recuperar el socio objetivo
+        socio = db.query(cls).filter_by(id=socio_id).first()
+        if not socio:
+            raise ValueError(
+                f"No se encontró ningún Socio Comercial con el ID {socio_id}."
+            )
+
+        try:
+            # 2. Iterar sobre los argumentos y actualizar solo los atributos válidos
+            for key, value in kwargs.items():
+                # Protegemos el ID para que no pueda ser alterado accidentalmente
+                if hasattr(socio, key) and key != "id":
+                    setattr(socio, key, value)
+
+            db.commit()
+            db.refresh(socio)
+            return socio
+
+        except Exception as e:
+            db.rollback()
+            raise RuntimeError(
+                f"Fallo al actualizar los datos del socio comercial: {e}"
+            )
 
 
 class AnticiposSinAplicar(Base):
@@ -353,10 +453,36 @@ class Credito(Base):
 
 
 class EstadoCuota(enum.Enum):
-    NO_COMPRADA = "NO COMPRADA"
-    PENDIENTE = "PENDIENTE"
-    MOROSA = "MOROSA"
-    CANCELADA = "CANCELADA"
+    """
+    =============================================================================
+    Enum: EstadoCuota
+    Description: Specifies the current state of an individual loan installment
+                 within the core system, reflecting its financial lifecycle and
+                 eligibility for assignment or accounting tracking.
+    =============================================================================
+    """
+
+    NO_COMPRADA = "NO COMPRADA"  # Cuotas de carteras originadas propias o que no corresponden a un flujo comprado
+    PENDIENTE = "PENDIENTE"  # Cuota vigente que se encuentra dentro del plazo legal de pago y aún no venció
+    MOROSA = "MOROSA"  # Cuota cuyo vencimiento ha expirado sin registrar el pago correspondiente
+    CANCELADA = "CANCELADA"  # Cuota que ha sido totalmente liquidada y cancelada por el cliente o tercero
+
+
+class EstadoCuotaCedida(enum.Enum):
+    """
+    =============================================================================
+    Enum: EstadoCuotaCedida
+    Description: Specifies the assignment and collection status of a specific
+                 installment when it is involved in a portfolio sale or
+                 transfer to a third-party financial entity.
+    =============================================================================
+    """
+
+    NO_VENDIDA = "NO VENDIDA"  # Disponible para la venta (Originada propia)
+    NO_COMPRADA = "NO COMPRADA"  # Estado para cuotas adquiridas que no se replican
+    PENDIENTE = "PENDIENTE"  # Cedida al comprador pero aún no liquidada/cobrada
+    MOROSA = "MOROSA"  # Cuota cedida que incurrió en mora tardía
+    CANCELADA = "CANCELADA"  # Cuota cedida que ya fue totalmente pagada
 
 
 class Cuota(Base):
@@ -376,6 +502,11 @@ class Cuota(Base):
     iva = Column(Float, default=0.0)
 
     estado = Column(Enum(EstadoCuota), nullable=False, default=EstadoCuota.PENDIENTE)
+    estado_cesion = Column(
+        Enum(EstadoCuotaCedida, name="estadocuotacedida"),
+        nullable=False,
+        default=EstadoCuotaCedida.NO_VENDIDA,
+    )
 
     # Relationships
     credito = relationship("Credito", back_populates="cuotas")
@@ -494,3 +625,136 @@ class Cobranza(Base):
     def __repr__(self):
         # Updated to reflect the new financial breakdown fields
         return f"<Cobranza(cuota_id={self.cuota_id}, tipo={self.tipo_cobranza}, total={self.importe_total})>"
+
+
+class Relacion(Base):
+    """
+    =============================================================================
+    Model: Relacion
+    Description: Represents a cross-reference and data-homologation table. Stores
+                 relational mappings between native primary keys and foreign
+                 identifiers originating from external partner systems (e.g.,
+                 Province IDs, Employer codes).
+    =============================================================================
+    """
+
+    __tablename__ = "relaciones"
+
+    # 1. Clave primaria única y auto-incremental del registro de mapeo
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    # 2. Clave foránea física apuntando al socio comercial dueño del sistema externo
+    socio_id = Column(Integer, ForeignKey("socios_comerciales.id"), nullable=False)
+
+    # 3. Identificador de la entidad o tabla mapeada (ej. "provincias", "empleadores")
+    tabla = Column(String, nullable=False)
+
+    # 4. ID nativo o local de nuestro sistema relacional
+    id_local = Column(Integer, nullable=False)
+
+    # 5. ID o código asignado en el archivo/sistema del socio comercial externo
+    id_foraneo = Column(
+        String, nullable=False
+    )  # Se usa String por si vienen códigos con letras o ceros a la izquierda
+
+    # 6. Atributo relacional ORM para navegación de objetos
+    socio = relationship("SocioComercial", back_populates="relaciones")
+
+    # 7. Restricciones de integridad a nivel de tabla
+    __table_args__ = (
+        # Previene que un mismo socio tenga duplicado el mapeo de un id local o foráneo en la misma entidad
+        UniqueConstraint("socio_id", "tabla", "id_local", name="uq_socio_tabla_local"),
+        UniqueConstraint(
+            "socio_id", "tabla", "id_foraneo", name="uq_socio_tabla_foraneo"
+        ),
+    )
+
+    @classmethod
+    def add_single_mapping(
+        cls,
+        socio_id: int,
+        tabla: str,
+        id_local: int,
+        id_foraneo: str | int,
+        db: Session = SessionLocal(),
+    ) -> "Relacion":
+        """
+        =============================================================================
+        Method: add_single_mapping
+        Description: Inserts a single relational mapping into the database.
+                     Validates prior existence to prevent unique constraint violations
+                     before attempting persistence.
+        Parameters:
+            socio_id (int): Primary key of the commercial partner.
+            tabla (str): Name of the logical table being mapped.
+            id_local (int): Native database identifier.
+            id_foraneo (str | int): External identifier from the partner.
+            db (Session): Active database session. Defaults to SessionLocal().
+        Returns:
+            Relacion: The newly created or pre-existing relationship instance.
+        =============================================================================
+        """
+        # Inicialización perezosa de la sesión si no se provee
+        session = db if db else SessionLocal()
+        id_foraneo_str = str(id_foraneo).strip()
+
+        try:
+            # 1. Verificar existencia previa para no violar restricciones de unicidad
+            existe = (
+                session.query(cls)
+                .filter_by(socio_id=socio_id, tabla=tabla, id_foraneo=id_foraneo_str)
+                .first()
+            )
+
+            if existe:
+                return existe
+
+            # 2. Instanciar y persistir el nuevo registro
+            nueva_relacion = cls(
+                socio_id=socio_id,
+                tabla=tabla,
+                id_local=int(id_local),
+                id_foraneo=id_foraneo_str,
+            )
+            session.add(nueva_relacion)
+            session.commit()
+            session.refresh(nueva_relacion)
+
+            return nueva_relacion
+
+        except Exception as e:
+            session.rollback()
+            raise RuntimeError(f"Error al guardar la relación individual: {e}")
+        finally:
+            # Si la sesión fue creada dentro de este método, se cierra para evitar fugas
+            if not db:
+                session.close()
+
+    @classmethod
+    def get_external_mapping_cache(
+        cls, socio_id: int, entidad: str, db: Session = SessionLocal()
+    ) -> dict:
+        """
+        =============================================================================
+        Method: get_external_mapping_cache
+        Description: Retrieves all mappings for a specific partner and table in a
+                     single database trip, returning a dictionary for O(1) lookups.
+        Parameters:
+            socio_id (int): Primary key of the commercial partner.
+            entidad (str): Name of the logical table being mapped.
+            db (Session): Active database session. Defaults to SessionLocal().
+        Returns:
+            dict: A mapping dictionary formatted as {id_foraneo: id_local}.
+        =============================================================================
+        """
+        session = db if db else SessionLocal()
+        try:
+            mapeos = (
+                session.query(cls.id_foraneo, cls.id_local)
+                .filter(cls.socio_id == socio_id, cls.tabla == entidad)
+                .all()
+            )
+            return {m.id_foraneo: m.id_local for m in mapeos}
+        finally:
+            if not db:
+                session.close()

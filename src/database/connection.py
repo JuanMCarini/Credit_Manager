@@ -8,6 +8,8 @@ Date: 2026-05-08
 import os
 
 from sqlalchemy import create_engine
+from sqlalchemy.engine import Engine
+from sqlalchemy.event import listens_for
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
@@ -42,3 +44,15 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+# --- AGREGAR ESTE BLOQUE ---
+@listens_for(Engine, "connect")
+def set_sqlite_pragma(dbapi_connection, connection_record):
+    """
+    Fuerza a SQLite a respetar las restricciones de Foreign Keys
+    cada vez que se abre una nueva conexión a la base de datos.
+    """
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()

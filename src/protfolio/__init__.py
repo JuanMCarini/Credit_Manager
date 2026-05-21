@@ -7,7 +7,7 @@ Author: Juan Martín Carini
 Date: 2026-05-14
 """
 
-from .csv_importer import PortfolioImporter
+from .purchase import PortfolioPurchase
 
 # Defines the public interface of the package
-__all__ = ["PortfolioImporter"]
+__all__ = ["PortfolioPurchase"]
