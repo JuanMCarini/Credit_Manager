@@ -24,10 +24,10 @@ def read_root():
 @app.get("/simular-cuotas")
 def simular(capital: float, tna: float, cuotas: int, dia_vto: int = 28):
     """
-    Endpoint para probar la lógica de amortización rápidamente.
+    Endpoint to quickly test the amortization logic.
     """
     try:
-        # Usamos el motor de lógica que ya validamos en el notebook
+        # Use the logic engine already validated in the notebook
         resultado = AmortizationEngine.generate_french_schedule(
             credito_id=0,
             capital=capital,
@@ -63,3 +63,4 @@ def get_portfolio_balances(fecha: str = None, agrupar: bool = False):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+

@@ -42,7 +42,7 @@ class CompanyConfig(BaseSettings):
         clean_cuit = "".join(filter(str.isdigit, v))
         if len(clean_cuit) != 11:
             raise ValueError(
-                f"El CUIT debe contener exactamente 11 dígitos numéricos. Valor recibido: {v}"
+                f"The CUIT must contain exactly 11 numerical digits. Value received: {v}"
             )
         return clean_cuit
 

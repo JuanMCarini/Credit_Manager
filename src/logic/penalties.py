@@ -69,7 +69,7 @@ class PenaltyManager:
         )
         if not original_credit:
             raise ValueError(
-                f"Crédito origen con ID {credito_origen_id} no encontrado."
+                f"Origin credit with ID {credito_origen_id} not found."
             )
 
         cliente_cuil = original_credit.cliente_cuil

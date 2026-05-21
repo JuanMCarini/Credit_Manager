@@ -74,7 +74,7 @@ class AmortizationEngine:
             diff = round(diff, 2)
             if diff != 0.00:
                 raise ValueError(
-                    f"\n⚠️ Diferencia en el valor de la cuota nro. {i} por $ {diff}."
+                    f"\n⚠️ Difference in the installment value no. {i} by $ {diff}."
                 )
 
             target_month = fecha_emision + relativedelta(months=i + gracia)

@@ -95,7 +95,7 @@ class CollectionManager:
         columns = "c.*"
         joins = ""
 
-        # Enrutador optimizado con match-case
+        # Optimized router with match-case
         match identificador:
             case "CREDITO_ID":
                 where = " WHERE c.credito_id = :val_id"
@@ -126,13 +126,13 @@ class CollectionManager:
 
             case _:
                 raise ValueError(
-                    f"⚠️ '{identificador}' no es un tipo válido de identificador."
+                    f"⚠️ '{identificador}' is not a valid identifier type."
                 )
 
-        # Armado final de la query
+        # Final query construction
         ctas_query = text(f"SELECT {columns} FROM cuotas c {joins} {where}")
 
-        # Ejecución segura delegando el parámetro al motor SQL
+        # Safe execution delegating the parameter to the SQL engine
         return pd.read_sql(
             ctas_query, self.db.get_bind(), params={"val_id": id_val}, index_col="id"
         )
@@ -157,15 +157,15 @@ class CollectionManager:
         import pandas as pd
         from sqlalchemy import text
 
-        # 1. Preparación de la cláusula IN segura
+        # 1. Preparation of the safe IN clause
         cuotas_ids = tuple(df_ctas.index)
         in_clause = f"({cuotas_ids[0]})" if len(cuotas_ids) == 1 else str(cuotas_ids)
 
-        # 2. Extracción de cobranzas históricas
+        # 2. Extraction of historical collections
         cobr_query = text(f"SELECT * FROM cobranzas WHERE cuota_id IN {in_clause}")
         df_cobr = pd.read_sql(cobr_query, self.db.get_bind(), index_col="cuota_id")
 
-        # 3. Agrupación y cruce de datos (Vectorizado)
+        # 3. Grouping and data crossing (Vectorized)
         df_cobr_sum = df_cobr.groupby("cuota_id")[["capital", "interes", "iva"]].sum()
         df = df_ctas.merge(
             df_cobr_sum,
@@ -175,16 +175,16 @@ class CollectionManager:
             suffixes=("", "_cobr"),
         ).fillna(0.0)
 
-        # 4. Cálculo de saldos pendientes por componente
+        # 4. Calculation of pending balances per component
         for col in ["capital", "interes", "iva"]:
             df[col] -= df[f"{col}_cobr"]
 
-        # 5. Limpieza de columnas y ordenamiento cronológico
+        # 5. Column cleanup and chronological ordering
         df.drop(columns=["capital_cobr", "interes_cobr", "iva_cobr"], inplace=True)
         df["fecha_vencimiento"] = pd.to_datetime(df["fecha_vencimiento"])
         df.sort_values(by="fecha_vencimiento", inplace=True)
 
-        # 6. Identificación del saldo total y filtrado de cuotas ya canceladas
+        # 6. Identification of total balance and filtering of already paid installments
         df["total"] = df[["capital", "interes", "iva"]].sum(axis=1)
         df_pending = df[df["total"].round(2) != 0.0].copy()
 
@@ -208,22 +208,22 @@ class CollectionManager:
             pd.DataFrame: DataFrame with pending installments, or an empty template.
         =============================================================================
         """
-        # 1. Extracción inicial de cuotas (usando el enrutador)
+        # 1. Initial installment extraction (using the router)
         df_ctas = self._fetch_installments_by_identifier(identificador, id_val)
 
-        # Si no hay cuotas en absoluto
+        # If there are no installments at all
         if df_ctas.empty:
             return self._generate_empty_collections_df()
 
-        # 2. Validación de unicidad para ID_EXTERNO
+        # 2. Uniqueness validation for ID_EXTERNO
         if identificador == "ID_EXTERNO":
             if len(df_ctas["credito_id"].unique()) > 1:
-                raise ValueError(f"⚠️ Hay más de un crédito con ID externo {id_val}.")
+                raise ValueError(f"⚠️ There is more than one credit with external ID {id_val}.")
 
-        # 3. Cálculo de saldos pendientes
+        # 3. Calculation of pending balances
         df = self._calculate_pending_balances(df_ctas)
 
-        # 4. Verificación final: si hay cuotas pero ya están todas pagadas
+        # 4. Final verification: if there are installments but they are all already paid
         if df.empty:
             return self._generate_empty_collections_df()
 
@@ -248,7 +248,7 @@ class CollectionManager:
         =============================================================================
         """
 
-        # 1. Instanciar objetos ORM en bloque
+        # 1. Instantiate ORM objects in bulk
         new_collections = []
         for row in df_cobr.itertuples():
             cobranza = Cobranza(
@@ -264,8 +264,8 @@ class CollectionManager:
         self.db.add_all(new_collections)
         self.db.flush()
 
-        # 2. Identificar y actualizar todos los créditos afectados de forma dinámica
-        # Esto previene errores si la búsqueda original se hizo por DNI o CUIL
+        # 2. Identify and update all affected credits dynamically
+        # This prevents errors if the original search was done by DNI or CUIL
         affected_credits = df_cobr["credito_id"].unique().tolist()
         cuotas_db = (
             self.db.query(Cuota).filter(Cuota.credito_id.in_(affected_credits)).all()
@@ -279,7 +279,7 @@ class CollectionManager:
         for credito in creditos_db:
             credito.actualizar_estado()
 
-        # 3. Persistencia segura
+        # 3. Safe persistence
         try:
             self.db.commit()
 
@@ -315,7 +315,7 @@ class CollectionManager:
             return df_cobr
         except Exception as e:
             self.db.rollback()
-            raise RuntimeError(f"Error persistiendo la transacción de cobranzas: {e}")
+            raise RuntimeError(f"Error persisting the collections transaction: {e}")
 
     def _process_sobrante_as_penalty(
         self,
@@ -348,14 +348,14 @@ class CollectionManager:
 
         from src.database.models import TipoCobranzaEnum
 
-        # 1. Compartir la sesión activa
+        # 1. Share the active session
         new_penalty = PenaltyManager(self.db)
 
         try:
-            # 2. Extraer un único ID válido (tomamos el crédito de la última cuota procesada)
+            # 2. Extract a single valid ID (we take the credit of the last processed installment)
             credito_origen_real = int(df_cobr.iloc[-1]["credito_id"])
 
-            # 3. Generar el crédito y la cuota usando el sobrante
+            # 3. Generate the credit and installment using the leftover
             penalty_credito, penalty_cuota = new_penalty.generate_penalty_credit(
                 credito_origen_id=credito_origen_real,
                 monto_punitorio=sobrante,
@@ -364,11 +364,11 @@ class CollectionManager:
                 tasa_iva=tasa_iva,
             )
 
-            # 4. Agregar la nueva fila usando el ID de la cuota como índice
+            # 4. Add the new row using the installment ID as index
             df_cobr.loc[penalty_cuota.id] = {
                 "credito_id": penalty_credito.id,
                 "nro_cuota": penalty_cuota.nro_cuota,
-                # Mantener pd.Timestamp evita el TypeError de Pandas:
+                # Keeping pd.Timestamp prevents Pandas TypeError:
                 "fecha_vencimiento": pd.Timestamp(penalty_cuota.fecha_vencimiento),
                 "capital": penalty_cuota.capital,
                 "interes": penalty_cuota.interes,
@@ -381,7 +381,7 @@ class CollectionManager:
 
         except Exception as e:
             self.db.rollback()
-            raise RuntimeError(f"Error crítico generando PENALTY para sobrante: {e}")
+            raise RuntimeError(f"Critical error generating PENALTY for leftover: {e}")
 
         return df_cobr
 
@@ -394,22 +394,22 @@ class CollectionManager:
         tasa_iva: float = 0.21,
     ) -> pd.DataFrame:
 
-        # 1. Normalización
+        # 1. Normalization
         payment_date = normalize_date(payment_date)
 
-        # 2. Extracción y cálculo de deuda (Salida temprana si no hay deuda)
+        # 2. Debt extraction and calculation (Early exit if there is no debt)
         df = self._get_pending_installments(identificador, id_val)
         if df.empty:
             return df
 
-        # 3. Identificación del saldo total a cubrir
+        # 3. Identification of total balance to cover
         df["total_acum"] = df["total"].cumsum().round(2)
         df_cobr = df[df["total_acum"] <= amount].copy()
 
         cobr = df_cobr["total"].sum()
         unuse_amount = round(amount - cobr, 2)
 
-        # 4. Cascada financiera para saldo sobrante (imputación parcial)
+        # 4. Financial waterfall for leftover balance (partial allocation)
         if unuse_amount > 0:
             pending_rows = df[df["total_acum"] > amount]
 
@@ -433,11 +433,11 @@ class CollectionManager:
 
                 df_cobr = pd.concat([df_cobr, partial_df], axis=0)
 
-        # 5. Limpieza de columnas temporales
+        # 5. Cleanup of temporary columns
         if "total_acum" in df_cobr.columns:
             df_cobr.drop(columns=["total_acum"], inplace=True)
 
-        # 6. Clasificación del tipo de cobranza
+        # 6. Classification of collection type
         df_cobr["tipo_cobranza"] = np.where(
             df_cobr["fecha_vencimiento"] <= pd.Timestamp(payment_date),
             TipoCobranzaEnum.COMUN.value,
@@ -446,12 +446,12 @@ class CollectionManager:
 
         sobrante = round(amount - df_cobr["total"].sum(), 2)
 
-        # Delegamos la creación del punitorio (si sobrante es 0, la función devuelve el DF intacto)
+        # We delegate the penalty creation (if leftover is 0, the function returns the intact DF)
         df_cobr = self._process_sobrante_as_penalty(
             df_cobr, sobrante, payment_date, tasa_iva
         )
 
-        # 7. Persistencia final delegada
+        # 7. Final delegated persistence
         return self._persist_collections(df_cobr, payment_date)
 
     def process_early_cancellation(
@@ -470,15 +470,15 @@ class CollectionManager:
         =============================================================================
         """
 
-        # 1. Normalización
+        # 1. Normalization
         payment_date = normalize_date(payment_date)
 
-        # 2. Extracción y cálculo de deuda (Salida temprana si no hay deuda)
+        # 2. Debt extraction and calculation (Early exit if there is no debt)
         df = self._get_pending_installments(identificador, id_val)
         if df.empty:
             return df
 
-        # 3. Identificación del saldo total a cubrir
+        # 3. Identification of total balance to cover
 
         a_vencer = df["fecha_vencimiento"] > payment_date
         df_BCA = df.loc[a_vencer].copy()
@@ -491,7 +491,7 @@ class CollectionManager:
         cobr = df_cobr["total"].sum()
         unuse_amount = round(amount - cobr, 2)
 
-        # 4. Cascada financiera para saldo sobrante (imputación parcial)
+        # 4. Financial waterfall for leftover balance (partial allocation)
         if unuse_amount > 0:
             pending_rows = df[df["total_acum"] > amount]
 
@@ -515,11 +515,11 @@ class CollectionManager:
 
                 df_cobr = pd.concat([df_cobr, partial_df], axis=0)
 
-        # 5. Limpieza de columnas temporales
+        # 5. Cleanup of temporary columns
         if "total_acum" in df_cobr.columns:
             df_cobr.drop(columns=["total_acum"], inplace=True)
 
-        # 6. Clasificación del tipo de cobranza
+        # 6. Classification of collection type
         df_cobr["tipo_cobranza"] = np.where(
             df_cobr["fecha_vencimiento"] <= pd.Timestamp(payment_date),
             TipoCobranzaEnum.COMUN.value,
@@ -539,12 +539,12 @@ class CollectionManager:
             df_BCA["tipo_cobranza"] = TipoCobranzaEnum.BCA.value
             df_cobr = pd.concat([df_cobr, df_BCA])
 
-        # Delegamos la creación del punitorio (si sobrante es 0, la función devuelve el DF intacto)
+        # We delegate the penalty creation (if leftover is 0, the function returns the intact DF)
         df_cobr = self._process_sobrante_as_penalty(
             df_cobr, sobrante, payment_date, tasa_iva
         )
 
-        # 7. Persistencia final delegada
+        # 7. Final delegated persistence
         return self._persist_collections(df_cobr, payment_date)
 
     def process_resource(
@@ -579,7 +579,7 @@ class CollectionManager:
         id_tipo = identificador.upper()
 
         try:
-            # 1. Construcción dinámica de la query para consultar anticipos históricos
+            # 1. Dynamic query construction to query historical advances
             query_anticipos = "SELECT ant.* FROM anticipos_socios ant"
             if id_tipo == "PROVEEDOR_CUIT":
                 query_anticipos += " JOIN socios_comerciales sc ON ant.socio_id = sc.id WHERE sc.cuit = :val_id"
@@ -589,7 +589,7 @@ class CollectionManager:
                     " JOIN carteras c ON ant.cartera_id = c.id WHERE c.id = :val_id"
                 )
                 id_val = int(id_val)
-            # 2. Lectura de anticipos existentes y adición al monto disponible
+            # 2. Reading existing advances and adding to the available amount
             anticipos = pd.read_sql(
                 query_anticipos,
                 self.db.get_bind(),
@@ -600,20 +600,20 @@ class CollectionManager:
                 float(anticipos["monto"].sum()) if "monto" in anticipos.columns else 0.0
             )
             amount += monto_anticipos
-            # 3. Extracción y cálculo de la deuda vigente filtrada
+            # 3. Extraction and calculation of filtered current debt
             df = self._fetch_installments_by_identifier(identificador, id_val)
             df = self._calculate_pending_balances(df)
 
-            # 4. Agrupación cronológica por vencimiento para determinar cobertura total
+            # 4. Chronological grouping by due date to determine total coverage
             df_vto = df.groupby("fecha_vencimiento")[["total"]].sum().sort_index()
             df_vto["total_acum"] = df_vto["total"].cumsum().round(2)
             df_vto = df_vto[df_vto["total_acum"] <= amount]
             sobrante = round(amount - df_vto["total"].sum() - monto_anticipos, 2)
 
-            # 5. Filtrado de cuotas que caen dentro de los vencimientos totalmente cubiertos
+            # 5. Filtering of installments falling within fully covered due dates
             df = df.loc[df["fecha_vencimiento"].isin(df_vto.index)].copy()
 
-            # 6. Persistencia del remanente (sobrante) en la tabla anticipos_socios
+            # 6. Persistence of the remainder (leftover) in the partner advances table
             if sobrante != 0:
                 fecha_iso = normalize_date(payment_date, as_type=str)
                 if id_tipo == "PROVEEDOR_CUIT":
@@ -638,17 +638,17 @@ class CollectionManager:
                     )
                 self.db.flush()
 
-            # 7. Cláusula de guardia: Si no se cobran cuotas, guardamos el anticipo y salimos
+            # 7. Guard clause: If no installments are collected, save the advance and exit
             if df.empty:
                 self.db.commit()
                 return self._generate_empty_collections()
 
-            # 8. Clasificación final del tipo de cobranza y delegación de la persistencia (que incluye commit)
+            # 8. Final classification of collection type and delegation of persistence (which includes commit)
             df["tipo_cobranza"] = TipoCobranzaEnum.RECURSO.value
             return self._persist_collections(df, payment_date)
 
         except Exception as e:
             self.db.rollback()
             raise RuntimeError(
-                f"Error procesando los recursos del socio comercial: {e}"
+                f"Error processing partner resources: {e}"
             )

@@ -31,7 +31,7 @@ def normalize_date(
     if input_date is None:
         base_date = date.today()
     elif isinstance(input_date, str):
-        # El uso de pandas permite digerir guiones (2026-03-30) y barras (2026/03/30) por igual
+        # The use of pandas allows digesting dashes (2026-03-30) and slashes (2026/03/30) equally
         base_date = pd.to_datetime(input_date).date()
     elif isinstance(input_date, datetime) or isinstance(input_date, pd.Timestamp):
         base_date = input_date.date()

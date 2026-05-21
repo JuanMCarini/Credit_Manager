@@ -174,7 +174,7 @@ class SocioComercial(Base):
         cuit_str = str(cuit).strip()
         rs_str = str(razon_social).strip()
 
-        # 1. Validación de duplicados antes de insertar
+        # 1. Duplicate validation before insertion
         existe = (
             db.query(cls)
             .filter((cls.cuit == cuit_str) | (cls.razon_social == rs_str))
@@ -183,12 +183,12 @@ class SocioComercial(Base):
 
         if existe:
             raise ValueError(
-                f"Ya existe un Socio Comercial registrado con el CUIT '{cuit_str}' "
-                f"o la Razón Social '{rs_str}'."
+                f"A Socio Comercial is already registered with CUIT '{cuit_str}' "
+                f"or Razón Social '{rs_str}'."
             )
 
         try:
-            # 2. Creación dinámica desempaquetando los atributos adicionales
+            # 2. Dynamic creation by unpacking additional attributes
             nuevo_socio = cls(razon_social=rs_str, cuit=cuit_str, **kwargs)
             db.add(nuevo_socio)
             db.commit()
@@ -197,7 +197,7 @@ class SocioComercial(Base):
 
         except Exception as e:
             db.rollback()
-            raise RuntimeError(f"Fallo al registrar el nuevo socio comercial: {e}")
+            raise RuntimeError(f"Failed to register the new socio comercial: {e}")
 
     @classmethod
     def update_socio(
@@ -219,17 +219,17 @@ class SocioComercial(Base):
             ValueError: If the socio_id is not found in the database.
         =============================================================================
         """
-        # 1. Recuperar el socio objetivo
+        # 1. Retrieve the target socio
         socio = db.query(cls).filter_by(id=socio_id).first()
         if not socio:
             raise ValueError(
-                f"No se encontró ningún Socio Comercial con el ID {socio_id}."
+                f"No Socio Comercial was found with ID {socio_id}."
             )
 
         try:
-            # 2. Iterar sobre los argumentos y actualizar solo los atributos válidos
+            # 2. Iterate over arguments and update only valid attributes
             for key, value in kwargs.items():
-                # Protegemos el ID para que no pueda ser alterado accidentalmente
+                # We protect the ID so it cannot be altered accidentally
                 if hasattr(socio, key) and key != "id":
                     setattr(socio, key, value)
 
@@ -240,7 +240,7 @@ class SocioComercial(Base):
         except Exception as e:
             db.rollback()
             raise RuntimeError(
-                f"Fallo al actualizar los datos del socio comercial: {e}"
+                f"Failed to update socio comercial data: {e}"
             )
 
 
@@ -296,6 +296,7 @@ class Cartera(Base):
     creditos_incluidos = relationship("Credito", back_populates="cartera")
     operaciones = relationship("OperacionCartera", back_populates="cartera")
     socio = relationship("SocioComercial", back_populates="carteras")
+    liquidaciones = relationship("LiquidacionCuotaCedida", back_populates="cartera")
 
     def __repr__(self):
         return f"<Cartera(nombre='{self.nombre}', socio_id={self.socio_id}, tipo={self.tipo_operacion}, fecha_compra={self.fecha_compra}, tna_desc={self.tna_descuento})>"
@@ -311,8 +312,8 @@ class EstadoCredito(enum.Enum):
     Possible states for a credit loan in the system.
     """
 
-    APROBADO = "APROBADO"  # Credito aprobado pero no liquidado
-    RECHAZADO = "RECHAZADO"  # Credito rechazado
+    APROBADO = "APROBADO"  # Credit approved but not disbursed
+    RECHAZADO = "RECHAZADO"  # Credit rejected
     ACTIVO = "ACTIVO"  # Current loan with no arrears
     CANCELADO = "CANCELADO"  # Fully paid loan
     MOROSO = "MOROSO"  # Loan with overdue payments
@@ -344,13 +345,13 @@ class Credito(Base):
     id_externo = Column(String(50), index=True, nullable=True)
     cliente_cuil = Column(String(11), ForeignKey("clientes.cuil"), nullable=False)
 
-    # ESCENARIO 1: Socio Comercial que originó el crédito (Mutual, Sindicato, etc.)
-    # Si es generación propia, queda nullable=True.
+    # SCENARIO 1: Socio Comercial that originated the credit (Mutual, Union, etc.)
+    # If it's internally generated, it remains nullable=True.
     socio_originador_id = Column(
         Integer, ForeignKey("socios_comerciales.id"), nullable=True
     )
 
-    # ESCENARIO 2: Si el crédito pertenece a una compra de cartera.
+    # SCENARIO 2: If the credit belongs to a portfolio purchase.
     cartera_id = Column(Integer, ForeignKey("carteras.id"), nullable=True)
 
     capital = Column(Float, nullable=False)
@@ -369,7 +370,7 @@ class Credito(Base):
     @hybrid_property
     def origen(self):
         """
-        Determina el origen de forma dinámica.
+        Dynamically determines the origin.
         """
         if self.cartera_id is not None:
             return OrigenCredito.COMPRADO
@@ -402,10 +403,10 @@ class Credito(Base):
 
         from src.database.models import EstadoCredito, EstadoCuota
 
-        # 1. Cláusula de Guardia: Proteger estados manuales inmutables
+        # 1. Guard Clause: Protect immutable manual states
         estados_manuales = [EstadoCredito.RECHAZADO, EstadoCredito.JUDICIAL]
 
-        # Parseo seguro del estado actual
+        # Safe parsing of current state
         estado_actual = (
             self.estado
             if isinstance(self.estado, EstadoCredito)
@@ -413,37 +414,58 @@ class Credito(Base):
         )
 
         if estado_actual in estados_manuales:
-            # Imprimimos la advertencia. En producción, es ideal usar logging.warning()
-            mensaje_alerta = f"⚠️ Advertencia: Intento de actualización automática omitido para el Crédito ID {self.id}. Estado bloqueado: {estado_actual.value}."
+            # Print the warning. In production, it is ideal to use logging.warning()
+            mensaje_alerta = f"⚠️ Warning: Automatic update attempt skipped for Credito ID {self.id}. State blocked: {estado_actual.value}."
             print(mensaje_alerta)
             logging.warning(mensaje_alerta)
 
             return estado_actual.value
 
-        # 2. Filtrar las cuotas que pertenecen activamente a la cartera
+        # 2. Filter the quotas that actively belong to the portfolio
         cuotas_activas = [c for c in self.cuotas if c.estado != EstadoCuota.NO_COMPRADA]
 
         if not cuotas_activas:
-            # Si todas fueron vendidas/cedidas, el crédito local se considera cancelado
+            # If all were sold/assigned, the local credit is considered cancelled
             self.estado = EstadoCredito.CANCELADO
             return self.estado.value
 
-        # 3. Evaluación de jerarquía para el ciclo dinámico
-        # Regla 1: Si hay alguna cuota morosa, el crédito entero entra en mora
+        # 3. Hierarchy evaluation for dynamic cycle
+        # Rule 1: If any quota is overdue, the entire credit goes into arrears
         if any(c.estado == EstadoCuota.MOROSA for c in cuotas_activas):
             self.estado = EstadoCredito.MOROSO
 
-        # Regla 2: Si todas están pagas, el crédito finalizó con éxito
+        # Rule 2: If all are paid, the credit finished successfully
         elif all(c.estado == EstadoCuota.CANCELADA for c in cuotas_activas):
             self.estado = EstadoCredito.CANCELADO
 
-        # Regla 3: Si hay cuotas pendientes pero ninguna vencida (aplica también a APROBADO)
+        # Rule 3: If there are pending quotas but none overdue (also applies to APROBADO)
         else:
             self.estado = EstadoCredito.ACTIVO
 
         return (
             self.estado.value if isinstance(self.estado, EstadoCredito) else self.estado
         )
+
+    @property
+    def carteras_de_venta(self) -> list:
+        """
+        =============================================================================
+        Property: carteras_de_venta
+        Description: Dynamically aggregates all the unique sales portfolios (Carteras)
+                     to which any of this credit's installments have been sold.
+        =============================================================================
+        """
+        from src.database.models import TipoOperacionCartera
+
+        ventas = set()
+        for cuota in self.cuotas:
+            for operacion in cuota.movimientos_cartera:
+                if (
+                    operacion.cartera
+                    and operacion.cartera.tipo_operacion == TipoOperacionCartera.VENTA
+                ):
+                    ventas.add(operacion.cartera)
+        return list(ventas)
 
     def __repr__(self):
         return (
@@ -462,10 +484,10 @@ class EstadoCuota(enum.Enum):
     =============================================================================
     """
 
-    NO_COMPRADA = "NO COMPRADA"  # Cuotas de carteras originadas propias o que no corresponden a un flujo comprado
-    PENDIENTE = "PENDIENTE"  # Cuota vigente que se encuentra dentro del plazo legal de pago y aún no venció
-    MOROSA = "MOROSA"  # Cuota cuyo vencimiento ha expirado sin registrar el pago correspondiente
-    CANCELADA = "CANCELADA"  # Cuota que ha sido totalmente liquidada y cancelada por el cliente o tercero
+    NO_COMPRADA = "NO COMPRADA"  # Installments from own originated portfolios or not corresponding to a purchased cash flow
+    PENDIENTE = "PENDIENTE"  # Active installment within the legal payment term and not yet expired
+    MOROSA = "MOROSA"  # Installment whose due date has expired without registering the corresponding payment
+    CANCELADA = "CANCELADA"  # Installment that has been fully settled and paid by the client or third party
 
 
 class EstadoCuotaCedida(enum.Enum):
@@ -478,11 +500,11 @@ class EstadoCuotaCedida(enum.Enum):
     =============================================================================
     """
 
-    NO_VENDIDA = "NO VENDIDA"  # Disponible para la venta (Originada propia)
-    NO_COMPRADA = "NO COMPRADA"  # Estado para cuotas adquiridas que no se replican
-    PENDIENTE = "PENDIENTE"  # Cedida al comprador pero aún no liquidada/cobrada
-    MOROSA = "MOROSA"  # Cuota cedida que incurrió en mora tardía
-    CANCELADA = "CANCELADA"  # Cuota cedida que ya fue totalmente pagada
+    NO_VENDIDA = "NO VENDIDA"  # Available for sale (Internally originated)
+    NO_COMPRADA = "NO COMPRADA"  # Status for acquired installments that are not replicated
+    PENDIENTE = "PENDIENTE"  # Assigned to the buyer but not yet liquidated/collected
+    MOROSA = "MOROSA"  # Assigned installment that incurred late default
+    CANCELADA = "CANCELADA"  # Assigned installment that was already fully paid
 
 
 class Cuota(Base):
@@ -512,6 +534,7 @@ class Cuota(Base):
     credito = relationship("Credito", back_populates="cuotas")
     movimientos_cartera = relationship("OperacionCartera", back_populates="cuota")
     cobranzas = relationship("Cobranza", back_populates="cuota")
+    liquidaciones = relationship("LiquidacionCuotaCedida", back_populates="cuota")
 
     def actualizar_estado(self, fecha_evaluacion: str | datetime) -> str:
         """
@@ -527,19 +550,19 @@ class Cuota(Base):
         =============================================================================
         """
         fecha_evaluacion = normalize_date(fecha_evaluacion)
-        # 1. Cláusula de guardia: Si la cuota nunca fue comprada, no la tocamos
+        # 1. Guard clause: If the installment was never purchased, we don't touch it
         if self.estado == EstadoCuota.NO_COMPRADA:
             return self.estado.value
 
-        # 2. Matemática financiera con redondeo para evitar errores de coma flotante
+        # 2. Financial math with rounding to avoid floating point errors
         total_esperado = round(self.capital + self.interes + self.iva, 2)
 
-        # Sumamos todo lo que ingresó por cobranzas asociadas a esta cuota
+        # We sum everything that came in through collections associated with this installment
         total_cobrado = sum(
             round(c.capital + c.interes + c.iva, 2) for c in self.cobranzas
         )
 
-        # 3. Lógica de transición de estados
+        # 3. State transition logic
         if total_cobrado >= total_esperado:
             self.estado = EstadoCuota.CANCELADA
 
@@ -627,6 +650,55 @@ class Cobranza(Base):
         return f"<Cobranza(cuota_id={self.cuota_id}, tipo={self.tipo_cobranza}, total={self.importe_total})>"
 
 
+class TipoLiquidacionEnum(enum.Enum):
+    """
+    Defines the financial nature of the payout/liquidation event to the portfolio buyer.
+    """
+
+    NORMAL = "NORMAL"
+    RECURSO = "RECURSO"
+    CANCELACION_ANTICIPADA = "CANCELACION ANTICIPADA"
+    PUNITORIOS = "PUNITORIOS"
+
+
+class LiquidacionCuotaCedida(Base):
+    """
+    Records payments (rendiciones/liquidaciones) made to the partner that purchased the portfolio.
+    Acts as a mirror to Cobranza but for liabilities.
+    """
+
+    __tablename__ = "liquidaciones_cuotas"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    cuota_id = Column(Integer, ForeignKey("cuotas.id"), nullable=False)
+    cartera_id = Column(Integer, ForeignKey("carteras.id"), nullable=False)
+
+    tipo_liquidacion = Column(
+        Enum(TipoLiquidacionEnum, values_callable=lambda obj: [e.value for e in obj]),
+        nullable=False,
+        default=TipoLiquidacionEnum.NORMAL.value,
+    )
+
+    capital = Column(Float, nullable=False, default=0.0)
+    interes = Column(Float, nullable=False, default=0.0)
+    iva = Column(Float, nullable=False, default=0.0)
+    fecha_pago = Column(Date, nullable=False)
+
+    # Relationships
+    cuota = relationship("Cuota", back_populates="liquidaciones")
+    cartera = relationship("Cartera", back_populates="liquidaciones")
+
+    @property
+    def importe_total(self) -> float:
+        """
+        Calculates the total rendered amount for this record.
+        """
+        return self.capital + self.interes + self.iva
+
+    def __repr__(self):
+        return f"<Liquidacion(cuota_id={self.cuota_id}, tipo={self.tipo_liquidacion}, total={self.importe_total})>"
+
+
 class Relacion(Base):
     """
     =============================================================================
@@ -640,29 +712,29 @@ class Relacion(Base):
 
     __tablename__ = "relaciones"
 
-    # 1. Clave primaria única y auto-incremental del registro de mapeo
+    # 1. Unique and auto-incremental primary key of the mapping record
     id = Column(Integer, primary_key=True, autoincrement=True)
 
-    # 2. Clave foránea física apuntando al socio comercial dueño del sistema externo
+    # 2. Physical foreign key pointing to the commercial partner owning the external system
     socio_id = Column(Integer, ForeignKey("socios_comerciales.id"), nullable=False)
 
-    # 3. Identificador de la entidad o tabla mapeada (ej. "provincias", "empleadores")
+    # 3. Identifier of the mapped entity or table (e.g. "provincias", "empleadores")
     tabla = Column(String, nullable=False)
 
-    # 4. ID nativo o local de nuestro sistema relacional
+    # 4. Native or local ID of our relational system
     id_local = Column(Integer, nullable=False)
 
-    # 5. ID o código asignado en el archivo/sistema del socio comercial externo
+    # 5. ID or code assigned in the file/system of the external commercial partner
     id_foraneo = Column(
         String, nullable=False
-    )  # Se usa String por si vienen códigos con letras o ceros a la izquierda
+    )  # String is used in case codes come with letters or leading zeros
 
-    # 6. Atributo relacional ORM para navegación de objetos
+    # 6. ORM relational attribute for object navigation
     socio = relationship("SocioComercial", back_populates="relaciones")
 
-    # 7. Restricciones de integridad a nivel de tabla
+    # 7. Table-level integrity constraints
     __table_args__ = (
-        # Previene que un mismo socio tenga duplicado el mapeo de un id local o foráneo en la misma entidad
+        # Prevents a single partner from having duplicated mapping of a local or foreign id in the same entity
         UniqueConstraint("socio_id", "tabla", "id_local", name="uq_socio_tabla_local"),
         UniqueConstraint(
             "socio_id", "tabla", "id_foraneo", name="uq_socio_tabla_foraneo"
@@ -694,12 +766,12 @@ class Relacion(Base):
             Relacion: The newly created or pre-existing relationship instance.
         =============================================================================
         """
-        # Inicialización perezosa de la sesión si no se provee
+        # Lazy initialization of the session if not provided
         session = db if db else SessionLocal()
         id_foraneo_str = str(id_foraneo).strip()
 
         try:
-            # 1. Verificar existencia previa para no violar restricciones de unicidad
+            # 1. Verify previous existence to avoid violating uniqueness constraints
             existe = (
                 session.query(cls)
                 .filter_by(socio_id=socio_id, tabla=tabla, id_foraneo=id_foraneo_str)
@@ -709,7 +781,7 @@ class Relacion(Base):
             if existe:
                 return existe
 
-            # 2. Instanciar y persistir el nuevo registro
+            # 2. Instantiate and persist the new record
             nueva_relacion = cls(
                 socio_id=socio_id,
                 tabla=tabla,
@@ -724,9 +796,9 @@ class Relacion(Base):
 
         except Exception as e:
             session.rollback()
-            raise RuntimeError(f"Error al guardar la relación individual: {e}")
+            raise RuntimeError(f"Error saving the individual relationship: {e}")
         finally:
-            # Si la sesión fue creada dentro de este método, se cierra para evitar fugas
+            # If the session was created within this method, it is closed to prevent leaks
             if not db:
                 session.close()
 

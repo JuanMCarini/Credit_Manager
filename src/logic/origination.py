@@ -104,7 +104,7 @@ class LoanOriginator:
             )
         else:
             raise ValueError(
-                f"Aún no esta configurado el tipo de crédito {type.value}."
+                f"The credit type {type.value} is not configured yet."
             )
 
         self.db.add_all(installments)

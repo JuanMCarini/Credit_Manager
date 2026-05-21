@@ -46,12 +46,12 @@ def get_db():
         db.close()
 
 
-# --- AGREGAR ESTE BLOQUE ---
+# --- ADD THIS BLOCK ---
 @listens_for(Engine, "connect")
 def set_sqlite_pragma(dbapi_connection, connection_record):
     """
-    Fuerza a SQLite a respetar las restricciones de Foreign Keys
-    cada vez que se abre una nueva conexión a la base de datos.
+    Forces SQLite to respect Foreign Key constraints
+    every time a new connection to the database is opened.
     """
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA foreign_keys=ON")

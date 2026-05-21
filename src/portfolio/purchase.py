@@ -113,7 +113,7 @@ class PortfolioPurchase:
         """
         Reads CSVs and stores the DataFrames internally in the instance (self).
         """
-        print("Leyendo archivos CSV...")
+        print("Reading CSV files...")
 
         cols_personas = [
             "ID Operación",
@@ -164,7 +164,7 @@ class PortfolioPurchase:
             "Valor Actual",
         ]
 
-        # 1. Extracción a variables temporales
+        # 1. Extraction to temporary variables
         df_p = pd.read_csv(
             personas_path, sep=",", encoding="latin-1", header=None, names=cols_personas
         )
@@ -179,15 +179,15 @@ class PortfolioPurchase:
             cuotas_path, sep=",", encoding="latin-1", header=None, names=cols_cuotas
         )
 
-        # 2. Transformación
-        print("Transformando y limpiando datos...")
+        # 2. Transformation
+        print("Transforming and cleaning data...")
         df_p["ID Operación"] = df_p["ID Operación"].astype(str).str.strip()
         df_pr["ID Operación"] = df_pr["ID Operación"].astype(str).str.strip()
         df_c["ID Operación"] = df_c["ID Operación"].astype(str).str.strip()
 
         df_p["CUIL"] = df_p["CUIL"].astype(str).str.replace(r"\D", "", regex=True)
 
-        # 3. Guardado en el estado del objeto (self)
+        # 3. Save into object state (self)
         self.df_personas = df_p.replace({np.nan: None})
         self.df_prestamos = df_pr.replace({np.nan: None})
         self.df_cuotas = df_c.replace({np.nan: None})
@@ -211,10 +211,10 @@ class PortfolioPurchase:
         """
 
         if not self.data_loaded:
-            raise ValueError("Debe ejecutar read_csv() antes de validar.")
+            raise ValueError("You must run read_csv() before validating.")
 
         # 2. LOGICAL VALIDATION
-        print("Validando integridad de datos...")
+        print("Validating data integrity...")
         errores_detectados = False
 
         # Initialize control columns in DataFrames
@@ -242,21 +242,21 @@ class PortfolioPurchase:
                 .str.strip()
             )
 
-            # Mapeo a una serie temporal para poder evaluar fallos sin perder los datos originales
+            # Map to a temporary series to evaluate failures without losing original data
             mapped_provincias = id_prov_str.map(cache_provincias)
             mask_prov_error = mapped_provincias.isna()
 
             if mask_prov_error.any():
                 self.df_personas.loc[mask_prov_error, "VALIDACION"] = (
-                    "ERROR: ID Provincia no encontrado en la tabla mapeos_externos"
+                    "ERROR: ID Provincia not found in external_mappings table"
                 )
                 errores_detectados = True
             else:
-                # Si todos los mapeos son exitosos, sobrescribimos la columna original
+                # If all mappings are successful, we overwrite the original column
                 self.df_personas["ID Provincia"] = mapped_provincias
         else:
             self.df_personas["VALIDACION"] = (
-                "ERROR: No se encontró la columna requerida 'ID Provincia'"
+                "ERROR: Required column 'ID Provincia' not found"
             )
             errores_detectados = True
 
@@ -286,14 +286,14 @@ class PortfolioPurchase:
 
             if mask_entidad_error.any():
                 self.df_prestamos.loc[mask_entidad_error, "VALIDACION"] = (
-                    "ERROR: ID Entidad no encontrado en la tabla mapeos_externos para 'socios_comerciales'"
+                    "ERROR: ID Entidad not found in external_mappings table for 'socios_comerciales'"
                 )
                 errores_detectados = True
             else:
                 self.df_prestamos["ID Entidad"] = mapped_entidades
         else:
             self.df_prestamos["VALIDACION"] = (
-                "ERROR: No se encontró la columna requerida 'ID Entidad'"
+                "ERROR: Required column 'ID Entidad' not found"
             )
             errores_detectados = True
 
@@ -303,7 +303,7 @@ class PortfolioPurchase:
 
         if mask_prestamos_huerfanos.any():
             self.df_prestamos.loc[mask_prestamos_huerfanos, "VALIDACION"] = (
-                "ERROR: ID Operación no encontrado en PERSONAS.CSV"
+                "ERROR: ID Operación not found in PERSONAS.CSV"
             )
             errores_detectados = True
 
@@ -320,7 +320,7 @@ class PortfolioPurchase:
         mask_dif_capital = self.df_prestamos["Diferencia_Capital"] != 0
         if mask_dif_capital.any():
             self.df_prestamos.loc[mask_dif_capital, "VALIDACION"] = (
-                "ERROR: El capital de las cuotas no coincide con el capital del préstamo"
+                "ERROR: Installment capital does not match the loan capital"
             )
             errores_detectados = True
 
@@ -330,7 +330,7 @@ class PortfolioPurchase:
 
         if mask_cuotas_huerfanas.any():
             self.df_cuotas.loc[mask_cuotas_huerfanas, "VALIDACION"] = (
-                "ERROR: ID Operación no encontrado en PRESTAMOS.CSV"
+                "ERROR: ID Operación not found in PRESTAMOS.CSV"
             )
             errores_detectados = True
 
@@ -362,7 +362,7 @@ class PortfolioPurchase:
 
         if mask_dif_va.any():
             self.df_cuotas.loc[mask_dif_va, "VALIDACION"] = (
-                "ERROR: El recálculo del Valor Actual difiere de los archivos"
+                "ERROR: The Present Value recalculation differs from the files"
             )
             errores_detectados = True
         else:
@@ -374,7 +374,7 @@ class PortfolioPurchase:
             nombre_reporte = f"REPORTE_ERRORES_IMPORTACION_{timestamp}.xlsx"
 
             print(
-                f"\n❌ SE ENCONTRARON INCONSISTENCIAS. Generando reporte: {nombre_reporte}"
+                f"\n❌ INCONSISTENCIES FOUND. Generating report: {nombre_reporte}"
             )
 
             with pd.ExcelWriter(nombre_reporte, engine="openpyxl") as writer:
@@ -389,10 +389,10 @@ class PortfolioPurchase:
                 )
 
             raise RuntimeError(
-                f"Validación fallida. Por favor, revise el archivo {nombre_reporte} para corregir los datos."
+                f"Validation failed. Please review the file {nombre_reporte} to correct the data."
             )
         else:
-            # Limpieza final de columnas auxiliares de control
+            # Final cleanup of auxiliary control columns
             self.df_personas.drop(columns=["VALIDACION"], inplace=True)
             self.df_prestamos.drop(
                 columns=[
@@ -407,7 +407,7 @@ class PortfolioPurchase:
             )
 
             print(
-                "\n✅ Validación superada exitosamente. Todos los registros son consistentes."
+                "\n✅ Validation passed successfully. All records are consistent."
             )
 
     def check_warnings(self) -> None:
@@ -416,14 +416,14 @@ class PortfolioPurchase:
         """
 
         if not self.data_loaded:
-            raise ValueError("Debe ejecutar read_csv() antes de validar.")
+            raise ValueError("You must run read_csv() before validating.")
 
         if not self.cartera:
             raise ValueError(
-                "No hay cartera instanciada. Ejecute create_portfolio primero."
+                "No portfolio instantiated. Run create_portfolio first."
             )
 
-        print("Ejecutando auditoría de calidad de datos (Alertas Operativas)...")
+        print("Executing data quality audit (Operational Alerts)...")
         alertas = []
 
         # Initialize warning tracking columns
@@ -446,10 +446,10 @@ class PortfolioPurchase:
 
         if clientes_incomunicados > 0:
             self.df_personas.loc[mask_incomunicados, "ALERTA_OPERATIVA"] += (
-                "Sin datos de contacto. "
+                "No contact data. "
             )
             alertas.append(
-                f"Hay {clientes_incomunicados} clientes sin teléfono ni mail (Riesgo de cobranza)."
+                f"There are {clientes_incomunicados} clients without phone or email (Collection risk)."
             )
 
         # 2. Bank Control: Loans without CBU/CVU
@@ -461,9 +461,9 @@ class PortfolioPurchase:
 
             if prestamos_sin_cuenta > 0:
                 self.df_prestamos.loc[mask_sin_cbu, "ALERTA_OPERATIVA"] += (
-                    "Falta CBU/CVU. "
+                    "Missing CBU/CVU. "
                 )
-                alertas.append(f"Falta el CBU/CVU en {prestamos_sin_cuenta} préstamos.")
+                alertas.append(f"CBU/CVU is missing in {prestamos_sin_cuenta} loans.")
 
         # 3. Employer Control: Loans without Ente Pagador
         if "Ente Pagador" in self.df_prestamos.columns:
@@ -474,10 +474,10 @@ class PortfolioPurchase:
 
             if prestamos_sin_empleador > 0:
                 self.df_prestamos.loc[mask_sin_ente, "ALERTA_OPERATIVA"] += (
-                    "Falta Ente Pagador. "
+                    "Missing Payer Entity. "
                 )
                 alertas.append(
-                    f"Faltan los datos del Ente Pagador en {prestamos_sin_empleador} préstamos."
+                    f"Payer Entity data is missing in {prestamos_sin_empleador} loans."
                 )
 
         # 4. Remuneration Control: Debt-to-Income Ratio
@@ -503,24 +503,24 @@ class PortfolioPurchase:
 
         if mask_remuneracion_nula.any():
             self.df_prestamos.loc[mask_remuneracion_nula, "ALERTA_OPERATIVA"] += (
-                "Remuneración nula/faltante. "
+                "Null/missing remuneration. "
             )
 
         if mask_relacion.any():
             self.df_prestamos.loc[mask_relacion, "ALERTA_OPERATIVA"] += (
-                "Cuota supera el 30% del sueldo. "
+                "Installment exceeds 30% of salary. "
             )
 
         operaciones_riesgosas = (mask_remuneracion_nula | mask_relacion).sum()
         if operaciones_riesgosas > 0:
             alertas.append(
-                f"Existen {operaciones_riesgosas} operaciones con remuneración nula o relación cuota-ingreso mayor al 30%."
+                f"There are {operaciones_riesgosas} operations with null remuneration or installment-to-income ratio greater than 30%."
             )
 
         # 5. Commercial Conditions Control: Fecha Compra y Tasa Compra
-        # A. Control de Fecha
+        # A. Date Control
         fecha_compra_sistema = pd.to_datetime(self.cartera.fecha_compra).date()
-        # Ajustar el parámetro 'dayfirst' si en el CSV la fecha viene como YYYY-MM-DD
+        # Adjust the 'dayfirst' parameter if the CSV date is YYYY-MM-DD
         fechas_csv = pd.to_datetime(
             self.df_prestamos["Fecha Compra"], dayfirst=False, errors="coerce"
         ).dt.date
@@ -530,13 +530,13 @@ class PortfolioPurchase:
 
         if prestamos_fecha_distinta > 0:
             self.df_prestamos.loc[mask_fecha_distinta, "ALERTA_OPERATIVA"] += (
-                "Fecha Compra difiere del contrato. "
+                "Purchase Date differs from contract. "
             )
             alertas.append(
-                f"Hay {prestamos_fecha_distinta} préstamos con Fecha Compra en el CSV distinta a la ingresada en sistema ({fecha_compra_sistema})."
+                f"There are {prestamos_fecha_distinta} loans with a CSV Purchase Date different from the system ({fecha_compra_sistema})."
             )
 
-        # B. Control de Tasa (Convirtiendo decimal a porcentaje)
+        # B. Rate Control (Converting decimal to percentage)
         tasa_sistema_porcentaje = self.cartera.tna_descuento * 100.0
         tasas_csv = pd.to_numeric(self.df_prestamos["Tasa Compra"], errors="coerce")
 
@@ -547,19 +547,19 @@ class PortfolioPurchase:
 
         if prestamos_tasa_distinta > 0:
             self.df_prestamos.loc[mask_tasa_distinta, "ALERTA_OPERATIVA"] += (
-                "Tasa Compra difiere del contrato. "
+                "Purchase Rate differs from contract. "
             )
             alertas.append(
-                f"Hay {prestamos_tasa_distinta} préstamos con Tasa Compra en el CSV distinta a la ingresada en sistema ({tasa_sistema_porcentaje}%)."
+                f"There are {prestamos_tasa_distinta} loans with a CSV Purchase Rate different from the system ({tasa_sistema_porcentaje}%)."
             )
 
         # --- EXCEL REPORT GENERATION & CLEANUP ---
         if alertas:
-            print("\n⚠️ ALERTAS OPERATIVAS DETECTADAS:")
+            print("\n⚠️ OPERATIONAL ALERTS DETECTED:")
             for i, alerta in enumerate(alertas, 1):
                 print(f"  {i}. {alerta}")
 
-            # 1. Hacemos una copia independiente para no alterar los datos en memoria
+            # 1. Make an independent copy to avoid altering in-memory data
             df_personas_alertas = self.df_personas[
                 self.df_personas["ALERTA_OPERATIVA"] != ""
             ].copy()
@@ -568,7 +568,7 @@ class PortfolioPurchase:
                 self.df_prestamos["ALERTA_OPERATIVA"] != ""
             ].copy()
 
-            # 2. Sanitización ETL: Truncamos celdas con texto corrupto al límite seguro de Excel
+            # 2. ETL Sanitization: Truncate corrupt text cells to Excel's safe limit
             for col in df_personas_alertas.select_dtypes(include=["object"]):
                 df_personas_alertas[col] = (
                     df_personas_alertas[col].astype(str).str[:32000]
@@ -582,7 +582,7 @@ class PortfolioPurchase:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             nombre_reporte = f"ALERTAS_OPERATIVAS_CARTERA_{timestamp}.xlsx"
 
-            print(f"\nGenerando reporte para la administración: {nombre_reporte}")
+            print(f"\nGenerating report for administration: {nombre_reporte}")
             with pd.ExcelWriter(nombre_reporte, engine="openpyxl") as writer:
                 if not df_personas_alertas.empty:
                     df_personas_alertas.to_excel(
@@ -594,7 +594,7 @@ class PortfolioPurchase:
                     )
         else:
             print(
-                "✅ Auditoría operativa impecable. No hay datos faltantes ni discrepancias comerciales."
+                "✅ Impeccable operational audit. No missing data or commercial discrepancies."
             )
 
         # Drop temporary tracking columns on the original DataFrames
@@ -609,10 +609,10 @@ class PortfolioPurchase:
         Extracts unique employers from the loans DataFrame, inserts new ones,
         and returns a mapping dictionary of {name: id}.
         """
-        print("  -> Preparando Entes Pagadores (Empleadores)...")
+        print("  -> Preparing Payer Entities (Employers)...")
         entes_csv = self.df_prestamos["Ente Pagador"].dropna().unique()
 
-        # Mapeamos los existentes en la base
+        # Map existing ones in the database
         empleadores_db = {e.razon_social: e.id for e in self.db.query(Empleador).all()}
 
         nuevos_empleadores = 0
@@ -621,13 +621,13 @@ class PortfolioPurchase:
             if ente_clean not in empleadores_db:
                 nuevo_emp = Empleador(razon_social=ente_clean)
                 self.db.add(nuevo_emp)
-                self.db.flush()  # Flush genera el ID sin hacer commit
+                self.db.flush()  # Flush generates the ID without committing
                 empleadores_db[ente_clean] = nuevo_emp.id
                 nuevos_empleadores += 1
 
         return empleadores_db
 
-    # --- HELPERS BLINDADOS ---
+    # --- BULLETPROOF HELPERS ---
     @staticmethod
     def safe_int(val):
         if pd.isna(val):
@@ -673,10 +673,10 @@ class PortfolioPurchase:
         """
         import pandas as pd
 
-        print("  -> Preparando Clientes...")
+        print("  -> Preparing Clients...")
         clientes_db_cuils = {c[0] for c in self.db.query(Cliente.cuil).all()}
 
-        # Mapeo rápido: ID Operación -> Ente Pagador (desde df_prestamos)
+        # Quick mapping: Operation ID -> Payer Entity (from df_prestamos)
         op_to_ente = self.df_prestamos.set_index("ID Operación")[
             "Ente Pagador"
         ].to_dict()
@@ -685,7 +685,7 @@ class PortfolioPurchase:
             cuil_clean = str(row["CUIL"]).strip()
 
             if cuil_clean not in clientes_db_cuils:
-                # Normalización de datos crudos
+                # Normalization of raw data
                 sex_raw = self.safe_str(row.get("Sexo"))
                 if sex_raw:
                     sex_raw = sex_raw.upper()
@@ -695,11 +695,11 @@ class PortfolioPurchase:
                     else (SexoEnum.FEMENINO if sex_raw in ["F", "2"] else SexoEnum.OTRO)
                 )
 
-                # --- CORRECCIÓN CRÍTICA DE FECHA (NaT) ---
+                # --- CRITICAL DATE CORRECTION (NaT) ---
                 f_nac_ts = pd.to_datetime(row.get("Fecha Nacimiento"), errors="coerce")
                 f_nac = f_nac_ts.date() if pd.notna(f_nac_ts) else None
 
-                # Búsqueda del Empleador (Casteo extra para evitar IDs corruptos)
+                # Employer search (Extra casting to avoid corrupt IDs)
                 id_op_externo = self.safe_str(row.get("ID Operación"))
                 ente_raw = op_to_ente.get(id_op_externo)
                 ente_nombre = (
@@ -707,10 +707,10 @@ class PortfolioPurchase:
                 )
                 emp_id = self.safe_int(empleadores_map.get(ente_nombre))
 
-                # Extraemos y limpiamos documento
+                # Extract and clean document
                 doc_str = self.safe_str(row.get("Documento"))
 
-                # Instanciación con casteo protegido en la totalidad de las columnas
+                # Instantiation with protected casting in all columns
                 nuevo_cliente = Cliente(
                     cuil=cuil_clean,
                     documento=doc_str.replace(r"\D", "") if doc_str else None,
@@ -751,7 +751,7 @@ class PortfolioPurchase:
         """
         import numpy_financial as npf
 
-        print("  -> Preparando Créditos...")
+        print("  -> Preparing Credits...")
         op_to_credito_id = {}
 
         for _, row in self.df_prestamos.iterrows():
@@ -814,12 +814,12 @@ class PortfolioPurchase:
         for installments with a Present Value (Valor Actual) of 0,
         linking them to the corresponding installment via ORM relationships.
         """
-        print("  -> Preparando Cuotas y Cobranzas Retenidas...")
+        print("  -> Preparing Installments and Retained Collections...")
 
         for _, row in self.df_cuotas.iterrows():
             id_op_externo = str(row["ID Operación"])
 
-            # Recuperamos el ID interno de la operación
+            # Retrieve internal operation ID
             cred_id_interno = op_to_credito_id.get(id_op_externo)
 
             if cred_id_interno:
@@ -829,7 +829,7 @@ class PortfolioPurchase:
                     else None
                 )
 
-                # Extracción y limpieza de los componentes financieros
+                # Extraction and cleaning of financial components
                 cap = float(row["Capital"]) if pd.notna(row["Capital"]) else 0.0
                 int_ = float(row["Interés"]) if pd.notna(row["Interés"]) else 0.0
                 iva_ = float(row["IVA"]) if pd.notna(row["IVA"]) else 0.0
@@ -855,8 +855,8 @@ class PortfolioPurchase:
                     estado_cesion=estado_cesion,
                 )
 
-                # --- VINCULACIÓN CON OPERACIÓN CARTERA ---
-                # Registramos que esta cuota fue adquirida en la cartera actual
+                # --- LINK WITH PORTFOLIO OPERATION ---
+                # Record that this installment was acquired in the current portfolio
                 nueva_operacion = OperacionCartera(
                     cartera_id=self.cartera.id,
                     cuota_comercializada=va != 0.0,
@@ -864,22 +864,22 @@ class PortfolioPurchase:
                 )
                 nueva_cuota.movimientos_cartera.append(nueva_operacion)
 
-                # Generación automática de la cobranza para cuotas no compradas
+                # Automatic collection generation for unpurchased installments
                 if va == 0:
                     nueva_cobranza = Cobranza(
                         tipo_cobranza=TipoCobranzaEnum.CNC,
                         capital=cap,
                         interes=int_,
                         iva=iva_,
-                        # La retención se registra con fecha contable del día de la compra de la cartera
+                        # The retention is recorded with accounting date of the portfolio purchase date
                         fecha=self.cartera.fecha_compra,
                     )
-                    # El ORM vincula el cuota_id de la cobranza en memoria antes del flush
+                    # The ORM links the collection's cuota_id in memory before flush
                     nueva_cuota.cobranzas.append(nueva_cobranza)
 
                 self.db.add(nueva_cuota)
 
-        # Persiste todas las cuotas y sus cobranzas asociadas de una sola vez
+        # Persist all installments and their associated collections at once
         self.db.flush()
 
     def save_portfolio(self) -> None:
@@ -888,46 +888,46 @@ class PortfolioPurchase:
         Commits the instantiated portfolio, partner, clients, credits, and installments.
         """
         if not self.data_loaded:
-            raise ValueError("Datos no cargados. Ejecute read_csv() primero.")
+            raise ValueError("Data not loaded. Run read_csv() first.")
 
         if not self.cartera or not self.socio:
             raise ValueError(
-                "No hay cartera y/o socio instanciado. Ejecute create_portfolio primero."
+                "No portfolio and/or partner instantiated. Run create_portfolio first."
             )
 
-        print("\nIniciando volcado a la Base de Datos (Transacción Atómica)...")
+        print("\nStarting dump to the Database (Atomic Transaction)...")
 
         try:
-            # 1. Guardar metadatos principales (Socio y Cartera)
+            # 1. Save main metadata (Partner and Portfolio)
             self.db.add(self.socio)
             self.db.flush()
 
-            # 2. VINCULACIÓN CRÍTICA: Le inyectamos a la cartera el ID recién creado
+            # 2. CRITICAL LINKING: Inject the newly created ID into the portfolio
             self.cartera.socio_id = self.socio.id
             self.db.add(self.cartera)
-            self.db.flush()  # Necesitamos el ID de la cartera para los créditos
+            self.db.flush()  # We need the portfolio ID for the credits
 
-            # 3. Ahora la Cartera tiene un ID válido y no falla
+            # 3. Now the Portfolio has a valid ID and won't fail
             self.db.add(self.cartera)
             self.db.flush()
 
-            # 4. Tablas de dependencias
+            # 4. Dependency tables
             empleadores_map = self._import_employers()
             self._import_clients(empleadores_map)
 
-            # 5. Tablas transaccionales
+            # 5. Transaction tables
             op_to_id = self._import_credits()
             self._import_installments(op_to_id)
 
-            # 6. Commit definitivo
+            # 6. Final commit
             self.db.commit()
             print(
-                f"✅ Transacción completada: Cartera '{self.cartera.nombre}' guardada."
+                f"✅ Transaction completed: Portfolio '{self.cartera.nombre}' saved."
             )
 
         except Exception as e:
             self.db.rollback()
-            raise RuntimeError(f"Error en inserción SQL: {e}")
+            raise RuntimeError(f"SQL insertion error: {e}")
 
     def request_portfolio_paths() -> dict:
         """
@@ -949,30 +949,30 @@ class PortfolioPurchase:
             "cuotas": "CUOTAS (ej: ../data/CUOTAS.CSV)",
         }
 
-        print("\n--- Asistente de Carga de Archivos de Cartera ---")
+        print("\n--- Portfolio File Upload Wizard ---")
 
         for clave, descripcion in archivos_requeridos.items():
             while True:
-                # Solicitamos la ruta y limpiamos espacios o comillas accidentales
+                # Request the path and clean up spaces or accidental quotes
                 ruta_ingresada = (
-                    input(f"📁 Ingrese la ruta para {descripcion}: ")
+                    input(f"📁 Enter the path for {descripcion}: ")
                     .strip()
                     .strip("\"'")
                 )
                 ruta_obj = Path(ruta_ingresada)
 
-                # Verificamos que la ruta exista y sea efectivamente un archivo
+                # Verify that the path exists and is effectively a file
                 if ruta_obj.exists() and ruta_obj.is_file():
-                    # Guardamos la ruta resolviendo su ubicación absoluta
+                    # Save the path resolving its absolute location
                     paths[clave] = str(ruta_obj.resolve())
-                    print(f"   ✔️ Archivo detectado: {ruta_obj.name}\n")
+                    print(f"   ✔️ File detected: {ruta_obj.name}\n")
                     break
                 else:
                     print(
-                        f"   ❌ Error: No se encontró ningún archivo en la ruta '{ruta_ingresada}'. Intente nuevamente.\n"
+                        f"   ❌ Error: No file found at path '{ruta_ingresada}'. Try again.\n"
                     )
 
-        print("--- Carga de rutas completada exitosamente ---")
+        print("--- Path loading completed successfully ---")
         return paths
 
     def process_full_portfolio(
@@ -1006,30 +1006,30 @@ class PortfolioPurchase:
             bool: True if the entire process completes successfully, False otherwise.
         =============================================================================
         """
-        # 1. Si no se pasaron rutas, se activa la solicitud interactiva
+        # 1. If no paths were passed, interactive prompt is activated
         if paths is None:
             from src.utils.files import ask_portfolio_paths
 
             paths = ask_portfolio_paths()
 
-            # Si el usuario canceló la selección de ventanas, abortamos limpiamente
+            # If the user canceled the window selection, we abort cleanly
             if paths == {} or paths is None:
                 print(
-                    f"❌ Ingesta abortada: No se proporcionaron los archivos necesarios para '{portfolio_name}'."
+                    f"❌ Ingestion aborted: Required files not provided for '{portfolio_name}'."
                 )
                 return False
 
         try:
-            # 2. Cláusula de Guardia: Validar estructura requerida del diccionario antes de operar
+            # 2. Guard Clause: Validate required dictionary structure before operating
             required_keys = {"personas", "prestamos", "cuotas"}
             missing_keys = required_keys - set(paths.keys())
             if missing_keys:
                 print(
-                    f"❌ Error: El diccionario 'paths' no contiene las claves obligatorias: {missing_keys}"
+                    f"❌ Error: The 'paths' dictionary is missing required keys: {missing_keys}"
                 )
                 return False
 
-            # 3. Creación de la entidad Cartera y vinculación con el Socio Comercial
+            # 3. Portfolio entity creation and linking with Commercial Partner
             self.create_portfolio(
                 nombre_cartera=portfolio_name,
                 fecha_compra=portfolio_date,
@@ -1040,29 +1040,29 @@ class PortfolioPurchase:
                 iva=iva,
             )
 
-            # 4. Lectura y carga de archivos CSV mapeados desde el diccionario de rutas
+            # 4. Read and load mapped CSV files from the paths dictionary
             self.read_csv(
                 personas_path=paths["personas"],
                 prestamos_path=paths["prestamos"],
                 cuotas_path=paths["cuotas"],
             )
 
-            # 5. Ejecución del motor de validación de integridad referencial y de tipos
+            # 5. Execution of the referential integrity and type validation engine
             self.validation()
 
-            # 6. Verificación de alertas o inconsistencias no bloqueantes
+            # 6. Verification of alerts or non-blocking inconsistencies
             self.check_warnings()
 
-            # 7. Persistencia final de los datos limpios en la base de datos
+            # 7. Final persistence of clean data to the database
             self.save_portfolio()
 
             print(
-                f"✅ Proceso de ingesta finalizado con éxito para la cartera: '{portfolio_name}'"
+                f"✅ Ingestion process finished successfully for portfolio: '{portfolio_name}'"
             )
             return True
 
         except Exception as e:
             print(
-                f"❌ Fallo crítico durante la importación de la cartera '{portfolio_name}': {e}"
+                f"❌ Critical failure during importation of portfolio '{portfolio_name}': {e}"
             )
             return False

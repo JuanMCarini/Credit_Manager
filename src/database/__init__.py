@@ -16,11 +16,13 @@ from .models import (
     Credito,
     Cuota,
     EstadoCredito,
+    LiquidacionCuotaCedida,
     OperacionCartera,
     OrigenCredito,
     SexoEnum,
     SocioComercial,
     TipoCobranzaEnum,
+    TipoLiquidacionEnum,
     TipoOperacionCartera,
 )
 
@@ -37,9 +39,11 @@ __all__ = [
     "Cuota",
     "OperacionCartera",
     "Cobranza",
+    "LiquidacionCuotaCedida",
     "SexoEnum",
     "TipoOperacionCartera",
     "OrigenCredito",
     "EstadoCredito",
     "TipoCobranzaEnum",
+    "TipoLiquidacionEnum",
 ]

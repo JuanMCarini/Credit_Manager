@@ -17,7 +17,7 @@ from src.database import engine
 def saldos(
     fecha: datetime | None = None,
     con_saldo: bool = True,
-    propias: bool = True,
+    propias: bool | None = None,
     agrupar: bool = False,
     clientes: bool = False,
     carteras: bool = False,
@@ -54,6 +54,7 @@ def saldos(
         JOIN creditos cr ON c.credito_id = cr.id 
         WHERE cr.fecha_emision <= :fecha
     """)
+
     df_ctas = pd.read_sql_query(ctas_query, engine, params=sql_params, index_col="id")
     df_cart = pd.read_sql("carteras", engine, index_col="id")
     df_socios = pd.read_sql("socios_comerciales", engine, index_col="id")
@@ -112,10 +113,10 @@ def saldos(
     )
 
     conditions = [
-        (df["tipo_op"].isin(["COMPRA", "RECOMPRA"])) & (df["comercializada"] == True),
-        (df["tipo_op"].isin(["COMPRA", "RECOMPRA"])) & (df["comercializada"] == False),
-        (df["tipo_op"] == "VENTA") & (df["comercializada"] == True),
-        (df["tipo_op"] == "VENTA") & (df["comercializada"] == False),
+        (df["tipo_op"].isin(["COMPRA", "RECOMPRA"])) & (df["comercializada"] == True),  # noqa: E712
+        (df["tipo_op"].isin(["COMPRA", "RECOMPRA"])) & (df["comercializada"] == False),  # noqa: E712
+        (df["tipo_op"] == "VENTA") & (df["comercializada"] == True),  # noqa: E712
+        (df["tipo_op"] == "VENTA") & (df["comercializada"] == False),  # noqa: E712
     ]
     choices = [
         COMPANY_DATA.razon_social,
@@ -131,8 +132,12 @@ def saldos(
         errors="ignore",
     )
 
-    if propias:
+    if propias is None:
+        pass
+    elif propias:
         df = df[df["Dueño"] == COMPANY_DATA.razon_social]
+    else:
+        df = df[df["Dueño"] != COMPANY_DATA.razon_social]
 
     # 5. Dynamic Grouping (Returning raw numbers)
     if agrupar and (

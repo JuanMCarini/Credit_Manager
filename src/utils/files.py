@@ -16,16 +16,16 @@ def select_file(title: str = "Select a file") -> Path:
         Path: A pathlib.Path object representing the chosen file destination.
     =============================================================================
     """
-    # 1. Crear una ventana raíz oculta para inicializar el diálogo
+    # 1. Create a hidden root window to initialize the dialog
     root = tk.Tk()
     root.withdraw()
 
-    # 2. Forzar la ventana del diálogo al frente de la pantalla
+    # 2. Force the dialog window to the front of the screen
     root.attributes("-topmost", True)
     root.lift()
     root.focus_force()
 
-    # 3. Lanzar el selector nativo filtrando extensiones comunes de datos
+    # 3. Launch the native selector filtering common data extensions
     file_path = filedialog.askopenfilename(
         title=title,
         filetypes=[
@@ -37,7 +37,7 @@ def select_file(title: str = "Select a file") -> Path:
         parent=root,
     )
 
-    # 4. Destruir la instancia raíz para liberar memoria de Tkinter
+    # 4. Destroy the root instance to free Tkinter memory
     root.destroy()
 
     return Path(file_path)
@@ -58,32 +58,32 @@ def ask_portfolio_paths() -> dict | None:
                      selection was aborted.
     =============================================================================
     """
-    print("📂 Iniciando selección secuencial de archivos para la cartera...")
+    print("📂 Starting sequential file selection for the portfolio...")
 
-    # 1. Solicitar archivo de clientes/personas
-    path_personas = select_file("Seleccionar archivo de PERSONAS (CSV)")
+    # 1. Request clients/persons file
+    path_personas = select_file("Select PERSONAS file (CSV)")
     if not path_personas.is_file():
-        print("❌ Operación cancelada: No se seleccionó el archivo de PERSONAS.")
+        print("❌ Operation cancelled: PERSONAS file was not selected.")
         return None
 
-    # 2. Solicitar archivo de operaciones/préstamos
-    path_prestamos = select_file("Seleccionar archivo de PRESTAMOS (CSV)")
+    # 2. Request operations/loans file
+    path_prestamos = select_file("Select PRESTAMOS file (CSV)")
     if not path_prestamos.is_file():
-        print("❌ Operación cancelada: No se seleccionó el archivo de PRESTAMOS.")
+        print("❌ Operation cancelled: PRESTAMOS file was not selected.")
         return None
 
-    # 3. Solicitar archivo de amortizaciones/cuotas
-    path_cuotas = select_file("Seleccionar archivo de CUOTAS (CSV)")
+    # 3. Request installments file
+    path_cuotas = select_file("Select CUOTAS file (CSV)")
     if not path_cuotas.is_file():
-        print("❌ Operación cancelada: No se seleccionó el archivo de CUOTAS.")
+        print("❌ Operation cancelled: CUOTAS file was not selected.")
         return None
 
-    # 4. Consolidar las rutas en la estructura de diccionario requerida
+    # 4. Consolidate paths into the required dictionary structure
     paths_dict = {
         "personas": path_personas,
         "prestamos": path_prestamos,
         "cuotas": path_cuotas,
     }
 
-    print("📊 Estructura de rutas cargada exitosamente.")
+    print("📊 Paths structure loaded successfully.")
     return paths_dict

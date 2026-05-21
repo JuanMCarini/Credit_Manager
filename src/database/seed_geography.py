@@ -54,7 +54,7 @@ def seed_provincias(db: Session) -> None:
             registros_insertados += 1
 
     db.commit()
-    print(f"✅ Se insertaron {registros_insertados} provincias correctamente.")
+    print(f"✅ {registros_insertados} provinces inserted successfully.")
 
 
 if __name__ == "__main__":
@@ -63,6 +63,6 @@ if __name__ == "__main__":
         seed_provincias(db)
     except Exception as e:
         db.rollback()
-        print(f"❌ Error al poblar provincias: {e}")
+        print(f"❌ Error populating provinces: {e}")
     finally:
         db.close()
