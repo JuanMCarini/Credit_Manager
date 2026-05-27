@@ -7,9 +7,11 @@ Description: Logic for processing different types of collections (standard,
 
 import enum
 from datetime import datetime
+from pathlib import Path
 
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
+from IPython.display import display
 from sqlalchemy import text  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
@@ -27,6 +29,7 @@ from src.database.models import (  # noqa: E402
 )
 from src.logic.penalties import PenaltyManager  # noqa: E402
 from src.utils.dates import normalize_date  # noqa: E402
+from src.utils.files import select_file
 
 
 class IdentificadorEnum(enum.Enum):
@@ -104,22 +107,27 @@ class CollectionManager:
         # 2. Ruteo optimizado con match-case, pero encadenando JOINs y WHEREs programáticos
         match identificador:
             case "CREDITO_ID":
+                val_id = int(val_id)
                 query = query.filter(Cuota.credito_id == val_id)
 
             case "ID_EXTERNO":
+                val_id = str(int(val_id))
                 query = query.join(Credito).filter(Credito.id_externo == val_id)
 
             case "CLIENTE_CUIL":
+                val_id = str(int(val_id))
                 query = query.join(Credito).filter(Credito.cliente_cuil == val_id)
 
             case "CLIENTE_DNI":
                 # SQLAlchemy encadena los joins mágicamente usando las relationships() que ya definiste en models.py
+                val_id = str(int(val_id))
                 query = (
                     query.join(Credito)
                     .join(Cliente)
                     .filter(Cliente.documento == val_id)
                 )
             case "PROVEEDOR_CUIT":
+                val_id = str(int(val_id))
                 query = (
                     query.join(Credito)
                     .join(Cartera, Credito.cartera_id == Cartera.id)
@@ -136,6 +144,7 @@ class CollectionManager:
 
         # 3. Ejecución final
         df = pd.read_sql(query.statement, self.db.get_bind(), index_col="id")
+
         return df
 
     def _calculate_pending_balances(self, df_ctas: pd.DataFrame) -> pd.DataFrame:
@@ -233,7 +242,7 @@ class CollectionManager:
 
         # 4. Final verification: if there are installments but they are all already paid
         if df.empty:
-            return self._generate_empty_collections_df()
+            return self._generate_empty_collections()
 
         return df
 
@@ -257,6 +266,9 @@ class CollectionManager:
         """
 
         # 1. Instantiate ORM objects in bulk
+        for col in ["capital", "interes", "iva"]:
+            df_cobr[col] = df_cobr[col].round(2)
+
         new_collections = []
         for row in df_cobr.itertuples():
             cobranza = Cobranza(
@@ -351,10 +363,6 @@ class CollectionManager:
         """
         if sobrante <= 0:
             return df_cobr
-
-        import pandas as pd
-
-        from src.database.models import TipoCobranzaEnum
 
         # 1. Share the active session
         new_penalty = PenaltyManager(self.db)
@@ -666,3 +674,70 @@ class CollectionManager:
         except Exception as e:
             self.db.rollback()
             raise RuntimeError(f"Error processing partner resources: {e}")
+
+    def process_massive_collection(
+        self,
+        identificador: str,
+        id_column: str = "A",
+        amount_column: str = "B",
+        payment_date: str | datetime | None = None,
+        path: str | Path | None = None,
+        early: bool = False,
+    ) -> pd.DataFrame:
+
+        if payment_date is None:
+            payment_date = datetime.today()
+
+        if path is None:
+            path = select_file()
+
+        match identificador:
+            case "CREDITO_ID":
+                ident = "credito_id"
+            case "CLIENTE_CUIL":
+                ident = "cliente_cuil"
+            case "CLIENTE_DNI":
+                ident = "cliente_dni"
+            case "ID_EXTERNO":
+                ident = "id_externo"
+            case "PROVEEDOR_CUIT":
+                ident = "proveedor_cuit"
+            case "CARTERA_ID":
+                ident = "cartera_id"
+            case _:
+                raise ValueError(
+                    f"Identificador '{identificador}' no soportado para cobros masivos."
+                )
+
+        # By passing a single comma-separated string, Pandas treats them as Excel column letters (A, B, N, etc)
+        # instead of literal column header names.
+        df = pd.read_excel(path, usecols=f"{id_column},{amount_column}")
+        header = [ident, "monto"]
+        df.columns = header
+        df["monto"] = df["monto"].astype(float)
+        df = df.groupby(ident)[["monto"]].sum().reset_index()
+
+        if (df["monto"] >= 0).all() or (df["monto"] <= 0).all():
+            df["monto"] = df["monto"].abs()
+        else:
+            raise ValueError("Amounts with different signs.")
+
+        lista_cobranzas = []
+        problems = []
+        if early:
+            process = self.process_early_cancellation
+        else:
+            process = self.process_standard_payment
+
+        for i, row in df.iterrows():
+            new_cobr = process(identificador, row[ident], row["monto"], payment_date)
+            if not new_cobr.empty:
+                lista_cobranzas.append(new_cobr)
+            else:
+                problems.append(row[ident])
+
+        df_cobr = pd.concat(lista_cobranzas) if lista_cobranzas else pd.DataFrame()
+
+        df_prob = df.loc[df[ident].isin(problems)]
+        display(df_prob)
+        return df_cobr

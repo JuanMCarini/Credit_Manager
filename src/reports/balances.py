@@ -213,6 +213,11 @@ def saldos(
     for col in ["ID Cartera", "Proveedor", "Originador"]:
         if col in df.columns:
             df[col] = df[col].replace(0.0, None)
+
+    for col in ["Fecha Vencimiento", "Fecha Emisión"]:
+        if col in df.columns:
+            df[col] = pd.to_datetime(df[col])
+
     df.rename_axis(index=renames, inplace=True)
 
     return df

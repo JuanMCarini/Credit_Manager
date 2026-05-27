@@ -1016,7 +1016,7 @@ class PortfolioPurchase:
             from src.utils.files import ask_portfolio_paths
 
             paths = ask_portfolio_paths()
-
+            print(paths)
             # If the user canceled the window selection, we abort cleanly
             if paths == {} or paths is None:
                 print(
