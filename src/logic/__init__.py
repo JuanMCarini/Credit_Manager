@@ -10,6 +10,7 @@ from .amortization import AmortizationEngine
 from .collections import CollectionManager, IdentificadorEnum
 from .origination import LoanOriginator
 from .penalties import PenaltyManager
+from .settlements import SettlementManager
 
 __all__ = [
     "AmortizationEngine",
@@ -17,4 +18,5 @@ __all__ = [
     "IdentificadorEnum",
     "LoanOriginator",
     "PenaltyManager",
+    "SettlementManager",
 ]

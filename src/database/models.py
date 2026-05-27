@@ -222,9 +222,7 @@ class SocioComercial(Base):
         # 1. Retrieve the target socio
         socio = db.query(cls).filter_by(id=socio_id).first()
         if not socio:
-            raise ValueError(
-                f"No Socio Comercial was found with ID {socio_id}."
-            )
+            raise ValueError(f"No Socio Comercial was found with ID {socio_id}.")
 
         try:
             # 2. Iterate over arguments and update only valid attributes
@@ -239,9 +237,7 @@ class SocioComercial(Base):
 
         except Exception as e:
             db.rollback()
-            raise RuntimeError(
-                f"Failed to update socio comercial data: {e}"
-            )
+            raise RuntimeError(f"Failed to update socio comercial data: {e}")
 
 
 class AnticiposSinAplicar(Base):
@@ -501,7 +497,9 @@ class EstadoCuotaCedida(enum.Enum):
     """
 
     NO_VENDIDA = "NO VENDIDA"  # Available for sale (Internally originated)
-    NO_COMPRADA = "NO COMPRADA"  # Status for acquired installments that are not replicated
+    NO_COMPRADA = (
+        "NO COMPRADA"  # Status for acquired installments that are not replicated
+    )
     PENDIENTE = "PENDIENTE"  # Assigned to the buyer but not yet liquidated/collected
     MOROSA = "MOROSA"  # Assigned installment that incurred late default
     CANCELADA = "CANCELADA"  # Assigned installment that was already fully paid
@@ -573,6 +571,47 @@ class Cuota(Base):
             self.estado = EstadoCuota.PENDIENTE
 
         return self.estado.value
+
+    def actualizar_estado_cedido(self, fecha_evaluacion: str | datetime) -> str:
+        """
+        =============================================================================
+        Method: actualizar_estado
+        Description: Evaluates the total paid amounts against the expected totals
+                     and the current date to determine the accurate status of the
+                     installment. Bypasses execution if the debt was sold.
+        Parameters:
+            fecha_evaluacion (date): The reference date to check for delinquency.
+        Returns:
+            str: The updated status of the installment.
+        =============================================================================
+        """
+        fecha_evaluacion = normalize_date(fecha_evaluacion)
+        # 1. Guard clause: If the installment was never purchased, we don't touch it
+        if self.estado_cesion in [
+            EstadoCuotaCedida.NO_COMPRADA,
+            EstadoCuotaCedida.NO_VENDIDA,
+        ]:
+            return self.estado_cesion.value
+
+        # 2. Financial math with rounding to avoid floating point errors
+        total_esperado = round(self.capital + self.interes + self.iva, 2)
+
+        # We sum everything that came in through collections associated with this installment
+        total_cobrado = sum(
+            round(c.capital + c.interes + c.iva, 2) for c in self.liquidaciones
+        )
+
+        # 3. State transition logic
+        if total_cobrado >= total_esperado:
+            self.estado_cesion = EstadoCuotaCedida.CANCELADA
+
+        elif fecha_evaluacion > normalize_date(self.fecha_vencimiento):
+            self.estado_cesion = EstadoCuotaCedida.MOROSA
+
+        else:
+            self.estado_cesion = EstadoCuotaCedida.PENDIENTE
+
+        return self.estado_cesion.value
 
     def __repr__(self):
         return f"<Cuota(credito_id={self.credito_id}, nro={self.nro_cuota})>"
@@ -655,10 +694,12 @@ class TipoLiquidacionEnum(enum.Enum):
     Defines the financial nature of the payout/liquidation event to the portfolio buyer.
     """
 
+    PENDIENTE = "PENDIENTE"
     NORMAL = "NORMAL"
     RECURSO = "RECURSO"
-    CANCELACION_ANTICIPADA = "CANCELACION ANTICIPADA"
-    PUNITORIOS = "PUNITORIOS"
+    CA = "CANCELACION ANTICIPADA"
+    BCA = "BONIFICACION POR CANCELACION ANTICIPADA"
+    IP = "INTERESES PERDIDOS"
 
 
 class LiquidacionCuotaCedida(Base):

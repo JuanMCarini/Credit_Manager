@@ -8,16 +8,23 @@ Description: Logic for processing different types of collections (standard,
 import enum
 from datetime import datetime
 
-from IPython.display import display
-
-display()
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 from sqlalchemy import text  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
 from src.database.connection import SessionLocal  # noqa: E402
-from src.database.models import Cobranza, Credito, Cuota, TipoCobranzaEnum  # noqa: E402
+from src.database.models import (  # noqa: E402
+    AnticiposSinAplicar,
+    Cartera,
+    Cliente,
+    Cobranza,
+    Credito,
+    Cuota,
+    EstadoCuota,
+    SocioComercial,
+    TipoCobranzaEnum,
+)
 from src.logic.penalties import PenaltyManager  # noqa: E402
 from src.utils.dates import normalize_date  # noqa: E402
 
@@ -73,7 +80,7 @@ class CollectionManager:
         )
 
     def _fetch_installments_by_identifier(
-        self, identificador: str, id_val: int | str
+        self, identificador: str, val_id: int | str, recurso: bool = False
     ) -> pd.DataFrame:
         """
         =============================================================================
@@ -90,52 +97,46 @@ class CollectionManager:
                           indexed by the installment 'id'.
         =============================================================================
         """
-        import pandas as pd
 
-        columns = "c.*"
-        joins = ""
+        # 1. Iniciamos la query base
+        query = self.db.query(Cuota)
 
-        # Optimized router with match-case
+        # 2. Ruteo optimizado con match-case, pero encadenando JOINs y WHEREs programáticos
         match identificador:
             case "CREDITO_ID":
-                where = " WHERE c.credito_id = :val_id"
+                query = query.filter(Cuota.credito_id == val_id)
 
             case "ID_EXTERNO":
-                columns += ", cr.id_externo, cr.cliente_cuil"
-                joins = " JOIN creditos cr ON c.credito_id = cr.id"
-                where = " WHERE cr.id_externo = :val_id"
+                query = query.join(Credito).filter(Credito.id_externo == val_id)
 
             case "CLIENTE_CUIL":
-                columns += ", cr.id_externo, cr.cliente_cuil"
-                joins = " JOIN creditos cr ON c.credito_id = cr.id"
-                where = " WHERE cr.cliente_cuil = :val_id"
+                query = query.join(Credito).filter(Credito.cliente_cuil == val_id)
 
             case "CLIENTE_DNI":
-                columns += ", cl.documento"
-                joins = " JOIN creditos cr ON c.credito_id = cr.id JOIN clientes cl ON cr.cliente_cuil = cl.cuil"
-                where = " WHERE cl.documento = :val_id"
-
-            case "PROVEEDOR_CUIT":
-                columns += ", sc.cuit as proveedor_cuit"
-                joins = (
-                    " JOIN creditos cr ON c.credito_id = cr.id"
-                    " JOIN carteras ca ON cr.cartera_id = ca.id"
-                    " JOIN socios_comerciales sc ON ca.socio_id = sc.id"
+                # SQLAlchemy encadena los joins mágicamente usando las relationships() que ya definiste en models.py
+                query = (
+                    query.join(Credito)
+                    .join(Cliente)
+                    .filter(Cliente.documento == val_id)
                 )
-                where = " WHERE sc.cuit = :val_id AND ca.recurso = 1 and c.estado IN ('PENDIENTE', 'MOROSA')"
+            case "PROVEEDOR_CUIT":
+                query = (
+                    query.join(Credito)
+                    .join(Cartera, Credito.cartera_id == Cartera.id)
+                    .join(SocioComercial, Cartera.socio_id == SocioComercial.id)
+                    .filter(
+                        SocioComercial.cuit == val_id,
+                        Cartera.recurso == recurso,
+                        Cuota.estado.in_([EstadoCuota.PENDIENTE, EstadoCuota.MOROSA]),
+                    )
+                )
 
             case _:
-                raise ValueError(
-                    f"⚠️ '{identificador}' is not a valid identifier type."
-                )
+                raise ValueError(f"⚠️ '{identificador}' is not a valid identifier type.")
 
-        # Final query construction
-        ctas_query = text(f"SELECT {columns} FROM cuotas c {joins} {where}")
-
-        # Safe execution delegating the parameter to the SQL engine
-        return pd.read_sql(
-            ctas_query, self.db.get_bind(), params={"val_id": id_val}, index_col="id"
-        )
+        # 3. Ejecución final
+        df = pd.read_sql(query.statement, self.db.get_bind(), index_col="id")
+        return df
 
     def _calculate_pending_balances(self, df_ctas: pd.DataFrame) -> pd.DataFrame:
         """
@@ -155,7 +156,6 @@ class CollectionManager:
         =============================================================================
         """
         import pandas as pd
-        from sqlalchemy import text
 
         # 1. Preparation of the safe IN clause
         cuotas_ids = tuple(df_ctas.index)
@@ -191,7 +191,7 @@ class CollectionManager:
         return df_pending
 
     def _get_pending_installments(
-        self, identificador: str, id_val: int | str
+        self, identificador: str, id_val: int | str, recurso: bool = False
     ) -> pd.DataFrame:
         """
         =============================================================================
@@ -209,16 +209,24 @@ class CollectionManager:
         =============================================================================
         """
         # 1. Initial installment extraction (using the router)
-        df_ctas = self._fetch_installments_by_identifier(identificador, id_val)
+        df_ctas = self._fetch_installments_by_identifier(identificador, id_val, recurso)
 
         # If there are no installments at all
         if df_ctas.empty:
-            return self._generate_empty_collections_df()
+            return self._generate_empty_collections()
 
         # 2. Uniqueness validation for ID_EXTERNO
-        if identificador == "ID_EXTERNO":
-            if len(df_ctas["credito_id"].unique()) > 1:
-                raise ValueError(f"⚠️ There is more than one credit with external ID {id_val}.")
+        match identificador:
+            case "ID_EXTERNO":
+                if len(df_ctas["credito_id"].unique()) > 1:
+                    raise ValueError(
+                        f"⚠️ There is more than one credit with external ID {id_val}."
+                    )
+            case "PROVEEDOR_CUIT":
+                if not recurso:
+                    raise ValueError(
+                        "⚠️ We cannot collect using the CUIT of a supplier where the file is without resources."
+                    )
 
         # 3. Calculation of pending balances
         df = self._calculate_pending_balances(df_ctas)
@@ -400,7 +408,7 @@ class CollectionManager:
         # 2. Debt extraction and calculation (Early exit if there is no debt)
         df = self._get_pending_installments(identificador, id_val)
         if df.empty:
-            return df
+            return self._generate_empty_collections()
 
         # 3. Identification of total balance to cover
         df["total_acum"] = df["total"].cumsum().round(2)
@@ -549,10 +557,10 @@ class CollectionManager:
 
     def process_resource(
         self,
-        payment_date: str | datetime,
-        amount: float,
+        identificador: str,
         id_val: int | str,
-        identificador: str = "PROVEEDOR_CUIT",
+        amount: float,
+        payment_date: str | datetime,
     ) -> pd.DataFrame:
         """
         =============================================================================
@@ -571,7 +579,6 @@ class CollectionManager:
             pd.DataFrame: Processed collections breakdown template or an empty template.
         =============================================================================
         """
-        from sqlalchemy import text
 
         from src.database.models import TipoCobranzaEnum
 
@@ -580,28 +587,37 @@ class CollectionManager:
 
         try:
             # 1. Dynamic query construction to query historical advances
-            query_anticipos = "SELECT ant.* FROM anticipos_socios ant"
-            if id_tipo == "PROVEEDOR_CUIT":
-                query_anticipos += " JOIN socios_comerciales sc ON ant.socio_id = sc.id WHERE sc.cuit = :val_id"
-                id_val = str(id_val)
-            elif id_tipo == "CARTERA_ID":
-                query_anticipos += (
-                    " JOIN carteras c ON ant.cartera_id = c.id WHERE c.id = :val_id"
-                )
-                id_val = int(id_val)
+            query_anticipos = self.db.query(AnticiposSinAplicar)
+            match identificador:
+                case "PROVEEDOR_CUIT":
+                    id_val = str(id_val)
+                    query_anticipos = (
+                        query_anticipos.join(
+                            SocioComercial,
+                            AnticiposSinAplicar.socio_id == SocioComercial.id,
+                        )
+                        .join(Cartera, SocioComercial.id == Cartera.socio_id)
+                        .filter(SocioComercial.cuit == id_val)
+                    )
+                case "CARTERA_ID":
+                    id_val = int(id_val)
+                    query_anticipos = query_anticipos.join(
+                        Cartera, AnticiposSinAplicar.socio_id == Cartera.socio_id
+                    ).filter(Cartera.id == id_val)
+            query_anticipos = query_anticipos.filter(Cartera.recurso)
             # 2. Reading existing advances and adding to the available amount
             anticipos = pd.read_sql(
-                query_anticipos,
+                query_anticipos.statement,
                 self.db.get_bind(),
-                params={"val_id": id_val},
                 index_col="id",
             )
+
             monto_anticipos = (
                 float(anticipos["monto"].sum()) if "monto" in anticipos.columns else 0.0
             )
             amount += monto_anticipos
             # 3. Extraction and calculation of filtered current debt
-            df = self._fetch_installments_by_identifier(identificador, id_val)
+            df = self._fetch_installments_by_identifier(identificador, id_val, True)
             df = self._calculate_pending_balances(df)
 
             # 4. Chronological grouping by due date to determine total coverage
@@ -649,6 +665,4 @@ class CollectionManager:
 
         except Exception as e:
             self.db.rollback()
-            raise RuntimeError(
-                f"Error processing partner resources: {e}"
-            )
+            raise RuntimeError(f"Error processing partner resources: {e}")

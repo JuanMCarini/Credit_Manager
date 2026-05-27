@@ -25,6 +25,8 @@ def saldos(
     originador: bool = False,
     vencimientos: bool = False,
     dueño: bool = False,
+    recurso: bool = False,
+    iva: bool = False,
 ):
     """
     =============================================================================
@@ -81,6 +83,8 @@ def saldos(
     df_ctas["Originador"] = df_ctas["socio_originador_id"].map(
         df_socios["razon_social"]
     )
+    df_ctas["recurso"] = df_ctas["cartera_id"].map(df_cart["recurso"])
+    df_ctas["iva_operado"] = df_ctas["cartera_id"].map(df_cart["iva"])
 
     # 3. Financial Calculations
     df_cobr_sum = df_cobr.groupby("cuota_id")[["capital", "interes", "iva"]].sum()
@@ -141,7 +145,14 @@ def saldos(
 
     # 5. Dynamic Grouping (Returning raw numbers)
     if agrupar and (
-        clientes or socios or carteras or originador or vencimientos or dueño
+        clientes
+        or socios
+        or carteras
+        or originador
+        or vencimientos
+        or dueño
+        or recurso
+        or iva
     ):
         lista_agrupadores = []
         if clientes:
@@ -156,6 +167,10 @@ def saldos(
             lista_agrupadores.append("Dueño")
         if vencimientos:
             lista_agrupadores.append("fecha_vencimiento")
+        if recurso:
+            lista_agrupadores.append("recurso")
+        if iva:
+            lista_agrupadores.append("iva_operado")
 
         # We perform the sum but skip the string formatting
         df = df.groupby(lista_agrupadores)[["capital", "interes", "iva", "total"]].sum()

@@ -368,14 +368,27 @@ class PortfolioPurchase:
         else:
             self.df_cuotas["Valor Actual"] = self.df_cuotas["VA_Calculado"]
 
+        # G. Validation: IVA Consistency
+        if self.cartera.iva:
+            iva_cuotas = pd.to_numeric(self.df_cuotas["IVA"], errors="coerce").fillna(0)
+            interes_cuotas = pd.to_numeric(
+                self.df_cuotas["Interés"], errors="coerce"
+            ).fillna(0)
+
+            mask_iva_inconsistente = (iva_cuotas == 0) & (interes_cuotas > 0)
+
+            if mask_iva_inconsistente.any():
+                self.df_cuotas.loc[mask_iva_inconsistente, "VALIDACION"] = (
+                    "ERROR: Installment has no IVA but has interest, while portfolio includes IVA"
+                )
+                errores_detectados = True
+
         # 3. EXCEL REPORT GENERATION
         if errores_detectados:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             nombre_reporte = f"REPORTE_ERRORES_IMPORTACION_{timestamp}.xlsx"
 
-            print(
-                f"\n❌ INCONSISTENCIES FOUND. Generating report: {nombre_reporte}"
-            )
+            print(f"\n❌ INCONSISTENCIES FOUND. Generating report: {nombre_reporte}")
 
             with pd.ExcelWriter(nombre_reporte, engine="openpyxl") as writer:
                 self.df_personas.to_excel(writer, sheet_name="PERSONAS", index=False)
@@ -406,9 +419,7 @@ class PortfolioPurchase:
                 columns=["VALIDACION", "VA_Calculado", "Diferencia_VA"], inplace=True
             )
 
-            print(
-                "\n✅ Validation passed successfully. All records are consistent."
-            )
+            print("\n✅ Validation passed successfully. All records are consistent.")
 
     def check_warnings(self) -> None:
         """
@@ -419,9 +430,7 @@ class PortfolioPurchase:
             raise ValueError("You must run read_csv() before validating.")
 
         if not self.cartera:
-            raise ValueError(
-                "No portfolio instantiated. Run create_portfolio first."
-            )
+            raise ValueError("No portfolio instantiated. Run create_portfolio first.")
 
         print("Executing data quality audit (Operational Alerts)...")
         alertas = []
@@ -921,9 +930,7 @@ class PortfolioPurchase:
 
             # 6. Final commit
             self.db.commit()
-            print(
-                f"✅ Transaction completed: Portfolio '{self.cartera.nombre}' saved."
-            )
+            print(f"✅ Transaction completed: Portfolio '{self.cartera.nombre}' saved.")
 
         except Exception as e:
             self.db.rollback()
@@ -955,9 +962,7 @@ class PortfolioPurchase:
             while True:
                 # Request the path and clean up spaces or accidental quotes
                 ruta_ingresada = (
-                    input(f"📁 Enter the path for {descripcion}: ")
-                    .strip()
-                    .strip("\"'")
+                    input(f"📁 Enter the path for {descripcion}: ").strip().strip("\"'")
                 )
                 ruta_obj = Path(ruta_ingresada)
 
