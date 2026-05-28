@@ -52,6 +52,7 @@ class SettlementManager:
         Initializes the settlement manager with an active database session.
         """
         self.db = db_session or SessionLocal()
+        self._own_session = db_session is None
         self.settlements = None
 
     def obtain_uncancelled_installments(
@@ -229,7 +230,7 @@ class SettlementManager:
 
     def __del__(self):
         """
-        Safely closes the database session.
+        Safely closes the database session if it was created internally.
         """
-        if hasattr(self, "db") and self.db:
+        if hasattr(self, "_own_session") and self._own_session and hasattr(self, "db") and self.db:
             self.db.close()

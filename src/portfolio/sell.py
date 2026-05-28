@@ -25,12 +25,13 @@ class PortfolioSell:
     Manages the selection and sale of active portfolio installments to third parties.
     """
 
-    def __init__(self, db_session: session = SessionLocal()):
+    def __init__(self, db_session: session | None = None):
         """
         Initializes the portfolio sales manager with an active database session
         and empty state containers for tracking transactional elements.
         """
-        self.db = db_session
+        self.db = db_session or SessionLocal()
+        self._own_session = db_session is None
 
         # State container
         self.df_cuotas_venta = None
@@ -280,7 +281,7 @@ class PortfolioSell:
     def __del__(self):
         """
         Ensures the underlying SQLAlchemy connection pool drops the session
-        cleanly when the object lifecycle terminates.
+        cleanly if it was created internally when the object lifecycle terminates.
         """
-        if hasattr(self, "db") and self.db:
+        if hasattr(self, "_own_session") and self._own_session and hasattr(self, "db") and self.db:
             self.db.close()
