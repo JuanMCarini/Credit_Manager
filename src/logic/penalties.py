@@ -35,6 +35,7 @@ class PenaltyManager:
         fecha_emision: datetime | str | None = None,
         fecha_vencimiento: datetime | str | None = None,
         tasa_iva: float = 0.21,
+        commit: bool = True,
     ) -> Credito:
         """
         =============================================================================
@@ -108,7 +109,10 @@ class PenaltyManager:
         self.db.add(penalty_cuota)
 
         try:
-            self.db.commit()
+            if commit:
+                self.db.commit()
+            else:
+                self.db.flush()
             return penalty_credit, penalty_cuota
         except Exception as e:
             self.db.rollback()

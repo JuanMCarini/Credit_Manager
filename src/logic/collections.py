@@ -247,7 +247,7 @@ class CollectionManager:
         return df
 
     def _persist_collections(
-        self, df_cobr: pd.DataFrame, payment_date: datetime
+        self, df_cobr: pd.DataFrame, payment_date: datetime, commit: bool = True
     ) -> pd.DataFrame:
         """
         =============================================================================
@@ -300,42 +300,43 @@ class CollectionManager:
             credito.actualizar_estado()
 
         # 3. Safe persistence
-        try:
-            self.db.commit()
+        if commit:
+            try:
+                self.db.commit()
+            except Exception as e:
+                self.db.rollback()
+                raise RuntimeError(f"Error persisting the collections transaction: {e}")
 
-            columns = {
-                "credito_id": "ID Crédito",
-                "nro_cuota": "Nro. Cuota",
-                "fecha_vencimiento": "Fecha Vencimiento",
-                "capital": "Capital",
-                "interes": "Interés",
-                "iva": "IVA",
-                "documento": "Documento",
-                "total": "Total",
-                "tipo_cobranza": "Tipo Cobranza",
-            }
-            df_cobr["Fecha Emisión"] = payment_date
-            df_cobr.rename(columns=columns, inplace=True)
-            df_cobr.set_index(["ID Crédito", "Nro. Cuota"], inplace=True)
-            df_cobr["Fecha Vencimiento"] = pd.to_datetime(
-                df_cobr["Fecha Vencimiento"]
-            ).dt.to_period("D")
-            df_cobr = df_cobr.sort_index()
-            df_cobr = df_cobr[
-                [
-                    "Fecha Emisión",
-                    "Tipo Cobranza",
-                    "Fecha Vencimiento",
-                    "Capital",
-                    "Interés",
-                    "IVA",
-                    "Total",
-                ]
+        columns = {
+            "credito_id": "ID Crédito",
+            "nro_cuota": "Nro. Cuota",
+            "fecha_vencimiento": "Fecha Vencimiento",
+            "capital": "Capital",
+            "interes": "Interés",
+            "iva": "IVA",
+            "documento": "Documento",
+            "total": "Total",
+            "tipo_cobranza": "Tipo Cobranza",
+        }
+        df_cobr["Fecha Emisión"] = payment_date
+        df_cobr.rename(columns=columns, inplace=True)
+        df_cobr.set_index(["ID Crédito", "Nro. Cuota"], inplace=True)
+        df_cobr["Fecha Vencimiento"] = pd.to_datetime(
+            df_cobr["Fecha Vencimiento"]
+        ).dt.to_period("D")
+        df_cobr = df_cobr.sort_index()
+        df_cobr = df_cobr[
+            [
+                "Fecha Emisión",
+                "Tipo Cobranza",
+                "Fecha Vencimiento",
+                "Capital",
+                "Interés",
+                "IVA",
+                "Total",
             ]
-            return df_cobr
-        except Exception as e:
-            self.db.rollback()
-            raise RuntimeError(f"Error persisting the collections transaction: {e}")
+        ]
+        return df_cobr
 
     def _process_sobrante_as_penalty(
         self,
@@ -343,6 +344,7 @@ class CollectionManager:
         sobrante: float,
         payment_date: datetime | str,
         tasa_iva: float = 0.21,
+        commit: bool = True,
     ) -> pd.DataFrame:
         """
         =============================================================================
@@ -378,6 +380,7 @@ class CollectionManager:
                 fecha_emision=payment_date,
                 fecha_vencimiento=payment_date,
                 tasa_iva=tasa_iva,
+                commit=commit,
             )
 
             # 4. Add the new row using the installment ID as index
@@ -408,6 +411,7 @@ class CollectionManager:
         amount: float,
         payment_date: datetime | str | None = None,
         tasa_iva: float = 0.21,
+        commit: bool = True,
     ) -> pd.DataFrame:
 
         # 1. Normalization
@@ -464,11 +468,11 @@ class CollectionManager:
 
         # We delegate the penalty creation (if leftover is 0, the function returns the intact DF)
         df_cobr = self._process_sobrante_as_penalty(
-            df_cobr, sobrante, payment_date, tasa_iva
+            df_cobr, sobrante, payment_date, tasa_iva, commit=commit
         )
 
         # 7. Final delegated persistence
-        return self._persist_collections(df_cobr, payment_date)
+        return self._persist_collections(df_cobr, payment_date, commit=commit)
 
     def process_early_cancellation(
         self,
@@ -477,6 +481,7 @@ class CollectionManager:
         amount: float,
         payment_date: datetime | str | None = None,
         tasa_iva: float = 0.21,
+        commit: bool = True,
     ) -> pd.DataFrame:
         """
         =============================================================================
@@ -557,11 +562,11 @@ class CollectionManager:
 
         # We delegate the penalty creation (if leftover is 0, the function returns the intact DF)
         df_cobr = self._process_sobrante_as_penalty(
-            df_cobr, sobrante, payment_date, tasa_iva
+            df_cobr, sobrante, payment_date, tasa_iva, commit=commit
         )
 
         # 7. Final delegated persistence
-        return self._persist_collections(df_cobr, payment_date)
+        return self._persist_collections(df_cobr, payment_date, commit=commit)
 
     def process_resource(
         self,
@@ -729,15 +734,32 @@ class CollectionManager:
         else:
             process = self.process_standard_payment
 
-        for i, row in df.iterrows():
-            new_cobr = process(identificador, row[ident], row["monto"], payment_date)
-            if not new_cobr.empty:
-                lista_cobranzas.append(new_cobr)
-            else:
-                problems.append(row[ident])
+        try:
+            for i, row in df.iterrows():
+                new_cobr = process(
+                    identificador,
+                    row[ident],
+                    row["monto"],
+                    payment_date,
+                    commit=False,
+                )
+                if not new_cobr.empty:
+                    lista_cobranzas.append(new_cobr)
+                else:
+                    problems.append(row[ident])
+
+            if problems:
+                self.db.rollback()
+                df_prob = df.loc[df[ident].isin(problems)]
+                display(df_prob)
+                raise ValueError(
+                    f"Se encontraron problemas al procesar las siguientes filas: {problems}. Se aplicó un rollback total."
+                )
+
+            self.db.commit()
+        except Exception as e:
+            self.db.rollback()
+            raise e
 
         df_cobr = pd.concat(lista_cobranzas) if lista_cobranzas else pd.DataFrame()
-
-        df_prob = df.loc[df[ident].isin(problems)]
-        display(df_prob)
         return df_cobr
