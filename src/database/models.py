@@ -559,9 +559,9 @@ class Cuota(Base):
         total_esperado = round(self.capital + self.interes + self.iva, 2)
 
         # We sum everything that came in through collections associated with this installment
-        total_cobrado = sum(
+        total_cobrado = round(sum(
             round(c.capital + c.interes + c.iva, 2) for c in self.cobranzas
-        )
+        ), 2)
 
         # 3. State transition logic
         if total_cobrado >= total_esperado:
@@ -600,9 +600,9 @@ class Cuota(Base):
         total_esperado = round(self.capital + self.interes + self.iva, 2)
 
         # We sum everything that came in through collections associated with this installment
-        total_cobrado = sum(
+        total_cobrado = round(sum(
             round(c.capital + c.interes + c.iva, 2) for c in self.liquidaciones
-        )
+        ), 2)
 
         # 3. State transition logic
         if total_cobrado >= total_esperado:
@@ -653,6 +653,7 @@ class TipoCobranzaEnum(enum.Enum):
     CNC = "CUOTA NO COMPRADA"
     PENALTY = "PENALTY"
     RECURSO = "RECURSO"
+    AJUSTE = "AJUSTE"
 
 
 class Cobranza(Base):

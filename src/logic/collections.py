@@ -194,7 +194,7 @@ class CollectionManager:
 
         # 4. Calculation of pending balances per component
         for col in ["capital", "interes", "iva"]:
-            df[col] -= df[f"{col}_cobr"]
+            df[col] -= df[f"{col}_cobr"].round(2)
 
         # 5. Column cleanup and chronological ordering
         df.drop(columns=["capital_cobr", "interes_cobr", "iva_cobr"], inplace=True)
@@ -202,7 +202,7 @@ class CollectionManager:
         df.sort_values(by="fecha_vencimiento", inplace=True)
 
         # 6. Identification of total balance and filtering of already paid installments
-        df["total"] = df[["capital", "interes", "iva"]].sum(axis=1)
+        df["total"] = df[["capital", "interes", "iva"]].sum(axis=1).round(2)
         df_pending = df[df["total"].round(2) != 0.0].copy()
 
         return df_pending

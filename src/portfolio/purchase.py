@@ -847,11 +847,11 @@ class PortfolioPurchase:
                 )
 
                 # Extraction and cleaning of financial components
-                cap = float(row["Capital"]) if pd.notna(row["Capital"]) else 0.0
-                int_ = float(row["Interés"]) if pd.notna(row["Interés"]) else 0.0
-                iva_ = float(row["IVA"]) if pd.notna(row["IVA"]) else 0.0
+                cap  = round(float(row["Capital"]),2) if pd.notna(row["Capital"]) else 0.0
+                int_ = round(float(row["Interés"]),2) if pd.notna(row["Interés"]) else 0.0
+                iva_ = round(float(row["IVA"]),2) if pd.notna(row["IVA"]) else 0.0
                 va = (
-                    float(row["Valor Actual"]) if pd.notna(row["Valor Actual"]) else 0.0
+                    round(float(row["Valor Actual"]),2) if pd.notna(row["Valor Actual"]) else 0.0
                 )
 
                 if va == 0:

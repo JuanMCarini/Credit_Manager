@@ -35,6 +35,7 @@ def saldos(
                  Returns raw numeric DataFrames for API compatibility.
     =============================================================================
     """
+    
     if isinstance(fecha, str):
         fecha = pd.to_datetime(fecha)
     elif fecha is None:
@@ -97,7 +98,7 @@ def saldos(
     ).fillna(0.0)
 
     for col in ["capital", "interes", "iva"]:
-        df[col] -= df[f"{col}_cobr"]
+        df[col] = (df[col].round(2) - df[f"{col}_cobr"].round(2)).round(2)
 
     df.drop(columns=["capital_cobr", "interes_cobr", "iva_cobr"], inplace=True)
     df["total"] = df[["capital", "interes", "iva"]].sum(axis=1)

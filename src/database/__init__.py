@@ -26,6 +26,9 @@ from .models import (
     TipoOperacionCartera,
 )
 
+# Import events to register SQLAlchemy event listeners
+from . import events
+
 # Explicitly define what is available when importing * from the database package
 __all__ = [
     "Base",
