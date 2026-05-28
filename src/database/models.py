@@ -152,7 +152,7 @@ class SocioComercial(Base):
 
     @classmethod
     def create_socio(
-        cls, razon_social: str, cuit: str, db: Session = SessionLocal(), **kwargs
+        cls, razon_social: str, cuit: str, db: Session | None = None, **kwargs
     ) -> "SocioComercial":
         """
         =============================================================================
@@ -171,6 +171,7 @@ class SocioComercial(Base):
             ValueError: If a partner with the same CUIT or Razón Social already exists.
         =============================================================================
         """
+        db = db or SessionLocal()
         cuit_str = str(cuit).strip()
         rs_str = str(razon_social).strip()
 
@@ -201,7 +202,7 @@ class SocioComercial(Base):
 
     @classmethod
     def update_socio(
-        cls, socio_id: int, db: Session = SessionLocal(), **kwargs
+        cls, socio_id: int, db: Session | None = None, **kwargs
     ) -> "SocioComercial":
         """
         =============================================================================
@@ -217,8 +218,10 @@ class SocioComercial(Base):
             SocioComercial: The updated business partner instance.
         Raises:
             ValueError: If the socio_id is not found in the database.
+            RuntimeError: If the database transaction fails to commit.
         =============================================================================
         """
+        db = db or SessionLocal()
         # 1. Retrieve the target socio
         socio = db.query(cls).filter_by(id=socio_id).first()
         if not socio:

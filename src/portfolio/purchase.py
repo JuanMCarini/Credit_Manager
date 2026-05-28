@@ -42,6 +42,7 @@ class PortfolioPurchase:
         Initializes the importer with a database session and empty state containers.
         """
         self.db = SessionLocal()
+
         self.cartera = None
         self.socio = None
 
@@ -49,6 +50,13 @@ class PortfolioPurchase:
         self.df_personas = None
         self.df_prestamos = None
         self.df_cuotas = None
+
+    def __del__(self):
+        """
+        Ensures the underlying SQLAlchemy connection pool drops the session cleanly.
+        """
+        if hasattr(self, "db") and self.db:
+            self.db.close()
 
     @property
     def data_loaded(self) -> bool:
@@ -915,10 +923,6 @@ class PortfolioPurchase:
             self.cartera.socio_id = self.socio.id
             self.db.add(self.cartera)
             self.db.flush()  # We need the portfolio ID for the credits
-
-            # 3. Now the Portfolio has a valid ID and won't fail
-            self.db.add(self.cartera)
-            self.db.flush()
 
             # 4. Dependency tables
             empleadores_map = self._import_employers()

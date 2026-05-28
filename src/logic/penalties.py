@@ -25,8 +25,16 @@ class PenaltyManager:
     =============================================================================
     """
 
-    def __init__(self, db_session: Session = SessionLocal()):
-        self.db = db_session
+    def __init__(self, db_session: Session | None = None):
+        self.db = db_session or SessionLocal()
+        self._own_session = db_session is None
+
+    def __del__(self):
+        """
+        Safely closes the database session if it was created internally.
+        """
+        if hasattr(self, "_own_session") and self._own_session and hasattr(self, "db") and self.db:
+            self.db.close()
 
     def generate_penalty_credit(
         self,

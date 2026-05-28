@@ -53,6 +53,14 @@ class CollectionManager:
 
     def __init__(self, db_session: Session | None = None):
         self.db = db_session or SessionLocal()
+        self._own_session = db_session is None
+
+    def __del__(self):
+        """
+        Safely closes the database session if it was created internally.
+        """
+        if hasattr(self, "_own_session") and self._own_session and hasattr(self, "db") and self.db:
+            self.db.close()
 
     @staticmethod
     def _generate_empty_collections() -> pd.DataFrame:

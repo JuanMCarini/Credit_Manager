@@ -40,7 +40,7 @@ def normalize_date(
 
     # 2. Cast to the explicitly requested output type
     if as_type is date:
-        return pd.to_datetime(base_date).date()
+        return base_date
     elif as_type is datetime:
         return datetime.combine(base_date, datetime.min.time())
     elif as_type is pd.Timestamp:
