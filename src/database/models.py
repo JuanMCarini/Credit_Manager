@@ -680,6 +680,7 @@ class Cobranza(Base):
 
     # Relationships
     cuota = relationship("Cuota", back_populates="cobranzas")
+    liquidaciones = relationship("LiquidacionCuotaCedida", back_populates="cobranza")
 
     @property
     def importe_total(self) -> float:
@@ -717,6 +718,7 @@ class LiquidacionCuotaCedida(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     cuota_id = Column(Integer, ForeignKey("cuotas.id"), nullable=False)
     cartera_id = Column(Integer, ForeignKey("carteras.id"), nullable=False)
+    cobranza_id = Column(Integer, ForeignKey("cobranzas.id"), nullable=True)
 
     tipo_liquidacion = Column(
         Enum(TipoLiquidacionEnum, values_callable=lambda obj: [e.value for e in obj]),
@@ -727,11 +729,13 @@ class LiquidacionCuotaCedida(Base):
     capital = Column(Float, nullable=False, default=0.0)
     interes = Column(Float, nullable=False, default=0.0)
     iva = Column(Float, nullable=False, default=0.0)
-    fecha_pago = Column(Date, nullable=False)
+    fecha_pago = Column(Date, nullable=True)
+    cancelada = Column(Boolean, nullable=False, default=False)
 
     # Relationships
     cuota = relationship("Cuota", back_populates="liquidaciones")
     cartera = relationship("Cartera", back_populates="liquidaciones")
+    cobranza = relationship("Cobranza", back_populates="liquidaciones")
 
     @property
     def importe_total(self) -> float:

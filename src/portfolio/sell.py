@@ -18,7 +18,7 @@ from src.database.models import (
     TipoOperacionCartera,
 )
 from src.utils.dates import normalize_date
-
+from src.logic.status_updater import actualizar_estados
 
 class PortfolioSell:
     """
@@ -61,6 +61,7 @@ class PortfolioSell:
             creditos_admitidos = [EstadoCredito.ACTIVO]
 
             if mora:
+                actualizar_estados()
                 cuotas_admitidas.append(EstadoCuota.MOROSA)
                 creditos_admitidos.append(EstadoCredito.MOROSO)
 
@@ -178,8 +179,8 @@ class PortfolioSell:
         nombre_cartera: str,
         fecha_venta: Union[str, date],
         tna_descuento: float,
-        cuit_comprador: str,
-        razon_social_comprador: str,
+        cuit_comprador: str | None = None,
+        razon_social_comprador: str | None = None,
         df_seleccion: pd.DataFrame = None,
         recurso: bool = True,
         iva: bool = False,
@@ -203,9 +204,14 @@ class PortfolioSell:
         # 1. Partner (Comprador)
         socio = (
             self.db.query(SocioComercial)
-            .filter_by(cuit=str(cuit_comprador).strip())
-            .first()
         )
+        if cuit_comprador is None and razon_social_comprador is None:
+            raise ValueError("CUIT and Razon Social must be provided.")
+        elif cuit_comprador is None:
+            socio = socio.filter(SocioComercial.razon_social==str(razon_social_comprador).strip().upper()).first()
+        else:
+            socio = socio.filter(SocioComercial.cuit==str(cuit_comprador).strip()).first()
+
         if not socio:
             socio = SocioComercial(
                 cuit=str(cuit_comprador).strip(), razon_social=razon_social_comprador

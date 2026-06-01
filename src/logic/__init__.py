@@ -11,6 +11,7 @@ from .collections import CollectionManager, IdentificadorEnum
 from .origination import LoanOriginator
 from .penalties import PenaltyManager
 from .settlements import SettlementManager
+from .status_updater import actualizar_estados
 
 __all__ = [
     "AmortizationEngine",
@@ -19,4 +20,5 @@ __all__ = [
     "LoanOriginator",
     "PenaltyManager",
     "SettlementManager",
+    "actualizar_estados",
 ]
