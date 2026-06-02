@@ -179,7 +179,7 @@ def saldos(
             lista_agrupadores.append("iva_operado")
 
         # We perform the sum but skip the string formatting
-        df = df.groupby(lista_agrupadores)[["capital", "interes", "iva", "total"]].sum()
+        df = df.groupby(lista_agrupadores, dropna=False)[["capital", "interes", "iva", "total"]].sum()
     else:
         df.reset_index(drop=False, inplace=True)
         df.set_index(["credito_id", "nro_cuota"], inplace=True)
