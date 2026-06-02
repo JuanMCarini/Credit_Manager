@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Credit Manager - Core Engine</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css?v=3">
+    <script src="main.js?v=3" defer></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar glass-panel">
+            <div class="logo-container">
+                <h1 class="logo-text">Credit<span>Manager</span></h1>
+                <p class="logo-subtext">Core Engine API</p>
+            </div>
+            
+            <nav class="nav-menu">
+                <button class="nav-item active" onclick="switchTab('simulation')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                    Simular Cuotas
+                </button>
+                <button class="nav-item" onclick="switchTab('balances')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83M22 12A10 10 0 0 0 12 2v10z"/></svg>
+                    Reportes de Saldos
+                </button>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="status-indicator">
+                    <span class="status-dot online"></span>
+                    <span id="api-status">Conectado (API Local)</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            
+            <!-- Simulacion Tab -->
+            <section id="tab-simulation" class="tab-content active">
+                <header class="section-header">
+                    <h2>Simulador de Amortización (Sistema Francés)</h2>
+                    <p>Calcule cronogramas de pagos utilizando el motor financiero de Credit Manager.</p>
+                </header>
+
+                <div class="content-grid">
+                    <!-- Formulario -->
+                    <div class="form-container glass-panel">
+                        <form id="sim-form" onsubmit="handleSimulation(event)">
+                            <div class="form-group">
+                                <label for="capital">Capital a financiar ($)</label>
+                                <input type="number" id="capital" value="100000" step="0.01" required>
+                            </div>
+                            
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="plazo">Plazo (Cuotas)</label>
+                                    <input type="number" id="plazo" value="12" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="tna">TNA c/IVA (%)</label>
+                                    <input type="number" id="tna" value="105" step="0.01" required>
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="fecha">Fecha Emisión</label>
+                                    <input type="date" id="fecha" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="vto">Día Vencimiento</label>
+                                    <input type="number" id="vto" value="28" required>
+                                </div>
+                            </div>
+                            
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="gracia">Meses Gracia</label>
+                                    <input type="number" id="gracia" value="2" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="iva">Alícuota IVA</label>
+                                    <input type="number" id="iva" value="0.21" step="0.01" required>
+                                </div>
+                            </div>
+
+                            <button type="submit" class="btn-primary" id="btn-simular">Generar Cronograma</button>
+                        </form>
+                    </div>
+
+                    <!-- Resultados -->
+                    <div class="results-container glass-panel">
+                        <div class="results-header">
+                            <h3>Cronograma Resultante</h3>
+                            <div class="summary-pills" id="sim-summary" style="display: none;">
+                                <!-- Llenado por JS -->
+                            </div>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="data-table" id="table-sim">
+                                <thead>
+                                    <tr>
+                                        <th>Nro</th>
+                                        <th>Vencimiento</th>
+                                        <th>Capital</th>
+                                        <th>Interés</th>
+                                        <th>IVA</th>
+                                        <th>Total Cuota</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td colspan="6" class="text-center empty-state">Ingrese los datos y simule para ver resultados.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Saldos Tab -->
+            <section id="tab-balances" class="tab-content">
+                <header class="section-header">
+                    <h2>Reporte de Saldos de Cartera</h2>
+                    <p>Métricas consolidadas directamente del Core Engine de base de datos.</p>
+                </header>
+
+                <div class="controls-panel glass-panel">
+                    <form id="balances-form" onsubmit="handleBalances(event)" class="balances-controls" style="flex-direction: column; align-items: stretch; gap: 16px;">
+                        
+                        <!-- First Row: Filters -->
+                        <div style="display: flex; gap: 24px; align-items: center; flex-wrap: wrap;">
+                            <div class="form-group inline">
+                                <label for="bal-fecha">Fecha de Corte:</label>
+                                <input type="date" id="bal-fecha">
+                            </div>
+
+                            <div class="filters-options">
+                                <label><input type="checkbox" id="bal-con-saldo" checked> Con Saldo Deudor</label>
+                                <label style="margin-left: 12px;">Propiedad: 
+                                    <select id="bal-propias" class="filter-select" style="margin-left: 8px;">
+                                        <option value="">Todas</option>
+                                        <option value="true">Propias</option>
+                                        <option value="false">Terceros</option>
+                                    </select>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="input-group" id="group-options" style="grid-column: 1 / -1;">
+                        <label style="margin-bottom: 8px; color: var(--text-secondary); font-size: 13px;">Agrupar por:</label>
+                        <div class="grouping-options" style="display: flex; gap: 16px; flex-wrap: wrap;">
+                            <label><input type="checkbox" id="grp-clientes"> Cliente</label>
+                            <label><input type="checkbox" id="grp-carteras"> Cartera</label>
+                            <label><input type="checkbox" id="grp-socios"> Proveedor/Socio</label>
+                            <label><input type="checkbox" id="grp-originador"> Originador</label>
+                            <label><input type="checkbox" id="grp-vencimientos"> Vencimiento</label>
+                            <label><input type="checkbox" id="grp-dueno"> Dueño</label>
+                            <label><input type="checkbox" id="grp-recurso"> Recurso</label>
+                            <label><input type="checkbox" id="grp-iva"> Tasa IVA</label>
+                        </div>
+                    </div>    
+                        <!-- Third Row: Submit -->
+                        <div style="display: flex; justify-content: flex-end;">
+                            <button type="submit" class="btn-secondary" id="btn-balances" style="min-width: 200px;">Consultar Reporte</button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Table Container -->
+                <div class="table-container glass-panel fade-in" style="margin-top: 32px; display: none;" id="balances-results">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                        <h3 style="margin: 0; color: var(--text-primary); font-family: var(--font-heading);">Resultados del Reporte</h3>
+                    </div>
+                    <div class="table-responsive" style="max-height: 500px;">
+                        <table class="data-table" id="table-bal">
+                            <thead>
+                                <tr id="bal-headers">
+                                    <th>Proveedor / Socio</th>
+                                    <th>Capital</th>
+                                    <th>Interés</th>
+                                    <th>IVA</th>
+                                    <th>Total Saldo</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="5" class="text-center empty-state">Haga clic en Consultar para cargar la cartera.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+    <script src="/app/main.js?v=2"></script>
+</body>
+</html>
