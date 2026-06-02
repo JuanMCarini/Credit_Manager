@@ -43,6 +43,40 @@ def select_file(title: str = "Select a file") -> Path:
     return Path(file_path)
 
 
+def select_directory(title: str = "Select a folder") -> Path:
+    """
+    =============================================================================
+    Function: select_directory
+    Description: Opens a native OS directory dialog to select a folder. Forces
+                 the window instance to the foreground to guarantee focus above
+                 all other active development windows.
+    Parameters:
+        title (str): The descriptive title to display on the dialog window.
+    Returns:
+        Path: A pathlib.Path object representing the chosen directory.
+    =============================================================================
+    """
+    # 1. Create a hidden root window to initialize the dialog
+    root = tk.Tk()
+    root.withdraw()
+
+    # 2. Force the dialog window to the front of the screen
+    root.attributes("-topmost", True)
+    root.lift()
+    root.focus_force()
+
+    # 3. Launch the native directory selector
+    dir_path = filedialog.askdirectory(
+        title=title,
+        parent=root,
+    )
+
+    # 4. Destroy the root instance to free Tkinter memory
+    root.destroy()
+
+    return Path(dir_path)
+
+
 def ask_portfolio_paths() -> dict | None:
     """
     =============================================================================
