@@ -1,7 +1,8 @@
 from sqlalchemy.event import listens_for
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import date, datetime
 from src.database.models import Cobranza, Cuota, Credito, EstadoCuota, TipoCobranzaEnum
+from src.utils.dates import normalize_date
 
 # Umbral máximo permitido para considerar una diferencia como "error de redondeo"
 ROUNDING_THRESHOLD = 0.05 
@@ -82,7 +83,7 @@ def auto_adjust_rounding_errors(session, flush_context, instances):
 
             # Determinamos la fecha del ajuste
             fecha_ajuste = datetime.today().date()
-            valid_dates = [c.fecha for c in cuota.cobranzas if c.fecha]
+            valid_dates = [normalize_date(c.fecha, date) for c in cuota.cobranzas if c.fecha]
             if valid_dates:
                 fecha_ajuste = max(valid_dates)
 

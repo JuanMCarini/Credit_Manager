@@ -76,9 +76,9 @@ def saldos(
     )
 
     # 2. Data Mapping
-    for col in ["fecha_emision", "cliente_cuil", "cartera_id", "socio_originador_id"]:
+    for col in ["fecha_emision", "cliente_cuil", "cartera_id", "socio_originador_id", "tipo_credito"]:
         df_ctas[col] = df_ctas["credito_id"].map(df_crts[col])
-
+    
     df_ctas["socio_id"] = df_ctas["cartera_id"].map(df_cart["socio_id"])
     df_ctas["Proveedor"] = df_ctas["socio_id"].map(df_socios["razon_social"])
     df_ctas["Originador"] = df_ctas["socio_originador_id"].map(
@@ -86,6 +86,11 @@ def saldos(
     )
     df_ctas["recurso"] = df_ctas["cartera_id"].map(df_cart["recurso"])
     df_ctas["iva_operado"] = df_ctas["cartera_id"].map(df_cart["iva"])
+
+    mask_penalty = (
+        (df_ctas["Originador"].isna())
+        & (df_ctas["tipo_credito"] == "PENALTY"))
+    df_ctas.loc[mask_penalty, "Originador"] = "PENALTY"
 
     # 3. Financial Calculations
     df_cobr_sum = df_cobr.groupby("cuota_id")[["capital", "interes", "iva"]].sum()

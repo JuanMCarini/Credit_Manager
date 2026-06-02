@@ -6,7 +6,7 @@ Date: 2026-05-08
 """
 
 import enum
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import (
     Boolean,
@@ -20,7 +20,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy.orm import Session, relationship
+from sqlalchemy.orm import Session, relationship, validates
 
 from src.database import Base, SessionLocal
 from src.utils.dates import normalize_date
@@ -30,6 +30,13 @@ class SexoEnum(enum.Enum):
     MASCULINO = "M"
     FEMENINO = "F"
     OTRO = "O"
+
+
+class EstadoClienteEnum(enum.Enum):
+    ACTIVO = "ACTIVO"
+    MOROSO = "MOROSO"
+    INCOBRABLE = "INCOBRABLE"
+    INACTIVO = "INACTIVO"
 
 
 class Empleador(Base):
@@ -70,7 +77,29 @@ class Provincia(Base):
 
 class Cliente(Base):
     """
-    Represents a client in the credit portfolio management system.
+    =============================================================================
+    Model: Cliente
+    Description: Represents a client in the credit portfolio management system.
+    Parameters / Attributes:
+        cuil (str): Unique worker identification number (11 digits, unique, non-nullable).
+        documento (str): National ID document number (10 digits max, unique, non-nullable).
+        apellido (str): Client's last name (non-nullable).
+        nombre (str): Client's first name (non-nullable).
+        fecha_nacimiento (date, optional): Client's birth date.
+        sexo (SexoEnum, optional): Client's sex/gender (SexoEnum.MASCULINO, FEMENINO, OTRO).
+        calle (str, optional): Street address.
+        calle_nro (int, optional): Street number.
+        piso (str, optional): Floor number.
+        depto (str, optional): Apartment/unit number.
+        id_provincia (int, optional): Foreign key to the Provincia table (provincias.id).
+        id_codigo_postal (str, optional): Zip/postal code.
+        localidad (str, optional): Locality or town name.
+        telefono (str, optional): Primary telephone contact number.
+        telefono_2 (str, optional): Secondary telephone contact number.
+        mail (str, optional): Email address.
+        remuneracion (float, optional): Monthly salary/income for credit scoring (default: 0.0).
+        empleador_id (int, optional): Foreign key to the Empleador table (empleadores.id).
+    =============================================================================
     """
 
     __tablename__ = "clientes"
@@ -86,6 +115,16 @@ class Cliente(Base):
     nombre = Column(String(100), nullable=False)
     fecha_nacimiento = Column(Date, nullable=True)
     sexo = Column(Enum(SexoEnum), nullable=True)
+    estado_civil = Column(String(50), nullable=True)
+    nacionalidad = Column(String(100), nullable=True)
+
+    # Employment details / Status
+    legajo = Column(String(50), nullable=True)
+    estado = Column(Enum(EstadoClienteEnum), nullable=True)
+    fecha_estado = Column(Date, nullable=True, default=date.today, onupdate=date.today)
+
+    # Banking details
+    cbu = Column(String(22), nullable=True)
 
     # Address details
     calle = Column(String(150), nullable=True)
@@ -113,6 +152,29 @@ class Cliente(Base):
     creditos = relationship("Credito", back_populates="cliente")
     provincia = relationship("Provincia", back_populates="clientes")
     empleador = relationship("Empleador", back_populates="empleados")
+
+    @validates("cuil", "documento")
+    def validate_cuil_dni(self, key, value):
+        if value is None:
+            return value
+        
+        clean_value = "".join(filter(str.isdigit, str(value)))
+        
+        if key == "cuil":
+            if self.documento:
+                clean_doc = "".join(filter(str.isdigit, str(self.documento)))
+                if clean_doc not in clean_value:
+                    raise ValueError(
+                        f"Validation error: Documento '{clean_doc}' must be contained within CUIL '{clean_value}'."
+                    )
+        elif key == "documento":
+            if self.cuil:
+                clean_cuil = "".join(filter(str.isdigit, str(self.cuil)))
+                if clean_value not in clean_cuil:
+                    raise ValueError(
+                        f"Validation error: Documento '{clean_value}' must be contained within CUIL '{clean_cuil}'."
+                    )
+        return value
 
     def __repr__(self):
         return f"<Cliente(cuil='{self.cuil}', apellido='{self.apellido}', nombre='{self.nombre}')>"
@@ -335,10 +397,35 @@ class TipoCredito(enum.Enum):
 
 class Credito(Base):
     """
-    Core loan entity. Each loan can pass through multiple portfolios over time.
+    =============================================================================
+    Model: Credito
+    Description: Core loan entity. Each loan can pass through multiple portfolios
+                 over time.
+    Parameters / Attributes:
+        id (int): Auto-incremental primary key.
+        id_externo (str, optional): External identification number from third-party systems.
+        cliente_cuil (str): Foreign key to the Cliente table (clientes.cuil, non-nullable).
+        socio_originador_id (int, optional): Foreign key to the SocioComercial table (socios_comerciales.id) representing the originator partner.
+        cartera_id (int, optional): Foreign key to the Cartera table (carteras.id) if the credit was purchased in a batch.
+        capital (float): Original principal/capital amount of the loan (non-nullable).
+        tna_c_iva (float): Annual nominal interest rate including VAT (TNA con IVA, non-nullable).
+        plazo (int): Total number of installments/term of the loan (non-nullable).
+        fecha_emision (date): Date of issuance (non-nullable).
+        estado (EstadoCredito): Current global state of the loan (default: EstadoCredito.APROBADO).
+        tipo_credito (TipoCredito): Amortization system style (FRANCES, ALEMAN, PENALTY, default: TipoCredito.FRANCES).
+        dia_vencimiento (int): Standard due day of the month for installments (default: 28, non-nullable).
+    =============================================================================
     """
 
     __tablename__ = "creditos"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "id_externo",
+            "socio_originador_id",
+            name="uq_credito_id_externo_socio",
+        ),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     id_externo = Column(String(50), index=True, nullable=True)
@@ -510,7 +597,21 @@ class EstadoCuotaCedida(enum.Enum):
 
 class Cuota(Base):
     """
-    Financial plan for a credit. Payment data is now handled by the Cobranza table.
+    =============================================================================
+    Model: Cuota
+    Description: Financial plan installment for a credit. Actual payments and 
+                 bonuses are handled via association with the Cobranza table.
+    Parameters / Attributes:
+        id (int): Auto-incremental primary key.
+        credito_id (int): Foreign key to the Credito table (creditos.id, non-nullable).
+        nro_cuota (int): Number representing the installment sequence (non-nullable).
+        fecha_vencimiento (date): Scheduled due date of the installment (non-nullable).
+        capital (float): Principal/capital amount of this installment (non-nullable).
+        interes (float): Interest amount of this installment (non-nullable).
+        iva (float): VAT tax component amount of this installment (default: 0.0).
+        estado (EstadoCuota): Local lifecycle state of the installment (default: EstadoCuota.PENDIENTE).
+        estado_cesion (EstadoCuotaCedida): Assignment state for portfolio sell transfers (default: EstadoCuotaCedida.NO_VENDIDA).
+    =============================================================================
     """
 
     __tablename__ = "cuotas"
@@ -617,7 +718,7 @@ class Cuota(Base):
         return self.estado_cesion.value
 
     def __repr__(self):
-        return f"<Cuota(credito_id={self.credito_id}, nro={self.nro_cuota})>"
+        return f"<Cuota(credito_id={self.credito_id}, nro={self.nro_cuota}, estado={self.estado}, estado_cesion={self.estado_cesion})>"
 
 
 class OperacionCartera(Base):
@@ -658,7 +759,18 @@ class TipoCobranzaEnum(enum.Enum):
 
 class Cobranza(Base):
     """
-    Records actual payment events or bonuses linked to specific installments.
+    =============================================================================
+    Model: Cobranza
+    Description: Records actual payment events or bonuses linked to specific installments.
+    Parameters / Attributes:
+        id (int): Auto-incremental primary key.
+        cuota_id (int): Foreign key to the Cuota table (cuotas.id, non-nullable).
+        tipo_cobranza (TipoCobranzaEnum): Financial nature of the collection event (default: TipoCobranzaEnum.COMUN).
+        capital (float): Principal/capital component collected (non-nullable).
+        interes (float): Interest component collected (non-nullable).
+        iva (float): VAT component collected (non-nullable).
+        fecha (date): Registration date of the payment/bonus (non-nullable).
+    =============================================================================
     """
 
     __tablename__ = "cobranzas"

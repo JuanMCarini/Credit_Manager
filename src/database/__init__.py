@@ -20,11 +20,14 @@ from .models import (
     OperacionCartera,
     OrigenCredito,
     SexoEnum,
+    EstadoClienteEnum,
     SocioComercial,
     TipoCobranzaEnum,
     TipoLiquidacionEnum,
     TipoOperacionCartera,
     EstadoCuota,
+    Provincia,
+    Empleador
 )
 
 # Import events to register SQLAlchemy event listeners
@@ -45,10 +48,13 @@ __all__ = [
     "Cobranza",
     "LiquidacionCuotaCedida",
     "SexoEnum",
+    "EstadoClienteEnum",
     "TipoOperacionCartera",
     "OrigenCredito",
     "EstadoCredito",
     "TipoCobranzaEnum",
     "TipoLiquidacionEnum",
     "EstadoCuota",
+    "Provincia",
+    "Empleador",
 ]
