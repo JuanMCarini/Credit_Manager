@@ -50,6 +50,13 @@ Credit_Manager/
     │   ├── connection.py # Engine de la base de datos y fábrica de sesiones
     │   ├── models.py     # Definición de las tablas (Cliente, Credito, Cuota, Cobranza, etc.)
     │   └── seed_geography.py # Poblado de tablas geográficas (Provincias)
+    ├── imports/          # Módulos de ingesta y ETL masivo
+    │   ├── init_socios.py    # Inicializador automático de socios comerciales
+    │   └── cql/              # Procesadores de reportes de Empresa Ficticia
+    │       ├── read.py       # Selector de directorio y lector de planillas base
+    │       ├── clients.py    # Procesamiento y carga optimizada de clientes
+    │       ├── credits.py    # Vectorización financiera (TNA) y carga de créditos
+    │       └── quota_and_coll.py # Carga segura por chunks de cuotas y cobranzas
     ├── logic/            # Reglas de negocio y motores financieros
     │   ├── amortization.py   # Motor de cálculo del sistema Francés
     │   ├── collections.py    # Gestor de cobranzas estándar, anticipadas e ingestas masivas
