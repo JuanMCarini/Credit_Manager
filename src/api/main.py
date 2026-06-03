@@ -8,10 +8,15 @@ from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
 import numpy as np
-from fastapi import FastAPI, HTTPException, Query
+from pydantic import BaseModel, Field
+from fastapi import FastAPI, HTTPException, Query, Depends
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
+from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
+
+from src.database import get_db, Cliente, SexoEnum, EstadoClienteEnum, Provincia, Empleador, SocioComercial, Credito
 
 from src.logic.amortization import AmortizationEngine
 from src.reports.balances import saldos
@@ -151,6 +156,388 @@ async def get_saldos(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error en la generación del reporte: {str(e)}")
+
+
+# -------------------------------------------------------------------
+# Modelos Pydantic
+# -------------------------------------------------------------------
+class ClienteCreate(BaseModel):
+    cuil: str = Field(..., max_length=11, description="CUIL sin guiones (11 dígitos)")
+    documento: str = Field(..., max_length=10)
+    apellido: str = Field(..., max_length=100)
+    nombre: str = Field(..., max_length=100)
+    fecha_nacimiento: Optional[date] = None
+    sexo: Optional[SexoEnum] = None
+    estado_civil: Optional[str] = None
+    nacionalidad: Optional[str] = None
+    legajo: Optional[str] = None
+    estado: Optional[EstadoClienteEnum] = EstadoClienteEnum.ACTIVO
+    cbu: Optional[str] = None
+    calle: Optional[str] = None
+    calle_nro: Optional[int] = None
+    piso: Optional[str] = None
+    depto: Optional[str] = None
+    id_provincia: Optional[int] = None
+    id_codigo_postal: Optional[str] = None
+    localidad: Optional[str] = None
+    telefono: Optional[str] = None
+    telefono_2: Optional[str] = None
+    mail: Optional[str] = None
+    remuneracion: float = 0.0
+    empleador_id: Optional[int] = None
+
+@app.post("/api/v1/clientes", tags=["Clientes"])
+async def create_cliente(
+    cliente_data: ClienteCreate,
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    Endpoint para crear un nuevo cliente en la base de datos.
+    """
+    try:
+        nuevo_cliente = Cliente(**cliente_data.dict(exclude_unset=True))
+        db.add(nuevo_cliente)
+        db.commit()
+        db.refresh(nuevo_cliente)
+        return {"status": "success", "message": "Cliente creado exitosamente", "cuil": nuevo_cliente.cuil}
+    except IntegrityError as e:
+        db.rollback()
+        error_msg = str(e.orig).lower()
+        if "foreign key" in error_msg:
+            raise HTTPException(status_code=400, detail="El ID de Provincia o Empleador ingresado no existe en la base de datos.")
+        elif "unique" in error_msg:
+            raise HTTPException(status_code=400, detail="Error de integridad. El CUIL o Documento ingresado ya está registrado.")
+        else:
+            raise HTTPException(status_code=400, detail=f"Error de base de datos: {str(e.orig)}")
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/clientes", tags=["Clientes"])
+def get_clientes_list(db: Session = Depends(get_db)):
+    clientes = db.query(Cliente).all()
+    result = []
+    for c in clientes:
+        prov = c.provincia.nombre if c.provincia else "-"
+        emp = c.empleador.razon_social if c.empleador else "-"
+        result.append({
+            "CUIL": c.cuil,
+            "Documento": c.documento,
+            "Apellido y Nombre": f"{c.apellido}, {c.nombre}" if c.apellido and c.nombre else (c.apellido or c.nombre),
+            "Estado": c.estado.value if c.estado else "-",
+            "Fecha Estado": c.fecha_estado.strftime("%Y-%m-%d") if c.fecha_estado else "-",
+            "Provincia": prov,
+            "Empleador": emp,
+            "Mail": c.mail or "-",
+            "Teléfono": c.telefono or "-",
+            "Remuneración": float(c.remuneracion or 0.0)
+        })
+    return result
+
+@app.get("/api/v1/clientes/{cuil}", tags=["Clientes"])
+def get_cliente(cuil: str, db: Session = Depends(get_db)):
+    cliente = db.query(Cliente).filter(Cliente.cuil == cuil).first()
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    
+    # We serialize the full SQLAlchemy object
+    return {
+        "cuil": cliente.cuil,
+        "documento": cliente.documento,
+        "apellido": cliente.apellido,
+        "nombre": cliente.nombre,
+        "fecha_nacimiento": cliente.fecha_nacimiento.strftime("%Y-%m-%d") if cliente.fecha_nacimiento else None,
+        "sexo": cliente.sexo.value if cliente.sexo else None,
+        "estado_civil": cliente.estado_civil,
+        "nacionalidad": cliente.nacionalidad,
+        "legajo": cliente.legajo,
+        "estado": cliente.estado.value if cliente.estado else None,
+        "cbu": cliente.cbu,
+        "calle": cliente.calle,
+        "calle_nro": cliente.calle_nro,
+        "piso": cliente.piso,
+        "depto": cliente.depto,
+        "id_provincia": cliente.id_provincia,
+        "id_codigo_postal": cliente.id_codigo_postal,
+        "localidad": cliente.localidad,
+        "telefono": cliente.telefono,
+        "telefono_2": cliente.telefono_2,
+        "mail": cliente.mail,
+        "remuneracion": float(cliente.remuneracion or 0.0),
+        "empleador_id": cliente.empleador_id
+    }
+
+@app.put("/api/v1/clientes/{cuil}", tags=["Clientes"])
+async def update_cliente(
+    cuil: str,
+    cliente_data: ClienteCreate,
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    try:
+        cliente = db.query(Cliente).filter(Cliente.cuil == cuil).first()
+        if not cliente:
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
+            
+        update_data = cliente_data.dict(exclude_unset=True)
+        for key, value in update_data.items():
+            setattr(cliente, key, value)
+            
+        db.commit()
+        db.refresh(cliente)
+        return {"status": "success", "message": "Cliente actualizado exitosamente", "cuil": cliente.cuil}
+    except IntegrityError as e:
+        db.rollback()
+        error_msg = str(e.orig).lower()
+        if "foreign key" in error_msg:
+            raise HTTPException(status_code=400, detail="El ID de Provincia o Empleador ingresado no existe en la base de datos.")
+        elif "unique" in error_msg:
+            raise HTTPException(status_code=400, detail="Error de integridad. El CUIL o Documento ingresado ya está registrado por otro cliente.")
+        else:
+            raise HTTPException(status_code=400, detail=f"Error de base de datos: {str(e.orig)}")
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/v1/clientes/{cuil}", tags=["Clientes"])
+def delete_cliente(cuil: str, db: Session = Depends(get_db)):
+    cliente = db.query(Cliente).filter(Cliente.cuil == cuil).first()
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    
+    try:
+        db.delete(cliente)
+        db.commit()
+        return {"status": "success", "message": "Cliente eliminado exitosamente"}
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="No se puede borrar este cliente porque ya tiene préstamos o cuotas asociadas en el historial.")
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error inesperado al borrar el cliente: {str(e)}")
+
+# -------------------------------------------------------------------
+# Créditos Endpoints
+# -------------------------------------------------------------------
+
+class CreditoEstadoUpdate(BaseModel):
+    estado: str
+
+@app.patch("/api/v1/creditos/{credito_id}/estado", tags=["Creditos"])
+def update_credito_estado(credito_id: int, data: CreditoEstadoUpdate, db: Session = Depends(get_db)):
+    credito = db.query(Credito).filter(Credito.id == credito_id).first()
+    if not credito:
+        raise HTTPException(status_code=404, detail="Crédito no encontrado")
+    
+    from src.database.models import EstadoCredito
+    try:
+        nuevo_estado = EstadoCredito(data.estado.upper())
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Estado inválido.")
+        
+    credito.estado = nuevo_estado
+    db.commit()
+    return {"status": "success", "message": "Estado actualizado"}
+
+@app.get("/api/v1/creditos/{credito_id}/cuotas", tags=["Creditos"])
+def get_credito_cuotas(credito_id: int, db: Session = Depends(get_db)):
+    from src.database.models import Cuota
+    cuotas = db.query(Cuota).filter(Cuota.credito_id == credito_id).order_by(Cuota.nro_cuota).all()
+    
+    result = []
+    for c in cuotas:
+        total_esperado = round(c.capital + c.interes + c.iva, 2)
+        
+        total_cobrado = 0.0
+        detalle_cobranzas = []
+        
+        # Sort collections by date
+        sorted_cobranzas = sorted(c.cobranzas, key=lambda cob: cob.fecha)
+        for cob in sorted_cobranzas:
+            tot = round(cob.capital + cob.interes + cob.iva, 2)
+            total_cobrado += tot
+            detalle_cobranzas.append({
+                "fecha": cob.fecha.strftime("%d/%m/%Y"),
+                "tipo": cob.tipo_cobranza.value if hasattr(cob.tipo_cobranza, "value") else str(cob.tipo_cobranza),
+                "capital": round(cob.capital, 2),
+                "interes": round(cob.interes, 2),
+                "iva": round(cob.iva, 2),
+                "total": tot
+            })
+            
+        total_cobrado = round(total_cobrado, 2)
+        saldo = round(total_esperado - total_cobrado, 2)
+        
+        result.append({
+            "nro_cuota": c.nro_cuota,
+            "vencimiento": c.fecha_vencimiento.strftime("%d/%m/%Y"),
+            "capital": round(c.capital, 2),
+            "interes": round(c.interes, 2),
+            "iva": round(c.iva, 2),
+            "total_esperado": total_esperado,
+            "total_cobrado": total_cobrado,
+            "saldo_pendiente": saldo,
+            "estado": c.estado.value,
+            "detalle_cobranzas": detalle_cobranzas
+        })
+        
+    return result
+
+@app.get("/api/v1/creditos", tags=["Creditos"])
+def get_creditos_list(db: Session = Depends(get_db)):
+    creditos = db.query(Credito).all()
+    result = []
+    for c in creditos:
+        nombre_cliente = f"{c.cliente.apellido}, {c.cliente.nombre}" if c.cliente else "-"
+        origen = c.origen.value if hasattr(c.origen, 'value') else str(c.origen)
+        socio = c.socio_originador.razon_social if c.socio_originador else "-"
+        result.append({
+            "ID": c.id,
+            "ID Externo": c.id_externo or "-",
+            "Cliente CUIL": c.cliente_cuil,
+            "Cliente Nombre": nombre_cliente,
+            "Origen": origen,
+            "Socio Originador": socio,
+            "Capital": float(c.capital),
+            "TNA con IVA": float(c.tna_c_iva),
+            "Plazo": c.plazo,
+            "Fecha Emisión": c.fecha_emision.strftime("%Y-%m-%d"),
+            "Estado": c.estado.value if c.estado else "-",
+            "Tipo Crédito": c.tipo_credito.value if c.tipo_credito else "-",
+            "Día Vto": c.dia_vencimiento
+        })
+    return result
+
+# -------------------------------------------------------------------
+# Tablas Auxiliares
+# -------------------------------------------------------------------
+
+AUX_TABLES = {
+    "provincias": Provincia,
+    "empleadores": Empleador,
+    "socios": SocioComercial,
+}
+
+@app.get("/api/v1/auxiliares/{tabla}", tags=["Auxiliares"])
+def get_aux_table(tabla: str, db: Session = Depends(get_db)):
+    if tabla not in AUX_TABLES:
+        raise HTTPException(status_code=404, detail="Tabla auxiliar no encontrada.")
+    model = AUX_TABLES[tabla]
+    records = db.query(model).all()
+    # Convert SQLAlchemy objects to dict
+    return [
+        {c.name: getattr(r, c.name) for c in model.__table__.columns}
+        for r in records
+    ]
+
+@app.post("/api/v1/auxiliares/{tabla}", tags=["Auxiliares"])
+def create_aux_record(tabla: str, payload: dict, db: Session = Depends(get_db)):
+    if tabla not in AUX_TABLES:
+        raise HTTPException(status_code=404, detail="Tabla auxiliar no encontrada.")
+    
+    try:
+        if tabla == "socios":
+            nuevo = SocioComercial.create_socio(db=db, **payload)
+        else:
+            model = AUX_TABLES[tabla]
+            nuevo = model(**payload)
+            db.add(nuevo)
+        db.commit()
+        db.refresh(nuevo)
+        return {"status": "success", "id": getattr(nuevo, "id", None)}
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+    except IntegrityError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Error de integridad: Ya existe un registro con esos datos únicos.")
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/v1/auxiliares/{tabla}/{record_id}", tags=["Auxiliares"])
+def update_aux_record(tabla: str, record_id: int, payload: dict, db: Session = Depends(get_db)):
+    if tabla not in AUX_TABLES:
+        raise HTTPException(status_code=404, detail="Tabla auxiliar no encontrada.")
+    
+    model = AUX_TABLES[tabla]
+    record = db.query(model).filter(model.id == record_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Registro no encontrado.")
+    
+    try:
+        for key, value in payload.items():
+            if hasattr(record, key) and key != "id":
+                setattr(record, key, value)
+        db.commit()
+        db.refresh(record)
+        return {"status": "success", "id": record.id}
+    except IntegrityError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Error de integridad al actualizar: Datos duplicados u otro conflicto.")
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# -------------------------------------------------------------------
+# System Actions
+# -------------------------------------------------------------------
+
+@app.post("/api/v1/system/actualizar_estados", tags=["System"])
+def sync_system_states(db: Session = Depends(get_db)):
+    from src.database.models import Cuota, Credito, Cliente, EstadoCredito, EstadoClienteEnum
+    from datetime import date
+    hoy = date.today()
+
+    try:
+        # 1. Update Cuotas
+        cuotas = db.query(Cuota).all()
+        for c in cuotas:
+            c.actualizar_estado(hoy)
+
+        # 2. Update Creditos
+        creditos = db.query(Credito).all()
+        for cred in creditos:
+            cred.actualizar_estado()
+        
+        # 3. Update Clientes
+        clientes = db.query(Cliente).all()
+        for cli in clientes:
+            creditos_cli = cli.creditos
+            if not creditos_cli:
+                # If no credits, keep as INACTIVO or default
+                cli.estado = EstadoClienteEnum.INACTIVO
+                continue
+            
+            # Extract current states of their credits
+            estados_str = []
+            for cred in creditos_cli:
+                e = cred.estado
+                if isinstance(e, EstadoCredito):
+                    estados_str.append(e.value)
+                else:
+                    estados_str.append(str(e))
+
+            if EstadoCredito.JUDICIAL.value in estados_str or "JUDICIAL" in estados_str:
+                cli.estado = EstadoClienteEnum.INCOBRABLE
+            elif EstadoCredito.MOROSO.value in estados_str or "MOROSO" in estados_str:
+                cli.estado = EstadoClienteEnum.MOROSO
+            else:
+                # Check if all are cancelled
+                all_cancelado = all(e == EstadoCredito.CANCELADO.value or e == "CANCELADO" for e in estados_str)
+                if all_cancelado:
+                    cli.estado = EstadoClienteEnum.INACTIVO
+                else:
+                    cli.estado = EstadoClienteEnum.ACTIVO
+
+        db.commit()
+        return {"status": "success", "message": "Estados sincronizados correctamente."}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
 # -------------------------------------------------------------------
 # Frontend
