@@ -8,8 +8,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=3">
-    <script src="main.js?v=3" defer></script>
+    <link rel="stylesheet" href="style.css?v=10">
+    <script src="main.js?v=10" defer></script>
 </head>
 <body>
     <div class="app-container">
@@ -26,8 +26,28 @@
                     Simular Cuotas
                 </button>
                 <button class="nav-item" onclick="switchTab('balances')">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83M22 12A10 10 0 0 0 12 2v10z"/></svg>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
                     Reportes de Saldos
+                </button>
+                <button class="nav-item" onclick="switchTab('listado-clientes'); loadClientesTable();">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    Listado de Clientes
+                </button>
+                <button class="nav-item" onclick="switchTab('listado-creditos'); loadCreditosTable();">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2" ry="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+                    Listado de Créditos
+                </button>
+                <button class="nav-item" onclick="switchTab('clientes')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+                    Alta de Cliente
+                </button>
+                <button class="nav-item" onclick="switchTab('auxiliares')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+                    Tablas Auxiliares
+                </button>
+                <button class="nav-item" onclick="switchTab('system-actions')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+                    Acciones del Sistema
                 </button>
             </nav>
 
@@ -42,6 +62,273 @@
         <!-- Main Content -->
         <main class="main-content">
             
+            <!-- Alta de Cliente Tab -->
+            <section id="tab-clientes" class="tab-content">
+                <header class="section-header">
+                    <h2 id="form-cliente-title">Registro de Nuevo Cliente</h2>
+                    <p id="form-cliente-subtitle">Dé de alta a un nuevo prospecto o cliente en la base centralizada del sistema.</p>
+                </header>
+
+                <div class="content-grid" style="grid-template-columns: 1fr;">
+                    <div class="form-container glass-panel">
+                        <form id="cliente-form" onsubmit="handleClientSubmit(event)">
+                            
+                            <h3 style="margin-bottom: 12px; font-family: var(--font-heading); font-size: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">Datos Personales</h3>
+                            <div class="form-row">
+                                <div class="form-group"><label for="cli-cuil">CUIL (Sin guiones) *</label><input type="text" id="cli-cuil" maxlength="11" required></div>
+                                <div class="form-group"><label for="cli-documento">Documento (DNI) *</label><input type="text" id="cli-documento" maxlength="10" required></div>
+                                <div class="form-group"><label for="cli-nombre">Nombre *</label><input type="text" id="cli-nombre" required></div>
+                                <div class="form-group"><label for="cli-apellido">Apellido *</label><input type="text" id="cli-apellido" required></div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group"><label for="cli-nacimiento">Fecha Nacimiento</label><input type="date" id="cli-nacimiento"></div>
+                                <div class="form-group">
+                                    <label for="cli-sexo">Sexo</label>
+                                    <select id="cli-sexo">
+                                        <option value="">Seleccione</option><option value="M">Masculino</option><option value="F">Femenino</option><option value="O">Otro</option>
+                                    </select>
+                                </div>
+                                <div class="form-group"><label for="cli-estcivil">Estado Civil</label><input type="text" id="cli-estcivil"></div>
+                                <div class="form-group"><label for="cli-nacionalidad">Nacionalidad</label><input type="text" id="cli-nacionalidad"></div>
+                            </div>
+
+                            <h3 style="margin-top: 24px; margin-bottom: 12px; font-family: var(--font-heading); font-size: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">Contacto y Domicilio</h3>
+                            <div class="form-row">
+                                <div class="form-group"><label for="cli-telefono">Teléfono Principal</label><input type="text" id="cli-telefono"></div>
+                                <div class="form-group"><label for="cli-telefono2">Teléfono Secundario</label><input type="text" id="cli-telefono2"></div>
+                                <div class="form-group"><label for="cli-mail">Email</label><input type="email" id="cli-mail"></div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group" style="flex: 2;"><label for="cli-calle">Calle</label><input type="text" id="cli-calle"></div>
+                                <div class="form-group"><label for="cli-callenro">Nro</label><input type="number" id="cli-callenro"></div>
+                                <div class="form-group"><label for="cli-piso">Piso</label><input type="text" id="cli-piso"></div>
+                                <div class="form-group"><label for="cli-depto">Depto</label><input type="text" id="cli-depto"></div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group"><label for="cli-localidad">Localidad</label><input type="text" id="cli-localidad"></div>
+                                <div class="form-group"><label for="cli-cp">Código Postal</label><input type="text" id="cli-cp"></div>
+                                <div class="form-group">
+                                    <label for="cli-provincia">Provincia</label>
+                                    <select id="cli-provincia">
+                                        <option value="">(Opcional)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <h3 style="margin-top: 24px; margin-bottom: 12px; font-family: var(--font-heading); font-size: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">Laboral y Financiero</h3>
+                            <div class="form-row">
+                                <div class="form-group"><label for="cli-remuneracion">Remuneración Declarada ($)</label><input type="number" step="0.01" id="cli-remuneracion" value="0.0"></div>
+                                <div class="form-group"><label for="cli-legajo">Nro. Legajo Laboral</label><input type="text" id="cli-legajo"></div>
+                                <div class="form-group">
+                                    <label for="cli-empleador">Empleador</label>
+                                    <select id="cli-empleador">
+                                        <option value="">(Opcional)</option>
+                                    </select>
+                                </div>
+                                <div class="form-group"><label for="cli-cbu">CBU / CVU Bancario</label><input type="text" id="cli-cbu" maxlength="22"></div>
+                            </div>
+
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 24px;">
+                                <div id="cli-feedback" style="font-size: 14px; font-weight: 500;"></div>
+                                <div>
+                                    <button type="button" class="btn-secondary" id="btn-cancel-cliente" style="display: none; margin-right: 8px;" onclick="cancelEditCliente()">
+                                        Cancelar
+                                    </button>
+                                    <button type="submit" class="btn-primary" id="btn-save-cliente" style="min-width: 200px;">
+                                        Guardar Cliente
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </section>
+            
+            <!-- Listado de Clientes Tab -->
+            <section id="tab-listado-clientes" class="tab-content">
+                <header class="section-header" style="display: flex; justify-content: space-between; align-items: flex-end;">
+                    <div>
+                        <h2>Listado de Clientes</h2>
+                        <p>Visualización de la cartera completa de clientes.</p>
+                    </div>
+                    <button class="btn-primary" onclick="loadClientesTable()" style="width: auto;">Actualizar Datos</button>
+                </header>
+
+                <div class="results-container glass-panel">
+                    <div class="table-responsive">
+                        <table class="data-table" id="table-clientes">
+                            <thead id="clientes-headers">
+                                <!-- Headers generados por JS con Filtros de Excel -->
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="100%" class="text-center empty-state" style="padding: 40px;">
+                                        Presione Actualizar para cargar el listado.
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tablas Auxiliares Tab -->
+            <section id="tab-auxiliares" class="tab-content">
+                <header class="section-header" style="display: flex; justify-content: space-between; align-items: flex-end;">
+                    <div>
+                        <h2>Gestión de Tablas Auxiliares</h2>
+                        <p>Administra los catálogos y diccionarios del sistema.</p>
+                    </div>
+                </header>
+
+                <div class="form-container glass-panel" style="margin-bottom: 24px;">
+                    <div class="form-row" style="align-items: flex-end;">
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="aux-table-select">Seleccionar Tabla</label>
+                            <select id="aux-table-select" onchange="loadAuxTable()">
+                                <option value="" disabled selected>Elija una tabla...</option>
+                                <option value="provincias">Provincias</option>
+                                <option value="empleadores">Empleadores</option>
+                                <option value="socios">Socios Comerciales</option>
+                            </select>
+                        </div>
+                        <div>
+                            <button class="btn-primary" onclick="openAuxModal()" style="width: auto;" id="btn-new-aux" disabled>+ Nuevo Registro</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="results-container glass-panel">
+                    <div class="table-responsive">
+                        <table class="data-table" id="aux-table">
+                            <thead id="aux-table-head">
+                                <!-- Dynamic Headers -->
+                            </thead>
+                            <tbody id="aux-table-body">
+                                <tr>
+                                    <td colspan="100%" class="empty-state">
+                                        Seleccione una tabla del menú desplegable para cargar sus datos.
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Modal para Formulario Auxiliar Genérico -->
+            <div id="aux-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); z-index: 2000; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+                <div class="glass-panel" style="background: var(--bg-base); width: 400px; padding: 24px; border-radius: var(--radius-lg); position: relative;">
+                    <h3 id="aux-modal-title" style="margin-bottom: 20px;">Nuevo Registro</h3>
+                    <form id="aux-form" onsubmit="saveAuxRecord(event)">
+                        <div id="aux-form-fields" style="display: flex; flex-direction: column; gap: 16px;">
+                            <!-- Generado dinámicamente -->
+                        </div>
+                        <div id="aux-feedback" style="margin-top: 16px; font-size: 13px; font-weight: 500;"></div>
+                        <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px;">
+                            <button type="button" class="btn-secondary" onclick="document.getElementById('aux-modal').style.display='none'">Cancelar</button>
+                            <button type="submit" class="btn-primary" style="width: auto;">Guardar</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Modal para Estado del Crédito -->
+            <div id="status-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); z-index: 2000; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+                <div class="glass-panel" style="background: var(--bg-base); width: 350px; padding: 24px; border-radius: var(--radius-lg); position: relative;">
+                    <h3 style="margin-bottom: 20px;">Modificar Estado</h3>
+                    <form id="status-form" onsubmit="saveCreditoStatus(event)">
+                        <input type="hidden" id="status-credito-id">
+                        <div class="form-group">
+                            <label for="status-select">Nuevo Estado</label>
+                            <select id="status-select" required>
+                                <option value="APROBADO">APROBADO</option>
+                                <option value="RECHAZADO">RECHAZADO</option>
+                                <option value="ACTIVO">ACTIVO</option>
+                                <option value="CANCELADO">CANCELADO</option>
+                                <option value="MOROSO">MOROSO</option>
+                                <option value="JUDICIAL">JUDICIAL</option>
+                            </select>
+                        </div>
+                        <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px;">
+                            <button type="button" class="btn-secondary" onclick="document.getElementById('status-modal').style.display='none'">Cancelar</button>
+                            <button type="submit" class="btn-primary" style="width: auto;">Guardar</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Modal para Cuenta Corriente -->
+            <div id="cuotas-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); z-index: 2000; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+                <div class="glass-panel" style="background: var(--bg-base); width: 90vw; max-width: 1100px; max-height: 90vh; display: flex; flex-direction: column; padding: 24px; border-radius: var(--radius-lg); position: relative;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h3>Cuenta Corriente (Cuotas)</h3>
+                        <button type="button" class="btn-secondary" style="padding: 4px 12px; width: auto;" onclick="document.getElementById('cuotas-modal').style.display='none'">Cerrar</button>
+                    </div>
+                    
+                    <div style="overflow-y: auto; flex: 1;">
+                        <table class="data-table" id="table-cuotas">
+                            <thead>
+                                <tr>
+                                    <th>N°</th>
+                                    <th>Vencimiento</th>
+                                    <th>Capital</th>
+                                    <th>Interés</th>
+                                    <th>IVA</th>
+                                    <th>Total Esperado</th>
+                                    <th>Cobrado</th>
+                                    <th>Saldo Pendiente</th>
+                                    <th>Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cuotas-body">
+                                <!-- Se llena por JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Listado de Créditos Tab -->
+            <section id="tab-listado-creditos" class="tab-content">
+                <header class="section-header" style="display: flex; justify-content: space-between; align-items: flex-end;">
+                    <div>
+                        <h2>Listado Global de Créditos</h2>
+                        <p>Vista general de todos los créditos de la base de datos con filtros dinámicos.</p>
+                    </div>
+                    <button class="btn-primary" onclick="loadCreditosTable()" style="height: fit-content; width: fit-content; padding-left: 24px; padding-right: 24px; margin-bottom: 8px;">Actualizar Datos</button>
+                </header>
+                <div class="glass-panel" style="overflow-x: auto; max-height: calc(100vh - 180px); overflow-y: auto;">
+                    <table class="data-table" id="table-creditos">
+                        <thead id="creditos-headers">
+                            <tr><th>Cargando créditos...</th></tr>
+                        </thead>
+                        <tbody id="creditos-body">
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- System Actions Tab -->
+            <section id="tab-system-actions" class="tab-content">
+                <header class="section-header">
+                    <h2>Acciones del Sistema</h2>
+                    <p>Mantenimiento, recalculo y sincronización global de la base de datos.</p>
+                </header>
+                
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+                    <div class="glass-panel" style="padding: 24px; border-radius: var(--radius-lg); text-align: center;">
+                        <h3 style="margin-bottom: 12px;">Sincronizar Estados 🔄</h3>
+                        <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 24px;">
+                            Recalcula y actualiza en cascada los estados de todas las cuotas, créditos y clientes en base a la fecha de hoy y los saldos de cobranza.
+                        </p>
+                        <button id="btn-sync-states" class="btn-primary" onclick="syncSystemStates()">
+                            Ejecutar Sincronización
+                        </button>
+                    </div>
+                </div>
+            </section>
+
             <!-- Simulacion Tab -->
             <section id="tab-simulation" class="tab-content active">
                 <header class="section-header">
@@ -203,6 +490,5 @@
 
         </main>
     </div>
-    <script src="/app/main.js?v=2"></script>
 </body>
 </html>
