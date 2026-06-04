@@ -70,6 +70,7 @@ class LoanOriginator:
         due_day: int,
         cutoff_day: int,
         type: TipoCredito,
+        comision_id: int | None = None,
     ) -> None:
         """
         =============================================================================
@@ -80,6 +81,7 @@ class LoanOriginator:
         self.credit = Credito(
             cliente_cuil=self.client.cuil,
             socio_originador_id=partner_id,
+            comision_id=comision_id,
             capital=capital,
             tna_c_iva=tna_c_iva,
             plazo=term,
@@ -119,6 +121,7 @@ class LoanOriginator:
         issuance_date: date | None = None,
         due_day: int = 28,
         type: TipoCredito = TipoCredito.FRANCES,
+        comision_id: int | None = None,
     ) -> Credito:
         """
         =============================================================================
@@ -133,7 +136,7 @@ class LoanOriginator:
             self._validate_client(client_cuil)
             cutoff_day = self._get_partner_cutoff_day(partner_id)
             self._generate_credit_and_schedule(
-                capital, tna_c_iva, term, partner_id, issuance_date, due_day, cutoff_day, type
+                capital, tna_c_iva, term, partner_id, issuance_date, due_day, cutoff_day, type, comision_id
             )
 
             self.db.commit()
@@ -153,6 +156,7 @@ class LoanOriginator:
         issuance_date: date | None = None,
         due_day: int = 28,
         type: TipoCredito = TipoCredito.FRANCES,
+        comision_id: int | None = None,
     ) -> Credito:
         """
         =============================================================================
@@ -188,6 +192,7 @@ class LoanOriginator:
                 due_day,
                 cutoff_day,
                 type,
+                comision_id,
             )
 
             self.db.commit()

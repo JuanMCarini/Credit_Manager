@@ -6,7 +6,7 @@ function switchTab(tabId) {
     document.querySelectorAll('.nav-item').forEach(btn => {
         btn.classList.remove('active');
     });
-    
+
     // Attempt to set active class on the corresponding nav button
     const targetBtn = document.querySelector(`.nav-item[onclick*="switchTab('${tabId}')"]`);
     if (targetBtn) {
@@ -33,7 +33,7 @@ const formatCurrency = (num) => {
 // --- Simulation Module ---
 async function handleSimulation(e) {
     e.preventDefault();
-    
+
     const btn = document.getElementById('btn-simular');
     btn.textContent = "Calculando...";
     btn.disabled = true;
@@ -53,10 +53,10 @@ async function handleSimulation(e) {
 
         const res = await fetch(`${API_URL}/simular-cuotas?${params}`);
         if (!res.ok) throw new Error("Error en la simulación");
-        
+
         const data = await res.json();
         renderSimulationTable(data);
-        
+
         // Show summary pills
         const sumPills = document.getElementById('sim-summary');
         const totalPagado = data.reduce((acc, c) => acc + c.capital + c.interes + c.iva, 0);
@@ -77,7 +77,7 @@ async function handleSimulation(e) {
 function renderSimulationTable(cuotas) {
     const tbody = document.querySelector('#table-sim tbody');
     tbody.innerHTML = '';
-    
+
     cuotas.forEach(c => {
         const total = c.capital + c.interes + c.iva;
         const tr = document.createElement('tr');
@@ -97,7 +97,7 @@ function renderSimulationTable(cuotas) {
 
 async function handleBalances(e) {
     e.preventDefault();
-    
+
     const btn = document.getElementById('btn-balances');
     btn.textContent = "Consultando...";
     btn.disabled = true;
@@ -115,14 +115,14 @@ async function handleBalances(e) {
         if (document.getElementById('grp-iva').checked) activeGroups.push({ id: 'iva_operado', label: 'Tasa IVA' });
 
         const isGrouping = activeGroups.length > 0;
-        
+
         let params = new URLSearchParams();
         if (fecha) params.append('fecha', fecha);
-        
+
         if (!document.getElementById('bal-con-saldo').checked) {
             params.append('con_saldo', 'false');
         }
-        
+
         const propiasVal = document.getElementById('bal-propias').value;
         if (propiasVal !== "") {
             params.append('propias', propiasVal);
@@ -142,7 +142,7 @@ async function handleBalances(e) {
 
         const res = await fetch(`${API_URL}/api/v1/reports/balances?${params}`);
         if (!res.ok) throw new Error("Error en el reporte de saldos");
-        
+
         const data = await res.json();
         const reportDateObj = fecha ? new Date(fecha + 'T00:00:00') : new Date();
         renderBalancesTable(data, activeGroups, reportDateObj);
@@ -159,10 +159,10 @@ function renderBalancesTable(data, activeGroups, reportDate) {
     const thead = document.getElementById('bal-headers');
     const tbody = document.querySelector('#table-bal tbody');
     tbody.innerHTML = '';
-    
+
     // Mostrar el contenedor de la tabla
     document.getElementById('balances-results').style.display = "block";
-    
+
     // Limpiar memoria de filtros
     excelFilters = {};
 
@@ -199,19 +199,19 @@ function renderBalancesTable(data, activeGroups, reportDate) {
             if (row['Fecha Vencimiento']) {
                 const vto = new Date(row['Fecha Vencimiento'] + 'T00:00:00');
                 const cutoff = new Date(reportDate);
-                cutoff.setHours(0,0,0,0);
+                cutoff.setHours(0, 0, 0, 0);
                 if (vto < cutoff) colorTotal = "var(--error)";
             }
 
             const tr = document.createElement('tr');
             let html = "";
-            
+
             // Build dynamic columns for each selected group
             activeGroups.forEach(g => {
                 const val = (row[g.id] !== undefined && row[g.id] !== null) ? row[g.id] : '-';
                 html += `<td>${val}</td>`;
             });
-            
+
             // Add fixed financial columns
             html += `
                 <td>${formatCurrency(row.Capital || 0)}</td>
@@ -228,7 +228,7 @@ function renderBalancesTable(data, activeGroups, reportDate) {
             if (row['Fecha Vencimiento']) {
                 const vto = new Date(row['Fecha Vencimiento'] + 'T00:00:00');
                 const cutoff = new Date(reportDate);
-                cutoff.setHours(0,0,0,0);
+                cutoff.setHours(0, 0, 0, 0);
                 if (vto < cutoff) colorTotal = "var(--error)";
             }
 
@@ -267,7 +267,7 @@ function getUniqueValuesForCol(tableId, colIndex) {
         const td = trs[i].getElementsByTagName("td")[colIndex];
         if (td) vals.add(td.textContent.trim());
     }
-    return Array.from(vals).sort();
+    return Array.from(vals).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
 }
 
 function openExcelFilter(e, colIndex, tableId = 'table-bal', headerId = 'bal-headers') {
@@ -286,7 +286,7 @@ function openExcelFilter(e, colIndex, tableId = 'table-bal', headerId = 'bal-hea
     const popover = document.createElement("div");
     popover.id = "excel-filter-popover";
     popover.className = "filter-popover glass-panel fade-in";
-    
+
     let html = `
         <div style="margin-bottom: 8px;">
             <input type="text" id="excel-filter-search" placeholder="🔍 Buscar..." 
@@ -358,7 +358,7 @@ function openExcelFilter(e, colIndex, tableId = 'table-bal', headerId = 'bal-hea
     document.getElementById("excel-filter-all").addEventListener("change", (ev) => {
         const checked = ev.target.checked;
         document.querySelectorAll(".excel-val-cb").forEach(cb => {
-            if(cb.closest('label').style.display !== 'none') {
+            if (cb.closest('label').style.display !== 'none') {
                 cb.checked = checked;
             }
         });
@@ -407,7 +407,7 @@ function runAllExcelFilters(tableId, headerId) {
     for (let i = 0; i < trs.length; i++) {
         let rowMatch = true;
         const tds = trs[i].getElementsByTagName("td");
-        
+
         for (const [colIndexStr, filterObj] of Object.entries(excelFilters[tableId] || {})) {
             const colIndex = parseInt(colIndexStr);
             if (tds[colIndex]) {
@@ -459,11 +459,21 @@ document.addEventListener("click", (e) => {
     }
 });
 
+// Global Input Formatting
+document.addEventListener('input', function(e) {
+    if (e.target.tagName === 'INPUT' && e.target.type === 'text') {
+        const start = e.target.selectionStart;
+        const end = e.target.selectionEnd;
+        e.target.value = e.target.value.toUpperCase();
+        e.target.setSelectionRange(start, end);
+    }
+});
+
 // Init
 document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('fecha').valueAsDate = new Date();
     document.getElementById('bal-fecha').valueAsDate = new Date();
-    
+
     try {
         const resProv = await fetch(`${API_URL}/api/v1/auxiliares/provincias`);
         if (resProv.ok) {
@@ -475,10 +485,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (selectUpdProv) selectUpdProv.innerHTML += `<option value="${p.id}">${p.nombre}</option>`;
             });
         }
-        
+
         const resEmp = await fetch(`${API_URL}/api/v1/auxiliares/empleadores`);
         if (resEmp.ok) {
             const empleadores = await resEmp.json();
+            window.empleadoresDataCache = empleadores;
             const selectEmp = document.getElementById('cli-empleador');
             const selectUpdEmp = document.getElementById('upd-cli-empleador');
             empleadores.forEach(e => {
@@ -486,10 +497,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (selectUpdEmp) selectUpdEmp.innerHTML += `<option value="${e.id}">${e.razon_social} ${e.cuit ? `(CUIT: ${e.cuit})` : ''}</option>`;
             });
         }
-        
+
         const resSocios = await fetch(`${API_URL}/api/v1/auxiliares/socios`);
         if (resSocios.ok) {
             const socios = await resSocios.json();
+            window.sociosDataCache = socios;
             const selectSocio = document.getElementById('cred-socio');
             if (selectSocio) {
                 socios.forEach(s => {
@@ -497,10 +509,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                 });
             }
         }
+
+        const resTasas = await fetch(`${API_URL}/api/v1/auxiliares/tasas_y_comisiones`);
+        if (resTasas.ok) {
+            window.tasasDataCache = await resTasas.json();
+        }
     } catch (e) {
         console.error("Error cargando listas desplegables:", e);
     }
-    
+
     // Set default values for other forms
     const credEmision = document.getElementById('cred-emision');
     if (credEmision) {
@@ -528,21 +545,21 @@ async function handleClientSubmit(e) {
     e.preventDefault();
     const btn = document.getElementById('btn-save-cliente');
     const feedback = document.getElementById('cli-feedback');
-    
+
     btn.disabled = true;
     btn.textContent = "Guardando...";
     feedback.textContent = "";
-    
+
     const getVal = (id) => {
         const el = document.getElementById(id);
-        if(!el) return null;
+        if (!el) return null;
         const val = el.value.trim();
         return val === "" ? null : val;
     };
-    
+
     const getNum = (id) => {
         const el = document.getElementById(id);
-        if(!el) return null;
+        if (!el) return null;
         const val = el.value.trim();
         return val === "" ? null : Number(val);
     };
@@ -575,15 +592,15 @@ async function handleClientSubmit(e) {
     try {
         const method = editingClienteCuil ? 'PUT' : 'POST';
         const url = editingClienteCuil ? `${API_URL}/api/v1/clientes/${editingClienteCuil}` : `${API_URL}/api/v1/clientes`;
-        
+
         const res = await fetch(url, {
             method: method,
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
-        
+
         const data = await res.json();
-        
+
         if (res.ok) {
             feedback.style.color = "var(--accent-secondary)";
             feedback.textContent = editingClienteCuil ? "¡Cliente actualizado con éxito!" : "¡Cliente registrado con éxito!";
@@ -611,20 +628,20 @@ async function editCliente(cuil) {
         const res = await fetch(`${API_URL}/api/v1/clientes/${cuil}`);
         if (!res.ok) throw new Error("No se pudieron obtener los datos del cliente.");
         const data = await res.json();
-        
+
         editingClienteCuil = cuil;
-        
+
         document.getElementById('form-cliente-title').textContent = `Modificando Cliente: ${data.nombre} ${data.apellido}`;
         document.getElementById('form-cliente-subtitle').textContent = `CUIL: ${cuil}`;
         document.getElementById('btn-save-cliente').textContent = "Actualizar Cliente";
         document.getElementById('btn-cancel-cliente').style.display = "inline-block";
         document.getElementById('cli-cuil').disabled = true; // CUIL cannot be changed as it is PK
-        
+
         const setVal = (id, val) => {
             const el = document.getElementById(id);
-            if(el) el.value = val !== null && val !== undefined ? val : "";
+            if (el) el.value = val !== null && val !== undefined ? val : "";
         };
-        
+
         setVal('cli-cuil', data.cuil);
         setVal('cli-documento', data.documento);
         setVal('cli-nombre', data.nombre);
@@ -647,9 +664,9 @@ async function editCliente(cuil) {
         setVal('cli-legajo', data.legajo);
         setVal('cli-empleador', data.empleador_id);
         setVal('cli-cbu', data.cbu);
-        
+
         switchTab('clientes');
-        
+
     } catch (e) {
         alert(e.message);
     }
@@ -657,13 +674,13 @@ async function editCliente(cuil) {
 
 async function deleteCliente(cuil) {
     if (!confirm(`¿Estás seguro de que deseas eliminar permanentemente el cliente con CUIL ${cuil}?`)) return;
-    
+
     try {
         const res = await fetch(`${API_URL}/api/v1/clientes/${cuil}`, {
             method: 'DELETE'
         });
         const data = await res.json();
-        
+
         if (res.ok) {
             alert("Cliente eliminado con éxito.");
             loadClientesTable();
@@ -684,7 +701,8 @@ const AUX_SCHEMAS = {
     },
     empleadores: {
         cuit: { type: 'text', label: 'CUIT (Sin guiones, Opcional)' },
-        razon_social: { type: 'text', label: 'Razón Social', required: true }
+        razon_social: { type: 'text', label: 'Razón Social', required: true },
+        socio_comercial_id: { type: 'select_socio', label: 'Socio Comercial Asociado' }
     },
     socios: {
         razon_social: { type: 'text', label: 'Razón Social', required: true },
@@ -694,6 +712,19 @@ const AUX_SCHEMAS = {
         mail: { type: 'email', label: 'Email' },
         telefono: { type: 'text', label: 'Teléfono' },
         dia_corte: { type: 'number', label: 'Día de Corte', default: 28 }
+    },
+    tasas_y_comisiones: {
+        fecha: { type: 'date', label: 'Fecha', required: true },
+        estado: { type: 'text', label: 'Estado', default: 'ACTIVA', required: true },
+        socio_originador_id: { type: 'select_socio', label: 'Socio Originador', required: true },
+        socio_intermediario_id: { type: 'select_socio', label: 'Socio Intermediario', required: true },
+        plazo: { type: 'number', label: 'Plazo (Meses)', default: 12, required: true },
+        tna_c_iva: { type: 'number', label: 'TNA (con IVA)', default: 0.0, required: true },
+        colocacion_originador: { type: 'number', label: '% Colocación Originador', default: 0.0, required: true },
+        colocacion_intermediario: { type: 'number', label: '% Colocación Intermediario', default: 0.0, required: true },
+        cobranza_originador: { type: 'number', label: '% Cobranza Originador', default: 0.0, required: true },
+        cobranza_intermediario: { type: 'number', label: '% Cobranza Intermediario', default: 0.0, required: true },
+        colocacion_propia: { type: 'number', label: '% Colocación Propia', default: 0.0, required: true }
     }
 };
 
@@ -705,37 +736,54 @@ async function loadAuxTable() {
     const select = document.getElementById('aux-table-select');
     const table = select.value;
     if (!table) return;
-    
+
     currentAuxTable = table;
     document.getElementById('btn-new-aux').disabled = false;
-    
+
     const tbody = document.getElementById('aux-table-body');
     const thead = document.getElementById('aux-table-head');
-    
+
     tbody.innerHTML = '<tr><td colspan="100%" style="text-align:center;">Cargando...</td></tr>';
-    
+
     try {
         const res = await fetch(`${API_URL}/api/v1/auxiliares/${table}`);
         if (!res.ok) throw new Error("Error al cargar datos");
         const data = await res.json();
         currentAuxData = data;
-        
+
         if (data.length === 0) {
             thead.innerHTML = '';
             tbody.innerHTML = '<tr><td colspan="100%" class="empty-state">No hay registros cargados en esta tabla.</td></tr>';
             return;
         }
-        
+
         const keys = Object.keys(data[0]);
-        thead.innerHTML = `<tr>${keys.map(k => `<th>${k.replace(/_/g, ' ').toUpperCase()}</th>`).join('')}<th>ACCIONES</th></tr>`;
-        
+        thead.innerHTML = `<tr>${keys.map(k => {
+            let title = k.replace(/_id$/g, '').replace(/_/g, ' ').toUpperCase();
+            if (title === 'TNA C IVA') title = 'TNA C/IVA';
+            return `<th>${title}</th>`;
+        }).join('')}<th>ACCIONES</th></tr>`;
+
         tbody.innerHTML = data.map(row => {
             return `<tr>
-                ${keys.map(k => `<td>${row[k] !== null ? row[k] : '-'}</td>`).join('')}
+                ${keys.map(k => {
+                let val = row[k] !== null ? row[k] : '-';
+                
+                if (val !== '-' && k.includes('socio') && k.endsWith('_id') && window.sociosDataCache) {
+                    // Force comparison as string/number safely
+                    const socio = window.sociosDataCache.find(s => String(s.id) === String(val));
+                    if (socio) val = socio.razon_social;
+                }
+
+                if (val !== '-' && (k.startsWith('colocacion_') || k.startsWith('cobranza_') || k === 'tna_c_iva')) {
+                    val = Number(val).toFixed(2) + '%';
+                }
+                return `<td>${val}</td>`;
+            }).join('')}
                 <td><button class="btn-secondary" style="padding:4px 8px; font-size:12px;" onclick="openAuxModal(${row.id})">Editar</button></td>
             </tr>`;
         }).join('');
-        
+
     } catch (e) {
         tbody.innerHTML = `<tr><td colspan="100%" class="empty-state" style="color:var(--error);">${e.message}</td></tr>`;
     }
@@ -744,31 +792,47 @@ async function loadAuxTable() {
 function openAuxModal(id = null) {
     if (!currentAuxTable) return;
     editingAuxId = id;
-    
+
     let record = null;
     if (id !== null) {
         record = currentAuxData.find(r => r.id === id);
     }
-    
+
     const schema = AUX_SCHEMAS[currentAuxTable];
     const fieldsContainer = document.getElementById('aux-form-fields');
     fieldsContainer.innerHTML = '';
-    
+
     Object.entries(schema).forEach(([key, config]) => {
         const requiredAttr = config.required ? 'required' : '';
         let value = config.default !== undefined ? config.default : '';
         if (record && record[key] !== null && record[key] !== undefined) {
             value = record[key];
         }
-        
+
+        let fieldHtml = "";
+
+        if (config.type === 'select_socio') {
+            let optionsHtml = '<option value="">Seleccione...</option>';
+            if (window.sociosDataCache) {
+                window.sociosDataCache.forEach(s => {
+                    const selected = String(s.id) === String(value) ? 'selected' : '';
+                    optionsHtml += `<option value="${s.id}" ${selected}>${s.razon_social} ${s.cuit ? `(CUIT: ${s.cuit})` : ''}</option>`;
+                });
+            }
+            fieldHtml = `<select id="aux-${key}" ${requiredAttr}>${optionsHtml}</select>`;
+        } else {
+            const stepAttr = config.type === 'number' ? 'step="any"' : '';
+            fieldHtml = `<input type="${config.type}" id="aux-${key}" value="${value}" ${requiredAttr} ${stepAttr}>`;
+        }
+
         fieldsContainer.innerHTML += `
             <div class="form-group" style="margin-bottom:0;">
                 <label for="aux-${key}">${config.label} ${config.required ? '*' : ''}</label>
-                <input type="${config.type}" id="aux-${key}" value="${value}" ${requiredAttr}>
+                ${fieldHtml}
             </div>
         `;
     });
-    
+
     document.getElementById('aux-modal-title').textContent = id ? `Editar Registro #${id}` : 'Nuevo Registro';
     document.getElementById('aux-feedback').textContent = '';
     document.getElementById('aux-modal').style.display = 'flex';
@@ -777,31 +841,31 @@ function openAuxModal(id = null) {
 async function saveAuxRecord(e) {
     e.preventDefault();
     if (!currentAuxTable) return;
-    
+
     const feedback = document.getElementById('aux-feedback');
     const schema = AUX_SCHEMAS[currentAuxTable];
     const payload = {};
-    
+
     Object.keys(schema).forEach(key => {
         const val = document.getElementById(`aux-${key}`).value.trim();
         payload[key] = val === '' ? null : val;
     });
-    
+
     feedback.style.color = "var(--text-primary)";
     feedback.textContent = "Guardando...";
-    
+
     try {
         const method = editingAuxId ? 'PUT' : 'POST';
-        const url = editingAuxId ? 
-                    `${API_URL}/api/v1/auxiliares/${currentAuxTable}/${editingAuxId}` : 
-                    `${API_URL}/api/v1/auxiliares/${currentAuxTable}`;
-                    
+        const url = editingAuxId ?
+            `${API_URL}/api/v1/auxiliares/${currentAuxTable}/${editingAuxId}` :
+            `${API_URL}/api/v1/auxiliares/${currentAuxTable}`;
+
         const res = await fetch(url, {
             method: method,
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
-        
+
         const result = await res.json();
         if (res.ok) {
             document.getElementById('aux-modal').style.display = 'none';
@@ -822,11 +886,11 @@ async function saveAuxRecord(e) {
 async function viewClientCredits(cuil) {
     switchTab('listado-creditos');
     await loadCreditosTable();
-    
+
     if (!excelFilters['table-creditos']) {
         excelFilters['table-creditos'] = {};
     }
-    
+
     // The "Cliente CUIL" column is at index 2
     excelFilters['table-creditos'][2] = {
         isDate: false,
@@ -834,14 +898,14 @@ async function viewClientCredits(cuil) {
         hasta: '',
         allowedSet: new Set([String(cuil)])
     };
-    
+
     runAllExcelFilters('table-creditos', 'creditos-headers');
 }
 
 async function viewClientCuentaCorriente(cuil) {
     const tbody = document.getElementById('cliente-cta-cte-body');
     tbody.innerHTML = '<tr><td colspan="100%" style="text-align:center;">Cargando cuenta corriente...</td></tr>';
-    
+
     // Configurar título del modal
     const titleEl = document.getElementById('cliente-cta-cte-title');
     let clienteName = cuil;
@@ -852,24 +916,24 @@ async function viewClientCuentaCorriente(cuil) {
         }
     }
     titleEl.textContent = `Cuenta Corriente Unificada: ${clienteName}`;
-    
+
     document.getElementById('cliente-cta-cte-modal').style.display = 'flex';
-    
+
     try {
         const res = await fetch(`${API_URL}/api/v1/clientes/${cuil}/cuenta_corriente`);
         if (!res.ok) throw new Error("Error al obtener la cuenta corriente del cliente.");
-        
+
         const data = await res.json();
         if (data.length === 0) {
             tbody.innerHTML = '<tr><td colspan="100%" style="text-align:center;">No hay cuotas registradas para este cliente.</td></tr>';
             return;
         }
-        
+
         let html = "";
         data.forEach(c => {
             const extStr = c.id_externo && c.id_externo !== '-' ? ` (${c.id_externo})` : '';
             const creditoLabel = `#${c.credito_id}${extStr}`;
-            
+
             html += `<tr>
                 <td>${creditoLabel}</td>
                 <td>${c.nro_cuota}</td>
@@ -879,24 +943,22 @@ async function viewClientCuentaCorriente(cuil) {
                 <td>${formatCurrency(c.iva)}</td>
                 <td style="font-weight: 600;">${formatCurrency(c.total_esperado)}</td>
                 <td style="color: var(--accent-secondary); font-weight: 600;">${formatCurrency(c.total_cobrado)}</td>
-                <td style="color: ${
-                    c.estado === 'MOROSA' ? 'var(--error)' :
+                <td style="color: ${c.estado === 'MOROSA' ? 'var(--error)' :
                     c.estado === 'PENDIENTE' ? 'var(--accent-secondary)' : 'inherit'
                 }; font-weight: 500;">
                     ${c.estado === 'CANCELADA' ? '-' : formatCurrency(c.saldo_pendiente)}
                 </td>
                 <td>
                     <span style="padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;
-                        background: ${
-                            c.estado === 'CANCELADA' ? 'var(--accent-secondary)' : 
-                            c.estado === 'MOROSA' ? 'var(--error)' : 
-                            'rgba(255,255,255,0.1)'
-                        };
+                        background: ${c.estado === 'CANCELADA' ? 'var(--accent-secondary)' :
+                    c.estado === 'MOROSA' ? 'var(--error)' :
+                        'rgba(255,255,255,0.1)'
+                };
                         color: #fff;
                     ">${c.estado}</span>
                 </td>
             </tr>`;
-            
+
             if (c.detalle_cobranzas && c.detalle_cobranzas.length > 0) {
                 c.detalle_cobranzas.forEach(cob => {
                     html += `<tr style="background: rgba(255, 255, 255, 0.02); font-size: 12px; color: var(--text-secondary);">
@@ -913,7 +975,7 @@ async function viewClientCuentaCorriente(cuil) {
                 });
             }
         });
-        
+
         tbody.innerHTML = html;
     } catch (error) {
         tbody.innerHTML = `<tr><td colspan="100%" style="text-align:center; color: var(--error);">${error.message}</td></tr>`;
@@ -923,9 +985,9 @@ async function viewClientCuentaCorriente(cuil) {
 async function loadClientesTable() {
     const tbody = document.querySelector('#table-clientes tbody');
     const thead = document.getElementById('clientes-headers');
-    
+
     tbody.innerHTML = '<tr><td colspan="100%" class="text-center empty-state" style="padding:40px;">Cargando clientes...</td></tr>';
-    
+
     // Clear filters
     if (!excelFilters['table-clientes']) excelFilters['table-clientes'] = {};
     else excelFilters['table-clientes'] = {};
@@ -934,16 +996,16 @@ async function loadClientesTable() {
         const res = await fetch(`${API_URL}/api/v1/clientes`);
         if (!res.ok) throw new Error("Error al cargar clientes");
         const data = await res.json();
-        
+
         // Cache data globally for name lookup in modals
         window.clientesDataCache = data;
-        
+
         if (data.length === 0) {
             thead.innerHTML = '';
             tbody.innerHTML = '<tr><td colspan="100%" class="empty-state text-center" style="padding:40px;">No hay clientes registrados.</td></tr>';
             return;
         }
-        
+
         const keys = Object.keys(data[0]);
         let theadHtml = "<tr>";
         keys.forEach((k, i) => {
@@ -956,7 +1018,7 @@ async function loadClientesTable() {
         });
         theadHtml += `<th>Acciones</th></tr>`;
         thead.innerHTML = theadHtml;
-        
+
         let tbodyHtml = "";
         data.forEach(row => {
             let rowHtml = "<tr>";
@@ -978,7 +1040,7 @@ async function loadClientesTable() {
             tbodyHtml += rowHtml;
         });
         tbody.innerHTML = tbodyHtml;
-        
+
     } catch (e) {
         tbody.innerHTML = `<tr><td colspan="100%" style="text-align:center; color: var(--error);">Error al cargar clientes: ${e.message}</td></tr>`;
     }
@@ -997,14 +1059,14 @@ async function saveCreditoStatus(e) {
     e.preventDefault();
     const id = document.getElementById('status-credito-id').value;
     const nuevoEstado = document.getElementById('status-select').value;
-    
+
     try {
         const res = await fetch(`${API_URL}/api/v1/creditos/${id}/estado`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ estado: nuevoEstado })
         });
-        
+
         if (res.ok) {
             document.getElementById('status-modal').style.display = 'none';
             loadCreditosTable(); // Recargar la tabla
@@ -1021,17 +1083,17 @@ async function viewCreditoCuotas(id) {
     const tbody = document.getElementById('cuotas-body');
     tbody.innerHTML = '<tr><td colspan="100%" style="text-align:center;">Cargando cuotas...</td></tr>';
     document.getElementById('cuotas-modal').style.display = 'flex';
-    
+
     try {
         const res = await fetch(`${API_URL}/api/v1/creditos/${id}/cuotas`);
         if (!res.ok) throw new Error("Error al obtener las cuotas del crédito.");
-        
+
         const data = await res.json();
         if (data.length === 0) {
             tbody.innerHTML = '<tr><td colspan="100%" style="text-align:center;">No hay cuotas registradas para este crédito.</td></tr>';
             return;
         }
-        
+
         let html = "";
         data.forEach(c => {
             html += `<tr>
@@ -1042,24 +1104,22 @@ async function viewCreditoCuotas(id) {
                 <td>${formatCurrency(c.iva)}</td>
                 <td style="font-weight: 600;">${formatCurrency(c.total_esperado)}</td>
                 <td style="color: var(--accent-secondary); font-weight: 600;">${formatCurrency(c.total_cobrado)}</td>
-                <td style="color: ${
-                    c.estado === 'MOROSA' ? 'var(--error)' :
+                <td style="color: ${c.estado === 'MOROSA' ? 'var(--error)' :
                     c.estado === 'PENDIENTE' ? 'var(--accent-secondary)' : 'inherit'
                 }; font-weight: 500;">
                     ${c.estado === 'CANCELADA' ? '-' : formatCurrency(c.saldo_pendiente)}
                 </td>
                 <td>
                     <span style="padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;
-                        background: ${
-                            c.estado === 'CANCELADA' ? 'var(--accent-secondary)' : 
-                            c.estado === 'MOROSA' ? 'var(--error)' : 
-                            'rgba(255,255,255,0.1)'
-                        };
+                        background: ${c.estado === 'CANCELADA' ? 'var(--accent-secondary)' :
+                    c.estado === 'MOROSA' ? 'var(--error)' :
+                        'rgba(255,255,255,0.1)'
+                };
                         color: ${c.estado === 'PENDIENTE' ? '#fff' : '#fff'};
                     ">${c.estado}</span>
                 </td>
             </tr>`;
-            
+
             if (c.detalle_cobranzas && c.detalle_cobranzas.length > 0) {
                 c.detalle_cobranzas.forEach(cob => {
                     html += `<tr style="background: rgba(255, 255, 255, 0.02); font-size: 12px; color: var(--text-secondary);">
@@ -1076,7 +1136,7 @@ async function viewCreditoCuotas(id) {
                 });
             }
         });
-        
+
         tbody.innerHTML = html;
     } catch (error) {
         tbody.innerHTML = `<tr><td colspan="100%" style="text-align:center; color: var(--error);">${error.message}</td></tr>`;
@@ -1086,14 +1146,14 @@ async function viewCreditoCuotas(id) {
 async function loadCreditosTable() {
     const tbody = document.getElementById('creditos-body');
     const thead = document.getElementById('creditos-headers');
-    
+
     tbody.innerHTML = '<tr><td colspan="100%" style="text-align:center;">Cargando créditos...</td></tr>';
-    
+
     try {
         const res = await fetch(`${API_URL}/api/v1/creditos`);
         if (!res.ok) throw new Error("Error al obtener los créditos del servidor");
         const data = await res.json();
-        
+
         if (data.length === 0) {
             tbody.innerHTML = '<tr><td colspan="100%" style="text-align:center;">No hay créditos registrados.</td></tr>';
             thead.innerHTML = '';
@@ -1103,7 +1163,7 @@ async function loadCreditosTable() {
         // Configure table filtering data
         window.tableDataCache = window.tableDataCache || {};
         window.tableDataCache['table-creditos'] = data;
-        
+
         const keys = Object.keys(data[0]);
         let theadHtml = "<tr>";
         keys.forEach((k, i) => {
@@ -1116,7 +1176,7 @@ async function loadCreditosTable() {
         });
         theadHtml += "<th>Acciones</th></tr>";
         thead.innerHTML = theadHtml;
-        
+
         let tbodyHtml = "";
         data.forEach(row => {
             let rowHtml = "<tr>";
@@ -1144,7 +1204,7 @@ async function loadCreditosTable() {
             tbodyHtml += rowHtml;
         });
         tbody.innerHTML = tbodyHtml;
-        
+
     } catch (e) {
         tbody.innerHTML = `<tr><td colspan="100%" style="text-align:center; color: var(--error);">Error al cargar créditos: ${e.message}</td></tr>`;
     }
@@ -1154,14 +1214,14 @@ async function deleteCredito(creditoId) {
     if (!confirm("¿Está seguro que desea eliminar este crédito? Esta acción no se puede deshacer y solo es posible si no tiene cobranzas asociadas.")) {
         return;
     }
-    
+
     try {
         const res = await fetch(`${API_URL}/api/v1/creditos/${creditoId}`, {
             method: 'DELETE'
         });
-        
+
         const data = await res.json();
-        
+
         if (res.ok) {
             alert("✅ " + data.message);
             loadCreditosTable(); // Recargar la tabla
@@ -1186,7 +1246,7 @@ async function syncSystemStates() {
             method: 'POST'
         });
         const data = await res.json();
-        
+
         if (res.ok) {
             alert("¡Éxito! " + data.message);
         } else {
@@ -1197,8 +1257,8 @@ async function syncSystemStates() {
     } finally {
         btn.disabled = false;
         btn.innerText = "Ejecutar Sincronización";
-        
-// Refresh tables if their tabs are active or data is cached
+
+        // Refresh tables if their tabs are active or data is cached
         if (document.getElementById('tab-clientes').classList.contains('active')) {
             loadClientesTable();
         } else if (document.getElementById('tab-listado-creditos').classList.contains('active')) {
@@ -1215,7 +1275,7 @@ async function searchClienteForCredito() {
     const resultDiv = document.getElementById('search-cli-result');
     const updateContainer = document.getElementById('alta-credito-cliente-container');
     const formContainer = document.getElementById('alta-credito-form-container');
-    
+
     if (!query) {
         resultDiv.style.display = 'block';
         resultDiv.style.backgroundColor = 'rgba(239, 68, 68, 0.1)';
@@ -1223,40 +1283,40 @@ async function searchClienteForCredito() {
         resultDiv.innerHTML = '<p style="color: var(--error);">Por favor ingrese un CUIL o DNI.</p>';
         return;
     }
-    
+
     updateContainer.style.display = 'none';
     formContainer.style.display = 'none';
-    
+
     try {
         const resList = await fetch(`${API_URL}/api/v1/clientes`);
         const data = await resList.json();
         const found = data.find(c => c.CUIL === query || c.Documento === query);
-        
+
         if (found) {
             // Fetch full details to populate update form
             const fullRes = await fetch(`${API_URL}/api/v1/clientes/${found.CUIL}`);
             if (!fullRes.ok) throw new Error("No se pudieron cargar los detalles del cliente.");
             const cliente = await fullRes.json();
-            
+
             resultDiv.style.display = 'block';
             resultDiv.style.backgroundColor = 'rgba(16, 185, 129, 0.1)';
             resultDiv.style.border = '1px solid var(--accent-secondary)';
             resultDiv.innerHTML = `<p style="color: var(--accent-secondary); margin: 0;">✅ Cliente encontrado: <strong>${cliente.apellido}, ${cliente.nombre}</strong></p>`;
-            
+
             // Populate Update Form
             const setVal = (id, val) => document.getElementById(id).value = val || '';
             setVal('upd-cli-cuil', cliente.cuil);
             setVal('upd-cli-documento', cliente.documento);
             setVal('upd-cli-nombre', cliente.nombre);
             setVal('upd-cli-apellido', cliente.apellido);
-            
+
             // Format dates for input[type="date"]
             if (cliente.fecha_nacimiento) {
                 setVal('upd-cli-nacimiento', cliente.fecha_nacimiento);
             } else {
                 setVal('upd-cli-nacimiento', '');
             }
-            
+
             setVal('upd-cli-sexo', cliente.sexo);
             setVal('upd-cli-estcivil', cliente.estado_civil);
             setVal('upd-cli-nacionalidad', cliente.nacionalidad);
@@ -1273,13 +1333,13 @@ async function searchClienteForCredito() {
             setVal('upd-cli-remuneracion', cliente.remuneracion);
             setVal('upd-cli-legajo', cliente.legajo);
             setVal('upd-cli-empleador', cliente.empleador_id);
-            
+
             // Reset button if it was confirmed before
             const btn = document.getElementById('btn-confirmar-cliente');
             btn.disabled = false;
             btn.innerText = "Confirmar y Actualizar Datos";
             btn.style.backgroundColor = "var(--accent-primary)";
-            
+
             updateContainer.style.display = 'block';
         } else {
             resultDiv.style.display = 'block';
@@ -1304,16 +1364,16 @@ async function confirmUpdateClienteForCredito(e) {
     const btn = document.getElementById('btn-confirmar-cliente');
     btn.disabled = true;
     btn.innerText = "Actualizando...";
-    
+
     const cuil = document.getElementById('upd-cli-cuil').value;
-    
+
     // Helper to get value or null
     const getVal = (id) => document.getElementById(id).value.trim() || null;
     const getNum = (id) => {
         const val = document.getElementById(id).value;
         return val ? parseInt(val, 10) : null;
     };
-    
+
     const payload = {
         cuil: cuil,
         documento: document.getElementById('upd-cli-documento').value,
@@ -1337,20 +1397,21 @@ async function confirmUpdateClienteForCredito(e) {
         legajo: getVal('upd-cli-legajo'),
         empleador_id: getNum('upd-cli-empleador')
     };
-    
+
     try {
         const res = await fetch(`${API_URL}/api/v1/clientes/${cuil}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
-        
+
         const data = await res.json();
         if (res.ok) {
             btn.innerText = "¡Datos Confirmados!";
             btn.style.backgroundColor = "var(--accent-secondary)";
             // Show credit form
             document.getElementById('alta-credito-form-container').style.display = 'block';
+            setupCreditFormForEmpleador(payload.empleador_id);
         } else {
             alert(`Error al actualizar cliente: ${data.detail}`);
             btn.innerText = "Confirmar y Actualizar Datos";
@@ -1363,12 +1424,152 @@ async function confirmUpdateClienteForCredito(e) {
     }
 }
 
+function setTasasMode(auto) {
+    const autoContainer = document.getElementById('container-tasa-auto');
+    const manualPlazo = document.getElementById('container-tasa-manual-plazo');
+    const manualTna = document.getElementById('container-tasa-manual-tna');
+    const selectTasas = document.getElementById('cred-tasa-seleccion');
+    const inputPlazo = document.getElementById('cred-plazo');
+    const inputTna = document.getElementById('cred-tna');
+
+    if (auto) {
+        autoContainer.style.display = 'block';
+        manualPlazo.style.display = 'none';
+        manualTna.style.display = 'none';
+        selectTasas.required = true;
+        
+        inputPlazo.required = false;
+        inputTna.required = false;
+        inputPlazo.type = "hidden";
+        inputTna.type = "hidden";
+    } else {
+        autoContainer.style.display = 'none';
+        manualPlazo.style.display = 'block';
+        manualTna.style.display = 'block';
+        selectTasas.required = false;
+        
+        inputPlazo.required = true;
+        inputTna.required = true;
+        inputPlazo.type = "number";
+        inputTna.type = "number";
+        inputPlazo.value = "";
+        inputTna.value = "";
+    }
+}
+
+function setupCreditFormForEmpleador(empleadorId) {
+    const selectSocio = document.getElementById('cred-socio');
+    if (!empleadorId) {
+        selectSocio.value = '';
+        selectSocio.disabled = false;
+        setTasasMode(false);
+        return;
+    }
+    
+    if (window.empleadoresDataCache) {
+        const emp = window.empleadoresDataCache.find(e => e.id === empleadorId);
+        if (emp && emp.socio_comercial_id) {
+            selectSocio.value = emp.socio_comercial_id;
+            selectSocio.disabled = true; // Lock it
+            updateTasasDropdown();
+        } else {
+            selectSocio.value = '';
+            selectSocio.disabled = false;
+            setTasasMode(false);
+        }
+    } else {
+        setTasasMode(false);
+    }
+}
+
+function updateTasasDropdown() {
+    const socioId = parseInt(document.getElementById('cred-socio').value, 10);
+    let emisionDateStr = document.getElementById('cred-emision').value;
+    if (!emisionDateStr) {
+        // use today
+        const today = new Date();
+        emisionDateStr = today.toISOString().split('T')[0];
+    }
+    const targetDate = new Date(emisionDateStr + 'T00:00:00');
+
+    const selectTasas = document.getElementById('cred-tasa-seleccion');
+    if (!selectTasas) return;
+    
+    selectTasas.innerHTML = '<option value="">Seleccione una opción...</option>';
+    document.getElementById('cred-plazo').value = '';
+    document.getElementById('cred-tna').value = '';
+
+    if (!socioId || !window.tasasDataCache) {
+        setTasasMode(false);
+        return;
+    }
+
+    // Filter by socio, ACTIVA, and fecha <= emision
+    const validTasas = window.tasasDataCache.filter(t => {
+        if (t.socio_originador_id !== socioId) return false;
+        if (t.estado !== 'ACTIVA') return false;
+        if (t.fecha) {
+            const tasaDate = new Date(t.fecha + 'T00:00:00');
+            if (tasaDate > targetDate) return false;
+        }
+        return true;
+    });
+
+    if (validTasas.length === 0) {
+        setTasasMode(false);
+        return;
+    }
+
+    setTasasMode(true);
+
+    // Group by plazo and get max fecha
+    const grouped = {};
+    validTasas.forEach(t => {
+        if (!grouped[t.plazo] || (new Date(t.fecha + 'T00:00:00') > new Date(grouped[t.plazo].fecha + 'T00:00:00'))) {
+            grouped[t.plazo] = t;
+        }
+    });
+
+    // Populate dropdown
+    Object.values(grouped).sort((a, b) => a.plazo - b.plazo).forEach(t => {
+        const option = document.createElement('option');
+        // value is JSON with plazo, tna and comision_id (tna must be a decimal, so we divide the % by 100)
+        option.value = JSON.stringify({plazo: t.plazo, tna: t.tna_c_iva / 100, comision_id: t.id});
+        const tnaPct = Number(t.tna_c_iva).toFixed(2);
+        option.innerText = `${t.plazo} cuotas - TNA ${tnaPct}%`;
+        selectTasas.appendChild(option);
+    });
+}
+
+function updateHiddenTasas() {
+    const select = document.getElementById('cred-tasa-seleccion');
+    const val = select.value;
+    if (val) {
+        const data = JSON.parse(val);
+        document.getElementById('cred-plazo').value = data.plazo;
+        document.getElementById('cred-tna').value = data.tna;
+    } else {
+        document.getElementById('cred-plazo').value = '';
+        document.getElementById('cred-tna').value = '';
+    }
+}
+
 async function submitAltaCredito(e) {
     e.preventDefault();
     const btn = e.target.querySelector('button[type="submit"]');
     btn.disabled = true;
     btn.innerText = "Procesando...";
-    
+
+    let comisionId = null;
+    const isAutoMode = document.getElementById('container-tasa-auto') && document.getElementById('container-tasa-auto').style.display !== 'none';
+    const tasaSelect = document.getElementById('cred-tasa-seleccion');
+    if (isAutoMode && tasaSelect && tasaSelect.value) {
+        try {
+            const data = JSON.parse(tasaSelect.value);
+            comisionId = data.comision_id || null;
+        } catch(e) {}
+    }
+
     const payload = {
         cliente_cuil: document.getElementById('upd-cli-cuil').value,
         capital: parseFloat(document.getElementById('cred-capital').value),
@@ -1376,16 +1577,17 @@ async function submitAltaCredito(e) {
         plazo: parseInt(document.getElementById('cred-plazo').value, 10),
         tipo_credito: document.getElementById('cred-tipo').value,
         socio_originador_id: document.getElementById('cred-socio').value ? parseInt(document.getElementById('cred-socio').value, 10) : null,
+        comision_id: comisionId,
         fecha_emision: document.getElementById('cred-emision').value || null
     };
-    
+
     try {
         const res = await fetch(`${API_URL}/api/v1/creditos/originacion`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
-        
+
         const data = await res.json();
         if (res.ok) {
             alert("¡Crédito generado exitosamente!");
@@ -1396,11 +1598,14 @@ async function submitAltaCredito(e) {
             document.getElementById('alta-credito-form-container').style.display = 'none';
             document.getElementById('search-cli-result').style.display = 'none';
             document.getElementById('search-cli-input').value = '';
-            
+
             // Recargar tabla de créditos
             loadCreditosTable();
-            // Cambiar a la pestaña de listado de créditos
-            switchTab('listado-creditos');
+            
+            // Abrir el modal de cuenta corriente para este nuevo crédito
+            if (data.credito_id) {
+                viewCreditoCuotas(data.credito_id);
+            }
         } else {
             alert(`Error: ${data.detail}`);
         }
