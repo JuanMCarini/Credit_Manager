@@ -16,8 +16,9 @@ import pandas as pd
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
-from src.database import get_db, Cliente, SexoEnum, EstadoClienteEnum, Provincia, Empleador, SocioComercial, Credito
+from src.database import get_db, Cliente, SexoEnum, EstadoClienteEnum, Provincia, Empleador, SocioComercial, Credito, TipoCredito
 
+from src.logic.origination import LoanOriginator
 from src.logic.amortization import AmortizationEngine
 from src.reports.balances import saldos
 
@@ -186,6 +187,16 @@ class ClienteCreate(BaseModel):
     remuneracion: float = 0.0
     empleador_id: Optional[int] = None
 
+class CreditoCreate(BaseModel):
+    cliente_cuil: str
+    capital: float
+    tna_c_iva: float
+    plazo: int
+    socio_originador_id: Optional[int] = None
+    fecha_emision: Optional[date] = None
+    dia_vencimiento: int = 28
+    tipo_credito: TipoCredito = TipoCredito.FRANCES
+
 @app.post("/api/v1/clientes", tags=["Clientes"])
 async def create_cliente(
     cliente_data: ClienteCreate,
@@ -215,6 +226,38 @@ async def create_cliente(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/creditos/originacion", tags=["Créditos"])
+async def create_credito(
+    credito_data: CreditoCreate,
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    Endpoint para originar un nuevo crédito para un cliente existente.
+    Genera automáticamente el crédito y sus cuotas (plan de amortización).
+    """
+    try:
+        originator = LoanOriginator(db_session=db)
+        nuevo_credito = originator.originate(
+            client_cuil=credito_data.cliente_cuil,
+            capital=credito_data.capital,
+            tna_c_iva=credito_data.tna_c_iva,
+            term=credito_data.plazo,
+            partner_id=credito_data.socio_originador_id,
+            issuance_date=credito_data.fecha_emision,
+            due_day=credito_data.dia_vencimiento,
+            type=credito_data.tipo_credito
+        )
+        return {
+            "status": "success",
+            "message": "Crédito originado y cuotas generadas exitosamente.",
+            "credito_id": nuevo_credito.id
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error originando el crédito: {str(e)}")
+
 
 @app.get("/api/v1/clientes", tags=["Clientes"])
 def get_clientes_list(db: Session = Depends(get_db)):
@@ -269,6 +312,61 @@ def get_cliente(cuil: str, db: Session = Depends(get_db)):
         "remuneracion": float(cliente.remuneracion or 0.0),
         "empleador_id": cliente.empleador_id
     }
+
+@app.get("/api/v1/clientes/{cuil}/cuenta_corriente", tags=["Clientes"])
+def get_cliente_cuenta_corriente(cuil: str, db: Session = Depends(get_db)):
+    cliente = db.query(Cliente).filter(Cliente.cuil == cuil).first()
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    
+    result = []
+    for c in cliente.creditos:
+        for cuota in c.cuotas:
+            total_esperado = round(cuota.capital + cuota.interes + cuota.iva, 2)
+            total_cobrado = 0.0
+            detalle_cobranzas = []
+            
+            # Ordenar cobranzas por fecha
+            sorted_cobranzas = sorted(cuota.cobranzas, key=lambda cob: cob.fecha)
+            for cob in sorted_cobranzas:
+                tot = round(cob.capital + cob.interes + cob.iva, 2)
+                total_cobrado += tot
+                detalle_cobranzas.append({
+                    "fecha": cob.fecha.strftime("%d/%m/%Y"),
+                    "tipo": cob.tipo_cobranza.value if hasattr(cob.tipo_cobranza, "value") else str(cob.tipo_cobranza),
+                    "capital": round(cob.capital, 2),
+                    "interes": round(cob.interes, 2),
+                    "iva": round(cob.iva, 2),
+                    "total": tot
+                })
+                
+            total_cobrado = round(total_cobrado, 2)
+            saldo = round(total_esperado - total_cobrado, 2)
+            
+            result.append({
+                "credito_id": c.id,
+                "id_externo": c.id_externo or "-",
+                "nro_cuota": cuota.nro_cuota,
+                "vencimiento": cuota.fecha_vencimiento.strftime("%d/%m/%Y"),
+                "vencimiento_raw": cuota.fecha_vencimiento,  # Para ordenamiento
+                "capital": round(cuota.capital, 2),
+                "interes": round(cuota.interes, 2),
+                "iva": round(cuota.iva, 2),
+                "total_esperado": total_esperado,
+                "total_cobrado": total_cobrado,
+                "saldo_pendiente": saldo,
+                "estado": cuota.estado.value,
+                "detalle_cobranzas": detalle_cobranzas
+            })
+            
+    # Ordenar todas las cuotas cronológicamente por vencimiento, luego por credito_id y nro_cuota
+    result.sort(key=lambda x: (x["vencimiento_raw"], x["credito_id"], x["nro_cuota"]))
+    
+    # Remover vencimiento_raw antes de retornar
+    for r in result:
+        del r["vencimiento_raw"]
+        
+    return result
 
 @app.put("/api/v1/clientes/{cuil}", tags=["Clientes"])
 async def update_cliente(
@@ -409,6 +507,28 @@ def get_creditos_list(db: Session = Depends(get_db)):
             "Día Vto": c.dia_vencimiento
         })
     return result
+
+@app.delete("/api/v1/creditos/{credito_id}", tags=["Creditos"])
+def delete_credito(credito_id: int, db: Session = Depends(get_db)):
+    credito = db.query(Credito).filter(Credito.id == credito_id).first()
+    if not credito:
+        raise HTTPException(status_code=404, detail="Crédito no encontrado")
+        
+    # Check if there are any cobranzas associated with this credit's cuotas
+    has_cobranzas = any(len(cuota.cobranzas) > 0 for cuota in credito.cuotas)
+    if has_cobranzas:
+        raise HTTPException(
+            status_code=400, 
+            detail="No se puede eliminar el crédito porque ya tiene cobranzas asociadas."
+        )
+        
+    try:
+        db.delete(credito)
+        db.commit()
+        return {"status": "success", "message": "Crédito eliminado exitosamente."}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error eliminando el crédito: {str(e)}")
 
 # -------------------------------------------------------------------
 # Tablas Auxiliares
