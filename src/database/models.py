@@ -5,6 +5,7 @@ Author: Juan Martín Carini
 Date: 2026-05-08
 """
 
+from matplotlib.table import table
 import enum
 from datetime import date, datetime
 
@@ -205,6 +206,12 @@ class SocioComercial(Base):
     creditos_originados = relationship("Credito", back_populates="socio_originador")
     relaciones = relationship(
         "Relacion", back_populates="socio", cascade="all, delete-orphan"
+    )
+    comisiones_originadas = relationship(
+        "Comision", foreign_keys="[Comision.socio_originador_id]", back_populates="socio_originador"
+    )
+    comisiones_intermediarias = relationship(
+        "Comision", foreign_keys="[Comision.socio_intermediario_id]", back_populates="socio_intermediario"
     )
 
     def __repr__(self):
@@ -440,6 +447,9 @@ class Credito(Base):
     # SCENARIO 2: If the credit belongs to a portfolio purchase.
     cartera_id = Column(Integer, ForeignKey("carteras.id"), nullable=True)
 
+    # Commission associated with this credit
+    comision_id = Column(Integer, ForeignKey("comisiones.id"), nullable=True)
+
     capital = Column(Float, nullable=False)
     tna_c_iva = Column(Float, nullable=False)
     plazo = Column(Integer, nullable=False)
@@ -471,6 +481,7 @@ class Credito(Base):
         "SocioComercial", back_populates="creditos_originados"
     )
     cartera = relationship("Cartera", back_populates="creditos_incluidos")
+    comisiones = relationship("Comision", back_populates="creditos")
 
     def actualizar_estado(self) -> str:
         """
@@ -991,3 +1002,52 @@ class Relacion(Base):
         finally:
             if not db:
                 session.close()
+
+
+class EstadoComisionEnum(enum.Enum):
+
+    ACTIVA = "ACTIVA"
+    INACTIVA = "INACTIVA"
+    SEMIACTIVA = "SEMI ACTIVA"
+
+
+class Comision(Base):
+    """
+    =============================================================================
+    Model: Comision
+    Description: Represents a commission structure linked to originated credits,
+                 associating both the originating partner and any intermediary.
+    Parameters / Attributes:
+        id (int): Auto-incremental primary key.
+        fecha (date): Date the commission was registered.
+        estado (EstadoComisionEnum): Current state of the commission (default: ACTIVA).
+        socio_originador_id (int): Foreign key to the SocioComercial table (originator).
+        socio_intermediario_id (int): Foreign key to the SocioComercial table (intermediary).
+        colocacion_originador (float): Commission percentage/amount for placement (originator).
+        colocacion_intermediario (float): Commission percentage/amount for placement (intermediary).
+        cobranza_originador (float): Commission percentage/amount for collection (originator).
+        cobranza_intermediario (float): Commission percentage/amount for collection (intermediary).
+        colocacion_propia (float): Commission for own placement.
+    =============================================================================
+    """
+
+    __tablename__ = "comisiones"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    fecha = Column(Date, nullable=False)
+    estado = Column(Enum(EstadoComisionEnum, values_callable=lambda obj: [e.value for e in obj]), nullable=False, default=EstadoComisionEnum.ACTIVA.value)
+
+    socio_originador_id = Column(Integer, ForeignKey("socios_comerciales.id"), nullable=False)
+    socio_intermediario_id = Column(Integer, ForeignKey("socios_comerciales.id"), nullable=False)
+
+    colocacion_originador = Column(Float, nullable=False, default=0.0)
+    colocacion_intermediario = Column(Float, nullable=False, default=0.0)
+
+    cobranza_originador = Column(Float, nullable=False, default=0.0)
+    cobranza_intermediario = Column(Float, nullable=False, default=0.0)
+
+    colocacion_propia = Column(Float, nullable=False, default=0.0)
+
+    socio_originador = relationship("SocioComercial", foreign_keys=[socio_originador_id], back_populates="comisiones_originadas")
+    socio_intermediario = relationship("SocioComercial", foreign_keys=[socio_intermediario_id], back_populates="comisiones_intermediarias")
+    creditos = relationship("Credito", back_populates="comision")
