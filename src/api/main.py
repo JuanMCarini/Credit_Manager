@@ -514,6 +514,13 @@ def delete_credito(credito_id: int, db: Session = Depends(get_db)):
     if not credito:
         raise HTTPException(status_code=404, detail="Crédito no encontrado")
         
+    from src.database.models import EstadoCredito
+    if credito.estado != EstadoCredito.APROBADO:
+        raise HTTPException(
+            status_code=400,
+            detail="Solo se puede eliminar un crédito si su estado es APROBADO."
+        )
+        
     # Check if there are any cobranzas associated with this credit's cuotas
     has_cobranzas = any(len(cuota.cobranzas) > 0 for cuota in credito.cuotas)
     if has_cobranzas:
