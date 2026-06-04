@@ -458,3 +458,22 @@ input:focus {
     font-size: 13px;
     font-weight: 600;
 }
+
+/* Status Badges for Credits */
+.status-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    text-align: center;
+    text-transform: uppercase;
+}
+.status-aprobado { background-color: rgba(51, 154, 240, 0.15); color: #339af0; border: 1px solid rgba(51, 154, 240, 0.3); } /* Azul */
+.status-rechazado { background-color: rgba(255, 146, 43, 0.15); color: #ff922b; border: 1px solid rgba(255, 146, 43, 0.3); } /* Naranja */
+.status-activo { background-color: rgba(81, 207, 102, 0.15); color: #51cf66; border: 1px solid rgba(81, 207, 102, 0.3); } /* Verde */
+.status-cancelado { background-color: rgba(255, 255, 255, 0.1); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.3); } /* Blanco */
+.status-moroso { background-color: rgba(252, 196, 25, 0.15); color: #fcc419; border: 1px solid rgba(252, 196, 25, 0.3); } /* Amarillo */
+.status-incobrable { background-color: rgba(255, 107, 107, 0.15); color: #ff6b6b; border: 1px solid rgba(255, 107, 107, 0.3); } /* Rojo */
+.status-judicial { background-color: rgba(204, 93, 232, 0.15); color: #cc5de8; border: 1px solid rgba(204, 93, 232, 0.3); } /* Violeta */
+.status-judicializado { background-color: rgba(204, 93, 232, 0.15); color: #cc5de8; border: 1px solid rgba(204, 93, 232, 0.3); } /* Violeta (alias) */

@@ -8,8 +8,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=10">
-    <script src="main.js?v=10" defer></script>
+    <link rel="stylesheet" href="style.css?v=17">
+    <script src="main.js?v=17" defer></script>
 </head>
 <body>
     <div class="app-container">
@@ -41,6 +41,10 @@
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
                     Alta de Cliente
                 </button>
+                <button class="nav-item" onclick="switchTab('alta-credito')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M12 14v4"/><path d="M10 16h4"/></svg>
+                    Alta de Crédito
+                </button>
                 <button class="nav-item" onclick="switchTab('auxiliares')">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
                     Tablas Auxiliares
@@ -61,6 +65,126 @@
 
         <!-- Main Content -->
         <main class="main-content">
+
+            <!-- Alta de Crédito Tab -->
+            <section id="tab-alta-credito" class="tab-content">
+                <header class="section-header">
+                    <h2>Originación de Crédito</h2>
+                    <p>Busque un cliente, confirme o actualice sus datos y proceda a dar de alta un nuevo crédito.</p>
+                </header>
+
+                <div class="content-grid" style="grid-template-columns: 1fr;">
+                    
+                    <!-- 1. Búsqueda -->
+                    <div class="glass-panel" style="padding: 20px; margin-bottom: 24px;">
+                        <h3 style="margin-bottom: 12px; font-family: var(--font-heading); font-size: 16px;">Paso 1: Buscar Cliente</h3>
+                        <div style="display: flex; gap: 12px; align-items: flex-end;">
+                            <div class="form-group" style="flex-grow: 1; max-width: 300px; margin-bottom: 0;">
+                                <label for="search-cli-input">CUIL o Documento</label>
+                                <input type="text" id="search-cli-input" placeholder="Ingrese DNI o CUIL">
+                            </div>
+                            <button class="btn-primary" onclick="searchClienteForCredito()" style="height: 42px;">🔍 Buscar</button>
+                        </div>
+                        <div id="search-cli-result" style="margin-top: 16px; padding: 12px; border-radius: 6px; display: none;"></div>
+                    </div>
+
+                    <!-- 2. Formulario de Actualización de Cliente (Inicialmente oculto) -->
+                    <div id="alta-credito-cliente-container" class="form-container glass-panel" style="display: none; margin-bottom: 24px;">
+                        <h3 style="margin-bottom: 12px; font-family: var(--font-heading); font-size: 16px;">Paso 2: Confirmar Datos del Cliente</h3>
+                        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;">Por favor verifique y actualice los datos del cliente. Es obligatorio confirmar antes de continuar.</p>
+                        
+                        <form id="form-update-cliente-credito" onsubmit="confirmUpdateClienteForCredito(event)">
+                            <h3 style="margin-bottom: 12px; font-family: var(--font-heading); font-size: 14px; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">Datos Personales</h3>
+                            <div class="form-row">
+                                <div class="form-group"><label>CUIL *</label><input type="text" id="upd-cli-cuil" readonly style="opacity: 0.7;"></div>
+                                <div class="form-group"><label>Documento *</label><input type="text" id="upd-cli-documento" readonly style="opacity: 0.7;"></div>
+                                <div class="form-group"><label>Nombre *</label><input type="text" id="upd-cli-nombre" required></div>
+                                <div class="form-group"><label>Apellido *</label><input type="text" id="upd-cli-apellido" required></div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group"><label>Fecha Nacimiento</label><input type="date" id="upd-cli-nacimiento"></div>
+                                <div class="form-group">
+                                    <label>Sexo</label>
+                                    <select id="upd-cli-sexo">
+                                        <option value="">Seleccione</option><option value="M">Masculino</option><option value="F">Femenino</option><option value="O">Otro</option>
+                                    </select>
+                                </div>
+                                <div class="form-group"><label>Estado Civil</label><input type="text" id="upd-cli-estcivil"></div>
+                                <div class="form-group"><label>Nacionalidad</label><input type="text" id="upd-cli-nacionalidad"></div>
+                            </div>
+
+                            <h3 style="margin-top: 16px; margin-bottom: 12px; font-family: var(--font-heading); font-size: 14px; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">Contacto y Domicilio</h3>
+                            <div class="form-row">
+                                <div class="form-group"><label>Teléfono Principal</label><input type="text" id="upd-cli-telefono"></div>
+                                <div class="form-group"><label>Teléfono Secundario</label><input type="text" id="upd-cli-telefono2"></div>
+                                <div class="form-group"><label>Email</label><input type="email" id="upd-cli-mail"></div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group" style="flex: 2;"><label>Calle</label><input type="text" id="upd-cli-calle"></div>
+                                <div class="form-group"><label>Nro</label><input type="number" id="upd-cli-callenro"></div>
+                                <div class="form-group"><label>Piso</label><input type="text" id="upd-cli-piso"></div>
+                                <div class="form-group"><label>Depto</label><input type="text" id="upd-cli-depto"></div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group"><label>Localidad</label><input type="text" id="upd-cli-localidad"></div>
+                                <div class="form-group"><label>Código Postal</label><input type="text" id="upd-cli-cp"></div>
+                                <div class="form-group">
+                                    <label>Provincia</label>
+                                    <select id="upd-cli-provincia">
+                                        <option value="">(Opcional)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <h3 style="margin-top: 16px; margin-bottom: 12px; font-family: var(--font-heading); font-size: 14px; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">Laboral y Financiero</h3>
+                            <div class="form-row">
+                                <div class="form-group"><label>Remuneración Mensual *</label><input type="number" step="0.01" id="upd-cli-remuneracion" required></div>
+                                <div class="form-group"><label>Nro. Legajo Laboral</label><input type="text" id="upd-cli-legajo"></div>
+                                <div class="form-group">
+                                    <label>Empleador</label>
+                                    <select id="upd-cli-empleador">
+                                        <option value="">(Opcional)</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-actions" style="justify-content: flex-start; margin-top: 16px;">
+                                <button type="submit" class="btn-primary" id="btn-confirmar-cliente">Confirmar y Actualizar Datos</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- 3. Formulario de Crédito (Inicialmente oculto) -->
+                    <div id="alta-credito-form-container" class="form-container glass-panel" style="display: none;">
+                        <h3 style="margin-bottom: 12px; font-family: var(--font-heading); font-size: 16px;">Paso 3: Condiciones del Crédito</h3>
+                        <form id="form-alta-credito" onsubmit="submitAltaCredito(event)">
+                            <div class="form-row">
+                                <div class="form-group"><label>Capital a Otorgar *</label><input type="number" step="0.01" id="cred-capital" required></div>
+                                <div class="form-group"><label>Plazo (Cuotas) *</label><input type="number" id="cred-plazo" min="1" max="120" required></div>
+                                <div class="form-group"><label>TNA con IVA (Ej: 0.6 para 60%) *</label><input type="number" step="0.0001" id="cred-tna" required></div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Tipo de Crédito *</label>
+                                    <select id="cred-tipo" required>
+                                        <option value="SISTEMA FRANCES">Sistema Francés</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Socio Originador</label>
+                                    <select id="cred-socio">
+                                        <option value="">(Ninguno / Directo)</option>
+                                    </select>
+                                </div>
+                                <div class="form-group"><label>Fecha de Emisión</label><input type="date" id="cred-emision"></div>
+                            </div>
+                            <div class="form-actions" style="margin-top: 24px;">
+                                <button type="submit" class="btn-primary" style="width: 100%; font-size: 16px; padding: 14px;">Originación de Crédito</button>
+                            </div>
+                        </form>
+                    </div>
+
+                </div>
+            </section>
             
             <!-- Alta de Cliente Tab -->
             <section id="tab-clientes" class="tab-content">
@@ -282,6 +406,38 @@
                                 </tr>
                             </thead>
                             <tbody id="cuotas-body">
+                                <!-- Se llena por JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal para Cuenta Corriente Unificada de Cliente -->
+            <div id="cliente-cta-cte-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); z-index: 2000; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+                <div class="glass-panel" style="background: var(--bg-base); width: 90vw; max-width: 1100px; max-height: 90vh; display: flex; flex-direction: column; padding: 24px; border-radius: var(--radius-lg); position: relative;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h3 id="cliente-cta-cte-title">Cuenta Corriente Unificada</h3>
+                        <button type="button" class="btn-secondary" style="padding: 4px 12px; width: auto;" onclick="document.getElementById('cliente-cta-cte-modal').style.display='none'">Cerrar</button>
+                    </div>
+                    
+                    <div style="overflow-y: auto; flex: 1;">
+                        <table class="data-table" id="table-cliente-cta-cte">
+                            <thead>
+                                <tr>
+                                    <th>Crédito (ID)</th>
+                                    <th>N° Cuota</th>
+                                    <th>Vencimiento</th>
+                                    <th>Capital</th>
+                                    <th>Interés</th>
+                                    <th>IVA</th>
+                                    <th>Total Esperado</th>
+                                    <th>Cobrado</th>
+                                    <th>Saldo Pendiente</th>
+                                    <th>Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cliente-cta-cte-body">
                                 <!-- Se llena por JS -->
                             </tbody>
                         </table>

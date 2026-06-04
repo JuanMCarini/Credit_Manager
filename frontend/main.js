@@ -469,8 +469,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (resProv.ok) {
             const provincias = await resProv.json();
             const selectProv = document.getElementById('cli-provincia');
+            const selectUpdProv = document.getElementById('upd-cli-provincia');
             provincias.forEach(p => {
                 selectProv.innerHTML += `<option value="${p.id}">${p.nombre}</option>`;
+                if (selectUpdProv) selectUpdProv.innerHTML += `<option value="${p.id}">${p.nombre}</option>`;
             });
         }
         
@@ -478,12 +480,31 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (resEmp.ok) {
             const empleadores = await resEmp.json();
             const selectEmp = document.getElementById('cli-empleador');
+            const selectUpdEmp = document.getElementById('upd-cli-empleador');
             empleadores.forEach(e => {
                 selectEmp.innerHTML += `<option value="${e.id}">${e.razon_social} ${e.cuit ? `(CUIT: ${e.cuit})` : ''}</option>`;
+                if (selectUpdEmp) selectUpdEmp.innerHTML += `<option value="${e.id}">${e.razon_social} ${e.cuit ? `(CUIT: ${e.cuit})` : ''}</option>`;
             });
+        }
+        
+        const resSocios = await fetch(`${API_URL}/api/v1/auxiliares/socios`);
+        if (resSocios.ok) {
+            const socios = await resSocios.json();
+            const selectSocio = document.getElementById('cred-socio');
+            if (selectSocio) {
+                socios.forEach(s => {
+                    selectSocio.innerHTML += `<option value="${s.id}">${s.razon_social} ${s.cuit ? `(CUIT: ${s.cuit})` : ''}</option>`;
+                });
+            }
         }
     } catch (e) {
         console.error("Error cargando listas desplegables:", e);
+    }
+    
+    // Set default values for other forms
+    const credEmision = document.getElementById('cred-emision');
+    if (credEmision) {
+        credEmision.valueAsDate = new Date();
     }
 });
 
@@ -817,6 +838,88 @@ async function viewClientCredits(cuil) {
     runAllExcelFilters('table-creditos', 'creditos-headers');
 }
 
+async function viewClientCuentaCorriente(cuil) {
+    const tbody = document.getElementById('cliente-cta-cte-body');
+    tbody.innerHTML = '<tr><td colspan="100%" style="text-align:center;">Cargando cuenta corriente...</td></tr>';
+    
+    // Configurar título del modal
+    const titleEl = document.getElementById('cliente-cta-cte-title');
+    let clienteName = cuil;
+    if (window.clientesDataCache) {
+        const cliente = window.clientesDataCache.find(c => c.CUIL === cuil);
+        if (cliente) {
+            clienteName = `${cliente['Apellido y Nombre']} (CUIL: ${cuil})`;
+        }
+    }
+    titleEl.textContent = `Cuenta Corriente Unificada: ${clienteName}`;
+    
+    document.getElementById('cliente-cta-cte-modal').style.display = 'flex';
+    
+    try {
+        const res = await fetch(`${API_URL}/api/v1/clientes/${cuil}/cuenta_corriente`);
+        if (!res.ok) throw new Error("Error al obtener la cuenta corriente del cliente.");
+        
+        const data = await res.json();
+        if (data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="100%" style="text-align:center;">No hay cuotas registradas para este cliente.</td></tr>';
+            return;
+        }
+        
+        let html = "";
+        data.forEach(c => {
+            const extStr = c.id_externo && c.id_externo !== '-' ? ` (${c.id_externo})` : '';
+            const creditoLabel = `#${c.credito_id}${extStr}`;
+            
+            html += `<tr>
+                <td>${creditoLabel}</td>
+                <td>${c.nro_cuota}</td>
+                <td>${c.vencimiento}</td>
+                <td>${formatCurrency(c.capital)}</td>
+                <td>${formatCurrency(c.interes)}</td>
+                <td>${formatCurrency(c.iva)}</td>
+                <td style="font-weight: 600;">${formatCurrency(c.total_esperado)}</td>
+                <td style="color: var(--accent-secondary); font-weight: 600;">${formatCurrency(c.total_cobrado)}</td>
+                <td style="color: ${
+                    c.estado === 'MOROSA' ? 'var(--error)' :
+                    c.estado === 'PENDIENTE' ? 'var(--accent-secondary)' : 'inherit'
+                }; font-weight: 500;">
+                    ${c.estado === 'CANCELADA' ? '-' : formatCurrency(c.saldo_pendiente)}
+                </td>
+                <td>
+                    <span style="padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;
+                        background: ${
+                            c.estado === 'CANCELADA' ? 'var(--accent-secondary)' : 
+                            c.estado === 'MOROSA' ? 'var(--error)' : 
+                            'rgba(255,255,255,0.1)'
+                        };
+                        color: #fff;
+                    ">${c.estado}</span>
+                </td>
+            </tr>`;
+            
+            if (c.detalle_cobranzas && c.detalle_cobranzas.length > 0) {
+                c.detalle_cobranzas.forEach(cob => {
+                    html += `<tr style="background: rgba(255, 255, 255, 0.02); font-size: 12px; color: var(--text-secondary);">
+                        <td colspan="3" style="text-align: right; border-left: 2px solid var(--accent-secondary);">
+                            ↳ Cobranza (${cob.tipo}) el ${cob.fecha}
+                        </td>
+                        <td>${formatCurrency(cob.capital)}</td>
+                        <td>${formatCurrency(cob.interes)}</td>
+                        <td>${formatCurrency(cob.iva)}</td>
+                        <td>-</td>
+                        <td style="color: var(--accent-secondary);">${formatCurrency(cob.total)}</td>
+                        <td colspan="2"></td>
+                    </tr>`;
+                });
+            }
+        });
+        
+        tbody.innerHTML = html;
+    } catch (error) {
+        tbody.innerHTML = `<tr><td colspan="100%" style="text-align:center; color: var(--error);">${error.message}</td></tr>`;
+    }
+}
+
 async function loadClientesTable() {
     const tbody = document.querySelector('#table-clientes tbody');
     const thead = document.getElementById('clientes-headers');
@@ -831,6 +934,9 @@ async function loadClientesTable() {
         const res = await fetch(`${API_URL}/api/v1/clientes`);
         if (!res.ok) throw new Error("Error al cargar clientes");
         const data = await res.json();
+        
+        // Cache data globally for name lookup in modals
+        window.clientesDataCache = data;
         
         if (data.length === 0) {
             thead.innerHTML = '';
@@ -863,6 +969,7 @@ async function loadClientesTable() {
             });
             rowHtml += `
                 <td style="white-space: nowrap;">
+                    <button class="btn-secondary" style="padding: 4px 8px; font-size: 11px; margin-right: 4px;" onclick="viewClientCuentaCorriente('${row.CUIL}')">👁️ Cta. Cte.</button>
                     <button class="btn-secondary" style="padding: 4px 8px; font-size: 11px; margin-right: 4px;" onclick="viewClientCredits('${row.CUIL}')">👁️ Créditos</button>
                     <button class="btn-secondary" style="padding: 4px 8px; font-size: 11px; margin-right: 4px;" onclick="editCliente('${row.CUIL}')">✏️ Editar</button>
                     <button class="btn-secondary" style="padding: 4px 8px; font-size: 11px; color: var(--error);" onclick="deleteCliente('${row.CUIL}')">🗑️ Borrar</button>
@@ -1019,13 +1126,19 @@ async function loadCreditosTable() {
                     val = formatCurrency(val);
                 } else if (k === 'TNA con IVA' && val !== null && val !== undefined) {
                     val = `${(val * 100).toFixed(2)}%`;
+                } else if (k === 'Estado' && val !== null && val !== undefined) {
+                    const statusClass = `status-badge status-${String(val).toLowerCase().replace(/\s+/g, '-')}`;
+                    val = `<span class="${statusClass}">${val}</span>`;
                 }
                 rowHtml += `<td>${val !== null ? val : '-'}</td>`;
             });
             rowHtml += `
-                <td style="white-space: nowrap; display: flex; gap: 4px;">
-                    <button class="btn-secondary" style="padding: 4px 8px; font-size: 11px;" onclick="openStatusModal('${row.ID}', '${row.Estado}')">✏️ Estado</button>
-                    <button class="btn-secondary" style="padding: 4px 8px; font-size: 11px;" onclick="viewCreditoCuotas('${row.ID}')">👁️ Cuenta</button>
+                <td style="white-space: nowrap;">
+                    <div style="display: flex; gap: 4px;">
+                        <button class="btn-secondary" style="padding: 4px 8px; font-size: 11px;" onclick="openStatusModal('${row.ID}', '${row.Estado}')">✏️ Estado</button>
+                        <button class="btn-secondary" style="padding: 4px 8px; font-size: 11px;" onclick="viewCreditoCuotas('${row.ID}')">👁️ Cuenta</button>
+                        <button class="btn-secondary" style="padding: 4px 8px; font-size: 11px; color: var(--error); border-color: var(--error);" onclick="deleteCredito('${row.ID}')">🗑️ Borrar</button>
+                    </div>
                 </td>
             </tr>`;
             tbodyHtml += rowHtml;
@@ -1034,6 +1147,29 @@ async function loadCreditosTable() {
         
     } catch (e) {
         tbody.innerHTML = `<tr><td colspan="100%" style="text-align:center; color: var(--error);">Error al cargar créditos: ${e.message}</td></tr>`;
+    }
+}
+
+async function deleteCredito(creditoId) {
+    if (!confirm("¿Está seguro que desea eliminar este crédito? Esta acción no se puede deshacer y solo es posible si no tiene cobranzas asociadas.")) {
+        return;
+    }
+    
+    try {
+        const res = await fetch(`${API_URL}/api/v1/creditos/${creditoId}`, {
+            method: 'DELETE'
+        });
+        
+        const data = await res.json();
+        
+        if (res.ok) {
+            alert("✅ " + data.message);
+            loadCreditosTable(); // Recargar la tabla
+        } else {
+            alert(`Error: ${data.detail}`);
+        }
+    } catch (error) {
+        alert(`Ocurrió un error de red al intentar eliminar el crédito: ${error.message}`);
     }
 }
 
@@ -1062,11 +1198,216 @@ async function syncSystemStates() {
         btn.disabled = false;
         btn.innerText = "Ejecutar Sincronización";
         
-        // Refresh tables if their tabs are active or data is cached
+// Refresh tables if their tabs are active or data is cached
         if (document.getElementById('tab-clientes').classList.contains('active')) {
             loadClientesTable();
         } else if (document.getElementById('tab-listado-creditos').classList.contains('active')) {
             loadCreditosTable();
         }
+    }
+}
+
+// -------------------------------------------------------------
+// Alta de Crédito Logic
+// -------------------------------------------------------------
+async function searchClienteForCredito() {
+    const query = document.getElementById('search-cli-input').value.trim();
+    const resultDiv = document.getElementById('search-cli-result');
+    const updateContainer = document.getElementById('alta-credito-cliente-container');
+    const formContainer = document.getElementById('alta-credito-form-container');
+    
+    if (!query) {
+        resultDiv.style.display = 'block';
+        resultDiv.style.backgroundColor = 'rgba(239, 68, 68, 0.1)';
+        resultDiv.style.border = '1px solid var(--error)';
+        resultDiv.innerHTML = '<p style="color: var(--error);">Por favor ingrese un CUIL o DNI.</p>';
+        return;
+    }
+    
+    updateContainer.style.display = 'none';
+    formContainer.style.display = 'none';
+    
+    try {
+        const resList = await fetch(`${API_URL}/api/v1/clientes`);
+        const data = await resList.json();
+        const found = data.find(c => c.CUIL === query || c.Documento === query);
+        
+        if (found) {
+            // Fetch full details to populate update form
+            const fullRes = await fetch(`${API_URL}/api/v1/clientes/${found.CUIL}`);
+            if (!fullRes.ok) throw new Error("No se pudieron cargar los detalles del cliente.");
+            const cliente = await fullRes.json();
+            
+            resultDiv.style.display = 'block';
+            resultDiv.style.backgroundColor = 'rgba(16, 185, 129, 0.1)';
+            resultDiv.style.border = '1px solid var(--accent-secondary)';
+            resultDiv.innerHTML = `<p style="color: var(--accent-secondary); margin: 0;">✅ Cliente encontrado: <strong>${cliente.apellido}, ${cliente.nombre}</strong></p>`;
+            
+            // Populate Update Form
+            const setVal = (id, val) => document.getElementById(id).value = val || '';
+            setVal('upd-cli-cuil', cliente.cuil);
+            setVal('upd-cli-documento', cliente.documento);
+            setVal('upd-cli-nombre', cliente.nombre);
+            setVal('upd-cli-apellido', cliente.apellido);
+            
+            // Format dates for input[type="date"]
+            if (cliente.fecha_nacimiento) {
+                setVal('upd-cli-nacimiento', cliente.fecha_nacimiento);
+            } else {
+                setVal('upd-cli-nacimiento', '');
+            }
+            
+            setVal('upd-cli-sexo', cliente.sexo);
+            setVal('upd-cli-estcivil', cliente.estado_civil);
+            setVal('upd-cli-nacionalidad', cliente.nacionalidad);
+            setVal('upd-cli-telefono', cliente.telefono);
+            setVal('upd-cli-telefono2', cliente.telefono_2);
+            setVal('upd-cli-mail', cliente.mail);
+            setVal('upd-cli-calle', cliente.calle);
+            setVal('upd-cli-callenro', cliente.calle_nro);
+            setVal('upd-cli-piso', cliente.piso);
+            setVal('upd-cli-depto', cliente.depto);
+            setVal('upd-cli-localidad', cliente.localidad);
+            setVal('upd-cli-cp', cliente.id_codigo_postal);
+            setVal('upd-cli-provincia', cliente.id_provincia);
+            setVal('upd-cli-remuneracion', cliente.remuneracion);
+            setVal('upd-cli-legajo', cliente.legajo);
+            setVal('upd-cli-empleador', cliente.empleador_id);
+            
+            // Reset button if it was confirmed before
+            const btn = document.getElementById('btn-confirmar-cliente');
+            btn.disabled = false;
+            btn.innerText = "Confirmar y Actualizar Datos";
+            btn.style.backgroundColor = "var(--accent-primary)";
+            
+            updateContainer.style.display = 'block';
+        } else {
+            resultDiv.style.display = 'block';
+            resultDiv.style.backgroundColor = 'rgba(239, 68, 68, 0.1)';
+            resultDiv.style.border = '1px solid var(--error)';
+            resultDiv.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <p style="color: var(--error); margin: 0;">❌ Cliente no encontrado.</p>
+                    <button class="btn-primary" onclick="switchTab('clientes')" style="font-size: 13px; padding: 6px 12px; height: auto;">Ir a Alta de Cliente</button>
+                </div>
+            `;
+        }
+    } catch (error) {
+        resultDiv.style.display = 'block';
+        resultDiv.style.backgroundColor = 'rgba(239, 68, 68, 0.1)';
+        resultDiv.innerHTML = `<p style="color: var(--error); margin: 0;">Error en la búsqueda: ${error.message}</p>`;
+    }
+}
+
+async function confirmUpdateClienteForCredito(e) {
+    e.preventDefault();
+    const btn = document.getElementById('btn-confirmar-cliente');
+    btn.disabled = true;
+    btn.innerText = "Actualizando...";
+    
+    const cuil = document.getElementById('upd-cli-cuil').value;
+    
+    // Helper to get value or null
+    const getVal = (id) => document.getElementById(id).value.trim() || null;
+    const getNum = (id) => {
+        const val = document.getElementById(id).value;
+        return val ? parseInt(val, 10) : null;
+    };
+    
+    const payload = {
+        cuil: cuil,
+        documento: document.getElementById('upd-cli-documento').value,
+        nombre: document.getElementById('upd-cli-nombre').value,
+        apellido: document.getElementById('upd-cli-apellido').value,
+        fecha_nacimiento: getVal('upd-cli-nacimiento'),
+        sexo: getVal('upd-cli-sexo'),
+        estado_civil: getVal('upd-cli-estcivil'),
+        nacionalidad: getVal('upd-cli-nacionalidad'),
+        telefono: getVal('upd-cli-telefono'),
+        telefono_2: getVal('upd-cli-telefono2'),
+        mail: getVal('upd-cli-mail'),
+        calle: getVal('upd-cli-calle'),
+        calle_nro: getNum('upd-cli-callenro'),
+        piso: getVal('upd-cli-piso'),
+        depto: getVal('upd-cli-depto'),
+        localidad: getVal('upd-cli-localidad'),
+        id_codigo_postal: getVal('upd-cli-cp'),
+        id_provincia: getNum('upd-cli-provincia'),
+        remuneracion: parseFloat(document.getElementById('upd-cli-remuneracion').value || 0),
+        legajo: getVal('upd-cli-legajo'),
+        empleador_id: getNum('upd-cli-empleador')
+    };
+    
+    try {
+        const res = await fetch(`${API_URL}/api/v1/clientes/${cuil}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        
+        const data = await res.json();
+        if (res.ok) {
+            btn.innerText = "¡Datos Confirmados!";
+            btn.style.backgroundColor = "var(--accent-secondary)";
+            // Show credit form
+            document.getElementById('alta-credito-form-container').style.display = 'block';
+        } else {
+            alert(`Error al actualizar cliente: ${data.detail}`);
+            btn.innerText = "Confirmar y Actualizar Datos";
+            btn.disabled = false;
+        }
+    } catch (err) {
+        alert("Ocurrió un error de red al intentar actualizar el cliente.");
+        btn.innerText = "Confirmar y Actualizar Datos";
+        btn.disabled = false;
+    }
+}
+
+async function submitAltaCredito(e) {
+    e.preventDefault();
+    const btn = e.target.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    btn.innerText = "Procesando...";
+    
+    const payload = {
+        cliente_cuil: document.getElementById('upd-cli-cuil').value,
+        capital: parseFloat(document.getElementById('cred-capital').value),
+        tna_c_iva: parseFloat(document.getElementById('cred-tna').value),
+        plazo: parseInt(document.getElementById('cred-plazo').value, 10),
+        tipo_credito: document.getElementById('cred-tipo').value,
+        socio_originador_id: document.getElementById('cred-socio').value ? parseInt(document.getElementById('cred-socio').value, 10) : null,
+        fecha_emision: document.getElementById('cred-emision').value || null
+    };
+    
+    try {
+        const res = await fetch(`${API_URL}/api/v1/creditos/originacion`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        
+        const data = await res.json();
+        if (res.ok) {
+            alert("¡Crédito generado exitosamente!");
+            // Limpiar formularios
+            e.target.reset();
+            document.getElementById('form-update-cliente-credito').reset();
+            document.getElementById('alta-credito-cliente-container').style.display = 'none';
+            document.getElementById('alta-credito-form-container').style.display = 'none';
+            document.getElementById('search-cli-result').style.display = 'none';
+            document.getElementById('search-cli-input').value = '';
+            
+            // Recargar tabla de créditos
+            loadCreditosTable();
+            // Cambiar a la pestaña de listado de créditos
+            switchTab('listado-creditos');
+        } else {
+            alert(`Error: ${data.detail}`);
+        }
+    } catch (err) {
+        alert("Ocurrió un error de red al intentar generar el crédito.");
+    } finally {
+        btn.disabled = false;
+        btn.innerText = "Originación de Crédito";
     }
 }
