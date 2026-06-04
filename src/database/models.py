@@ -55,6 +55,11 @@ class Empleador(Base):
     # Relationships
     empleados = relationship("Cliente", back_populates="empleador")
 
+    socio_comercial_id = Column(
+        Integer, ForeignKey("socios_comerciales.id"), nullable=True
+    )
+    socio_comercial = relationship("SocioComercial", back_populates="empleadores")
+
     def __repr__(self):
         return f"<Empleador(cuit='{self.cuit}', razon_social='{self.razon_social}')>"
 
@@ -208,11 +213,12 @@ class SocioComercial(Base):
         "Relacion", back_populates="socio", cascade="all, delete-orphan"
     )
     comisiones_originadas = relationship(
-        "Comision", foreign_keys="[Comision.socio_originador_id]", back_populates="socio_originador"
+        "TasaYComision", foreign_keys="[TasaYComision.socio_originador_id]", back_populates="socio_originador"
     )
     comisiones_intermediarias = relationship(
-        "Comision", foreign_keys="[Comision.socio_intermediario_id]", back_populates="socio_intermediario"
+        "TasaYComision", foreign_keys="[TasaYComision.socio_intermediario_id]", back_populates="socio_intermediario"
     )
+    empleadores = relationship("Empleador", back_populates="socio_comercial")
 
     def __repr__(self):
         return (
@@ -448,7 +454,7 @@ class Credito(Base):
     cartera_id = Column(Integer, ForeignKey("carteras.id"), nullable=True)
 
     # Commission associated with this credit
-    comision_id = Column(Integer, ForeignKey("comisiones.id"), nullable=True)
+    comision_id = Column(Integer, ForeignKey("tasas_y_comisiones.id"), nullable=True)
 
     capital = Column(Float, nullable=False)
     tna_c_iva = Column(Float, nullable=False)
@@ -481,7 +487,7 @@ class Credito(Base):
         "SocioComercial", back_populates="creditos_originados"
     )
     cartera = relationship("Cartera", back_populates="creditos_incluidos")
-    comisiones = relationship("Comision", back_populates="creditos")
+    comision = relationship("TasaYComision", back_populates="creditos")
 
     def actualizar_estado(self) -> str:
         """
@@ -1011,10 +1017,10 @@ class EstadoComisionEnum(enum.Enum):
     SEMIACTIVA = "SEMI ACTIVA"
 
 
-class Comision(Base):
+class TasaYComision(Base):
     """
     =============================================================================
-    Model: Comision
+    Model: TasaYComision
     Description: Represents a commission structure linked to originated credits,
                  associating both the originating partner and any intermediary.
     Parameters / Attributes:
@@ -1023,6 +1029,8 @@ class Comision(Base):
         estado (EstadoComisionEnum): Current state of the commission (default: ACTIVA).
         socio_originador_id (int): Foreign key to the SocioComercial table (originator).
         socio_intermediario_id (int): Foreign key to the SocioComercial table (intermediary).
+        plazo (int): Loan term in months.
+        tna_c_iva (float): Nominal annual interest rate with VAT.
         colocacion_originador (float): Commission percentage/amount for placement (originator).
         colocacion_intermediario (float): Commission percentage/amount for placement (intermediary).
         cobranza_originador (float): Commission percentage/amount for collection (originator).
@@ -1031,7 +1039,7 @@ class Comision(Base):
     =============================================================================
     """
 
-    __tablename__ = "comisiones"
+    __tablename__ = "tasas_y_comisiones"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     fecha = Column(Date, nullable=False)
@@ -1039,6 +1047,9 @@ class Comision(Base):
 
     socio_originador_id = Column(Integer, ForeignKey("socios_comerciales.id"), nullable=False)
     socio_intermediario_id = Column(Integer, ForeignKey("socios_comerciales.id"), nullable=False)
+
+    plazo = Column(Integer, nullable=False, default=12)
+    tna_c_iva = Column(Float, nullable=False, default=0.0)
 
     colocacion_originador = Column(Float, nullable=False, default=0.0)
     colocacion_intermediario = Column(Float, nullable=False, default=0.0)

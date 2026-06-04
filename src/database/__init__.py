@@ -28,8 +28,9 @@ from .models import (
     EstadoCuota,
     Provincia,
     Empleador,
-    Comision,
-    EstadoComisionEnum
+    TasaYComision,
+    EstadoComisionEnum,
+    TipoCredito
 )
 
 # Import events to register SQLAlchemy event listeners
@@ -59,6 +60,7 @@ __all__ = [
     "EstadoCuota",
     "Provincia",
     "Empleador",
-    "Comision",
-    "EstadoComisionEnum"
+    "TasaYComision",
+    "EstadoComisionEnum",
+    "TipoCredito"
 ]

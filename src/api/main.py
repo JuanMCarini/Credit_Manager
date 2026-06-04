@@ -16,7 +16,7 @@ import pandas as pd
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
-from src.database import get_db, Cliente, SexoEnum, EstadoClienteEnum, Provincia, Empleador, SocioComercial, Credito, TipoCredito
+from src.database import get_db, Cliente, SexoEnum, EstadoClienteEnum, Provincia, Empleador, SocioComercial, Credito, TipoCredito, TasaYComision
 
 from src.logic.origination import LoanOriginator
 from src.logic.amortization import AmortizationEngine
@@ -193,6 +193,7 @@ class CreditoCreate(BaseModel):
     tna_c_iva: float
     plazo: int
     socio_originador_id: Optional[int] = None
+    comision_id: Optional[int] = None
     fecha_emision: Optional[date] = None
     dia_vencimiento: int = 28
     tipo_credito: TipoCredito = TipoCredito.FRANCES
@@ -246,7 +247,8 @@ async def create_credito(
             partner_id=credito_data.socio_originador_id,
             issuance_date=credito_data.fecha_emision,
             due_day=credito_data.dia_vencimiento,
-            type=credito_data.tipo_credito
+            type=credito_data.tipo_credito,
+            comision_id=credito_data.comision_id
         )
         return {
             "status": "success",
@@ -545,6 +547,7 @@ AUX_TABLES = {
     "provincias": Provincia,
     "empleadores": Empleador,
     "socios": SocioComercial,
+    "tasas_y_comisiones": TasaYComision,
 }
 
 @app.get("/api/v1/auxiliares/{tabla}", tags=["Auxiliares"])
@@ -559,11 +562,26 @@ def get_aux_table(tabla: str, db: Session = Depends(get_db)):
         for r in records
     ]
 
+def _parse_aux_payload(payload: dict) -> dict:
+    parsed = {}
+    from datetime import datetime
+    for k, v in payload.items():
+        if isinstance(v, str):
+            try:
+                if len(v) == 10 and v[4] == '-' and v[7] == '-':
+                    parsed[k] = datetime.strptime(v, "%Y-%m-%d").date()
+                    continue
+            except ValueError:
+                pass
+        parsed[k] = v
+    return parsed
+
 @app.post("/api/v1/auxiliares/{tabla}", tags=["Auxiliares"])
 def create_aux_record(tabla: str, payload: dict, db: Session = Depends(get_db)):
     if tabla not in AUX_TABLES:
         raise HTTPException(status_code=404, detail="Tabla auxiliar no encontrada.")
     
+    payload = _parse_aux_payload(payload)
     try:
         if tabla == "socios":
             nuevo = SocioComercial.create_socio(db=db, **payload)
@@ -577,6 +595,9 @@ def create_aux_record(tabla: str, payload: dict, db: Session = Depends(get_db)):
     except ValueError as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
+    except TypeError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Los datos ingresados no son válidos (Verifique que los números y las fechas tengan el formato correcto).")
     except IntegrityError as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=f"Error de integridad: Ya existe un registro con esos datos únicos.")
@@ -594,6 +615,7 @@ def update_aux_record(tabla: str, record_id: int, payload: dict, db: Session = D
     if not record:
         raise HTTPException(status_code=404, detail="Registro no encontrado.")
     
+    payload = _parse_aux_payload(payload)
     try:
         for key, value in payload.items():
             if hasattr(record, key) and key != "id":
@@ -601,6 +623,9 @@ def update_aux_record(tabla: str, record_id: int, payload: dict, db: Session = D
         db.commit()
         db.refresh(record)
         return {"status": "success", "id": record.id}
+    except TypeError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Los datos ingresados no son válidos (Verifique que los números y las fechas tengan el formato correcto).")
     except IntegrityError as e:
         db.rollback()
         raise HTTPException(status_code=400, detail="Error de integridad al actualizar: Datos duplicados u otro conflicto.")
@@ -628,6 +653,8 @@ def sync_system_states(db: Session = Depends(get_db)):
         # 2. Update Creditos
         creditos = db.query(Credito).all()
         for cred in creditos:
+            if cred.fecha_emision == hoy:
+                continue
             cred.actualizar_estado()
         
         # 3. Update Clientes
