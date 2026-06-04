@@ -84,7 +84,7 @@ class LoanOriginator:
             tna_c_iva=tna_c_iva,
             plazo=term,
             fecha_emision=issuance_date,
-            estado=EstadoCredito.ACTIVO,
+            estado=EstadoCredito.APROBADO,
             dia_vencimiento=due_day,
             tipo_credito=type,
         )
@@ -118,6 +118,7 @@ class LoanOriginator:
         partner_id: int | None = None,
         issuance_date: date | None = None,
         due_day: int = 28,
+        type: TipoCredito = TipoCredito.FRANCES,
     ) -> Credito:
         """
         =============================================================================
@@ -132,7 +133,7 @@ class LoanOriginator:
             self._validate_client(client_cuil)
             cutoff_day = self._get_partner_cutoff_day(partner_id)
             self._generate_credit_and_schedule(
-                capital, tna_c_iva, term, partner_id, issuance_date, due_day, cutoff_day
+                capital, tna_c_iva, term, partner_id, issuance_date, due_day, cutoff_day, type
             )
 
             self.db.commit()
