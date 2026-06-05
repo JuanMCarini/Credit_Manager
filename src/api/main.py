@@ -15,8 +15,9 @@ from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy import or_
 
-from src.database import get_db, Cliente, SexoEnum, EstadoClienteEnum, Provincia, Empleador, SocioComercial, Credito, TipoCredito, TasaYComision
+from src.database import get_db, Cliente, SexoEnum, EstadoClienteEnum, Provincia, Empleador, SocioComercial, Credito, TipoCredito, TasaYComision, Cartera, Relacion
 
 from src.logic.origination import LoanOriginator
 from src.logic.amortization import AmortizationEngine
@@ -31,10 +32,9 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# Permitir orígenes para desarrollo (Vite típicamente usa localhost:5173 o 127.0.0.1:5173)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # En producción debe limitarse al dominio del frontend
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -158,6 +158,43 @@ async def get_saldos(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error en la generación del reporte: {str(e)}")
 
+import io
+from fastapi.responses import StreamingResponse
+
+@app.get("/api/v1/reports/balances/excel", tags=["Reportes"])
+async def export_saldos_excel(
+    fecha: Optional[datetime] = Query(None, description="Fecha de corte para el cálculo. Por defecto es hoy."),
+    con_saldo: bool = Query(True, description="Filtra solo las operaciones que aún mantienen saldo deudor."),
+    propias: Optional[bool] = Query(None, description="Verdadero para cartera propia, Falso para terceros, Nulo para ambas."),
+    agrupar: bool = Query(False, description="Activa el pipeline de agrupación dinámico."),
+    clientes: bool = Query(False, description="Agrupa y totaliza saldos por cliente."),
+    carteras: bool = Query(False, description="Agrupa y totaliza saldos por cartera."),
+    socios: bool = Query(False, description="Agrupa y totaliza saldos por socio."),
+    originador: bool = Query(False, description="Agrupa y totaliza saldos por socio originador."),
+    vencimientos: bool = Query(False, description="Agrupa y totaliza saldos por fecha de vencimiento."),
+    dueño: bool = Query(False, description="Agrupa y totaliza saldos por dueño de la cartera."),
+    recurso: bool = Query(False, description="Agrupa y totaliza saldos diferenciando si tienen recurso."),
+    iva: bool = Query(False, description="Agrupa y totaliza saldos por IVA."),
+):
+    try:
+        df = saldos(
+            fecha=fecha, con_saldo=con_saldo, propias=propias, agrupar=agrupar,
+            clientes=clientes, carteras=carteras, socios=socios, originador=originador,
+            vencimientos=vencimientos, dueño=dueño, recurso=recurso, iva=iva
+        )
+        df = df.reset_index()
+
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='Saldos')
+        output.seek(0)
+
+        headers = {'Content-Disposition': 'attachment; filename="reporte_saldos.xlsx"'}
+        return StreamingResponse(output, headers=headers, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generando Excel: {str(e)}")
+
+
 
 # -------------------------------------------------------------------
 # Modelos Pydantic
@@ -272,6 +309,8 @@ def get_clientes_list(db: Session = Depends(get_db)):
             "CUIL": c.cuil,
             "Documento": c.documento,
             "Apellido y Nombre": f"{c.apellido}, {c.nombre}" if c.apellido and c.nombre else (c.apellido or c.nombre),
+            "Apellido": c.apellido or "-",
+            "Nombre": c.nombre or "-",
             "Estado": c.estado.value if c.estado else "-",
             "Fecha Estado": c.fecha_estado.strftime("%Y-%m-%d") if c.fecha_estado else "-",
             "Provincia": prov,
@@ -284,7 +323,7 @@ def get_clientes_list(db: Session = Depends(get_db)):
 
 @app.get("/api/v1/clientes/{cuil}", tags=["Clientes"])
 def get_cliente(cuil: str, db: Session = Depends(get_db)):
-    cliente = db.query(Cliente).filter(Cliente.cuil == cuil).first()
+    cliente = db.query(Cliente).filter(or_(Cliente.cuil == cuil, Cliente.documento == cuil)).first()
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
     
@@ -548,6 +587,7 @@ AUX_TABLES = {
     "empleadores": Empleador,
     "socios": SocioComercial,
     "tasas_y_comisiones": TasaYComision,
+    "relaciones": Relacion
 }
 
 @app.get("/api/v1/auxiliares/{tabla}", tags=["Auxiliares"])
@@ -633,12 +673,36 @@ def update_aux_record(tabla: str, record_id: int, payload: dict, db: Session = D
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.delete("/api/v1/auxiliares/{tabla}/{record_id}", tags=["Auxiliares"])
+def delete_aux_record(tabla: str, record_id: int, db: Session = Depends(get_db)):
+    if tabla not in AUX_TABLES:
+        raise HTTPException(status_code=404, detail="Tabla auxiliar no encontrada.")
+    
+    model = AUX_TABLES[tabla]
+    record = db.query(model).filter(model.id == record_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Registro no encontrado.")
+    
+    try:
+        db.delete(record)
+        db.commit()
+        return {"status": "success", "message": "Registro eliminado exitosamente."}
+    except IntegrityError as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=400, 
+            detail="No se puede eliminar este registro porque está siendo utilizado por otros registros en el sistema (restricción de integridad referencial)."
+        )
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 # -------------------------------------------------------------------
 # System Actions
 # -------------------------------------------------------------------
 
-@app.post("/api/v1/system/actualizar_estados", tags=["System"])
+@app.post("/api/v1/system/sync-states", tags=["System"])
 def sync_system_states(db: Session = Depends(get_db)):
     from src.database.models import Cuota, Credito, Cliente, EstadoCredito, EstadoClienteEnum
     from datetime import date
