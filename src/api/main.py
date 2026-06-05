@@ -15,7 +15,8 @@ from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import or_
+from sqlalchemy import or_, asc, desc, cast, String
+import math
 
 from src.database import get_db, Cliente, SexoEnum, EstadoClienteEnum, Provincia, Empleador, SocioComercial, Credito, TipoCredito, TasaYComision, Cartera, Relacion
 
@@ -589,6 +590,81 @@ AUX_TABLES = {
     "tasas_y_comisiones": TasaYComision,
     "relaciones": Relacion
 }
+
+class TabulatorSort(BaseModel):
+    field: str
+    dir: str
+
+class TabulatorFilter(BaseModel):
+    field: str
+    type: str
+    value: Any
+
+class TabulatorRequest(BaseModel):
+    page: int = 1
+    size: int = 50
+    sort: Optional[List[TabulatorSort]] = []
+    filter: Optional[List[TabulatorFilter]] = []
+
+@app.post("/api/v1/auxiliares/{tabla}/data", tags=["Auxiliares"])
+def get_aux_table_data(tabla: str, request: TabulatorRequest, db: Session = Depends(get_db)):
+    if tabla not in AUX_TABLES:
+        raise HTTPException(status_code=404, detail="Tabla auxiliar no encontrada.")
+    model = AUX_TABLES[tabla]
+    query = db.query(model)
+
+    # 1. Apply Filters
+    if request.filter:
+        for f in request.filter:
+            if not hasattr(model, f.field):
+                continue
+            column = getattr(model, f.field)
+            
+            # Simple operators mapping
+            if f.type == "like":
+                query = query.filter(cast(column, String).ilike(f"%{f.value}%"))
+            elif f.type == "=":
+                query = query.filter(column == f.value)
+            elif f.type == "!=":
+                query = query.filter(column != f.value)
+            elif f.type == ">":
+                query = query.filter(column > f.value)
+            elif f.type == "<":
+                query = query.filter(column < f.value)
+            elif f.type == ">=":
+                query = query.filter(column >= f.value)
+            elif f.type == "<=":
+                query = query.filter(column <= f.value)
+    
+    # 2. Count total rows after filtering
+    total_count = query.count()
+    last_page = math.ceil(total_count / request.size) if request.size > 0 else 1
+
+    # 3. Apply Sorting
+    if request.sort:
+        for s in request.sort:
+            if not hasattr(model, s.field):
+                continue
+            column = getattr(model, s.field)
+            if s.dir == "asc":
+                query = query.order_by(asc(column))
+            elif s.dir == "desc":
+                query = query.order_by(desc(column))
+
+    # 4. Apply Pagination
+    query = query.offset((request.page - 1) * request.size).limit(request.size)
+    records = query.all()
+
+    data = [
+        {c.name: getattr(r, c.name) for c in model.__table__.columns}
+        for r in records
+    ]
+
+    return {
+        "last_page": last_page,
+        "data": data
+    }
+
 
 @app.get("/api/v1/auxiliares/{tabla}", tags=["Auxiliares"])
 def get_aux_table(tabla: str, db: Session = Depends(get_db)):
