@@ -28,11 +28,13 @@ graph TD
 
 ## 🛠️ Technologies Used
 
-* **Language**: Python 3.14.4
+* **Language**: Python 3.14.4 (Backend) / JavaScript (Frontend)
 * **Data Manipulation**: Pandas, NumPy & NumPy-Financial
 * **ORM & Database**: SQLAlchemy & SQLite (forcing `PRAGMA foreign_keys=ON`)
 * **Configuration & Validation**: Pydantic & Pydantic-Settings
-* **Web Framework**: FastAPI & Uvicorn
+* **Web Framework (Backend)**: FastAPI & Uvicorn
+* **Web Framework (Frontend)**: React & Vite (v2) / HTML & Vanilla JS (v1)
+* **Testing**: Pytest
 * **File Reading**: openpyxl (for reading Excel files)
 
 ## 📁 Project Structure
@@ -41,8 +43,10 @@ graph TD
 Credit_Manager/
 ├── .env                  # Environment variables and administrative company metadata
 ├── data/                 # Local storage for the SQLite database and CSV/Excel files
+├── frontend/             # Web client v1 (Vanilla JS, HTML, CSS)
+├── frontend-v2/          # Modern web client v2 (React, Vite)
 ├── notebooks/            # Jupyter Notebooks for interactive testing and auditing
-└── src/
+├── src/
     ├── api/              # FastAPI server endpoints, routing, and configuration
     │   ├── main.py       # Web API entry point
     │   └── routes/       # Definition of additional API routes
@@ -67,6 +71,7 @@ Credit_Manager/
     ├── reports/          # Reports and analytics for balances and accrued interests
     │   └── balances.py   # Vectorized calculation of balances and overdue/pending debt
     └── utils/            # Common auxiliary functions (date formatting, file selection, etc.)
+└── tests/                # Unit and integration tests (pytest)
 ```
 
 ## ⚙️ Installation and Setup

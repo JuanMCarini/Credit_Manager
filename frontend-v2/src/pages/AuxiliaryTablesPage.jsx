@@ -1,6 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import useAppStore from '../store/useAppStore';
 import axiosClient from '../api/axiosClient';
+import { ReactTabulator } from 'react-tabulator';
+import 'react-tabulator/lib/styles.css';
+import 'tabulator-tables/dist/css/tabulator.min.css';
 
 const AuxiliaryTablesPage = () => {
   const { provincias, empleadores, socios, tasasYComisiones, relaciones, fetchAuxiliares } = useAppStore();
@@ -10,6 +13,49 @@ const AuxiliaryTablesPage = () => {
   const [editingRecord, setEditingRecord] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [feedback, setFeedback] = useState(null);
+
+  const tableRef = useRef(null);
+
+  const ajaxRequestFunc = useCallback((url, config, params) => {
+    return new Promise((resolve, reject) => {
+      axiosClient.post(url, params)
+        .then(response => {
+          resolve(response.data);
+        })
+        .catch(error => {
+          reject();
+        });
+    });
+  }, []);
+
+  const actionFormatter = useCallback((cell, formatterParams, onRendered) => {
+    const row = cell.getRow().getData();
+    
+    const container = document.createElement("div");
+    container.style.textAlign = "center";
+    container.style.display = "flex";
+    container.style.justifyContent = "center";
+    container.style.gap = "8px";
+    
+    const editBtn = document.createElement("button");
+    editBtn.innerHTML = "✏️";
+    editBtn.className = "btn-icon";
+    editBtn.title = "Editar";
+    editBtn.style = "cursor: pointer; background: none; border: none; color: var(--primary-color);";
+    editBtn.onclick = () => openEditModal(row);
+    
+    const delBtn = document.createElement("button");
+    delBtn.innerHTML = "🗑️";
+    delBtn.className = "btn-icon";
+    delBtn.title = "Eliminar";
+    delBtn.style = "cursor: pointer; background: none; border: none; color: var(--danger-color);";
+    delBtn.onclick = () => handleDelete(row.id);
+    
+    container.appendChild(editBtn);
+    container.appendChild(delBtn);
+    
+    return container;
+  }, []);
 
   const relationMaps = {
     socio_comercial_id: { options: socios, valueKey: 'id', labelKey: 'razon_social' },
@@ -35,8 +81,55 @@ const AuxiliaryTablesPage = () => {
   };
 
   const currentTableConfig = tablesMap[activeTable];
-  const tableData = currentTableConfig.data || [];
-  const columns = tableData.length > 0 ? Object.keys(tableData[0]) : (currentTableConfig.schema || []);
+  const columns = currentTableConfig.schema || [];
+
+  const getColumns = useCallback(() => {
+    const cols = columns.map(col => {
+      let colDef = {
+        title: col.toUpperCase().replace(/_/g, ' '),
+        field: col,
+        headerFilter: "input",
+        headerSort: true,
+      };
+
+      if (['capital', 'interes', 'iva', 'total'].includes(col.toLowerCase())) {
+        colDef.formatter = "money";
+        colDef.formatterParams = {
+          decimal: ",",
+          thousand: ".",
+          symbol: "$ ",
+          precision: 2,
+        };
+      } else if (percentFields.includes(col)) {
+        colDef.formatter = (cell) => {
+          const val = cell.getValue();
+          if (val === null || val === undefined) return '';
+          return `${(val * 100).toFixed(2)}%`;
+        };
+      }
+      return colDef;
+    });
+
+    cols.push({
+      title: "ACCIONES",
+      field: "acciones",
+      headerSort: false,
+      headerFilter: false,
+      formatter: actionFormatter,
+      width: 120,
+      hozAlign: "center",
+    });
+
+    return cols;
+  }, [activeTable, columns, actionFormatter]);
+
+  useEffect(() => {
+    if (tableRef.current && tableRef.current.current) {
+      const table = tableRef.current.current;
+      table.setColumns(getColumns());
+      table.setData(`/api/v1/auxiliares/${currentTableConfig.endpoint}/data`);
+    }
+  }, [activeTable, getColumns, currentTableConfig.endpoint]);
 
   const handleDelete = async (id) => {
     if (!window.confirm("¿Estás seguro de que deseas eliminar este registro?")) return;
@@ -117,6 +210,9 @@ const AuxiliaryTablesPage = () => {
         setFeedback({ type: 'success', message: 'Registro actualizado exitosamente.' });
       }
       await fetchAuxiliares();
+      if (tableRef.current && tableRef.current.current) {
+        tableRef.current.current.replaceData(); // Reload table data via ajax
+      }
       closeEditModal();
     } catch (error) {
       setFeedback({ type: 'error', message: error.response?.data?.detail || "Error al guardar el registro." });
@@ -152,7 +248,7 @@ const AuxiliaryTablesPage = () => {
 
         <div className="glass-panel" style={{ padding: '20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <h3 style={{ margin: 0 }}>Registros ({tableData.length})</h3>
+            <h3 style={{ margin: 0 }}>Registros</h3>
             <button 
               className="btn-primary" 
               onClick={() => openEditModal(null)}
@@ -162,51 +258,25 @@ const AuxiliaryTablesPage = () => {
             </button>
           </div>
           
-          {tableData.length === 0 ? (
-            <p style={{ opacity: 0.7 }}>No hay registros en esta tabla.</p>
-          ) : (
-            <div className="table-responsive">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    {columns.map(col => <th key={col}>{col.toUpperCase().replace(/_/g, ' ')}</th>)}
-                    <th style={{ width: '120px', textAlign: 'center' }}>ACCIONES</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tableData.map((row, idx) => (
-                    <tr key={row.id || idx}>
-                      {columns.map(col => {
-                        let displayValue = String(row[col] ?? '');
-                        if (percentFields.includes(col) && row[col] !== null) {
-                          displayValue = `${(row[col] * 100).toFixed(2)}%`;
-                        }
-                        return <td key={col}>{displayValue}</td>;
-                      })}
-                      <td style={{ textAlign: 'center' }}>
-                        <button 
-                          className="btn-icon" 
-                          onClick={() => openEditModal(row)}
-                          title="Editar"
-                          style={{ marginRight: '8px', cursor: 'pointer', background: 'none', border: 'none', color: 'var(--primary-color)' }}
-                        >
-                          ✏️
-                        </button>
-                        <button 
-                          className="btn-icon" 
-                          onClick={() => handleDelete(row.id)}
-                          title="Eliminar"
-                          style={{ cursor: 'pointer', background: 'none', border: 'none', color: 'var(--danger-color)' }}
-                        >
-                          🗑️
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <div className="table-responsive" style={{ height: '600px' }}>
+            <ReactTabulator
+              onRef={(ref) => (tableRef.current = ref)}
+              columns={getColumns()}
+              options={{
+                ajaxURL: `/api/v1/auxiliares/${currentTableConfig.endpoint}/data`,
+                ajaxRequestFunc: ajaxRequestFunc,
+                pagination: true,
+                paginationMode: "remote",
+                filterMode: "remote",
+                sortMode: "remote",
+                paginationSize: 10,
+                paginationSizeSelector: [10, 25, 50, 100],
+                layout: "fitColumns",
+                responsiveLayout: "collapse",
+                placeholder: "No hay registros en esta tabla.",
+              }}
+            />
+          </div>
         </div>
       </div>
 

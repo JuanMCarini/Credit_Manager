@@ -28,11 +28,13 @@ graph TD
 
 ## 🛠️ Tecnologías Utilizadas
 
-* **Lenguaje**: Python 3.14.4
+* **Lenguaje**: Python 3.14.4 (Backend) / JavaScript (Frontend)
 * **Manipulación de Datos**: Pandas, NumPy & NumPy-Financial
 * **ORM & Base de Datos**: SQLAlchemy & SQLite (forzando `PRAGMA foreign_keys=ON`)
 * **Configuración y Validación**: Pydantic & Pydantic-Settings
-* **Framework Web**: FastAPI & Uvicorn
+* **Framework Web (Backend)**: FastAPI & Uvicorn
+* **Framework Web (Frontend)**: React & Vite (v2) / HTML & Vanilla JS (v1)
+* **Pruebas**: Pytest
 * **Lectura de Archivos**: openpyxl (para lectura de archivos Excel)
 
 ## 📁 Estructura del Proyecto
@@ -41,8 +43,10 @@ graph TD
 Credit_Manager/
 ├── .env                  # Variables de entorno y metadatos de la empresa administradora
 ├── data/                 # Almacenamiento local de la base de datos SQLite y archivos CSV/Excel
+├── frontend/             # Cliente web v1 (Vanilla JS, HTML, CSS)
+├── frontend-v2/          # Cliente web v2 moderno (React, Vite)
 ├── notebooks/            # Notebooks Jupyter para pruebas interactivas y auditorías
-└── src/
+├── src/
     ├── api/              # Endpoints, ruteo y configuración del servidor FastAPI
     │   ├── main.py       # Punto de entrada de la API web
     │   └── routes/       # Definición de rutas adicionales de la API
@@ -67,6 +71,7 @@ Credit_Manager/
     ├── reports/          # Reportes y analítica de saldos e intereses devengados
     │   └── balances.py   # Cálculo vectorial de saldos y deuda morosa/pendiente
     └── utils/            # Funciones auxiliares comunes (formateo de fechas, selección de archivos, etc.)
+└── tests/                # Pruebas unitarias y de integración (pytest)
 ```
 
 ## ⚙️ Instalación y Configuración
