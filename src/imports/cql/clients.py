@@ -9,12 +9,12 @@ efficiently load data into the database while avoiding memory exhaustion.
 
 import pandas as pd
 import numpy as np
-from src.database import SessionLocal, Cliente, SexoEnum, EstadoClienteEnum, Provincia, Empleador
+from src.database import SessionLocal, Cliente, SexoEnum, EstadoClienteEnum, Provincia, Empleador, SocioComercial
 # pyrefly: ignore [missing-import]
 from .read import df_clientes, df_inventario
 
 # 1. Group df_inventario to prevent 1-to-many duplication (1 row per client)
-df_inventario_grouped = df_inventario.groupby("Id. Cliente")[["Org.", "Sueldo Liquido"]].first()
+df_inventario_grouped = df_inventario.groupby("Id. Cliente")[["Org.", "Sueldo Liquido", "Línea"]].first()
 
 # 2. Perform a clean merge without duplicated rows
 df_clientes = df_clientes.merge(
@@ -118,10 +118,31 @@ with SessionLocal() as db:
         # Register new employers detected in 'Org.'
         if "Org." in df_clientes.columns:
             orgs_unicos = df_clientes["Org."].dropna().unique()
+            
+            # Map each unique Org to a socio_id using its Línea
+            org_socio_id = {}
+            if "Línea" in df_clientes.columns:
+                socios = db.query(SocioComercial).all()
+                org_linea = df_clientes.groupby("Org.")["Línea"].first().to_dict()
+                for org, linea in org_linea.items():
+                    if pd.isna(linea):
+                        org_socio_id[org] = None
+                        continue
+                    l_upper = str(linea).upper()
+                    matched_id = None
+                    for s in socios:
+                        if s.razon_social and str(s.razon_social).upper() in l_upper:
+                            matched_id = s.id
+                            break
+                    org_socio_id[org] = matched_id
+
             for org in orgs_unicos:
                 org_clean = str(org).strip().upper()
                 if org_clean and org_clean not in empleadores_map:
-                    nuevo_emp = Empleador(razon_social=org_clean)
+                    nuevo_emp = Empleador(
+                        razon_social=org_clean,
+                        socio_comercial_id=org_socio_id.get(org)
+                    )
                     db.add(nuevo_emp)
                     db.flush()
                     empleadores_map[org_clean] = nuevo_emp.id

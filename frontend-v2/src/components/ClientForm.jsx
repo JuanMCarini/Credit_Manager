@@ -23,6 +23,7 @@ const ClientForm = ({ initialData, onSubmit, loading, feedback, buttonText = "Gu
     localidad: '',
     id_codigo_postal: '',
     id_provincia: '',
+    fecha_ingreso: '',
     remuneracion: 0,
     legajo: '',
     empleador_id: '',
@@ -107,6 +108,7 @@ const ClientForm = ({ initialData, onSubmit, loading, feedback, buttonText = "Gu
         Laboral y Financiero
       </h3>
       <div className="form-row">
+        <div className="form-group"><label>Fecha Ingreso</label><input type="date" name="fecha_ingreso" value={form.fecha_ingreso || ''} onChange={handleChange} /></div>
         <div className="form-group"><label>Remuneración Declarada ($)</label><input type="number" step="0.01" name="remuneracion" value={form.remuneracion || ''} onChange={handleChange} /></div>
         <div className="form-group"><label>Nro. Legajo Laboral</label><input type="text" name="legajo" value={form.legajo || ''} onChange={handleChange} /></div>
         <div className="form-group">

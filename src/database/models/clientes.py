@@ -1,0 +1,158 @@
+import enum
+from datetime import date
+
+from sqlalchemy import (
+    Boolean,
+    Column,
+    Date,
+    Enum,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+)
+from sqlalchemy.orm import relationship, validates
+
+from src.database import Base
+
+
+class SexoEnum(enum.Enum):
+    MASCULINO = "M"
+    FEMENINO = "F"
+    OTRO = "O"
+
+
+class EstadoClienteEnum(enum.Enum):
+    ACTIVO = "ACTIVO"
+    MOROSO = "MOROSO"
+    INCOBRABLE = "INCOBRABLE"
+    INACTIVO = "INACTIVO"
+
+
+class Empleador(Base):
+    """
+    Represents the employer or withholding agent (Agente de Retención)
+    for payroll deduction loans (Código de Descuento).
+    """
+
+    __tablename__ = "empleadores"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    cuit = Column(String(11), unique=True, nullable=True)
+    razon_social = Column(String(150), nullable=False)
+    es_pasivo = Column(Boolean, default=False)  # True para Jubilados/Pensionados
+
+    # Relationships
+    empleados = relationship("Cliente", back_populates="empleador")
+
+    socio_comercial_id = Column(
+        Integer, ForeignKey("socios_comerciales.id"), nullable=True
+    )
+    socio_comercial = relationship("SocioComercial", back_populates="empleadores")
+
+    def __repr__(self):
+        return f"<Empleador(cuit='{self.cuit}', razon_social='{self.razon_social}')>"
+
+
+class Provincia(Base):
+    """
+    Represents a geographical province or state.
+    """
+
+    __tablename__ = "provincias"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    nombre = Column(String(100), unique=True, nullable=False)
+
+    # Relationships
+    clientes = relationship("Cliente", back_populates="provincia")
+
+    def __repr__(self):
+        return f"<Provincia(id={self.id}, nombre='{self.nombre}')>"
+
+
+class Cliente(Base):
+    """
+    =============================================================================
+    Model: Cliente
+    =============================================================================
+    """
+
+    __tablename__ = "clientes"
+
+    # Primary Key & Identification
+    cuil = Column(
+        String(11), primary_key=True, unique=True, nullable=False
+    )  # Unique worker identification number
+    documento = Column(String(10), unique=True, nullable=False)
+
+    # Personal Information
+    apellido = Column(String(100), nullable=False)
+    nombre = Column(String(100), nullable=False)
+    fecha_nacimiento = Column(Date, nullable=True)
+    sexo = Column(Enum(SexoEnum), nullable=True)
+    estado_civil = Column(String(50), nullable=True)
+    nacionalidad = Column(String(100), nullable=True)
+
+    # Employment details / Status
+    legajo = Column(String(50), nullable=True)
+    estado = Column(Enum(EstadoClienteEnum), nullable=True)
+    fecha_estado = Column(Date, nullable=True, default=date.today, onupdate=date.today)
+
+    # Banking details
+    cbu = Column(String(22), nullable=True)
+
+    # Address details
+    calle = Column(String(150), nullable=True)
+    calle_nro = Column(Integer, nullable=True)
+    piso = Column(String(10), nullable=True)
+    depto = Column(String(10), nullable=True)
+
+    # Foreign Keys linking to geographical tables
+    id_provincia = Column(Integer, ForeignKey("provincias.id"), nullable=True)
+    id_codigo_postal = Column(String(10), nullable=True)
+    localidad = Column(String(100), nullable=True)
+
+    # Contact Information
+    telefono = Column(String(50), nullable=True)
+    telefono_2 = Column(String(50), nullable=True)
+    mail = Column(String(150), nullable=True)
+
+    # New ForeignKey linking to Empleador
+    empleador_id = Column(Integer, ForeignKey("empleadores.id"), nullable=True)
+
+    # Employment details / Status
+    fecha_ingreso = Column(Date, nullable=True)
+    remuneracion = Column(Float, default=0.0)  # Monthly income for credit scoring
+
+    
+    # Relationships
+    creditos = relationship("Credito", back_populates="cliente")
+    provincia = relationship("Provincia", back_populates="clientes")
+    empleador = relationship("Empleador", back_populates="empleados")
+
+    @validates("cuil", "documento")
+    def validate_cuil_dni(self, key, value):
+        if value is None:
+            return value
+        
+        clean_value = "".join(filter(str.isdigit, str(value)))
+        
+        if key == "cuil":
+            if self.documento:
+                clean_doc = "".join(filter(str.isdigit, str(self.documento)))
+                if clean_doc not in clean_value:
+                    raise ValueError(
+                        f"Validation error: Documento '{clean_doc}' must be contained within CUIL '{clean_value}'."
+                    )
+        elif key == "documento":
+            if self.cuil:
+                clean_cuil = "".join(filter(str.isdigit, str(self.cuil)))
+                if clean_value not in clean_cuil:
+                    raise ValueError(
+                        f"Validation error: Documento '{clean_value}' must be contained within CUIL '{clean_cuil}'."
+                    )
+        return value
+
+    def __repr__(self):
+        return f"<Cliente(cuil='{self.cuil}', apellido='{self.apellido}', nombre='{self.nombre}')>"
