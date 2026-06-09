@@ -264,6 +264,7 @@ function getUniqueValuesForCol(tableId, colIndex) {
     const trs = tbody.getElementsByTagName("tr");
     const vals = new Set();
     for (let i = 0; i < trs.length; i++) {
+        if (trs[i].classList.contains('sub-row')) continue;
         const td = trs[i].getElementsByTagName("td")[colIndex];
         if (td) vals.add(td.textContent.trim());
     }
@@ -286,8 +287,13 @@ function openExcelFilter(e, colIndex, tableId = 'table-bal', headerId = 'bal-hea
     const popover = document.createElement("div");
     popover.id = "excel-filter-popover";
     popover.className = "filter-popover glass-panel fade-in";
+    popover.style.zIndex = "99999";
 
     let html = `
+        <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+            <button class="btn-secondary" style="font-size: 11px; flex: 1; padding: 4px;" onclick="sortExcelFilter(event, ${colIndex}, '${tableId}', 'asc')">↑ Ascendente</button>
+            <button class="btn-secondary" style="font-size: 11px; flex: 1; padding: 4px;" onclick="sortExcelFilter(event, ${colIndex}, '${tableId}', 'desc')">↓ Descendente</button>
+        </div>
         <div style="margin-bottom: 8px;">
             <input type="text" id="excel-filter-search" placeholder="🔍 Buscar..." 
                 style="width: 100%; padding: 6px; font-size: 12px; background: rgba(0,0,0,0.5); border: 1px solid var(--border-color); color: white; border-radius: 4px;">
@@ -342,7 +348,7 @@ function openExcelFilter(e, colIndex, tableId = 'table-bal', headerId = 'bal-hea
 
     // Posicionamiento
     const rect = e.target.getBoundingClientRect();
-    popover.style.left = `${rect.left}px`;
+    popover.style.left = `${rect.left + window.scrollX}px`;
     popover.style.top = `${rect.bottom + window.scrollY + 8}px`;
 
     // Interactividad
@@ -364,6 +370,69 @@ function openExcelFilter(e, colIndex, tableId = 'table-bal', headerId = 'bal-hea
         });
     });
 }
+
+
+window.sortExcelFilter = function(e, colIndex, tableId, direction) {
+    e.stopPropagation();
+    const tbody = document.querySelector(`#${tableId} tbody`);
+    if (!tbody) return;
+    
+    // Convert NodeList to Array
+    const trs = Array.from(tbody.children);
+    const groups = [];
+    let currentGroup = null;
+    
+    trs.forEach(tr => {
+        if (tr.classList.contains('sub-row')) {
+            if (currentGroup) currentGroup.subRows.push(tr);
+        } else {
+            currentGroup = { mainRow: tr, subRows: [] };
+            groups.push(currentGroup);
+        }
+    });
+    
+    const parseNumeric = (val) => {
+        if (!val || val === '-') return 0;
+        let clean = val.replace(/[$%\s]/g, '').replace(/\./g, '').replace(',', '.');
+        const num = parseFloat(clean);
+        return isNaN(num) ? val : num;
+    };
+    
+    groups.sort((a, b) => {
+        const aCol = a.mainRow.children[colIndex];
+        const bCol = b.mainRow.children[colIndex];
+        if (!aCol || !bCol) return 0;
+        
+        let aVal = aCol.textContent.trim();
+        let bVal = bCol.textContent.trim();
+        
+        let aNum = parseNumeric(aVal);
+        let bNum = parseNumeric(bVal);
+        
+        if (typeof aNum === 'string' && aVal.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            aNum = new Date(aVal).getTime();
+            bNum = new Date(bVal).getTime();
+        }
+        
+        if (aNum === bNum) return 0;
+        
+        let comparison = 0;
+        if (typeof aNum === 'number' && typeof bNum === 'number') {
+            comparison = aNum > bNum ? 1 : -1;
+        } else {
+            comparison = aVal.localeCompare(bVal, undefined, {numeric: true});
+        }
+        
+        return direction === 'asc' ? comparison : -comparison;
+    });
+    
+    groups.forEach(g => {
+        tbody.appendChild(g.mainRow);
+        g.subRows.forEach(sr => tbody.appendChild(sr));
+    });
+    
+    closeExcelFilter();
+};
 
 function closeExcelFilter() {
     const popover = document.getElementById("excel-filter-popover");
@@ -404,9 +473,16 @@ function runAllExcelFilters(tableId, headerId) {
     if (!tbody) return;
     const trs = tbody.getElementsByTagName("tr");
 
+    let lastMainRowMatch = true;
     for (let i = 0; i < trs.length; i++) {
+        let tr = trs[i];
+        if (tr.classList.contains('sub-row')) {
+            tr.style.display = lastMainRowMatch ? "" : "none";
+            continue;
+        }
+        
         let rowMatch = true;
-        const tds = trs[i].getElementsByTagName("td");
+        const tds = tr.getElementsByTagName("td");
 
         for (const [colIndexStr, filterObj] of Object.entries(excelFilters[tableId] || {})) {
             const colIndex = parseInt(colIndexStr);
@@ -437,7 +513,8 @@ function runAllExcelFilters(tableId, headerId) {
                 }
             }
         }
-        trs[i].style.display = rowMatch ? "" : "none";
+        lastMainRowMatch = rowMatch;
+        tr.style.display = rowMatch ? "" : "none";
     }
 
     document.querySelectorAll(`.filter-icon-${tableId}`).forEach(icon => {
@@ -702,6 +779,7 @@ const AUX_SCHEMAS = {
     empleadores: {
         cuit: { type: 'text', label: 'CUIT (Sin guiones, Opcional)' },
         razon_social: { type: 'text', label: 'Razón Social', required: true },
+        es_pasivo: { type: 'checkbox', label: 'Es Pasivo (Jubilado/Pensionado)' },
         socio_comercial_id: { type: 'select_socio', label: 'Socio Comercial Asociado' }
     },
     socios: {
@@ -757,11 +835,18 @@ async function loadAuxTable() {
             return;
         }
 
+        excelFilters['aux-table'] = {};
+
         const keys = Object.keys(data[0]);
-        thead.innerHTML = `<tr>${keys.map(k => {
+        thead.innerHTML = `<tr>${keys.map((k, i) => {
             let title = k.replace(/_id$/g, '').replace(/_/g, ' ').toUpperCase();
             if (title === 'TNA C IVA') title = 'TNA C/IVA';
-            return `<th>${title}</th>`;
+            return `<th>
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                    <span>${title}</span>
+                    <span class="filter-icon filter-icon-aux-table" data-col="${i}" onclick="openExcelFilter(event, ${i}, 'aux-table', 'aux-table-head')">▼</span>
+                </div>
+            </th>`;
         }).join('')}<th>ACCIONES</th></tr>`;
 
         tbody.innerHTML = data.map(row => {
@@ -820,15 +905,20 @@ function openAuxModal(id = null) {
                 });
             }
             fieldHtml = `<select id="aux-${key}" ${requiredAttr}>${optionsHtml}</select>`;
+        } else if (config.type === 'checkbox') {
+            const checkedAttr = value ? 'checked' : '';
+            fieldHtml = `<input type="checkbox" id="aux-${key}" style="width: auto; margin-right: 8px;" ${checkedAttr}>`;
         } else {
             const stepAttr = config.type === 'number' ? 'step="any"' : '';
             fieldHtml = `<input type="${config.type}" id="aux-${key}" value="${value}" ${requiredAttr} ${stepAttr}>`;
         }
 
+        let groupStyle = config.type === 'checkbox' ? 'display: flex; align-items: center;' : '';
         fieldsContainer.innerHTML += `
-            <div class="form-group" style="margin-bottom:0;">
-                <label for="aux-${key}">${config.label} ${config.required ? '*' : ''}</label>
-                ${fieldHtml}
+            <div class="form-group" style="margin-bottom:0; ${groupStyle}">
+                ${config.type === 'checkbox' ? fieldHtml : ''}
+                <label for="aux-${key}" style="${config.type === 'checkbox' ? 'margin-bottom:0;' : ''}">${config.label} ${config.required ? '*' : ''}</label>
+                ${config.type !== 'checkbox' ? fieldHtml : ''}
             </div>
         `;
     });
@@ -847,8 +937,13 @@ async function saveAuxRecord(e) {
     const payload = {};
 
     Object.keys(schema).forEach(key => {
-        const val = document.getElementById(`aux-${key}`).value.trim();
-        payload[key] = val === '' ? null : val;
+        const field = document.getElementById(`aux-${key}`);
+        if (schema[key].type === 'checkbox') {
+            payload[key] = field.checked;
+        } else {
+            const val = field.value.trim();
+            payload[key] = val === '' ? null : val;
+        }
     });
 
     feedback.style.color = "var(--text-primary)";
@@ -926,15 +1021,25 @@ async function viewClientCuentaCorriente(cuil) {
         const data = await res.json();
         if (data.length === 0) {
             tbody.innerHTML = '<tr><td colspan="100%" style="text-align:center;">No hay cuotas registradas para este cliente.</td></tr>';
+            document.getElementById('cliente-cta-cte-headers').innerHTML = '';
             return;
         }
+
+        excelFilters['table-cliente-cta-cte'] = {};
+        const headers = ["Crédito (ID)", "N° Cuota", "Vencimiento", "Capital", "Interés", "IVA", "Total Esperado", "Cobrado", "Saldo Pendiente", "Estado"];
+        let theadHtml = "<tr>";
+        headers.forEach((h, i) => {
+            theadHtml += `<th><div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;"><span>${h}</span><span class="filter-icon filter-icon-table-cliente-cta-cte" data-col="${i}" onclick="openExcelFilter(event, ${i}, 'table-cliente-cta-cte', 'cliente-cta-cte-headers')">▼</span></div></th>`;
+        });
+        theadHtml += "</tr>";
+        document.getElementById('cliente-cta-cte-headers').innerHTML = theadHtml;
 
         let html = "";
         data.forEach(c => {
             const extStr = c.id_externo && c.id_externo !== '-' ? ` (${c.id_externo})` : '';
             const creditoLabel = `#${c.credito_id}${extStr}`;
 
-            html += `<tr>
+            html += `<tr class="main-row">
                 <td>${creditoLabel}</td>
                 <td>${c.nro_cuota}</td>
                 <td>${c.vencimiento}</td>
@@ -961,7 +1066,7 @@ async function viewClientCuentaCorriente(cuil) {
 
             if (c.detalle_cobranzas && c.detalle_cobranzas.length > 0) {
                 c.detalle_cobranzas.forEach(cob => {
-                    html += `<tr style="background: rgba(255, 255, 255, 0.02); font-size: 12px; color: var(--text-secondary);">
+                    html += `<tr class="sub-row" style="background: rgba(255, 255, 255, 0.02); font-size: 12px; color: var(--text-secondary);">
                         <td colspan="3" style="text-align: right; border-left: 2px solid var(--accent-secondary);">
                             ↳ Cobranza (${cob.tipo}) el ${cob.fecha}
                         </td>
@@ -1091,12 +1196,22 @@ async function viewCreditoCuotas(id) {
         const data = await res.json();
         if (data.length === 0) {
             tbody.innerHTML = '<tr><td colspan="100%" style="text-align:center;">No hay cuotas registradas para este crédito.</td></tr>';
+            document.getElementById('cuotas-headers').innerHTML = '';
             return;
         }
 
+        excelFilters['table-cuotas'] = {};
+        const headers = ["N°", "Vencimiento", "Capital", "Interés", "IVA", "Total Esperado", "Cobrado", "Saldo Pendiente", "Estado"];
+        let theadHtml = "<tr>";
+        headers.forEach((h, i) => {
+            theadHtml += `<th><div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;"><span>${h}</span><span class="filter-icon filter-icon-table-cuotas" data-col="${i}" onclick="openExcelFilter(event, ${i}, 'table-cuotas', 'cuotas-headers')">▼</span></div></th>`;
+        });
+        theadHtml += "</tr>";
+        document.getElementById('cuotas-headers').innerHTML = theadHtml;
+
         let html = "";
         data.forEach(c => {
-            html += `<tr>
+            html += `<tr class="main-row">
                 <td>${c.nro_cuota}</td>
                 <td>${c.vencimiento}</td>
                 <td>${formatCurrency(c.capital)}</td>
@@ -1122,7 +1237,7 @@ async function viewCreditoCuotas(id) {
 
             if (c.detalle_cobranzas && c.detalle_cobranzas.length > 0) {
                 c.detalle_cobranzas.forEach(cob => {
-                    html += `<tr style="background: rgba(255, 255, 255, 0.02); font-size: 12px; color: var(--text-secondary);">
+                    html += `<tr class="sub-row" style="background: rgba(255, 255, 255, 0.02); font-size: 12px; color: var(--text-secondary);">
                         <td colspan="2" style="text-align: right; border-left: 2px solid var(--accent-secondary);">
                             ↳ Cobranza (${cob.tipo}) el ${cob.fecha}
                         </td>
@@ -1242,7 +1357,7 @@ async function syncSystemStates() {
     btn.innerText = "Sincronizando...";
 
     try {
-        const res = await fetch(`${API_URL}/api/v1/system/actualizar_estados`, {
+        const res = await fetch(`${API_URL}/api/v1/system/sync-states`, {
             method: 'POST'
         });
         const data = await res.json();

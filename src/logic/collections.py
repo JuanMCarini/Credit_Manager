@@ -728,6 +728,8 @@ class CollectionManager:
         header = [ident, "monto"]
         df.columns = header
         df["monto"] = df["monto"].astype(float)
+        df = df.loc[df[ident] != "Total"]
+        df[ident] = df[ident].astype(str)
         df = df.groupby(ident)[["monto"]].sum().reset_index()
 
         if (df["monto"] >= 0).all() or (df["monto"] <= 0).all():

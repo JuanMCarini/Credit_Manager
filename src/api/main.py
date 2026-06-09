@@ -222,6 +222,7 @@ class ClienteCreate(BaseModel):
     telefono: Optional[str] = None
     telefono_2: Optional[str] = None
     mail: Optional[str] = None
+    fecha_ingreso: Optional[date] = None
     remuneracion: float = 0.0
     empleador_id: Optional[int] = None
 
@@ -318,6 +319,7 @@ def get_clientes_list(db: Session = Depends(get_db)):
             "Empleador": emp,
             "Mail": c.mail or "-",
             "Teléfono": c.telefono or "-",
+            "Fecha Ingreso": c.fecha_ingreso.strftime("%Y-%m-%d") if c.fecha_ingreso else "-",
             "Remuneración": float(c.remuneracion or 0.0)
         })
     return result
@@ -351,6 +353,7 @@ def get_cliente(cuil: str, db: Session = Depends(get_db)):
         "telefono": cliente.telefono,
         "telefono_2": cliente.telefono_2,
         "mail": cliente.mail,
+        "fecha_ingreso": cliente.fecha_ingreso.strftime("%Y-%m-%d") if cliente.fecha_ingreso else None,
         "remuneracion": float(cliente.remuneracion or 0.0),
         "empleador_id": cliente.empleador_id
     }
@@ -779,6 +782,7 @@ def delete_aux_record(tabla: str, record_id: int, db: Session = Depends(get_db))
 # -------------------------------------------------------------------
 
 @app.post("/api/v1/system/sync-states", tags=["System"])
+@app.post("/api/v1/system/actualizar_estados", tags=["System"])
 def sync_system_states(db: Session = Depends(get_db)):
     from src.database.models import Cuota, Credito, Cliente, EstadoCredito, EstadoClienteEnum
     from datetime import date

@@ -12,7 +12,7 @@
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;800&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" href="style.css?v=17">
-    <script src="main.js?v=17" defer></script>
+    <script src="main.js?v=2" defer></script>
 </head>
 
 <body>
@@ -528,18 +528,8 @@
 
                     <div style="overflow-y: auto; flex: 1;">
                         <table class="data-table" id="table-cuotas">
-                            <thead>
-                                <tr>
-                                    <th>N°</th>
-                                    <th>Vencimiento</th>
-                                    <th>Capital</th>
-                                    <th>Interés</th>
-                                    <th>IVA</th>
-                                    <th>Total Esperado</th>
-                                    <th>Cobrado</th>
-                                    <th>Saldo Pendiente</th>
-                                    <th>Estado</th>
-                                </tr>
+                            <thead id="cuotas-headers">
+                                <tr><th>Cargando...</th></tr>
                             </thead>
                             <tbody id="cuotas-body">
                                 <!-- Se llena por JS -->
@@ -563,19 +553,8 @@
 
                     <div style="overflow-y: auto; flex: 1;">
                         <table class="data-table" id="table-cliente-cta-cte">
-                            <thead>
-                                <tr>
-                                    <th>Crédito (ID)</th>
-                                    <th>N° Cuota</th>
-                                    <th>Vencimiento</th>
-                                    <th>Capital</th>
-                                    <th>Interés</th>
-                                    <th>IVA</th>
-                                    <th>Total Esperado</th>
-                                    <th>Cobrado</th>
-                                    <th>Saldo Pendiente</th>
-                                    <th>Estado</th>
-                                </tr>
+                            <thead id="cliente-cta-cte-headers">
+                                <tr><th>Cargando...</th></tr>
                             </thead>
                             <tbody id="cliente-cta-cte-body">
                                 <!-- Se llena por JS -->
