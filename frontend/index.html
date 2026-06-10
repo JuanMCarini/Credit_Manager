@@ -64,6 +64,12 @@
                     </svg>
                     Listado de Cobranzas
                 </button>
+                <button class="nav-item" onclick="switchTab('procesamiento-cobranzas')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                    </svg>
+                    Ingreso de Cobranzas
+                </button>
                 <button class="nav-item" onclick="switchTab('procesos'); loadProcesosTable();">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
@@ -627,6 +633,110 @@
                             <tr><td colspan="100%" class="text-center empty-state">Presione Actualizar para cargar el listado.</td></tr>
                         </tbody>
                     </table>
+                </div>
+            </section>
+
+            <!-- Procesamiento de Cobranzas Tab -->
+            <section id="tab-procesamiento-cobranzas" class="tab-content">
+                <header class="section-header">
+                    <h2>Ingreso de Cobranzas</h2>
+                    <p>Cargue nuevas cobranzas de forma individual o de manera masiva mediante un archivo Excel (.xlsx).</p>
+                </header>
+
+                <div class="content-grid" style="grid-template-columns: 1fr;">
+                    
+                    <!-- Cobranza Individual -->
+                    <div class="glass-panel" style="padding: 20px; margin-bottom: 24px;">
+                        <h3 style="margin-bottom: 12px; font-family: var(--font-heading); font-size: 16px;">Cobranza Individual</h3>
+                        <form id="form-cobranza-individual" onsubmit="submitCobranzaIndividual(event)">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Tipo de Identificador *</label>
+                                    <select id="cob-ind-identificador" required>
+                                        <option value="CLIENTE_DNI">Documento del Cliente (DNI)</option>
+                                        <option value="CLIENTE_CUIL">CUIL del Cliente</option>
+                                        <option value="CREDITO_ID">ID del Crédito</option>
+                                        <option value="ID_EXTERNO">ID Externo</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Valor *</label>
+                                    <input type="text" id="cob-ind-valor" required placeholder="Ej. 12345678">
+                                </div>
+                                <div class="form-group">
+                                    <label>Monto a Cobrar ($) *</label>
+                                    <input type="number" step="0.01" id="cob-ind-monto" required>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Fecha de Cobro *</label>
+                                    <input type="date" id="cob-ind-fecha" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Tipo de Cobro *</label>
+                                    <select id="cob-ind-tipo" required>
+                                        <option value="comun">Común / Anticipo</option>
+                                        <option value="anticipada">Cancelación Anticipada (Con quita)</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" style="display: flex; align-items: flex-end;">
+                                    <button type="submit" class="btn-primary" style="width: 100%; height: 42px;">Procesar Cobranza Individual</button>
+                                </div>
+                            </div>
+                            <div id="cob-ind-feedback" style="margin-top: 12px; font-size: 14px; font-weight: 500;"></div>
+                        </form>
+                    </div>
+
+                    <!-- Cobranza Masiva -->
+                    <div class="glass-panel" style="padding: 20px;">
+                        <h3 style="margin-bottom: 12px; font-family: var(--font-heading); font-size: 16px;">Cobranza Masiva por Lote</h3>
+                        <form id="form-cobranza-masiva" onsubmit="submitCobranzaMasiva(event)">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Tipo de Identificador *</label>
+                                    <select id="cob-mas-identificador" required>
+                                        <option value="CLIENTE_DNI">Documento del Cliente (DNI)</option>
+                                        <option value="CLIENTE_CUIL">CUIL del Cliente</option>
+                                        <option value="CREDITO_ID">ID del Crédito</option>
+                                        <option value="ID_EXTERNO">ID Externo</option>
+                                        <option value="PROVEEDOR_CUIT">CUIT del Socio/Proveedor (Con Recurso)</option>
+                                        <option value="CARTERA_ID">ID de Cartera</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Columna ID (Ej. A) *</label>
+                                    <input type="text" id="cob-mas-col-id" required value="A" maxlength="2">
+                                </div>
+                                <div class="form-group">
+                                    <label>Columna Monto (Ej. B) *</label>
+                                    <input type="text" id="cob-mas-col-monto" required value="B" maxlength="2">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Archivo Excel (.xlsx) *</label>
+                                    <input type="file" id="cob-mas-file" accept=".xlsx" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Fecha de Cobro</label>
+                                    <input type="date" id="cob-mas-fecha">
+                                </div>
+                                <div class="form-group">
+                                    <label>Tipo de Cobro *</label>
+                                    <select id="cob-mas-tipo" required>
+                                        <option value="comun">Común / Anticipo</option>
+                                        <option value="anticipada">Cancelación Anticipada (Con quita)</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-actions" style="margin-top: 16px;">
+                                <button type="submit" class="btn-primary" style="width: 100%; font-size: 16px; padding: 14px;">Procesar Lote Masivo</button>
+                            </div>
+                            <div id="cob-mas-feedback" style="margin-top: 12px; font-size: 14px; font-weight: 500;"></div>
+                        </form>
+                    </div>
+
                 </div>
             </section>
 

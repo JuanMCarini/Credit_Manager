@@ -1388,7 +1388,7 @@ async function loadCobranzasTable() {
                 </div>
             </th>`;
         });
-        theadHtml += "</tr>";
+        theadHtml += "<th>Acciones</th></tr>";
         thead.innerHTML = theadHtml;
 
         let tbodyHtml = "";
@@ -1407,7 +1407,11 @@ async function loadCobranzasTable() {
                     rowHtml += `<td>${val !== null ? val : '-'}</td>`;
                 }
             });
-            rowHtml += "</tr>";
+            rowHtml += `
+                <td style="white-space: nowrap;">
+                    <button class="btn-secondary" style="padding: 4px 8px; font-size: 11px; color: var(--error); border-color: var(--error);" onclick="deleteCobranza('${row.ID}')">🗑️ Borrar</button>
+                </td>
+            </tr>`;
             tbodyHtml += rowHtml;
         });
         tbody.innerHTML = tbodyHtml;
@@ -1417,6 +1421,29 @@ async function loadCobranzasTable() {
         console.error("loadCobranzasTable failed:", e);
     }
 }
+
+window.deleteCobranza = async function(cobranzaId) {
+    if (!confirm("¿Está seguro que desea eliminar esta cobranza individual? Esta acción no se puede deshacer y ajustará el estado de la cuota correspondiente.")) {
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_URL}/api/v1/cobranzas/${cobranzaId}`, {
+            method: 'DELETE'
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+            alert("✅ " + data.message);
+            loadCobranzasTable(); // Recargar la tabla
+        } else {
+            alert(`Error: ${data.detail}`);
+        }
+    } catch (error) {
+        alert(`Ocurrió un error de red al intentar eliminar la cobranza: ${error.message}`);
+    }
+};
 
 // -------------------------------------------------------------
 // Procesos Logic
@@ -1915,3 +1942,104 @@ async function submitAltaCredito(e) {
         btn.innerText = "Originación de Crédito";
     }
 }
+
+// -------------------------------------------------------------
+// Procesamiento de Cobranzas Logic
+// -------------------------------------------------------------
+window.submitCobranzaIndividual = async function(e) {
+    e.preventDefault();
+    const btn = e.target.querySelector('button[type="submit"]');
+    const feedback = document.getElementById('cob-ind-feedback');
+    btn.disabled = true;
+    btn.innerText = "Procesando...";
+    feedback.innerText = "";
+    feedback.style.color = "inherit";
+
+    const payload = {
+        identificador: document.getElementById('cob-ind-identificador').value,
+        id_val: document.getElementById('cob-ind-valor').value,
+        monto: parseFloat(document.getElementById('cob-ind-monto').value),
+        fecha_pago: document.getElementById('cob-ind-fecha').value || null,
+        anticipada: document.getElementById('cob-ind-tipo').value === 'anticipada'
+    };
+
+    try {
+        const res = await fetch(`${API_URL}/api/v1/cobranzas/individual`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+            feedback.innerText = "✅ " + data.message;
+            feedback.style.color = "var(--accent-secondary)";
+            e.target.reset();
+            // Refrescar tablas en background
+            loadCobranzasTable();
+            loadProcesosTable();
+        } else {
+            feedback.innerText = `❌ Error: ${data.detail}`;
+            feedback.style.color = "var(--error)";
+        }
+    } catch (err) {
+        feedback.innerText = `❌ Error de red: ${err.message}`;
+        feedback.style.color = "var(--error)";
+    } finally {
+        btn.disabled = false;
+        btn.innerText = "Procesar Cobranza Individual";
+    }
+};
+
+window.submitCobranzaMasiva = async function(e) {
+    e.preventDefault();
+    const btn = e.target.querySelector('button[type="submit"]');
+    const feedback = document.getElementById('cob-mas-feedback');
+    btn.disabled = true;
+    btn.innerText = "Subiendo y Procesando...";
+    feedback.innerText = "";
+    feedback.style.color = "inherit";
+
+    const formData = new FormData();
+    formData.append('identificador', document.getElementById('cob-mas-identificador').value);
+    formData.append('id_column', document.getElementById('cob-mas-col-id').value);
+    formData.append('amount_column', document.getElementById('cob-mas-col-monto').value);
+    
+    const fecha = document.getElementById('cob-mas-fecha').value;
+    if (fecha) {
+        formData.append('fecha_pago', fecha);
+    }
+    
+    formData.append('anticipada', document.getElementById('cob-mas-tipo').value === 'anticipada');
+    
+    const fileInput = document.getElementById('cob-mas-file');
+    if (fileInput.files.length > 0) {
+        formData.append('file', fileInput.files[0]);
+    }
+
+    try {
+        const res = await fetch(`${API_URL}/api/v1/cobranzas/masiva`, {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+            feedback.innerText = "✅ " + data.message;
+            feedback.style.color = "var(--accent-secondary)";
+            e.target.reset();
+            // Refrescar tablas en background
+            loadCobranzasTable();
+            loadProcesosTable();
+        } else {
+            feedback.innerText = `❌ Error: ${data.detail}`;
+            feedback.style.color = "var(--error)";
+        }
+    } catch (err) {
+        feedback.innerText = `❌ Error de red: ${err.message}`;
+        feedback.style.color = "var(--error)";
+    } finally {
+        btn.disabled = false;
+        btn.innerText = "Procesar Lote Masivo";
+    }
+};

@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 from pydantic import BaseModel, Field
-from fastapi import FastAPI, HTTPException, Query, Depends
+from fastapi import FastAPI, HTTPException, Query, Depends, UploadFile, File, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
@@ -22,6 +22,7 @@ from src.database import get_db, Cliente, SexoEnum, EstadoClienteEnum, Provincia
 
 from src.logic.origination import LoanOriginator
 from src.logic.amortization import AmortizationEngine
+from src.logic.collections import CollectionManager
 from src.reports.balances import saldos
 
 # -------------------------------------------------------------------
@@ -583,6 +584,70 @@ def delete_credito(credito_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Error eliminando el crédito: {str(e)}")
 
 # -------------------------------------------------------------------
+# Cobranzas Endpoints
+# -------------------------------------------------------------------
+
+class CobranzaIndividual(BaseModel):
+    identificador: str
+    id_val: str
+    monto: float
+    fecha_pago: Optional[date] = None
+    anticipada: bool = False
+
+@app.post("/api/v1/cobranzas/individual", tags=["Cobranzas"])
+def procesar_cobranza_individual(
+    datos: CobranzaIndividual,
+    db: Session = Depends(get_db)
+):
+    manager = CollectionManager(db)
+    try:
+        fecha_pago_dt = datetime.combine(datos.fecha_pago, datetime.min.time()) if datos.fecha_pago else datetime.today()
+        if datos.anticipada:
+            df = manager.process_early_cancellation(
+                identificador=datos.identificador,
+                id_val=datos.id_val,
+                amount=datos.monto,
+                payment_date=fecha_pago_dt
+            )
+        else:
+            df = manager.process_standard_payment(
+                identificador=datos.identificador,
+                id_val=datos.id_val,
+                amount=datos.monto,
+                payment_date=fecha_pago_dt
+            )
+        return {"status": "success", "message": "Cobranza individual procesada exitosamente."}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/v1/cobranzas/masiva", tags=["Cobranzas"])
+async def procesar_cobranza_masiva(
+    identificador: str = Form(...),
+    id_column: str = Form("A"),
+    amount_column: str = Form("B"),
+    fecha_pago: Optional[date] = Form(None),
+    anticipada: bool = Form(False),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    manager = CollectionManager(db)
+    try:
+        fecha_pago_dt = datetime.combine(fecha_pago, datetime.min.time()) if fecha_pago else datetime.today()
+        file_bytes = await file.read()
+        
+        df = manager.process_massive_collection(
+            identificador=identificador,
+            id_column=id_column,
+            amount_column=amount_column,
+            payment_date=fecha_pago_dt,
+            early=anticipada,
+            file_bytes=file_bytes
+        )
+        return {"status": "success", "message": "Cobranza masiva procesada exitosamente."}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+# -------------------------------------------------------------------
 # Tablas Auxiliares
 # -------------------------------------------------------------------
 
@@ -871,7 +936,19 @@ def delete_proceso(proceso_id: int, db: Session = Depends(get_db)):
         )
         
     try:
+        from src.database.models.creditos import TipoCredito
+        from src.database.models.cobranzas import TipoCobranzaEnum
+        
+        penalty_credits = []
+        for c in proceso.cobranzas:
+            if c.tipo_cobranza == TipoCobranzaEnum.PENALTY:
+                if c.cuota and c.cuota.credito and c.cuota.credito.tipo_credito == TipoCredito.PENALTY:
+                    penalty_credits.append(c.cuota.credito)
+                    
         db.delete(proceso)
+        for pc in penalty_credits:
+            db.delete(pc)
+            
         db.commit()
         return {"status": "success", "message": "Proceso y sus cobranzas eliminados exitosamente."}
     except Exception as e:
@@ -906,6 +983,28 @@ def get_cobranzas(db: Session = Depends(get_db)):
             "Total": float(c.capital + c.interes + c.iva)
         })
     return result
+
+@app.delete("/api/v1/cobranzas/{cobranza_id}", tags=["Cobranzas"])
+def delete_cobranza(cobranza_id: int, db: Session = Depends(get_db)):
+    from src.database.models.cobranzas import Cobranza
+    cobranza = db.query(Cobranza).filter(Cobranza.id == cobranza_id).first()
+    if not cobranza:
+        raise HTTPException(status_code=404, detail="Cobranza no encontrada")
+        
+    # Check if the cobranza has liquidaciones associated
+    if len(cobranza.liquidaciones) > 0:
+        raise HTTPException(
+            status_code=400, 
+            detail="No se puede eliminar la cobranza porque tiene liquidaciones asociadas."
+        )
+        
+    try:
+        db.delete(cobranza)
+        db.commit()
+        return {"status": "success", "message": "Cobranza eliminada exitosamente."}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error eliminando la cobranza: {str(e)}")
 
 # -------------------------------------------------------------------
 # Frontend

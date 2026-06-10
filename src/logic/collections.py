@@ -713,13 +713,19 @@ class CollectionManager:
         payment_date: str | datetime | None = None,
         path: str | Path | None = None,
         early: bool = False,
+        file_bytes: bytes | None = None,
     ) -> pd.DataFrame:
 
         if payment_date is None:
             payment_date = datetime.today()
 
-        if path is None:
-            path = select_file()
+        if file_bytes is not None:
+            import io
+            data_source = io.BytesIO(file_bytes)
+        elif path is not None:
+            data_source = path
+        else:
+            data_source = select_file()
 
         match identificador:
             case "CREDITO_ID":
@@ -741,7 +747,7 @@ class CollectionManager:
 
         # By passing a single comma-separated string, Pandas treats them as Excel column letters (A, B, N, etc)
         # instead of literal column header names.
-        df = pd.read_excel(path, usecols=f"{id_column},{amount_column}")
+        df = pd.read_excel(data_source, usecols=f"{id_column},{amount_column}")
         header = [ident, "monto"]
         df.columns = header
         df["monto"] = df["monto"].astype(float)
