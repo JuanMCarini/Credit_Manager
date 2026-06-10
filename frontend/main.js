@@ -101,6 +101,7 @@ function renderSimulationTable(cuotas) {
         `;
         tbody.appendChild(tr);
     });
+    updateTableTotals('table-sim');
 }
 
 // --- Balances Module ---
@@ -259,6 +260,7 @@ function renderBalancesTable(data, activeGroups, reportDate) {
             tbody.appendChild(tr);
         });
     }
+    updateTableTotals('table-bal');
 }
 
 // -------------------------------------------------------------------
@@ -537,6 +539,263 @@ function runAllExcelFilters(tableId, headerId) {
             icon.style.color = "inherit";
         }
     });
+
+    updateTableTotals(tableId);
+}
+
+function updateTableTotals(tableId) {
+    const table = document.getElementById(tableId);
+    if (!table) return;
+    const thead = table.querySelector('thead');
+    const tbody = table.querySelector('tbody');
+    let tfoot = table.querySelector('tfoot');
+
+    if (!thead || !tbody) return;
+
+    const trHead = thead.querySelector('tr');
+    if (!trHead) return;
+
+    const headers = Array.from(trHead.querySelectorAll('th')).map(th => {
+        const span = th.querySelector('span');
+        return span ? span.textContent.trim().toLowerCase() : th.textContent.trim().toLowerCase();
+    });
+
+    const monetaryKeywords = ['capital', 'interés', 'interes', 'iva', 'total', 'saldo', 'monto', 'pagado'];
+    const monetaryCols = [];
+    headers.forEach((text, index) => {
+        if (monetaryKeywords.some(kw => text.includes(kw)) && !text.includes('fecha') && !text.includes('nro') && !text.includes('id') && !text.includes('cuotas') && !text.includes('tna')) {
+            monetaryCols.push(index);
+        }
+    });
+
+    if (monetaryCols.length === 0) {
+        if (tfoot) tfoot.style.display = 'none';
+        return;
+    }
+
+    const totals = new Array(headers.length).fill(0);
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    let visibleRows = 0;
+
+    const parseCurrency = (str) => {
+        if (!str || str === '-') return 0;
+        let clean = str.replace(/[$%\s]/g, '').replace(/\./g, '').replace(',', '.');
+        const num = parseFloat(clean);
+        return isNaN(num) ? 0 : num;
+    };
+
+    const isCtaCteTable = tableId === 'table-cliente-cta-cte' || tableId === 'table-cuotas';
+    let cancelMode = false;
+    let cancelDateStr = '';
+
+    if (tableId === 'table-cliente-cta-cte') {
+        const toggle = document.getElementById('toggle-cancel-cliente');
+        const dateInp = document.getElementById('date-cancel-cliente');
+        if (toggle && toggle.checked) {
+            cancelMode = true;
+            cancelDateStr = dateInp.value;
+        }
+    } else if (tableId === 'table-cuotas') {
+        const toggle = document.getElementById('toggle-cancel-credito');
+        const dateInp = document.getElementById('date-cancel-credito');
+        if (toggle && toggle.checked) {
+            cancelMode = true;
+            cancelDateStr = dateInp.value;
+        }
+    }
+
+    // Set to start of the chosen day (or current date if not selected) to accurately compare
+    let cancelDate = new Date();
+    if (cancelDateStr) {
+        const parts = cancelDateStr.split('-');
+        if (parts.length === 3) {
+            cancelDate = new Date(parts[0], parts[1] - 1, parts[2]);
+        }
+    }
+    cancelDate.setHours(0, 0, 0, 0);
+
+    const hideAcciones = isCtaCteTable && cancelMode;
+    const headerThs = table.querySelectorAll('thead th');
+    if (headerThs.length > 0) {
+        headerThs[headerThs.length - 1].style.display = hideAcciones ? 'none' : '';
+    }
+
+    rows.forEach(tr => {
+        if (tr.style.display !== 'none' && !tr.classList.contains('empty-state')) {
+            const tds = tr.querySelectorAll('td');
+            if (isCtaCteTable && tds.length > 0) {
+                tds[tds.length - 1].style.display = hideAcciones ? 'none' : '';
+            }
+
+            const isSubRow = tr.classList.contains('sub-row');
+
+            if (isSubRow && !isCtaCteTable) return;
+            
+            if (isSubRow) {
+                if (cancelMode) {
+                    const dateAttr = tr.getAttribute('data-date');
+                    if (dateAttr) {
+                        let parts = dateAttr.split('/');
+                        if (parts.length !== 3) parts = dateAttr.split('-');
+                        if (parts.length === 3) {
+                            let year, month, day;
+                            if (parts[0].length === 4) {
+                                year = parts[0]; month = parts[1]; day = parts[2];
+                            } else {
+                                day = parts[0]; month = parts[1]; year = parts[2];
+                            }
+                            const cobDate = new Date(year, month - 1, day);
+                            cobDate.setHours(0, 0, 0, 0);
+                            
+                            if (cobDate > cancelDate) {
+                                tr.style.opacity = '0.2';
+                                tr.style.textDecoration = 'line-through';
+                                return; // Ignore this collection entirely
+                            } else {
+                                tr.style.opacity = '1';
+                                tr.style.textDecoration = 'none';
+                            }
+                        }
+                    }
+                } else {
+                    tr.style.opacity = '1';
+                    tr.style.textDecoration = 'none';
+                }
+            }
+            
+            if (!isSubRow) visibleRows++;
+
+            const multiplier = (isSubRow && isCtaCteTable) ? -1 : 1;
+
+            let currentVisualCol = 0;
+
+            let isUnexpired = false;
+
+            if (cancelMode && !isSubRow) {
+                const vencColIndex = tableId === 'table-cliente-cta-cte' ? 2 : 1;
+                const capitalColIndex = tableId === 'table-cliente-cta-cte' ? 3 : 2;
+                const saldoPendCol = tableId === 'table-cliente-cta-cte' ? 8 : 7;
+
+                if (tds[vencColIndex] && tds[capitalColIndex] && tds[saldoPendCol]) {
+                    const vencStr = tds[vencColIndex].textContent.trim();
+                    let parts = vencStr.split('/');
+                    if (parts.length !== 3) parts = vencStr.split('-');
+
+                    if (parts.length === 3) {
+                        // Support both YYYY-MM-DD and DD/MM/YYYY
+                        let year, month, day;
+                        if (parts[0].length === 4) {
+                            year = parts[0]; month = parts[1]; day = parts[2];
+                        } else {
+                            day = parts[0]; month = parts[1]; year = parts[2];
+                        }
+
+                        const vencDate = new Date(year, month - 1, day);
+                        vencDate.setHours(0, 0, 0, 0);
+
+                        const saldoCell = tds[saldoPendCol];
+
+                        if (!saldoCell.hasAttribute('data-original')) {
+                            saldoCell.setAttribute('data-original', saldoCell.innerHTML);
+                        }
+
+                        if (vencDate > cancelDate) {
+                            isUnexpired = true;
+                            const capText = tds[capitalColIndex].textContent;
+                            saldoCell.innerHTML = `<span style="opacity:0.7;">${capText}<br><small>(Solo Cap)</small></span>`;
+                            saldoCell.setAttribute('data-val', capText);
+                        } else {
+                            let ignoredCobranzasTotal = 0;
+                            let nextTr = tr.nextElementSibling;
+                            while (nextTr && nextTr.classList.contains('sub-row')) {
+                                const dateAttr = nextTr.getAttribute('data-date');
+                                if (dateAttr) {
+                                    let subParts = dateAttr.split('/');
+                                    if (subParts.length !== 3) subParts = dateAttr.split('-');
+                                    if (subParts.length === 3) {
+                                        let y, m, d;
+                                        if (subParts[0].length === 4) {
+                                            y = subParts[0]; m = subParts[1]; d = subParts[2];
+                                        } else {
+                                            d = subParts[0]; m = subParts[1]; y = subParts[2];
+                                        }
+                                        const cobDate = new Date(y, m - 1, d);
+                                        cobDate.setHours(0, 0, 0, 0);
+                                        
+                                        if (cobDate > cancelDate) {
+                                            const subTds = nextTr.querySelectorAll('td');
+                                            // Index 5 is the Total Cobrado column in sub-rows for both tables
+                                            if (subTds[5]) {
+                                                ignoredCobranzasTotal += parseCurrency(subTds[5].textContent);
+                                            }
+                                        }
+                                    }
+                                }
+                                nextTr = nextTr.nextElementSibling;
+                            }
+
+                            if (ignoredCobranzasTotal > 0) {
+                                const originalText = saldoCell.getAttribute('data-original');
+                                const tempDiv = document.createElement('div');
+                                tempDiv.innerHTML = originalText;
+                                const baseSaldo = parseCurrency(tempDiv.textContent);
+                                const finalSaldo = baseSaldo + ignoredCobranzasTotal;
+                                saldoCell.innerHTML = `${formatCurrency(finalSaldo)}<br><small style="color:var(--warning);">(+${formatCurrency(ignoredCobranzasTotal)})</small>`;
+                                saldoCell.setAttribute('data-val', formatCurrency(finalSaldo));
+                            } else {
+                                saldoCell.innerHTML = saldoCell.getAttribute('data-original');
+                                saldoCell.removeAttribute('data-val');
+                            }
+                        }
+                    }
+                }
+            } else if (!cancelMode && !isSubRow && isCtaCteTable) {
+                const saldoPendCol = tableId === 'table-cliente-cta-cte' ? 8 : 7;
+                if (tds[saldoPendCol] && tds[saldoPendCol].hasAttribute('data-original')) {
+                    tds[saldoPendCol].innerHTML = tds[saldoPendCol].getAttribute('data-original');
+                    tds[saldoPendCol].removeAttribute('data-val');
+                }
+            }
+
+            tds.forEach(td => {
+                const colspan = parseInt(td.getAttribute('colspan') || '1', 10);
+
+                if (colspan === 1 && monetaryCols.includes(currentVisualCol)) {
+                    const txt = td.hasAttribute('data-val') ? td.getAttribute('data-val') : td.textContent;
+                    totals[currentVisualCol] += parseCurrency(txt) * multiplier;
+                }
+
+                currentVisualCol += colspan;
+            });
+        }
+    });
+
+    if (visibleRows === 0) {
+        if (tfoot) tfoot.style.display = 'none';
+        return;
+    }
+
+    if (!tfoot) {
+        tfoot = document.createElement('tfoot');
+        table.appendChild(tfoot);
+    }
+    tfoot.style.display = '';
+
+    let tfootHtml = '<tr>';
+    headers.forEach((text, index) => {
+        const isLastCol = index === headers.length - 1;
+        const colStyle = (isLastCol && isCtaCteTable && cancelMode) ? 'display: none;' : '';
+        
+        if (monetaryCols.includes(index)) {
+            tfootHtml += `<th style="font-weight: bold; background: var(--bg-panel); color: var(--accent-primary); border-top: 2px solid var(--border-color); text-align: left; padding: 12px 16px; ${colStyle}">${formatCurrency(totals[index])}</th>`;
+        } else if (index === 0) {
+            tfootHtml += `<th style="font-weight: bold; background: var(--bg-panel); border-top: 2px solid var(--border-color); text-align: right; padding: 12px 16px; ${colStyle}">TOTALES:</th>`;
+        } else {
+            tfootHtml += `<th style="background: var(--bg-panel); border-top: 2px solid var(--border-color); padding: 12px 16px; ${colStyle}"></th>`;
+        }
+    });
+    tfootHtml += '</tr>';
+    tfoot.innerHTML = tfootHtml;
 }
 
 // Cerrar clickeando afuera
@@ -622,7 +881,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         const targetBtn = document.querySelector(`.nav-item[href="${hashStr}"]`);
-        
+
         if (queryParams.has('cliente') && hashStr === '#listado-creditos') {
             setTimeout(() => {
                 if (targetBtn) targetBtn.classList.add('active');
@@ -915,6 +1174,8 @@ async function loadAuxTable() {
             </tr>`;
         }).join('');
 
+        updateTableTotals('aux-table');
+
     } catch (e) {
         tbody.innerHTML = `<tr><td colspan="100%" class="empty-state" style="color:var(--error);">${e.message}</td></tr>`;
     }
@@ -1121,7 +1382,7 @@ async function viewClientCuentaCorriente(cuil) {
 
             if (c.detalle_cobranzas && c.detalle_cobranzas.length > 0) {
                 c.detalle_cobranzas.forEach(cob => {
-                    html += `<tr class="sub-row" style="background: rgba(255, 255, 255, 0.02); font-size: 12px; color: var(--text-secondary);">
+                    html += `<tr class="sub-row" data-date="${cob.fecha}" style="background: rgba(255, 255, 255, 0.02); font-size: 12px; color: var(--text-secondary);">
                         <td colspan="3" style="text-align: right; border-left: 2px solid var(--accent-secondary);">
                             ↳ Cobranza (${cob.tipo}) el ${cob.fecha}
                         </td>
@@ -1143,6 +1404,7 @@ async function viewClientCuentaCorriente(cuil) {
         });
 
         tbody.innerHTML = html;
+        updateTableTotals('table-cliente-cta-cte');
     } catch (error) {
         tbody.innerHTML = `<tr><td colspan="100%" style="text-align:center; color: var(--error);">${error.message}</td></tr>`;
     }
@@ -1209,6 +1471,7 @@ async function loadClientesTable() {
             tbodyHtml += rowHtml;
         });
         tbody.innerHTML = tbodyHtml;
+        updateTableTotals('table-clientes');
 
     } catch (e) {
         tbody.innerHTML = `<tr><td colspan="100%" style="text-align:center; color: var(--error);">Error al cargar clientes: ${e.message}</td></tr>`;
@@ -1310,7 +1573,7 @@ async function viewCreditoCuotas(id) {
 
             if (c.detalle_cobranzas && c.detalle_cobranzas.length > 0) {
                 c.detalle_cobranzas.forEach(cob => {
-                    html += `<tr class="sub-row" style="background: rgba(255, 255, 255, 0.02); font-size: 12px; color: var(--text-secondary);">
+                    html += `<tr class="sub-row" data-date="${cob.fecha}" style="background: rgba(255, 255, 255, 0.02); font-size: 12px; color: var(--text-secondary);">
                         <td colspan="2" style="text-align: right; border-left: 2px solid var(--accent-secondary);">
                             ↳ Cobranza (${cob.tipo}) el ${cob.fecha}
                         </td>
@@ -1332,6 +1595,7 @@ async function viewCreditoCuotas(id) {
         });
 
         tbody.innerHTML = html;
+        updateTableTotals('table-cuotas');
     } catch (error) {
         tbody.innerHTML = `<tr><td colspan="100%" style="text-align:center; color: var(--error);">${error.message}</td></tr>`;
     }
@@ -1398,6 +1662,7 @@ async function loadCreditosTable() {
             tbodyHtml += rowHtml;
         });
         tbody.innerHTML = tbodyHtml;
+        updateTableTotals('table-creditos');
 
     } catch (e) {
         tbody.innerHTML = `<tr><td colspan="100%" style="text-align:center; color: var(--error);">Error al cargar créditos: ${e.message}</td></tr>`;
@@ -1491,6 +1756,7 @@ async function loadCobranzasTable() {
             tbodyHtml += rowHtml;
         });
         tbody.innerHTML = tbodyHtml;
+        updateTableTotals('table-cobranzas');
 
     } catch (e) {
         tbody.innerHTML = `<tr><td colspan="100%" style="text-align:left; color: var(--error);"><pre>Error: ${e.message}\n${e.stack}</pre></td></tr>`;
@@ -1498,7 +1764,7 @@ async function loadCobranzasTable() {
     }
 }
 
-window.deleteCobranza = async function(cobranzaId) {
+window.deleteCobranza = async function (cobranzaId) {
     if (!confirm("¿Está seguro que desea eliminar esta cobranza individual? Esta acción no se puede deshacer y ajustará el estado de la cuota correspondiente.")) {
         return;
     }
@@ -1513,7 +1779,7 @@ window.deleteCobranza = async function(cobranzaId) {
         if (res.ok) {
             alert("✅ " + data.message);
             loadCobranzasTable(); // Recargar la tabla
-            
+
             if (document.getElementById('tab-cliente-cta-cte').classList.contains('active') && window.currentCtaCteCuil) {
                 viewClientCuentaCorriente(window.currentCtaCteCuil);
             } else if (document.getElementById('tab-credito-cuotas').classList.contains('active') && window.currentCreditoId) {
@@ -1582,6 +1848,7 @@ async function loadProcesosTable() {
             rowHtml += `
                 <td style="white-space: nowrap;">
                     <button class="btn-secondary" style="padding: 4px 8px; font-size: 11px; margin-right: 8px;" onclick="viewCobranzasProceso('${row.ID}')">🔍 Ver Cobranzas</button>
+                    <button class="btn-secondary" style="padding: 4px 8px; font-size: 11px; margin-right: 8px;" onclick="openProcesoModal('${row.ID}', '${row.Estado}', '${row['Descripción']}')">✏️ Editar</button>
                     <button class="btn-secondary" style="padding: 4px 8px; font-size: 11px; color: var(--error); border-color: var(--error);" onclick="deleteProceso('${row.ID}')">🗑️ Borrar</button>
                 </td>
             </tr>`;
@@ -1615,6 +1882,38 @@ async function deleteProceso(procesoId) {
         }
     } catch (error) {
         alert(`Ocurrió un error de red al intentar eliminar el proceso: ${error.message}`);
+    }
+}
+
+window.openProcesoModal = function (id, estado, descripcion) {
+    document.getElementById('proceso-id-input').value = id;
+    document.getElementById('proceso-estado-select').value = estado;
+    document.getElementById('proceso-descripcion-input').value = descripcion !== '-' ? descripcion : '';
+    document.getElementById('proceso-modal').style.display = 'flex';
+};
+
+window.saveProceso = async function (event) {
+    event.preventDefault();
+    const id = document.getElementById('proceso-id-input').value;
+    const estado = document.getElementById('proceso-estado-select').value;
+    const descripcion = document.getElementById('proceso-descripcion-input').value || null;
+
+    try {
+        const res = await fetch(`${API_URL}/api/v1/procesos/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ estado, descripcion })
+        });
+        const data = await res.json();
+
+        if (res.ok) {
+            document.getElementById('proceso-modal').style.display = 'none';
+            loadProcesosTable();
+        } else {
+            alert(`Error: ${data.detail}`);
+        }
+    } catch (e) {
+        alert("Error de red al actualizar el proceso.");
     }
 }
 
@@ -2028,7 +2327,7 @@ async function submitAltaCredito(e) {
 // -------------------------------------------------------------
 // Procesamiento de Cobranzas Logic
 // -------------------------------------------------------------
-window.submitCobranzaIndividual = async function(e) {
+window.submitCobranzaIndividual = async function (e) {
     e.preventDefault();
     const btn = e.target.querySelector('button[type="submit"]');
     const feedback = document.getElementById('cob-ind-feedback');
@@ -2073,7 +2372,7 @@ window.submitCobranzaIndividual = async function(e) {
     }
 };
 
-window.submitCobranzaMasiva = async function(e) {
+window.submitCobranzaMasiva = async function (e) {
     e.preventDefault();
     const btn = e.target.querySelector('button[type="submit"]');
     const feedback = document.getElementById('cob-mas-feedback');
@@ -2086,14 +2385,14 @@ window.submitCobranzaMasiva = async function(e) {
     formData.append('identificador', document.getElementById('cob-mas-identificador').value);
     formData.append('id_column', document.getElementById('cob-mas-col-id').value);
     formData.append('amount_column', document.getElementById('cob-mas-col-monto').value);
-    
+
     const fecha = document.getElementById('cob-mas-fecha').value;
     if (fecha) {
         formData.append('fecha_pago', fecha);
     }
-    
+
     formData.append('anticipada', document.getElementById('cob-mas-tipo').value === 'anticipada');
-    
+
     const fileInput = document.getElementById('cob-mas-file');
     if (fileInput.files.length > 0) {
         formData.append('file', fileInput.files[0]);
@@ -2126,21 +2425,21 @@ window.submitCobranzaMasiva = async function(e) {
     }
 };
 
-window.openCobrarModal = function(credito_id, saldo_pendiente, tipo) {
+window.openCobrarModal = function (credito_id, saldo_pendiente, tipo) {
     document.getElementById('cobrar-cuota-credito-id').value = credito_id;
     document.getElementById('cobrar-cuota-monto').value = saldo_pendiente;
     document.getElementById('cobrar-cuota-tipo').value = tipo;
-    
+
     document.getElementById('cobrar-cuota-fecha').valueAsDate = new Date();
-    
+
     const tipoLabel = tipo === 'anticipada' ? 'Cancelación Anticipada' : 'Cobranza Común';
     document.getElementById('cobrar-cuota-title').textContent = `Cobrar Cuota (${tipoLabel})`;
-    
+
     document.getElementById('cobrar-cuota-feedback').textContent = '';
     document.getElementById('cobrar-cuota-modal').style.display = 'flex';
 };
 
-window.submitCobrarCuotaRapida = async function(e) {
+window.submitCobrarCuotaRapida = async function (e) {
     e.preventDefault();
     const btn = document.getElementById('btn-cobrar-cuota');
     const feedback = document.getElementById('cobrar-cuota-feedback');
@@ -2174,7 +2473,7 @@ window.submitCobrarCuotaRapida = async function(e) {
             document.getElementById('cobrar-cuota-modal').style.display = 'none';
             // Mostrar confirmacion nativa en lugar de feedback en el modal ya que se cierra
             alert("✅ Cobranza registrada exitosamente");
-            
+
             // Recargar tablas globales en background
             loadCobranzasTable();
             loadProcesosTable();
@@ -2200,11 +2499,11 @@ window.submitCobrarCuotaRapida = async function(e) {
     }
 };
 
-window.openModificarCobranzaModal = function(cobranza_id, credito_id, monto, fechaStr, tipoStr) {
+window.openModificarCobranzaModal = function (cobranza_id, credito_id, monto, fechaStr, tipoStr) {
     document.getElementById('mod-cobranza-id').value = cobranza_id;
     document.getElementById('mod-cobranza-credito-id').value = credito_id;
     document.getElementById('mod-cobranza-monto').value = monto;
-    
+
     // fechaStr comes in "DD/MM/YYYY" format
     if (fechaStr && fechaStr !== '-') {
         const parts = fechaStr.split('/');
@@ -2212,22 +2511,22 @@ window.openModificarCobranzaModal = function(cobranza_id, credito_id, monto, fec
             document.getElementById('mod-cobranza-fecha').value = `${parts[2]}-${parts[1]}-${parts[0]}`;
         }
     }
-    
+
     // The type is either 'COMUN', 'CA' (Cancelación Anticipada), 'BCA' or 'PENALTY'.
     document.getElementById('mod-cobranza-tipo').value = (tipoStr === 'CA' || tipoStr === 'Cancelación Anticipada') ? 'anticipada' : 'comun';
-    
+
     document.getElementById('mod-cobranza-feedback').textContent = '';
     document.getElementById('modificar-cobranza-modal').style.display = 'flex';
 };
 
-window.submitModificarCobranza = async function(e) {
+window.submitModificarCobranza = async function (e) {
     e.preventDefault();
     const btn = document.getElementById('btn-mod-cobranza');
     const feedback = document.getElementById('mod-cobranza-feedback');
     btn.disabled = true;
     btn.innerText = "Procesando...";
     feedback.innerText = "";
-    
+
     const cobranza_id = document.getElementById('mod-cobranza-id').value;
     const credito_id = document.getElementById('mod-cobranza-credito-id').value;
     const monto = parseFloat(document.getElementById('mod-cobranza-monto').value);
@@ -2253,7 +2552,7 @@ window.submitModificarCobranza = async function(e) {
         if (res.ok) {
             document.getElementById('modificar-cobranza-modal').style.display = 'none';
             alert("✅ Cobranza modificada exitosamente");
-            
+
             loadCobranzasTable();
             loadProcesosTable();
 
@@ -2274,4 +2573,12 @@ window.submitModificarCobranza = async function(e) {
         btn.innerText = "Confirmar Modificación";
     }
 };
+
+document.addEventListener('DOMContentLoaded', () => {
+    const today = new Date().toISOString().split('T')[0];
+    const dateCancelCliente = document.getElementById('date-cancel-cliente');
+    const dateCancelCredito = document.getElementById('date-cancel-credito');
+    if (dateCancelCliente) dateCancelCliente.value = today;
+    if (dateCancelCredito) dateCancelCredito.value = today;
+});
 

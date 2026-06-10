@@ -258,7 +258,7 @@ class CollectionManager:
         return df
 
     def _persist_collections(
-        self, df_cobr: pd.DataFrame, payment_date: datetime, proceso_id: int | None = None, commit: bool = True
+        self, df_cobr: pd.DataFrame, payment_date: datetime, proceso_id: int | None = None, commit: bool = True, descripcion: str | None = None
     ) -> pd.DataFrame:
         """
         =============================================================================
@@ -281,6 +281,7 @@ class CollectionManager:
             proceso = Proceso(
                 tipo=TipoProcesoEnum.INDIVIDUAL.value,
                 estado=EstadoProcesoEnum.COMPLETADO.value,
+                descripcion=descripcion
             )
             self.db.add(proceso)
             self.db.flush()
@@ -495,7 +496,7 @@ class CollectionManager:
         )
 
         # 7. Final delegated persistence
-        return self._persist_collections(df_cobr, payment_date, proceso_id=proceso_id, commit=commit)
+        return self._persist_collections(df_cobr, payment_date, proceso_id=proceso_id, commit=commit, descripcion=f"{identificador}: {id_val}")
 
     def process_early_cancellation(
         self,
@@ -590,7 +591,7 @@ class CollectionManager:
         )
 
         # 7. Final delegated persistence
-        return self._persist_collections(df_cobr, payment_date, proceso_id=proceso_id, commit=commit)
+        return self._persist_collections(df_cobr, payment_date, proceso_id=proceso_id, commit=commit, descripcion=f"{identificador}: {id_val}")
 
     def process_resource(
         self,
@@ -699,7 +700,7 @@ class CollectionManager:
 
             # 8. Final classification of collection type and delegation of persistence (which includes commit)
             df["tipo_cobranza"] = TipoCobranzaEnum.RECURSO.value
-            return self._persist_collections(df, payment_date, proceso_id=proceso_id)
+            return self._persist_collections(df, payment_date, proceso_id=proceso_id, descripcion=f"{identificador}: {id_val}")
 
         except Exception as e:
             self.db.rollback()
@@ -714,6 +715,7 @@ class CollectionManager:
         path: str | Path | None = None,
         early: bool = False,
         file_bytes: bytes | None = None,
+        filename: str | None = None,
     ) -> pd.DataFrame:
 
         if payment_date is None:
@@ -771,6 +773,7 @@ class CollectionManager:
             proceso_masivo = Proceso(
                 tipo=TipoProcesoEnum.MASIVO_CSV.value,
                 estado=EstadoProcesoEnum.PROCESANDO.value,
+                descripcion=filename or "Proceso Masivo"
             )
             self.db.add(proceso_masivo)
             self.db.flush()

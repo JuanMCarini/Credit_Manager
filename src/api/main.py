@@ -643,7 +643,8 @@ async def procesar_cobranza_masiva(
             amount_column=amount_column,
             payment_date=fecha_pago_dt,
             early=anticipada,
-            file_bytes=file_bytes
+            file_bytes=file_bytes,
+            filename=file.filename
         )
         return {"status": "success", "message": "Cobranza masiva procesada exitosamente."}
     except Exception as e:
@@ -918,9 +919,33 @@ def get_procesos(db: Session = Depends(get_db)):
             "ID": p.id,
             "Tipo": p.tipo.value if hasattr(p.tipo, 'value') else str(p.tipo),
             "Estado": p.estado.value if hasattr(p.estado, 'value') else str(p.estado),
+            "Descripción": p.descripcion or "-",
             "Fecha Ejecución": p.fecha_ejecucion.strftime("%Y-%m-%d %H:%M:%S") if p.fecha_ejecucion else "-"
         })
     return result
+
+class ProcesoUpdate(BaseModel):
+    estado: str
+    descripcion: Optional[str] = None
+
+@app.put("/api/v1/procesos/{proceso_id}", tags=["Cobranzas"])
+def update_proceso(proceso_id: int, data: ProcesoUpdate, db: Session = Depends(get_db)):
+    from src.database.models.cobranzas import Proceso, EstadoProcesoEnum
+    proceso = db.query(Proceso).filter(Proceso.id == proceso_id).first()
+    if not proceso:
+        raise HTTPException(status_code=404, detail="Proceso no encontrado")
+    
+    try:
+        nuevo_estado = EstadoProcesoEnum(data.estado.upper())
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Estado inválido.")
+        
+    proceso.estado = nuevo_estado
+    if data.descripcion is not None:
+        proceso.descripcion = data.descripcion
+        
+    db.commit()
+    return {"status": "success", "message": "Proceso actualizado"}
 
 @app.delete("/api/v1/procesos/{proceso_id}", tags=["Cobranzas"])
 def delete_proceso(proceso_id: int, db: Session = Depends(get_db)):

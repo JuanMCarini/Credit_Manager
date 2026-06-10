@@ -9,10 +9,10 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;800&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;700;800&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=18">
-    <script src="main.js?v=4" defer></script>
+    <link rel="stylesheet" href="style.css?v=2">
+    <script src="main.js?v=8" defer></script>
 </head>
 
 <body>
@@ -579,6 +579,36 @@
                 </div>
             </div>
 
+            <!-- Modal para Modificar Proceso -->
+            <div id="proceso-modal"
+                style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); z-index: 2000; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+                <div class="glass-panel"
+                    style="background: var(--bg-base); width: 400px; padding: 24px; border-radius: var(--radius-lg); position: relative;">
+                    <h3 style="margin-bottom: 20px;">Modificar Proceso</h3>
+                    <form id="proceso-form" onsubmit="saveProceso(event)">
+                        <input type="hidden" id="proceso-id-input">
+                        <div class="form-group">
+                            <label for="proceso-estado-select">Estado</label>
+                            <select id="proceso-estado-select" required>
+                                <option value="COMPLETADO">COMPLETADO</option>
+                                <option value="REVERTIDO">REVERTIDO</option>
+                                <option value="PROCESANDO">PROCESANDO</option>
+                                <option value="FALLIDO">FALLIDO</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="proceso-descripcion-input">Descripción</label>
+                            <input type="text" id="proceso-descripcion-input">
+                        </div>
+                        <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px;">
+                            <button type="button" class="btn-secondary"
+                                onclick="document.getElementById('proceso-modal').style.display='none'">Cancelar</button>
+                            <button type="submit" class="btn-primary" style="width: auto;">Guardar</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
             <!-- Tab para Cuenta Corriente de un Crédito -->
             <section id="tab-credito-cuotas" class="tab-content">
                 <header class="section-header" style="display: flex; justify-content: space-between; align-items: flex-end;">
@@ -589,6 +619,20 @@
                     <button type="button" class="btn-secondary" style="height: fit-content; width: fit-content; padding-left: 24px; padding-right: 24px; margin-bottom: 8px;"
                         onclick="switchTab('listado-creditos')">⬅ Volver al Listado</button>
                 </header>
+
+                <div style="display: flex; gap: 16px; margin-bottom: 16px; align-items: center; background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px;">
+                    <div style="display: flex; align-items: center; gap: 8px; font-weight: 500;">
+                        <label class="switch">
+                            <input type="checkbox" id="toggle-cancel-credito" onchange="updateTableTotals('table-cuotas')">
+                            <span class="slider"></span>
+                        </label>
+                        Modo Saldo de Cancelación
+                    </div>
+                    <label style="display: flex; align-items: center; gap: 8px; font-weight: 500;">
+                        Fecha de Corte:
+                        <input type="date" id="date-cancel-credito" onchange="updateTableTotals('table-cuotas')">
+                    </label>
+                </div>
 
                 <div class="glass-panel" style="overflow-x: auto; max-height: calc(100vh - 180px); overflow-y: auto;">
                     <table class="data-table" id="table-cuotas">
@@ -612,6 +656,20 @@
                     <button type="button" class="btn-secondary" style="height: fit-content; width: fit-content; padding-left: 24px; padding-right: 24px; margin-bottom: 8px;"
                         onclick="switchTab('listado-clientes')">⬅ Volver al Listado</button>
                 </header>
+
+                <div style="display: flex; gap: 16px; margin-bottom: 16px; align-items: center; background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px;">
+                    <div style="display: flex; align-items: center; gap: 8px; font-weight: 500;">
+                        <label class="switch">
+                            <input type="checkbox" id="toggle-cancel-cliente" onchange="updateTableTotals('table-cliente-cta-cte')">
+                            <span class="slider"></span>
+                        </label>
+                        Modo Saldo de Cancelación
+                    </div>
+                    <label style="display: flex; align-items: center; gap: 8px; font-weight: 500;">
+                        Fecha de Corte:
+                        <input type="date" id="date-cancel-cliente" onchange="updateTableTotals('table-cliente-cta-cte')">
+                    </label>
+                </div>
 
                 <div class="glass-panel" style="overflow-x: auto; max-height: calc(100vh - 180px); overflow-y: auto;">
                     <table class="data-table" id="table-cliente-cta-cte">

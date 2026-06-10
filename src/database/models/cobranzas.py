@@ -59,6 +59,8 @@ class Proceso(Base):
         default=EstadoProcesoEnum.COMPLETADO.value,
     )
     
+    descripcion = Column(String, nullable=True)
+    
     fecha_ejecucion = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     # Relación 1:N con Cobranza.
