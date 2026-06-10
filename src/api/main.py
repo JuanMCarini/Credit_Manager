@@ -378,6 +378,7 @@ def get_cliente_cuenta_corriente(cuil: str, db: Session = Depends(get_db)):
                 tot = round(cob.capital + cob.interes + cob.iva, 2)
                 total_cobrado += tot
                 detalle_cobranzas.append({
+                    "id": cob.id,
                     "fecha": cob.fecha.strftime("%d/%m/%Y"),
                     "tipo": cob.tipo_cobranza.value if hasattr(cob.tipo_cobranza, "value") else str(cob.tipo_cobranza),
                     "capital": round(cob.capital, 2),
@@ -503,6 +504,7 @@ def get_credito_cuotas(credito_id: int, db: Session = Depends(get_db)):
             tot = round(cob.capital + cob.interes + cob.iva, 2)
             total_cobrado += tot
             detalle_cobranzas.append({
+                "id": cob.id,
                 "fecha": cob.fecha.strftime("%d/%m/%Y"),
                 "tipo": cob.tipo_cobranza.value if hasattr(cob.tipo_cobranza, "value") else str(cob.tipo_cobranza),
                 "capital": round(cob.capital, 2),
@@ -998,13 +1000,81 @@ def delete_cobranza(cobranza_id: int, db: Session = Depends(get_db)):
             detail="No se puede eliminar la cobranza porque tiene liquidaciones asociadas."
         )
         
+    cuota = cobranza.cuota
+    credito = cuota.credito if cuota else None
+    
     try:
         db.delete(cobranza)
+        db.flush()
+        
+        from datetime import date
+        hoy = date.today()
+        if cuota:
+            cuota.actualizar_estado(hoy)
+        if credito:
+            credito.actualizar_estado()
+            
         db.commit()
         return {"status": "success", "message": "Cobranza eliminada exitosamente."}
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error eliminando la cobranza: {str(e)}")
+
+@app.put("/api/v1/cobranzas/{cobranza_id}", tags=["Cobranzas"])
+def modificar_cobranza(cobranza_id: int, datos: CobranzaIndividual, db: Session = Depends(get_db)):
+    from src.database.models.cobranzas import Cobranza
+    cobranza = db.query(Cobranza).filter(Cobranza.id == cobranza_id).first()
+    if not cobranza:
+        raise HTTPException(status_code=404, detail="Cobranza no encontrada")
+        
+    if len(cobranza.liquidaciones) > 0:
+        raise HTTPException(
+            status_code=400, 
+            detail="No se puede modificar la cobranza porque tiene liquidaciones asociadas."
+        )
+        
+    cuota = cobranza.cuota
+    credito = cuota.credito if cuota else None
+    
+    try:
+        # Borrar la cobranza vieja
+        db.delete(cobranza)
+        db.flush()
+        
+        # Actualizar estado de cuota y credito antes de aplicar el nuevo cobro
+        from datetime import date
+        hoy = date.today()
+        if cuota:
+            cuota.actualizar_estado(hoy)
+        if credito:
+            credito.actualizar_estado()
+            
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error eliminando la cobranza original: {str(e)}")
+        
+    # Procesar la nueva cobranza con los datos proporcionados
+    manager = CollectionManager(db)
+    try:
+        fecha_pago_dt = datetime.combine(datos.fecha_pago, datetime.min.time()) if datos.fecha_pago else datetime.today()
+        if datos.anticipada:
+            df = manager.process_early_cancellation(
+                identificador=datos.identificador,
+                id_val=datos.id_val,
+                amount=datos.monto,
+                payment_date=fecha_pago_dt
+            )
+        else:
+            df = manager.process_standard_payment(
+                identificador=datos.identificador,
+                id_val=datos.id_val,
+                amount=datos.monto,
+                payment_date=fecha_pago_dt
+            )
+        return {"status": "success", "message": "Cobranza modificada exitosamente."}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 # -------------------------------------------------------------------
 # Frontend
