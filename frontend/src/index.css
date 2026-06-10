@@ -389,11 +389,18 @@ input:focus, select:focus {
 .status-aprobado { background-color: rgba(51, 154, 240, 0.15); color: #339af0; border: 1px solid rgba(51, 154, 240, 0.3); } /* Azul */
 .status-rechazado { background-color: rgba(255, 146, 43, 0.15); color: #ff922b; border: 1px solid rgba(255, 146, 43, 0.3); } /* Naranja */
 .status-activo { background-color: rgba(81, 207, 102, 0.15); color: #51cf66; border: 1px solid rgba(81, 207, 102, 0.3); } /* Verde */
-.status-cancelado { background-color: rgba(255, 255, 255, 0.1); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.3); } /* Blanco */
-.status-moroso { background-color: rgba(252, 196, 25, 0.15); color: #fcc419; border: 1px solid rgba(252, 196, 25, 0.3); } /* Amarillo */
+.status-inactivo { background-color: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.3); } /* Gris */
+.status-cancelado, .status-cancelada { background-color: rgba(255, 255, 255, 0.1); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.3); } /* Blanco */
+.status-moroso, .status-morosa { background-color: rgba(252, 196, 25, 0.15); color: #fcc419; border: 1px solid rgba(252, 196, 25, 0.3); } /* Amarillo */
 .status-incobrable { background-color: rgba(255, 107, 107, 0.15); color: #ff6b6b; border: 1px solid rgba(255, 107, 107, 0.3); } /* Rojo */
-.status-judicial { background-color: rgba(204, 93, 232, 0.15); color: #cc5de8; border: 1px solid rgba(204, 93, 232, 0.3); } /* Violeta */
-.status-judicializado { background-color: rgba(204, 93, 232, 0.15); color: #cc5de8; border: 1px solid rgba(204, 93, 232, 0.3); } /* Violeta (alias) */
+.status-judicial, .status-judicializado { background-color: rgba(204, 93, 232, 0.15); color: #cc5de8; border: 1px solid rgba(204, 93, 232, 0.3); } /* Violeta */
+.status-pendiente { background-color: rgba(252, 196, 25, 0.15); color: #fcc419; border: 1px solid rgba(252, 196, 25, 0.3); } /* Amarillo */
+.status-completado { background-color: rgba(81, 207, 102, 0.15); color: #51cf66; border: 1px solid rgba(81, 207, 102, 0.3); } /* Verde */
+.status-revertido { background-color: rgba(255, 146, 43, 0.15); color: #ff922b; border: 1px solid rgba(255, 146, 43, 0.3); } /* Naranja */
+.status-procesando { background-color: rgba(51, 154, 240, 0.15); color: #339af0; border: 1px solid rgba(51, 154, 240, 0.3); } /* Azul */
+.status-fallido { background-color: rgba(255, 107, 107, 0.15); color: #ff6b6b; border: 1px solid rgba(255, 107, 107, 0.3); } /* Rojo */
+.status-individual { background-color: rgba(204, 93, 232, 0.15); color: #cc5de8; border: 1px solid rgba(204, 93, 232, 0.3); } /* Violeta */
+.status-masivo-csv { background-color: rgba(32, 201, 151, 0.15); color: #20c997; border: 1px solid rgba(32, 201, 151, 0.3); } /* Teal */
 
 /* Modal Overlays */
 .modal-overlay {

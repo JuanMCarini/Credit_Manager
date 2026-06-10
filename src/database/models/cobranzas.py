@@ -1,18 +1,79 @@
 import enum
-from datetime import date
+from datetime import date, datetime
 
 from sqlalchemy import (
     Boolean,
     Column,
     Date,
+    DateTime,
     Enum,
     Float,
     ForeignKey,
     Integer,
+    String,
 )
 from sqlalchemy.orm import relationship
 
 from src.database import Base
+
+
+class TipoProcesoEnum(enum.Enum):
+    INDIVIDUAL = "INDIVIDUAL"
+    MASIVO_CSV = "MASIVO_CSV"
+
+
+class EstadoProcesoEnum(enum.Enum):
+    COMPLETADO = "COMPLETADO"
+    REVERTIDO = "REVERTIDO"
+    PROCESANDO = "PROCESANDO"
+    FALLIDO = "FALLIDO"
+
+
+class Proceso(Base):
+    """
+    =============================================================================
+    Model: Proceso
+    =============================================================================
+    Representa un agrupador o 'lote' lógico para la ingesta de pagos.
+    Envuelve tanto a cobranzas aisladas como a importaciones masivas.
+    
+    Parameters:
+    - tipo: Define el origen (e.g. INDIVIDUAL, MASIVO_CSV).
+    - estado: Estado de ejecución (e.g. COMPLETADO, REVERTIDO).
+    - fecha_ejecucion: Timestamp de cuando se ejecutó o ingirió.
+    """
+
+    __tablename__ = "procesos"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    
+    tipo = Column(
+        Enum(TipoProcesoEnum, values_callable=lambda obj: [e.value for e in obj]),
+        nullable=False,
+        default=TipoProcesoEnum.INDIVIDUAL.value,
+    )
+    
+    estado = Column(
+        Enum(EstadoProcesoEnum, values_callable=lambda obj: [e.value for e in obj]),
+        nullable=False,
+        default=EstadoProcesoEnum.COMPLETADO.value,
+    )
+    
+    fecha_ejecucion = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    # Relación 1:N con Cobranza.
+    # MANDATORIO: cascade="all, delete-orphan" garantiza que la eliminación del
+    # proceso borre automáticamente las cobranzas asociadas, manteniendo la integridad
+    # referencial sin dejar registros huérfanos. Si alguna Cobranza tiene 
+    # liquidaciones asociadas, el motor abortará la operación por integridad foránea.
+    cobranzas = relationship(
+        "Cobranza", 
+        back_populates="proceso", 
+        cascade="all, delete-orphan"
+    )
+
+    def __repr__(self):
+        return f"<Proceso(id={self.id}, tipo={self.tipo}, estado={self.estado})>"
 
 
 class TipoCobranzaEnum(enum.Enum):
@@ -37,6 +98,7 @@ class Cobranza(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     cuota_id = Column(Integer, ForeignKey("cuotas.id"), nullable=False)
+    proceso_id = Column(Integer, ForeignKey("procesos.id"), nullable=True)
 
     tipo_cobranza = Column(
         Enum(TipoCobranzaEnum, values_callable=lambda obj: [e.value for e in obj]),
@@ -51,6 +113,7 @@ class Cobranza(Base):
 
     # Relationships
     cuota = relationship("Cuota", back_populates="cobranzas")
+    proceso = relationship("Proceso", back_populates="cobranzas")
     liquidaciones = relationship("LiquidacionCuotaCedida", back_populates="cobranza")
 
     @property

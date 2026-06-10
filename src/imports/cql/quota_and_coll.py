@@ -13,6 +13,7 @@ import numpy as np
 import src.imports.cql.read as read_files
 from src.database import engine, SessionLocal, Credito, Cuota, EstadoCuota
 from src.database import TipoCobranzaEnum, Cobranza
+from src.database.models.cobranzas import Proceso, TipoProcesoEnum
 
 # --- A. OPTIMIZED QUOTA LOAD AND MERGE ---
 df_cuotas = read_files.df_cuotas.copy()
@@ -189,6 +190,14 @@ df_cobranzas["Tipo Cobranza Enum"] = df_cobranzas["Tipo Cobranza Enum"].fillna(T
 # --- F. COLLECTION INSERTION (SAFE FOR ORM EVENTS) ---
 with SessionLocal() as db:
     try:
+        # 3. CREACIÓN DEL PROCESO MASIVO
+        # Creamos la cabecera del lote para rastrear la carga y permitir su reversión.
+        nuevo_proceso = Proceso(
+            tipo=TipoProcesoEnum.MASIVO_CSV
+        )
+        db.add(nuevo_proceso)
+        db.flush()  # Flushear para obtener el nuevo_proceso.id
+
         # We process in chunks to protect memory, but we use add_all()
         # instead of bulk_insert to ensure the SQLAlchemy rounding trigger works.
         for start_idx in range(0, len(df_cobranzas), CHUNK_SIZE):
@@ -202,6 +211,7 @@ with SessionLocal() as db:
                 
                 new_coll = Cobranza(
                     cuota_id=row["cuota_id"],
+                    proceso_id=nuevo_proceso.id,
                     tipo_cobranza=row["Tipo Cobranza Enum"],
                     capital=float(row["CA"]),
                     interes=float(row["IN"]),
