@@ -372,16 +372,16 @@ function openExcelFilter(e, colIndex, tableId = 'table-bal', headerId = 'bal-hea
 }
 
 
-window.sortExcelFilter = function(e, colIndex, tableId, direction) {
+window.sortExcelFilter = function (e, colIndex, tableId, direction) {
     e.stopPropagation();
     const tbody = document.querySelector(`#${tableId} tbody`);
     if (!tbody) return;
-    
+
     // Convert NodeList to Array
     const trs = Array.from(tbody.children);
     const groups = [];
     let currentGroup = null;
-    
+
     trs.forEach(tr => {
         if (tr.classList.contains('sub-row')) {
             if (currentGroup) currentGroup.subRows.push(tr);
@@ -390,47 +390,47 @@ window.sortExcelFilter = function(e, colIndex, tableId, direction) {
             groups.push(currentGroup);
         }
     });
-    
+
     const parseNumeric = (val) => {
         if (!val || val === '-') return 0;
         let clean = val.replace(/[$%\s]/g, '').replace(/\./g, '').replace(',', '.');
         const num = parseFloat(clean);
         return isNaN(num) ? val : num;
     };
-    
+
     groups.sort((a, b) => {
         const aCol = a.mainRow.children[colIndex];
         const bCol = b.mainRow.children[colIndex];
         if (!aCol || !bCol) return 0;
-        
+
         let aVal = aCol.textContent.trim();
         let bVal = bCol.textContent.trim();
-        
+
         let aNum = parseNumeric(aVal);
         let bNum = parseNumeric(bVal);
-        
+
         if (typeof aNum === 'string' && aVal.match(/^\d{4}-\d{2}-\d{2}$/)) {
             aNum = new Date(aVal).getTime();
             bNum = new Date(bVal).getTime();
         }
-        
+
         if (aNum === bNum) return 0;
-        
+
         let comparison = 0;
         if (typeof aNum === 'number' && typeof bNum === 'number') {
             comparison = aNum > bNum ? 1 : -1;
         } else {
-            comparison = aVal.localeCompare(bVal, undefined, {numeric: true});
+            comparison = aVal.localeCompare(bVal, undefined, { numeric: true });
         }
-        
+
         return direction === 'asc' ? comparison : -comparison;
     });
-    
+
     groups.forEach(g => {
         tbody.appendChild(g.mainRow);
         g.subRows.forEach(sr => tbody.appendChild(sr));
     });
-    
+
     closeExcelFilter();
 };
 
@@ -480,7 +480,7 @@ function runAllExcelFilters(tableId, headerId) {
             tr.style.display = lastMainRowMatch ? "" : "none";
             continue;
         }
-        
+
         let rowMatch = true;
         const tds = tr.getElementsByTagName("td");
 
@@ -537,7 +537,7 @@ document.addEventListener("click", (e) => {
 });
 
 // Global Input Formatting
-document.addEventListener('input', function(e) {
+document.addEventListener('input', function (e) {
     if (e.target.tagName === 'INPUT' && e.target.type === 'text') {
         const start = e.target.selectionStart;
         const end = e.target.selectionEnd;
@@ -853,7 +853,7 @@ async function loadAuxTable() {
             return `<tr>
                 ${keys.map(k => {
                 let val = row[k] !== null ? row[k] : '-';
-                
+
                 if (val !== '-' && k.includes('socio') && k.endsWith('_id') && window.sociosDataCache) {
                     // Force comparison as string/number safely
                     const socio = window.sociosDataCache.find(s => String(s.id) === String(val));
@@ -1131,6 +1131,9 @@ async function loadClientesTable() {
                 let val = row[k];
                 if (k === 'Remuneración' && val !== null && val !== undefined) {
                     val = formatCurrency(val);
+                } else if (k === 'Estado' && val !== null && val !== undefined) {
+                    const statusClass = `status-badge status-${String(val).toLowerCase().replace(/\\s+/g, '-')}`;
+                    val = `<span class="${statusClass}">${val}</span>`;
                 }
                 rowHtml += `<td>${val !== null ? val : '-'}</td>`;
             });
@@ -1349,6 +1352,186 @@ async function deleteCredito(creditoId) {
 }
 
 // -------------------------------------------------------------
+// Cobranzas Logic
+// -------------------------------------------------------------
+async function loadCobranzasTable() {
+    const tbody = document.getElementById('cobranzas-body');
+    const thead = document.getElementById('cobranzas-headers');
+
+    tbody.innerHTML = `<tr><td colspan="100%" style="text-align:center;">Cargando cobranzas...</td></tr>`;
+
+    if (!excelFilters['table-cobranzas']) excelFilters['table-cobranzas'] = {};
+    else excelFilters['table-cobranzas'] = {};
+
+    try {
+        const res = await fetch(`${API_URL}/api/v1/cobranzas`);
+        if (!res.ok) throw new Error("Error fetching data");
+
+        const data = await res.json();
+
+        if (data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="100%" style="text-align:center;">No hay cobranzas registradas.</td></tr>';
+            thead.innerHTML = '';
+            return;
+        }
+
+        window.tableDataCache = window.tableDataCache || {};
+        window.tableDataCache['table-cobranzas'] = data;
+
+        const keys = Object.keys(data[0]);
+        let theadHtml = "<tr>";
+        keys.forEach((k, i) => {
+            theadHtml += `<th>
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                    <span>${k}</span>
+                    <span class="filter-icon filter-icon-table-cobranzas" data-col="${i}" onclick="openExcelFilter(event, ${i}, 'table-cobranzas', 'cobranzas-headers')">▼</span>
+                </div>
+            </th>`;
+        });
+        theadHtml += "</tr>";
+        thead.innerHTML = theadHtml;
+
+        let tbodyHtml = "";
+        data.forEach(row => {
+            let rowHtml = "<tr>";
+            keys.forEach(k => {
+                let val = row[k];
+                if (k === 'Total' && val !== null && val !== undefined) {
+                    val = formatCurrency(val);
+                    rowHtml += `<td style="font-weight: 600;">${val}</td>`;
+                } else if (k === 'Tipo' && val !== null && val !== undefined) {
+                    const statusClass = `status-badge status-${String(val).toLowerCase().replace(/\s+/g, '-')}`;
+                    rowHtml += `<td><span class="${statusClass}">${val}</span></td>`;
+                } else {
+                    rowHtml += `<td>${val !== null ? val : '-'}</td>`;
+                }
+            });
+            rowHtml += "</tr>";
+            tbodyHtml += rowHtml;
+        });
+        tbody.innerHTML = tbodyHtml;
+
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="100%" style="text-align:left; color: var(--error);"><pre>Error: ${e.message}\n${e.stack}</pre></td></tr>`;
+        console.error("loadCobranzasTable failed:", e);
+    }
+}
+
+// -------------------------------------------------------------
+// Procesos Logic
+// -------------------------------------------------------------
+async function loadProcesosTable() {
+    const tbody = document.getElementById('procesos-body');
+    const thead = document.getElementById('procesos-headers');
+
+    tbody.innerHTML = `<tr><td colspan="100%" style="text-align:center;">Cargando procesos...</td></tr>`;
+
+    if (!excelFilters['table-procesos']) excelFilters['table-procesos'] = {};
+    else excelFilters['table-procesos'] = {};
+
+    try {
+        const res = await fetch(`${API_URL}/api/v1/procesos`);
+        if (!res.ok) throw new Error("Error fetching procesos");
+
+        const data = await res.json();
+
+        if (data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="100%" style="text-align:center;">No hay procesos registrados.</td></tr>';
+            thead.innerHTML = '';
+            return;
+        }
+
+        window.tableDataCache = window.tableDataCache || {};
+        window.tableDataCache['table-procesos'] = data;
+
+        const keys = Object.keys(data[0]);
+        let theadHtml = "<tr>";
+        keys.forEach((k, i) => {
+            theadHtml += `<th>
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                    <span>${k}</span>
+                    <span class="filter-icon filter-icon-table-procesos" data-col="${i}" onclick="openExcelFilter(event, ${i}, 'table-procesos', 'procesos-headers')">▼</span>
+                </div>
+            </th>`;
+        });
+        theadHtml += "<th>Acciones</th></tr>";
+        thead.innerHTML = theadHtml;
+
+        let tbodyHtml = "";
+        data.forEach(row => {
+            let rowHtml = "<tr>";
+            keys.forEach(k => {
+                let val = row[k];
+                if ((k === 'Estado' || k === 'Tipo') && val !== null && val !== undefined) {
+                    const statusClass = `status-badge status-${String(val).toLowerCase().replace(/\s+/g, '-')}`;
+                    rowHtml += `<td><span class="${statusClass}">${val}</span></td>`;
+                } else {
+                    rowHtml += `<td>${val !== null ? val : '-'}</td>`;
+                }
+            });
+            rowHtml += `
+                <td style="white-space: nowrap;">
+                    <button class="btn-secondary" style="padding: 4px 8px; font-size: 11px; margin-right: 8px;" onclick="viewCobranzasProceso('${row.ID}')">🔍 Ver Cobranzas</button>
+                    <button class="btn-secondary" style="padding: 4px 8px; font-size: 11px; color: var(--error); border-color: var(--error);" onclick="deleteProceso('${row.ID}')">🗑️ Borrar</button>
+                </td>
+            </tr>`;
+            tbodyHtml += rowHtml;
+        });
+        tbody.innerHTML = tbodyHtml;
+
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="100%" style="text-align:left; color: var(--error);"><pre>Error: ${e.message}\n${e.stack}</pre></td></tr>`;
+        console.error("loadProcesosTable failed:", e);
+    }
+}
+
+async function deleteProceso(procesoId) {
+    if (!confirm("¿Está seguro que desea eliminar este proceso de ingesta y todas sus cobranzas asociadas?")) {
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_URL}/api/v1/procesos/${procesoId}`, {
+            method: 'DELETE'
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+            alert("✅ " + data.message);
+            loadProcesosTable();
+        } else {
+            alert(`Error: ${data.detail}`);
+        }
+    } catch (error) {
+        alert(`Ocurrió un error de red al intentar eliminar el proceso: ${error.message}`);
+    }
+}
+
+window.viewCobranzasProceso = async function (procesoId) {
+    // Navigate to Cobranzas tab
+    switchTab('listado-cobranzas');
+
+    // Ensure the table is loaded
+    await loadCobranzasTable();
+
+    // In the new API layout, Proceso ID is the 2nd column (index 1)
+    const tableId = 'table-cobranzas';
+    const headerId = 'cobranzas-headers';
+    const colIndex = 1;
+
+    if (!excelFilters[tableId]) excelFilters[tableId] = {};
+    excelFilters[tableId][colIndex] = {
+        isDate: false,
+        desde: '',
+        hasta: '',
+        allowedSet: new Set([String(procesoId)])
+    };
+
+    runAllExcelFilters(tableId, headerId);
+}
+
+// -------------------------------------------------------------
 // System Actions Logic
 // -------------------------------------------------------------
 async function syncSystemStates() {
@@ -1552,7 +1735,7 @@ function setTasasMode(auto) {
         manualPlazo.style.display = 'none';
         manualTna.style.display = 'none';
         selectTasas.required = true;
-        
+
         inputPlazo.required = false;
         inputTna.required = false;
         inputPlazo.type = "hidden";
@@ -1562,7 +1745,7 @@ function setTasasMode(auto) {
         manualPlazo.style.display = 'block';
         manualTna.style.display = 'block';
         selectTasas.required = false;
-        
+
         inputPlazo.required = true;
         inputTna.required = true;
         inputPlazo.type = "number";
@@ -1580,7 +1763,7 @@ function setupCreditFormForEmpleador(empleadorId) {
         setTasasMode(false);
         return;
     }
-    
+
     if (window.empleadoresDataCache) {
         const emp = window.empleadoresDataCache.find(e => e.id === empleadorId);
         if (emp && emp.socio_comercial_id) {
@@ -1609,7 +1792,7 @@ function updateTasasDropdown() {
 
     const selectTasas = document.getElementById('cred-tasa-seleccion');
     if (!selectTasas) return;
-    
+
     selectTasas.innerHTML = '<option value="">Seleccione una opción...</option>';
     document.getElementById('cred-plazo').value = '';
     document.getElementById('cred-tna').value = '';
@@ -1649,7 +1832,7 @@ function updateTasasDropdown() {
     Object.values(grouped).sort((a, b) => a.plazo - b.plazo).forEach(t => {
         const option = document.createElement('option');
         // value is JSON with plazo, tna and comision_id (tna must be a decimal, so we divide the % by 100)
-        option.value = JSON.stringify({plazo: t.plazo, tna: t.tna_c_iva / 100, comision_id: t.id});
+        option.value = JSON.stringify({ plazo: t.plazo, tna: t.tna_c_iva / 100, comision_id: t.id });
         const tnaPct = Number(t.tna_c_iva).toFixed(2);
         option.innerText = `${t.plazo} cuotas - TNA ${tnaPct}%`;
         selectTasas.appendChild(option);
@@ -1682,7 +1865,7 @@ async function submitAltaCredito(e) {
         try {
             const data = JSON.parse(tasaSelect.value);
             comisionId = data.comision_id || null;
-        } catch(e) {}
+        } catch (e) { }
     }
 
     const payload = {
@@ -1716,7 +1899,7 @@ async function submitAltaCredito(e) {
 
             // Recargar tabla de créditos
             loadCreditosTable();
-            
+
             // Abrir el modal de cuenta corriente para este nuevo crédito
             if (data.credito_id) {
                 viewCreditoCuotas(data.credito_id);

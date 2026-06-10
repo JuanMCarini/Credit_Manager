@@ -26,6 +26,9 @@ from src.database.models import (  # noqa: E402
     EstadoCuota,
     SocioComercial,
     TipoCobranzaEnum,
+    Proceso,
+    TipoProcesoEnum,
+    EstadoProcesoEnum,
 )
 from src.logic.penalties import PenaltyManager  # noqa: E402
 from src.utils.dates import normalize_date  # noqa: E402
@@ -255,7 +258,7 @@ class CollectionManager:
         return df
 
     def _persist_collections(
-        self, df_cobr: pd.DataFrame, payment_date: datetime, commit: bool = True
+        self, df_cobr: pd.DataFrame, payment_date: datetime, proceso_id: int | None = None, commit: bool = True
     ) -> pd.DataFrame:
         """
         =============================================================================
@@ -273,6 +276,16 @@ class CollectionManager:
         =============================================================================
         """
 
+        # Create INDIVIDUAL process if no proceso_id is provided
+        if not proceso_id:
+            proceso = Proceso(
+                tipo=TipoProcesoEnum.INDIVIDUAL.value,
+                estado=EstadoProcesoEnum.COMPLETADO.value,
+            )
+            self.db.add(proceso)
+            self.db.flush()
+            proceso_id = proceso.id
+
         # 1. Instantiate ORM objects in bulk
         for col in ["capital", "interes", "iva"]:
             df_cobr[col] = df_cobr[col].round(2)
@@ -281,6 +294,7 @@ class CollectionManager:
         for row in df_cobr.itertuples():
             cobranza = Cobranza(
                 cuota_id=row.Index,
+                proceso_id=proceso_id,
                 tipo_cobranza=row.tipo_cobranza,
                 capital=row.capital,
                 interes=row.interes,
@@ -419,6 +433,7 @@ class CollectionManager:
         amount: float,
         payment_date: datetime | str | None = None,
         tasa_iva: float = 0.21,
+        proceso_id: int | None = None,
         commit: bool = True,
     ) -> pd.DataFrame:
 
@@ -480,7 +495,7 @@ class CollectionManager:
         )
 
         # 7. Final delegated persistence
-        return self._persist_collections(df_cobr, payment_date, commit=commit)
+        return self._persist_collections(df_cobr, payment_date, proceso_id=proceso_id, commit=commit)
 
     def process_early_cancellation(
         self,
@@ -489,6 +504,7 @@ class CollectionManager:
         amount: float,
         payment_date: datetime | str | None = None,
         tasa_iva: float = 0.21,
+        proceso_id: int | None = None,
         commit: bool = True,
     ) -> pd.DataFrame:
         """
@@ -574,7 +590,7 @@ class CollectionManager:
         )
 
         # 7. Final delegated persistence
-        return self._persist_collections(df_cobr, payment_date, commit=commit)
+        return self._persist_collections(df_cobr, payment_date, proceso_id=proceso_id, commit=commit)
 
     def process_resource(
         self,
@@ -582,6 +598,7 @@ class CollectionManager:
         id_val: int | str,
         amount: float,
         payment_date: str | datetime,
+        proceso_id: int | None = None,
     ) -> pd.DataFrame:
         """
         =============================================================================
@@ -682,7 +699,7 @@ class CollectionManager:
 
             # 8. Final classification of collection type and delegation of persistence (which includes commit)
             df["tipo_cobranza"] = TipoCobranzaEnum.RECURSO.value
-            return self._persist_collections(df, payment_date)
+            return self._persist_collections(df, payment_date, proceso_id=proceso_id)
 
         except Exception as e:
             self.db.rollback()
@@ -745,12 +762,21 @@ class CollectionManager:
             process = self.process_standard_payment
 
         try:
+            proceso_masivo = Proceso(
+                tipo=TipoProcesoEnum.MASIVO_CSV.value,
+                estado=EstadoProcesoEnum.PROCESANDO.value,
+            )
+            self.db.add(proceso_masivo)
+            self.db.flush()
+            p_id = proceso_masivo.id
+
             for i, row in df.iterrows():
                 new_cobr = process(
                     identificador,
                     row[ident],
                     row["monto"],
                     payment_date,
+                    proceso_id=p_id,
                     commit=False,
                 )
                 if not new_cobr.empty:
@@ -766,6 +792,7 @@ class CollectionManager:
                     f"Se encontraron problemas al procesar las siguientes filas: {problems}. Se aplicó un rollback total."
                 )
 
+            proceso_masivo.estado = EstadoProcesoEnum.COMPLETADO.value
             self.db.commit()
         except Exception as e:
             self.db.rollback()

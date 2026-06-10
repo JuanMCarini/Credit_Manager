@@ -838,6 +838,76 @@ def sync_system_states(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 # -------------------------------------------------------------------
+# Cobranzas y Procesos
+# -------------------------------------------------------------------
+
+@app.get("/api/v1/procesos", tags=["Cobranzas"])
+def get_procesos(db: Session = Depends(get_db)):
+    from src.database.models.cobranzas import Proceso
+    procesos = db.query(Proceso).order_by(desc(Proceso.fecha_ejecucion)).all()
+    result = []
+    for p in procesos:
+        result.append({
+            "ID": p.id,
+            "Tipo": p.tipo.value if hasattr(p.tipo, 'value') else str(p.tipo),
+            "Estado": p.estado.value if hasattr(p.estado, 'value') else str(p.estado),
+            "Fecha Ejecución": p.fecha_ejecucion.strftime("%Y-%m-%d %H:%M:%S") if p.fecha_ejecucion else "-"
+        })
+    return result
+
+@app.delete("/api/v1/procesos/{proceso_id}", tags=["Cobranzas"])
+def delete_proceso(proceso_id: int, db: Session = Depends(get_db)):
+    from src.database.models.cobranzas import Proceso
+    proceso = db.query(Proceso).filter(Proceso.id == proceso_id).first()
+    if not proceso:
+        raise HTTPException(status_code=404, detail="Proceso no encontrado")
+        
+    # Check if any cobranza has liquidaciones associated
+    has_liquidaciones = any(len(cobranza.liquidaciones) > 0 for cobranza in proceso.cobranzas)
+    if has_liquidaciones:
+        raise HTTPException(
+            status_code=400, 
+            detail="No se puede eliminar el proceso porque tiene liquidaciones asociadas a sus cobranzas."
+        )
+        
+    try:
+        db.delete(proceso)
+        db.commit()
+        return {"status": "success", "message": "Proceso y sus cobranzas eliminados exitosamente."}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error eliminando el proceso: {str(e)}")
+
+@app.get("/api/v1/cobranzas", tags=["Cobranzas"])
+def get_cobranzas(db: Session = Depends(get_db)):
+    from src.database.models.cobranzas import Cobranza
+    # Para evitar bloqueos con mucha data, leemos un máximo en memoria o aplicamos limit.
+    # Siguiendo el diseño actual sin paginación, usaremos limit 5000 por seguridad.
+    cobranzas = db.query(Cobranza).order_by(desc(Cobranza.fecha)).limit(5000).all()
+    result = []
+    for c in cobranzas:
+        cuota_nro = c.cuota.nro_cuota if c.cuota else "-"
+        cuota_vto = c.cuota.fecha_vencimiento.strftime("%Y-%m-%d") if c.cuota and c.cuota.fecha_vencimiento else "-"
+        credito_id = c.cuota.credito_id if c.cuota else "-"
+        cliente_cuil = c.cuota.credito.cliente_cuil if c.cuota and c.cuota.credito else "-"
+        
+        result.append({
+            "ID": c.id,
+            "Proceso ID": c.proceso_id or "-",
+            "Fecha Emisión": c.fecha.strftime("%Y-%m-%d") if c.fecha else "-",
+            "Crédito ID": credito_id,
+            "Cliente CUIL": cliente_cuil,
+            "Cuota Nro": cuota_nro,
+            "Fecha Vencimiento": cuota_vto,
+            "Tipo": c.tipo_cobranza.value if hasattr(c.tipo_cobranza, 'value') else str(c.tipo_cobranza),
+            "Capital": float(c.capital),
+            "Interés": float(c.interes),
+            "IVA": float(c.iva),
+            "Total": float(c.capital + c.interes + c.iva)
+        })
+    return result
+
+# -------------------------------------------------------------------
 # Frontend
 # -------------------------------------------------------------------
 app.mount("/app", StaticFiles(directory="frontend", html=True), name="frontend")

@@ -477,3 +477,4 @@ input:focus {
 .status-incobrable { background-color: rgba(255, 107, 107, 0.15); color: #ff6b6b; border: 1px solid rgba(255, 107, 107, 0.3); } /* Rojo */
 .status-judicial { background-color: rgba(204, 93, 232, 0.15); color: #cc5de8; border: 1px solid rgba(204, 93, 232, 0.3); } /* Violeta */
 .status-judicializado { background-color: rgba(204, 93, 232, 0.15); color: #cc5de8; border: 1px solid rgba(204, 93, 232, 0.3); } /* Violeta (alias) */
+.status-inactivo { background-color: rgba(255, 255, 255, 0.05); color: #adb5bd; border: 1px solid rgba(255, 255, 255, 0.15); } /* Gris */

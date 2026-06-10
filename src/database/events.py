@@ -87,9 +87,13 @@ def auto_adjust_rounding_errors(session, flush_context, instances):
             if valid_dates:
                 fecha_ajuste = max(valid_dates)
 
+            # Determinamos el proceso_id a heredar (de las cobranzas que lo originaron)
+            proceso_id_ajuste = next((c.proceso_id for c in cuota.cobranzas if getattr(c, "proceso_id", None) is not None), None)
+
             # 6. Crear la cobranza correctora
             cobranza_ajuste = Cobranza(
                 tipo_cobranza=TipoCobranzaEnum.AJUSTE,
+                proceso_id=proceso_id_ajuste,
                 capital=dif_cap,
                 interes=dif_int,
                 iva=dif_iva,

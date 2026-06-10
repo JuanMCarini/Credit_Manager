@@ -8,6 +8,8 @@ import CreditOriginationPage from './pages/CreditOriginationPage';
 import CreditListPage from './pages/CreditListPage';
 import AuxiliaryTablesPage from './pages/AuxiliaryTablesPage';
 import SystemActionsPage from './pages/SystemActionsPage';
+import CollectionsListPage from './pages/CollectionsListPage';
+import ProcesosListPage from './pages/ProcesosListPage';
 
 function App() {
   return (
@@ -21,6 +23,8 @@ function App() {
           <Route path="creditos" element={<CreditListPage />} />
           <Route path="alta-cliente" element={<ClientRegistrationPage />} />
           <Route path="alta-credito" element={<CreditOriginationPage />} />
+          <Route path="cobranzas" element={<CollectionsListPage />} />
+          <Route path="procesos" element={<ProcesosListPage />} />
           <Route path="auxiliares" element={<AuxiliaryTablesPage />} />
           <Route path="acciones" element={<SystemActionsPage />} />
         </Route>

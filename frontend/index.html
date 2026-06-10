@@ -11,8 +11,8 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;800&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=17">
-    <script src="main.js?v=2" defer></script>
+    <link rel="stylesheet" href="style.css?v=18">
+    <script src="main.js?v=4" defer></script>
 </head>
 
 <body>
@@ -56,6 +56,21 @@
                         <line x1="2" y1="10" x2="22" y2="10" />
                     </svg>
                     Listado de Créditos
+                </button>
+                <button class="nav-item" onclick="switchTab('listado-cobranzas'); loadCobranzasTable();">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="1" x2="12" y2="23" />
+                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                    </svg>
+                    Listado de Cobranzas
+                </button>
+                <button class="nav-item" onclick="switchTab('procesos'); loadProcesosTable();">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                        <line x1="8" y1="21" x2="16" y2="21"></line>
+                        <line x1="12" y1="17" x2="12" y2="21"></line>
+                    </svg>
+                    Procesos de Ingesta
                 </button>
                 <button class="nav-item" onclick="switchTab('clientes')">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -584,6 +599,58 @@
                             </tr>
                         </thead>
                         <tbody id="creditos-body">
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Listado de Cobranzas Tab -->
+            <section id="tab-listado-cobranzas" class="tab-content">
+                <header class="section-header" style="display: flex; justify-content: space-between; align-items: flex-end;">
+                    <div>
+                        <h2>Listado Global de Cobranzas</h2>
+                        <p>Vista general de las cobranzas y filtros por procesos de ingesta.</p>
+                    </div>
+                    <button class="btn-primary" onclick="loadCobranzasTable()" style="height: fit-content; width: fit-content; padding-left: 24px; padding-right: 24px; margin-bottom: 8px;">
+                        Actualizar Datos
+                    </button>
+                </header>
+                
+                <div class="glass-panel" style="overflow-x: auto; max-height: calc(100vh - 180px); overflow-y: auto;">
+                    <table class="data-table" id="table-cobranzas">
+                        <thead id="cobranzas-headers">
+                            <tr>
+                                <th>Cargando cobranzas...</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cobranzas-body">
+                            <tr><td colspan="100%" class="text-center empty-state">Presione Actualizar para cargar el listado.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Procesos Tab -->
+            <section id="tab-procesos" class="tab-content">
+                <header class="section-header" style="display: flex; justify-content: space-between; align-items: flex-end;">
+                    <div>
+                        <h2>Listado de Procesos de Ingesta</h2>
+                        <p>Vista de procesos de cobranza, tanto masivos como individuales.</p>
+                    </div>
+                    <button class="btn-primary" onclick="loadProcesosTable()" style="height: fit-content; width: fit-content; padding-left: 24px; padding-right: 24px; margin-bottom: 8px;">
+                        Actualizar Datos
+                    </button>
+                </header>
+                
+                <div class="glass-panel" style="overflow-x: auto; max-height: calc(100vh - 180px); overflow-y: auto;">
+                    <table class="data-table" id="table-procesos">
+                        <thead id="procesos-headers">
+                            <tr>
+                                <th>Cargando procesos...</th>
+                            </tr>
+                        </thead>
+                        <tbody id="procesos-body">
+                            <tr><td colspan="100%" class="text-center empty-state">Presione Actualizar para cargar el listado.</td></tr>
                         </tbody>
                     </table>
                 </div>
