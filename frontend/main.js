@@ -1044,6 +1044,7 @@ async function viewClientCredits(cuil) {
 }
 
 async function viewClientCuentaCorriente(cuil) {
+    window.currentCtaCteCuil = cuil;
     const tbody = document.getElementById('cliente-cta-cte-body');
     tbody.innerHTML = '<tr><td colspan="100%" style="text-align:center;">Cargando cuenta corriente...</td></tr>';
 
@@ -1072,7 +1073,7 @@ async function viewClientCuentaCorriente(cuil) {
         }
 
         excelFilters['table-cliente-cta-cte'] = {};
-        const headers = ["Crédito (ID)", "N° Cuota", "Vencimiento", "Capital", "Interés", "IVA", "Total Esperado", "Cobrado", "Saldo Pendiente", "Estado"];
+        const headers = ["Crédito (ID)", "N° Cuota", "Vencimiento", "Capital", "Interés", "IVA", "Total Esperado", "Cobrado", "Saldo Pendiente", "Estado", "Acciones"];
         let theadHtml = "<tr>";
         headers.forEach((h, i) => {
             theadHtml += `<th><div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;"><span>${h}</span><span class="filter-icon filter-icon-table-cliente-cta-cte" data-col="${i}" onclick="openExcelFilter(event, ${i}, 'table-cliente-cta-cte', 'cliente-cta-cte-headers')">▼</span></div></th>`;
@@ -1108,6 +1109,14 @@ async function viewClientCuentaCorriente(cuil) {
                         color: #fff;
                     ">${c.estado}</span>
                 </td>
+                <td style="white-space: nowrap;">
+                    ${c.estado !== 'CANCELADA' ? `
+                    <div style="display: flex; gap: 4px;">
+                        <button class="btn-secondary" style="padding: 4px 8px; font-size: 11px;" onclick="openCobrarModal('${c.credito_id}', ${c.saldo_pendiente}, 'comun')">Cobrar</button>
+                        <button class="btn-secondary" style="padding: 4px 8px; font-size: 11px;" onclick="openCobrarModal('${c.credito_id}', ${c.saldo_pendiente}, 'anticipada')">Canc. Ant.</button>
+                    </div>
+                    ` : '-'}
+                </td>
             </tr>`;
 
             if (c.detalle_cobranzas && c.detalle_cobranzas.length > 0) {
@@ -1122,6 +1131,12 @@ async function viewClientCuentaCorriente(cuil) {
                         <td>-</td>
                         <td style="color: var(--accent-secondary);">${formatCurrency(cob.total)}</td>
                         <td colspan="2"></td>
+                        <td>
+                            <div style="display: flex; gap: 4px;">
+                                <button class="btn-secondary" style="padding: 2px 6px; font-size: 10px;" onclick="openModificarCobranzaModal(${cob.id}, '${c.credito_id}', ${cob.total}, '${cob.fecha}', '${cob.tipo}')">Modificar</button>
+                                <button class="btn-secondary" style="padding: 2px 6px; font-size: 10px; color: var(--error); border-color: var(--error);" onclick="deleteCobranza(${cob.id})">Borrar</button>
+                            </div>
+                        </td>
                     </tr>`;
                 });
             }
@@ -1234,6 +1249,7 @@ async function saveCreditoStatus(e) {
 }
 
 async function viewCreditoCuotas(id) {
+    window.currentCreditoId = id;
     const tbody = document.getElementById('cuotas-body');
     tbody.innerHTML = '<tr><td colspan="100%" style="text-align:center;">Cargando cuotas...</td></tr>';
     switchTab('credito-cuotas');
@@ -1250,7 +1266,7 @@ async function viewCreditoCuotas(id) {
         }
 
         excelFilters['table-cuotas'] = {};
-        const headers = ["N°", "Vencimiento", "Capital", "Interés", "IVA", "Total Esperado", "Cobrado", "Saldo Pendiente", "Estado"];
+        const headers = ["N°", "Vencimiento", "Capital", "Interés", "IVA", "Total Esperado", "Cobrado", "Saldo Pendiente", "Estado", "Acciones"];
         let theadHtml = "<tr>";
         headers.forEach((h, i) => {
             theadHtml += `<th><div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;"><span>${h}</span><span class="filter-icon filter-icon-table-cuotas" data-col="${i}" onclick="openExcelFilter(event, ${i}, 'table-cuotas', 'cuotas-headers')">▼</span></div></th>`;
@@ -1282,6 +1298,14 @@ async function viewCreditoCuotas(id) {
                         color: ${c.estado === 'PENDIENTE' ? '#fff' : '#fff'};
                     ">${c.estado}</span>
                 </td>
+                <td style="white-space: nowrap;">
+                    ${c.estado !== 'CANCELADA' ? `
+                    <div style="display: flex; gap: 4px;">
+                        <button class="btn-secondary" style="padding: 4px 8px; font-size: 11px;" onclick="openCobrarModal('${id}', ${c.saldo_pendiente}, 'comun')">Cobrar</button>
+                        <button class="btn-secondary" style="padding: 4px 8px; font-size: 11px;" onclick="openCobrarModal('${id}', ${c.saldo_pendiente}, 'anticipada')">Canc. Ant.</button>
+                    </div>
+                    ` : '-'}
+                </td>
             </tr>`;
 
             if (c.detalle_cobranzas && c.detalle_cobranzas.length > 0) {
@@ -1296,6 +1320,12 @@ async function viewCreditoCuotas(id) {
                         <td>-</td>
                         <td style="color: var(--accent-secondary);">${formatCurrency(cob.total)}</td>
                         <td colspan="2"></td>
+                        <td>
+                            <div style="display: flex; gap: 4px;">
+                                <button class="btn-secondary" style="padding: 2px 6px; font-size: 10px;" onclick="openModificarCobranzaModal(${cob.id}, '${id}', ${cob.total}, '${cob.fecha}', '${cob.tipo}')">Modificar</button>
+                                <button class="btn-secondary" style="padding: 2px 6px; font-size: 10px; color: var(--error); border-color: var(--error);" onclick="deleteCobranza(${cob.id})">Borrar</button>
+                            </div>
+                        </td>
                     </tr>`;
                 });
             }
@@ -1483,6 +1513,12 @@ window.deleteCobranza = async function(cobranzaId) {
         if (res.ok) {
             alert("✅ " + data.message);
             loadCobranzasTable(); // Recargar la tabla
+            
+            if (document.getElementById('tab-cliente-cta-cte').classList.contains('active') && window.currentCtaCteCuil) {
+                viewClientCuentaCorriente(window.currentCtaCteCuil);
+            } else if (document.getElementById('tab-credito-cuotas').classList.contains('active') && window.currentCreditoId) {
+                viewCreditoCuotas(window.currentCreditoId);
+            }
         } else {
             alert(`Error: ${data.detail}`);
         }
@@ -2089,3 +2125,153 @@ window.submitCobranzaMasiva = async function(e) {
         btn.innerText = "Procesar Lote Masivo";
     }
 };
+
+window.openCobrarModal = function(credito_id, saldo_pendiente, tipo) {
+    document.getElementById('cobrar-cuota-credito-id').value = credito_id;
+    document.getElementById('cobrar-cuota-monto').value = saldo_pendiente;
+    document.getElementById('cobrar-cuota-tipo').value = tipo;
+    
+    document.getElementById('cobrar-cuota-fecha').valueAsDate = new Date();
+    
+    const tipoLabel = tipo === 'anticipada' ? 'Cancelación Anticipada' : 'Cobranza Común';
+    document.getElementById('cobrar-cuota-title').textContent = `Cobrar Cuota (${tipoLabel})`;
+    
+    document.getElementById('cobrar-cuota-feedback').textContent = '';
+    document.getElementById('cobrar-cuota-modal').style.display = 'flex';
+};
+
+window.submitCobrarCuotaRapida = async function(e) {
+    e.preventDefault();
+    const btn = document.getElementById('btn-cobrar-cuota');
+    const feedback = document.getElementById('cobrar-cuota-feedback');
+    btn.disabled = true;
+    btn.innerText = "Procesando...";
+    feedback.innerText = "";
+    feedback.style.color = "inherit";
+
+    const credito_id = document.getElementById('cobrar-cuota-credito-id').value;
+    const monto = parseFloat(document.getElementById('cobrar-cuota-monto').value);
+    const fecha = document.getElementById('cobrar-cuota-fecha').value;
+    const tipo = document.getElementById('cobrar-cuota-tipo').value;
+
+    const payload = {
+        identificador: "CREDITO_ID",
+        id_val: String(credito_id),
+        monto: monto,
+        fecha_pago: fecha || null,
+        anticipada: tipo === 'anticipada'
+    };
+
+    try {
+        const res = await fetch(`${API_URL}/api/v1/cobranzas/individual`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+            document.getElementById('cobrar-cuota-modal').style.display = 'none';
+            // Mostrar confirmacion nativa en lugar de feedback en el modal ya que se cierra
+            alert("✅ Cobranza registrada exitosamente");
+            
+            // Recargar tablas globales en background
+            loadCobranzasTable();
+            loadProcesosTable();
+
+            // Recargar la vista actual para reflejar el pago
+            if (document.getElementById('tab-cliente-cta-cte').classList.contains('active')) {
+                if (window.currentCtaCteCuil) {
+                    viewClientCuentaCorriente(window.currentCtaCteCuil);
+                }
+            } else if (document.getElementById('tab-credito-cuotas').classList.contains('active')) {
+                viewCreditoCuotas(credito_id);
+            }
+        } else {
+            feedback.innerText = `❌ Error: ${data.detail}`;
+            feedback.style.color = "var(--error)";
+        }
+    } catch (err) {
+        feedback.innerText = `❌ Error de red: ${err.message}`;
+        feedback.style.color = "var(--error)";
+    } finally {
+        btn.disabled = false;
+        btn.innerText = "Confirmar";
+    }
+};
+
+window.openModificarCobranzaModal = function(cobranza_id, credito_id, monto, fechaStr, tipoStr) {
+    document.getElementById('mod-cobranza-id').value = cobranza_id;
+    document.getElementById('mod-cobranza-credito-id').value = credito_id;
+    document.getElementById('mod-cobranza-monto').value = monto;
+    
+    // fechaStr comes in "DD/MM/YYYY" format
+    if (fechaStr && fechaStr !== '-') {
+        const parts = fechaStr.split('/');
+        if (parts.length === 3) {
+            document.getElementById('mod-cobranza-fecha').value = `${parts[2]}-${parts[1]}-${parts[0]}`;
+        }
+    }
+    
+    // The type is either 'COMUN', 'CA' (Cancelación Anticipada), 'BCA' or 'PENALTY'.
+    document.getElementById('mod-cobranza-tipo').value = (tipoStr === 'CA' || tipoStr === 'Cancelación Anticipada') ? 'anticipada' : 'comun';
+    
+    document.getElementById('mod-cobranza-feedback').textContent = '';
+    document.getElementById('modificar-cobranza-modal').style.display = 'flex';
+};
+
+window.submitModificarCobranza = async function(e) {
+    e.preventDefault();
+    const btn = document.getElementById('btn-mod-cobranza');
+    const feedback = document.getElementById('mod-cobranza-feedback');
+    btn.disabled = true;
+    btn.innerText = "Procesando...";
+    feedback.innerText = "";
+    
+    const cobranza_id = document.getElementById('mod-cobranza-id').value;
+    const credito_id = document.getElementById('mod-cobranza-credito-id').value;
+    const monto = parseFloat(document.getElementById('mod-cobranza-monto').value);
+    const fecha = document.getElementById('mod-cobranza-fecha').value;
+    const tipo = document.getElementById('mod-cobranza-tipo').value;
+
+    const payload = {
+        identificador: "CREDITO_ID",
+        id_val: String(credito_id),
+        monto: monto,
+        fecha_pago: fecha || null,
+        anticipada: tipo === 'anticipada'
+    };
+
+    try {
+        const res = await fetch(`${API_URL}/api/v1/cobranzas/${cobranza_id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+            document.getElementById('modificar-cobranza-modal').style.display = 'none';
+            alert("✅ Cobranza modificada exitosamente");
+            
+            loadCobranzasTable();
+            loadProcesosTable();
+
+            if (document.getElementById('tab-cliente-cta-cte').classList.contains('active') && window.currentCtaCteCuil) {
+                viewClientCuentaCorriente(window.currentCtaCteCuil);
+            } else if (document.getElementById('tab-credito-cuotas').classList.contains('active') && window.currentCreditoId) {
+                viewCreditoCuotas(window.currentCreditoId);
+            }
+        } else {
+            feedback.innerText = `❌ Error: ${data.detail}`;
+            feedback.style.color = "var(--error)";
+        }
+    } catch (err) {
+        feedback.innerText = `❌ Error de red: ${err.message}`;
+        feedback.style.color = "var(--error)";
+    } finally {
+        btn.disabled = false;
+        btn.innerText = "Confirmar Modificación";
+    }
+};
+

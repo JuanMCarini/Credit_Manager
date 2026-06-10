@@ -995,6 +995,61 @@
                 </div>
             </section>
 
+            <!-- Modal para Cobrar Cuota -->
+            <div id="cobrar-cuota-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); z-index: 2000; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+                <div class="glass-panel" style="background: var(--bg-base); width: 350px; padding: 24px; border-radius: var(--radius-lg); position: relative;">
+                    <h3 style="margin-bottom: 20px;" id="cobrar-cuota-title">Cobrar Cuota</h3>
+                    <form id="cobrar-cuota-form" onsubmit="submitCobrarCuotaRapida(event)">
+                        <input type="hidden" id="cobrar-cuota-credito-id">
+                        <input type="hidden" id="cobrar-cuota-tipo">
+                        <div class="form-group">
+                            <label for="cobrar-cuota-monto">Monto a Cobrar *</label>
+                            <input type="number" step="0.01" id="cobrar-cuota-monto" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="cobrar-cuota-fecha">Fecha de Pago</label>
+                            <input type="date" id="cobrar-cuota-fecha">
+                        </div>
+                        <div id="cobrar-cuota-feedback" style="font-size: 13px; font-weight: 500; margin-top: 10px;"></div>
+                        <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px;">
+                            <button type="button" class="btn-secondary" onclick="document.getElementById('cobrar-cuota-modal').style.display='none'">Cancelar</button>
+                            <button type="submit" class="btn-primary" id="btn-cobrar-cuota" style="width: auto;">Confirmar</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Modal para Modificar Cobranza -->
+            <div id="modificar-cobranza-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); z-index: 2000; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+                <div class="glass-panel" style="background: var(--bg-base); width: 350px; padding: 24px; border-radius: var(--radius-lg); position: relative;">
+                    <h3 style="margin-bottom: 20px;">Modificar Cobranza</h3>
+                    <form id="modificar-cobranza-form" onsubmit="submitModificarCobranza(event)">
+                        <input type="hidden" id="mod-cobranza-id">
+                        <input type="hidden" id="mod-cobranza-credito-id">
+                        <div class="form-group">
+                            <label for="mod-cobranza-tipo">Tipo de Cobranza *</label>
+                            <select id="mod-cobranza-tipo" required>
+                                <option value="comun">Común</option>
+                                <option value="anticipada">Cancelación Anticipada</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="mod-cobranza-monto">Monto Aplicado *</label>
+                            <input type="number" step="0.01" id="mod-cobranza-monto" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="mod-cobranza-fecha">Fecha de Pago *</label>
+                            <input type="date" id="mod-cobranza-fecha" required>
+                        </div>
+                        <div id="mod-cobranza-feedback" style="font-size: 13px; font-weight: 500; margin-top: 10px;"></div>
+                        <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px;">
+                            <button type="button" class="btn-secondary" onclick="document.getElementById('modificar-cobranza-modal').style.display='none'">Cancelar</button>
+                            <button type="submit" class="btn-primary" id="btn-mod-cobranza" style="width: auto;">Confirmar Modificación</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
         </main>
     </div>
 </body>
