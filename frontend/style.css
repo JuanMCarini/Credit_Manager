@@ -129,6 +129,62 @@ h1, h2, h3, h4 {
     flex: 1;
 }
 
+.nav-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.nav-group-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 16px;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-family: var(--font-body);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: var(--transition);
+    border-radius: var(--radius-md);
+}
+
+.nav-group-header:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.nav-group-header .chevron {
+    transition: transform 0.3s ease;
+}
+
+.nav-group.open .nav-group-header .chevron {
+    transform: rotate(180deg);
+}
+
+.nav-group-items {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    overflow: hidden;
+    max-height: 0;
+    opacity: 0;
+    transition: max-height 0.3s ease, opacity 0.3s ease;
+}
+
+.nav-group.open .nav-group-items {
+    max-height: 500px;
+    opacity: 1;
+}
+
+.nav-group-items .nav-item {
+    padding-left: 24px;
+}
+
 .nav-item {
     display: flex;
     align-items: center;
@@ -144,6 +200,7 @@ h1, h2, h3, h4 {
     cursor: pointer;
     transition: var(--transition);
     text-align: left;
+    text-decoration: none;
 }
 
 .nav-item:hover {

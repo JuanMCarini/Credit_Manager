@@ -25,13 +25,13 @@
             </div>
 
             <nav class="nav-menu">
-                <button class="nav-item active" onclick="switchTab('simulation')">
+                <a href="#simulation" class="nav-item active" onclick="switchTab('simulation')">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
                     </svg>
                     Simular Cuotas
-                </button>
-                <button class="nav-item" onclick="switchTab('balances')">
+                </a>
+                <a href="#balances" class="nav-item" onclick="switchTab('balances')">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                         <polyline points="14 2 14 8 20 8" />
@@ -40,80 +40,124 @@
                         <polyline points="10 9 9 9 8 9" />
                     </svg>
                     Reportes de Saldos
-                </button>
-                <button class="nav-item" onclick="switchTab('listado-clientes'); loadClientesTable();">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                        <circle cx="9" cy="7" r="4" />
-                        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                    </svg>
-                    Listado de Clientes
-                </button>
-                <button class="nav-item" onclick="switchTab('listado-creditos'); loadCreditosTable();">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="2" y="5" width="20" height="14" rx="2" ry="2" />
-                        <line x1="2" y1="10" x2="22" y2="10" />
-                    </svg>
-                    Listado de Créditos
-                </button>
-                <button class="nav-item" onclick="switchTab('listado-cobranzas'); loadCobranzasTable();">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="12" y1="1" x2="12" y2="23" />
-                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-                    </svg>
-                    Listado de Cobranzas
-                </button>
-                <button class="nav-item" onclick="switchTab('procesamiento-cobranzas')">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-                    </svg>
-                    Ingreso de Cobranzas
-                </button>
-                <button class="nav-item" onclick="switchTab('procesos'); loadProcesosTable();">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-                        <line x1="8" y1="21" x2="16" y2="21"></line>
-                        <line x1="12" y1="17" x2="12" y2="21"></line>
-                    </svg>
-                    Procesos de Ingesta
-                </button>
-                <button class="nav-item" onclick="switchTab('clientes')">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                        <circle cx="8.5" cy="7" r="4" />
-                        <line x1="20" y1="8" x2="20" y2="14" />
-                        <line x1="23" y1="11" x2="17" y2="11" />
-                    </svg>
-                    Alta de Cliente
-                </button>
-                <button class="nav-item" onclick="switchTab('alta-credito')">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                        <line x1="16" y1="2" x2="16" y2="6" />
-                        <line x1="8" y1="2" x2="8" y2="6" />
-                        <line x1="3" y1="10" x2="21" y2="10" />
-                        <path d="M12 14v4" />
-                        <path d="M10 16h4" />
-                    </svg>
-                    Alta de Crédito
-                </button>
-                <button class="nav-item" onclick="switchTab('auxiliares')">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                        <line x1="3" y1="9" x2="21" y2="9" />
-                        <line x1="9" y1="21" x2="9" y2="9" />
-                    </svg>
-                    Tablas Auxiliares
-                </button>
-                <button class="nav-item" onclick="switchTab('system-actions')">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path
-                            d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-                        <circle cx="12" cy="12" r="3" />
-                    </svg>
-                    Acciones del Sistema
-                </button>
+                </a>
+
+                <div class="nav-group">
+                    <button class="nav-group-header" onclick="toggleNavGroup(this)">
+                        <span>Clientes</span>
+                        <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </button>
+                    <div class="nav-group-items">
+                        <a href="#listado-clientes" class="nav-item" onclick="switchTab('listado-clientes'); loadClientesTable();">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                                <circle cx="9" cy="7" r="4" />
+                                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                            </svg>
+                            Listado de Clientes
+                        </a>
+                        <a href="#clientes" class="nav-item" onclick="switchTab('clientes')">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                                <circle cx="8.5" cy="7" r="4" />
+                                <line x1="20" y1="8" x2="20" y2="14" />
+                                <line x1="23" y1="11" x2="17" y2="11" />
+                            </svg>
+                            Alta de Cliente
+                        </a>
+                    </div>
+                </div>
+
+                <div class="nav-group">
+                    <button class="nav-group-header" onclick="toggleNavGroup(this)">
+                        <span>Créditos</span>
+                        <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </button>
+                    <div class="nav-group-items">
+                        <a href="#listado-creditos" class="nav-item" onclick="switchTab('listado-creditos'); loadCreditosTable();">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="2" y="5" width="20" height="14" rx="2" ry="2" />
+                                <line x1="2" y1="10" x2="22" y2="10" />
+                            </svg>
+                            Listado de Créditos
+                        </a>
+                        <a href="#alta-credito" class="nav-item" onclick="switchTab('alta-credito')">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                                <line x1="16" y1="2" x2="16" y2="6" />
+                                <line x1="8" y1="2" x2="8" y2="6" />
+                                <line x1="3" y1="10" x2="21" y2="10" />
+                                <path d="M12 14v4" />
+                                <path d="M10 16h4" />
+                            </svg>
+                            Alta de Crédito
+                        </a>
+                    </div>
+                </div>
+
+                <div class="nav-group">
+                    <button class="nav-group-header" onclick="toggleNavGroup(this)">
+                        <span>Cobranzas</span>
+                        <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </button>
+                    <div class="nav-group-items">
+                        <a href="#listado-cobranzas" class="nav-item" onclick="switchTab('listado-cobranzas'); loadCobranzasTable();">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="1" x2="12" y2="23" />
+                                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                            </svg>
+                            Listado de Cobranzas
+                        </a>
+                        <a href="#procesamiento-cobranzas" class="nav-item" onclick="switchTab('procesamiento-cobranzas')">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                            </svg>
+                            Ingreso de Cobranzas
+                        </a>
+                        <a href="#procesos" class="nav-item" onclick="switchTab('procesos'); loadProcesosTable();">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                                <line x1="8" y1="21" x2="16" y2="21"></line>
+                                <line x1="12" y1="17" x2="12" y2="21"></line>
+                            </svg>
+                            Procesos de Ingesta
+                        </a>
+                    </div>
+                </div>
+
+                <div class="nav-group">
+                    <button class="nav-group-header" onclick="toggleNavGroup(this)">
+                        <span>Configuración</span>
+                        <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </button>
+                    <div class="nav-group-items">
+                        <a href="#auxiliares" class="nav-item" onclick="switchTab('auxiliares')">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                                <line x1="3" y1="9" x2="21" y2="9" />
+                                <line x1="9" y1="21" x2="9" y2="9" />
+                            </svg>
+                            Tablas Auxiliares
+                        </a>
+                        <a href="#system-actions" class="nav-item" onclick="switchTab('system-actions')">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path
+                                    d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+                                <circle cx="12" cy="12" r="3" />
+                            </svg>
+                            Acciones del Sistema
+                        </a>
+                    </div>
+                </div>
             </nav>
 
             <div class="sidebar-footer">
@@ -535,55 +579,51 @@
                 </div>
             </div>
 
-            <!-- Modal para Cuenta Corriente -->
-            <div id="cuotas-modal"
-                style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); z-index: 2000; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
-                <div class="glass-panel"
-                    style="background: var(--bg-base); width: 90vw; max-width: 1100px; max-height: 90vh; display: flex; flex-direction: column; padding: 24px; border-radius: var(--radius-lg); position: relative;">
-                    <div
-                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                        <h3>Cuenta Corriente (Cuotas)</h3>
-                        <button type="button" class="btn-secondary" style="padding: 4px 12px; width: auto;"
-                            onclick="document.getElementById('cuotas-modal').style.display='none'">Cerrar</button>
+            <!-- Tab para Cuenta Corriente de un Crédito -->
+            <section id="tab-credito-cuotas" class="tab-content">
+                <header class="section-header" style="display: flex; justify-content: space-between; align-items: flex-end;">
+                    <div>
+                        <h2>Cuenta Corriente (Cuotas del Crédito)</h2>
+                        <p>Detalle completo del plan de pagos y cobranzas aplicadas.</p>
                     </div>
+                    <button type="button" class="btn-secondary" style="height: fit-content; width: fit-content; padding-left: 24px; padding-right: 24px; margin-bottom: 8px;"
+                        onclick="switchTab('listado-creditos')">⬅ Volver al Listado</button>
+                </header>
 
-                    <div style="overflow-y: auto; flex: 1;">
-                        <table class="data-table" id="table-cuotas">
-                            <thead id="cuotas-headers">
-                                <tr><th>Cargando...</th></tr>
-                            </thead>
-                            <tbody id="cuotas-body">
-                                <!-- Se llena por JS -->
-                            </tbody>
-                        </table>
-                    </div>
+                <div class="glass-panel" style="overflow-x: auto; max-height: calc(100vh - 180px); overflow-y: auto;">
+                    <table class="data-table" id="table-cuotas">
+                        <thead id="cuotas-headers">
+                            <tr><th>Cargando...</th></tr>
+                        </thead>
+                        <tbody id="cuotas-body">
+                            <!-- Se llena por JS -->
+                        </tbody>
+                    </table>
                 </div>
-            </div>
+            </section>
 
-            <!-- Modal para Cuenta Corriente Unificada de Cliente -->
-            <div id="cliente-cta-cte-modal"
-                style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); z-index: 2000; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
-                <div class="glass-panel"
-                    style="background: var(--bg-base); width: 90vw; max-width: 1100px; max-height: 90vh; display: flex; flex-direction: column; padding: 24px; border-radius: var(--radius-lg); position: relative;">
-                    <div
-                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                        <h3 id="cliente-cta-cte-title">Cuenta Corriente Unificada</h3>
-                        <button type="button" class="btn-secondary" style="padding: 4px 12px; width: auto;"
-                            onclick="document.getElementById('cliente-cta-cte-modal').style.display='none'">Cerrar</button>
+            <!-- Tab para Cuenta Corriente Unificada de Cliente -->
+            <section id="tab-cliente-cta-cte" class="tab-content">
+                <header class="section-header" style="display: flex; justify-content: space-between; align-items: flex-end;">
+                    <div>
+                        <h2 id="cliente-cta-cte-title">Cuenta Corriente Unificada</h2>
+                        <p>Consolidado de todas las cuotas de todos los créditos activos del cliente.</p>
                     </div>
+                    <button type="button" class="btn-secondary" style="height: fit-content; width: fit-content; padding-left: 24px; padding-right: 24px; margin-bottom: 8px;"
+                        onclick="switchTab('listado-clientes')">⬅ Volver al Listado</button>
+                </header>
 
-                    <div style="overflow-y: auto; flex: 1;">
-                        <table class="data-table" id="table-cliente-cta-cte">
-                            <thead id="cliente-cta-cte-headers">
-                                <tr><th>Cargando...</th></tr>
-                            </thead>
-                            <tbody id="cliente-cta-cte-body">
-                                <!-- Se llena por JS -->
-                            </tbody>
-                        </table>
-                    </div>
+                <div class="glass-panel" style="overflow-x: auto; max-height: calc(100vh - 180px); overflow-y: auto;">
+                    <table class="data-table" id="table-cliente-cta-cte">
+                        <thead id="cliente-cta-cte-headers">
+                            <tr><th>Cargando...</th></tr>
+                        </thead>
+                        <tbody id="cliente-cta-cte-body">
+                            <!-- Se llena por JS -->
+                        </tbody>
+                    </table>
                 </div>
-            </div>
+            </section>
 
             <!-- Listado de Créditos Tab -->
             <section id="tab-listado-creditos" class="tab-content">
