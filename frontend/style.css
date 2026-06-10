@@ -280,6 +280,8 @@ input:focus {
 
 .table-responsive {
     overflow-x: auto;
+    overflow-y: auto;
+    max-height: calc(100vh - 180px);
     border-radius: var(--radius-md);
     border: 1px solid var(--border-color);
 }
@@ -363,12 +365,15 @@ input:focus {
 }
 
 .data-table th {
-    background: rgba(0, 0, 0, 0.3);
+    background: #161b22;
     color: var(--text-secondary);
     font-weight: 600;
     font-size: 12px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
 }
 
 .data-table tr:last-child td {
