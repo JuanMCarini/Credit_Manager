@@ -156,6 +156,15 @@ const CollectionsListPage = () => {
                     </div>
                   )}
                 </th>
+                <th onClick={() => handleSort('Capital')} style={{ cursor: 'pointer' }}>
+                  Capital <SortIcon columnKey="Capital" />
+                </th>
+                <th onClick={() => handleSort('Interés')} style={{ cursor: 'pointer' }}>
+                  Interés <SortIcon columnKey="Interés" />
+                </th>
+                <th onClick={() => handleSort('IVA')} style={{ cursor: 'pointer' }}>
+                  IVA <SortIcon columnKey="IVA" />
+                </th>
                 <th onClick={() => handleSort('Total')} style={{ cursor: 'pointer' }}>
                   Total Cobrado <SortIcon columnKey="Total" />
                   <input type="text" placeholder="Filtrar Total..." value={filter.Total} onChange={e => setFilter({ ...filter, Total: e.target.value })} onClick={e => e.stopPropagation()} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
@@ -172,7 +181,7 @@ const CollectionsListPage = () => {
             <tbody>
               {filteredAndSortedCobranzas.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="text-center empty-state" style={{ padding: '40px' }}>
+                  <td colSpan="11" className="text-center empty-state" style={{ padding: '40px' }}>
                     {loading ? "Cargando..." : "No hay cobranzas para mostrar con los filtros actuales."}
                   </td>
                 </tr>
@@ -189,6 +198,9 @@ const CollectionsListPage = () => {
                          {c.Tipo}
                        </span>
                     </td>
+                    <td>{formatCurrency(c.Capital)}</td>
+                    <td>{formatCurrency(c['Interés'])}</td>
+                    <td>{formatCurrency(c.IVA)}</td>
                     <td style={{ fontWeight: 'bold' }}>{formatCurrency(c.Total)}</td>
                     <td>{c.Fecha}</td>
                   </tr>

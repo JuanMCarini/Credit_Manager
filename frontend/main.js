@@ -1396,9 +1396,10 @@ async function loadCobranzasTable() {
             let rowHtml = "<tr>";
             keys.forEach(k => {
                 let val = row[k];
-                if (k === 'Total' && val !== null && val !== undefined) {
+                if (['Total', 'Capital', 'Interés', 'IVA'].includes(k) && val !== null && val !== undefined) {
                     val = formatCurrency(val);
-                    rowHtml += `<td style="font-weight: 600;">${val}</td>`;
+                    const weight = k === 'Total' ? '600' : 'normal';
+                    rowHtml += `<td style="font-weight: ${weight};">${val}</td>`;
                 } else if (k === 'Tipo' && val !== null && val !== undefined) {
                     const statusClass = `status-badge status-${String(val).toLowerCase().replace(/\s+/g, '-')}`;
                     rowHtml += `<td><span class="${statusClass}">${val}</span></td>`;
