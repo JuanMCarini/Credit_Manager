@@ -11,6 +11,11 @@ function switchTab(tabId) {
     const targetBtn = document.querySelector(`.nav-item[onclick*="switchTab('${tabId}')"]`);
     if (targetBtn) {
         targetBtn.classList.add('active');
+        // Auto-open parent group if closed
+        const parentGroup = targetBtn.closest('.nav-group');
+        if (parentGroup && !parentGroup.classList.contains('open')) {
+            parentGroup.classList.add('open');
+        }
     } else if (typeof event !== 'undefined' && event && event.currentTarget) {
         event.currentTarget.classList.add('active');
     }
@@ -23,6 +28,11 @@ function switchTab(tabId) {
     if (targetTab) {
         targetTab.classList.add('active');
     }
+}
+
+function toggleNavGroup(headerBtn) {
+    const group = headerBtn.closest('.nav-group');
+    group.classList.toggle('open');
 }
 
 // --- Utils ---
@@ -600,6 +610,42 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (credEmision) {
         credEmision.valueAsDate = new Date();
     }
+
+    // Handle initial hash routing
+    if (window.location.hash) {
+        let hashStr = window.location.hash;
+        let queryParams = new URLSearchParams();
+        if (hashStr.includes('?')) {
+            const parts = hashStr.split('?');
+            hashStr = parts[0];
+            queryParams = new URLSearchParams(parts[1]);
+        }
+
+        const targetBtn = document.querySelector(`.nav-item[href="${hashStr}"]`);
+        
+        if (queryParams.has('cliente') && hashStr === '#listado-creditos') {
+            setTimeout(() => {
+                if (targetBtn) targetBtn.classList.add('active');
+                viewClientCredits(queryParams.get('cliente'));
+            }, 50);
+        } else if (queryParams.has('cta_cte') && hashStr === '#listado-clientes') {
+            setTimeout(() => {
+                if (targetBtn) targetBtn.click();
+                viewClientCuentaCorriente(queryParams.get('cta_cte'));
+            }, 50);
+        } else if (queryParams.has('credito_cta') && hashStr === '#listado-creditos') {
+            setTimeout(() => {
+                if (targetBtn) targetBtn.click();
+                viewCreditoCuotas(queryParams.get('credito_cta'));
+            }, 50);
+        } else if (queryParams.has('edit') && hashStr === '#clientes') {
+            setTimeout(() => {
+                editCliente(queryParams.get('edit'));
+            }, 50);
+        } else if (targetBtn) {
+            setTimeout(() => targetBtn.click(), 50);
+        }
+    }
 });
 
 // -------------------------------------------------------------
@@ -1012,7 +1058,7 @@ async function viewClientCuentaCorriente(cuil) {
     }
     titleEl.textContent = `Cuenta Corriente Unificada: ${clienteName}`;
 
-    document.getElementById('cliente-cta-cte-modal').style.display = 'flex';
+    switchTab('cliente-cta-cte');
 
     try {
         const res = await fetch(`${API_URL}/api/v1/clientes/${cuil}/cuenta_corriente`);
@@ -1139,9 +1185,9 @@ async function loadClientesTable() {
             });
             rowHtml += `
                 <td style="white-space: nowrap;">
-                    <button class="btn-secondary" style="padding: 4px 8px; font-size: 11px; margin-right: 4px;" onclick="viewClientCuentaCorriente('${row.CUIL}')">👁️ Cta. Cte.</button>
-                    <button class="btn-secondary" style="padding: 4px 8px; font-size: 11px; margin-right: 4px;" onclick="viewClientCredits('${row.CUIL}')">👁️ Créditos</button>
-                    <button class="btn-secondary" style="padding: 4px 8px; font-size: 11px; margin-right: 4px;" onclick="editCliente('${row.CUIL}')">✏️ Editar</button>
+                    <a href="#listado-clientes?cta_cte=${row.CUIL}" class="btn-secondary" style="padding: 4px 8px; font-size: 11px; margin-right: 4px; text-decoration: none; display: inline-block; box-sizing: border-box;" onclick="viewClientCuentaCorriente('${row.CUIL}')">👁️ Cta. Cte.</a>
+                    <a href="#listado-creditos?cliente=${row.CUIL}" class="btn-secondary" style="padding: 4px 8px; font-size: 11px; margin-right: 4px; text-decoration: none; display: inline-block; box-sizing: border-box;" onclick="viewClientCredits('${row.CUIL}')">👁️ Créditos</a>
+                    <a href="#clientes?edit=${row.CUIL}" class="btn-secondary" style="padding: 4px 8px; font-size: 11px; margin-right: 4px; text-decoration: none; display: inline-block; box-sizing: border-box;" onclick="editCliente('${row.CUIL}')">✏️ Editar</a>
                     <button class="btn-secondary" style="padding: 4px 8px; font-size: 11px; color: var(--error);" onclick="deleteCliente('${row.CUIL}')">🗑️ Borrar</button>
                 </td>
             </tr>`;
@@ -1190,7 +1236,7 @@ async function saveCreditoStatus(e) {
 async function viewCreditoCuotas(id) {
     const tbody = document.getElementById('cuotas-body');
     tbody.innerHTML = '<tr><td colspan="100%" style="text-align:center;">Cargando cuotas...</td></tr>';
-    document.getElementById('cuotas-modal').style.display = 'flex';
+    switchTab('credito-cuotas');
 
     try {
         const res = await fetch(`${API_URL}/api/v1/creditos/${id}/cuotas`);
@@ -1314,7 +1360,7 @@ async function loadCreditosTable() {
                 <td style="white-space: nowrap;">
                     <div style="display: flex; gap: 4px;">
                         <button class="btn-secondary" style="padding: 4px 8px; font-size: 11px;" onclick="openStatusModal('${row.ID}', '${row.Estado}')">✏️ Estado</button>
-                        <button class="btn-secondary" style="padding: 4px 8px; font-size: 11px;" onclick="viewCreditoCuotas('${row.ID}')">👁️ Cuenta</button>
+                        <a href="#listado-creditos?credito_cta=${row.ID}" class="btn-secondary" style="padding: 4px 8px; font-size: 11px; text-decoration: none; display: inline-block; box-sizing: border-box;" onclick="viewCreditoCuotas('${row.ID}')">👁️ Cuenta</a>
                         <button class="btn-secondary" style="padding: 4px 8px; font-size: 11px; color: var(--error); border-color: var(--error);" onclick="deleteCredito('${row.ID}')">🗑️ Borrar</button>
                     </div>
                 </td>
