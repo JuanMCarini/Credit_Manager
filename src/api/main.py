@@ -24,6 +24,11 @@ from src.logic.origination import LoanOriginator
 from src.logic.amortization import AmortizationEngine
 from src.logic.collections import CollectionManager
 from src.reports.balances import saldos
+from src.portfolio.sell import PortfolioSell
+
+# Variables for sync optimization
+_LAST_SYNC_DATE = None
+_LAST_SYNC_STATE_HASH = None
 
 # -------------------------------------------------------------------
 # Inicialización de la Aplicación
@@ -596,6 +601,37 @@ class CobranzaIndividual(BaseModel):
     fecha_pago: Optional[date] = None
     anticipada: bool = False
 
+class CobranzaMasiva(BaseModel):
+    identificador: str
+    id_val: str
+    cuotas: List[int]
+    monto_total: float
+    fecha_pago: Optional[date] = None
+
+class VentaCarteraRequest(BaseModel):
+    nombre_cartera: str
+    fecha_venta: date
+    tna_descuento: float
+    cuit_comprador: str
+    razon_social_comprador: str
+    mora: bool = False
+    recurso: bool = True
+    iva: bool = False
+    fecha_emision_desde: Optional[date] = None
+    fecha_emision_hasta: Optional[date] = None
+    fecha_vencimiento_desde: Optional[date] = None
+    fecha_vencimiento_hasta: Optional[date] = None
+    creditos_excluidos: List[int] = Field(default_factory=list)
+    cartera_id: Optional[int] = None
+    usar_cuotas_guardadas: bool = False
+
+class UpdateCarteraRequest(BaseModel):
+    fecha_compra: Optional[date] = None
+    tna_descuento: Optional[float] = None
+    recurso: Optional[bool] = None
+    iva: Optional[bool] = None
+    estado: Optional[str] = None
+
 @app.post("/api/v1/cobranzas/individual", tags=["Cobranzas"])
 def procesar_cobranza_individual(
     datos: CobranzaIndividual,
@@ -852,11 +888,21 @@ def delete_aux_record(tabla: str, record_id: int, db: Session = Depends(get_db))
 @app.post("/api/v1/system/sync-states", tags=["System"])
 @app.post("/api/v1/system/actualizar_estados", tags=["System"])
 def sync_system_states(db: Session = Depends(get_db)):
-    from src.database.models import Cuota, Credito, Cliente, EstadoCredito, EstadoClienteEnum
+    global _LAST_SYNC_DATE, _LAST_SYNC_STATE_HASH
+    from src.database.models import Cuota, Credito, Cliente, EstadoCredito, EstadoClienteEnum, Cobranza
+    from sqlalchemy import func
     from datetime import date
     hoy = date.today()
 
     try:
+        # Optimization: Bypass sync if no new credits/collections and day hasn't changed
+        credito_stats = db.query(func.max(Credito.id), func.count(Credito.id)).first()
+        cobranza_stats = db.query(func.max(Cobranza.id), func.count(Cobranza.id)).first()
+        current_state_hash = f"cred:{credito_stats[0]}-{credito_stats[1]}_cob:{cobranza_stats[0]}-{cobranza_stats[1]}"
+        
+        if _LAST_SYNC_DATE == hoy and _LAST_SYNC_STATE_HASH == current_state_hash:
+            return {"status": "success", "message": "Estados ya se encontraban sincronizados."}
+
         # 1. Update Cuotas
         cuotas = db.query(Cuota).all()
         for c in cuotas:
@@ -900,6 +946,10 @@ def sync_system_states(db: Session = Depends(get_db)):
                     cli.estado = EstadoClienteEnum.ACTIVO
 
         db.commit()
+        
+        _LAST_SYNC_DATE = hoy
+        _LAST_SYNC_STATE_HASH = current_state_hash
+        
         return {"status": "success", "message": "Estados sincronizados correctamente."}
     except Exception as e:
         db.rollback()
@@ -1100,6 +1150,393 @@ def modificar_cobranza(cobranza_id: int, datos: CobranzaIndividual, db: Session 
         return {"status": "success", "message": "Cobranza modificada exitosamente."}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+# -------------------------------------------------------------------
+# Operaciones de Cartera
+# -------------------------------------------------------------------
+
+@app.get("/api/v1/carteras", tags=["Carteras"])
+def get_carteras(db: Session = Depends(get_db)):
+    from src.database.models import Cartera, SocioComercial
+    carteras = db.query(Cartera).join(SocioComercial, Cartera.socio_id == SocioComercial.id).all()
+    
+    result = []
+    for c in carteras:
+        result.append({
+            "id": c.id,
+            "nombre": c.nombre,
+            "tipo_operacion": c.tipo_operacion.value if hasattr(c.tipo_operacion, 'value') else c.tipo_operacion,
+            "socio": c.socio.razon_social if c.socio else "",
+            "fecha_compra": c.fecha_compra.strftime("%Y-%m-%d"),
+            "tna_descuento": c.tna_descuento,
+            "recurso": c.recurso,
+            "iva": c.iva,
+            "estado": c.estado.value if hasattr(c.estado, 'value') else c.estado
+        })
+    return result
+
+@app.post("/api/v1/carteras/venta/preview", tags=["Carteras"])
+def preview_venta_cartera(data: VentaCarteraRequest, db: Session = Depends(get_db)):
+    try:
+        from src.database.models import Credito, Cliente, Cuota
+        
+        # Sincronizar estados automáticamente antes de consultar la cartera disponible
+        sync_system_states(db)
+        
+        sell_manager = PortfolioSell(db)
+        
+        if data.usar_cuotas_guardadas and data.cartera_id:
+            df_seleccion = sell_manager.fetch_installments_from_cartera(data.cartera_id)
+        else:
+            df_seleccion = sell_manager.fetch_available_installments_for_sale(
+                mora=data.mora,
+                fecha_emision_desde=data.fecha_emision_desde,
+                fecha_emision_hasta=data.fecha_emision_hasta,
+                fecha_vencimiento_desde=data.fecha_vencimiento_desde,
+                fecha_vencimiento_hasta=data.fecha_vencimiento_hasta,
+                cartera_id=data.cartera_id
+            )
+        
+        if df_seleccion is None or df_seleccion.empty:
+            return {"creditos": [], "cuotas": [], "resumen": []}
+            
+        if data.creditos_excluidos:
+            df_seleccion = df_seleccion[~df_seleccion['credito_id'].isin(data.creditos_excluidos)]
+            if df_seleccion.empty:
+                return {"creditos": [], "cuotas": [], "resumen": []}
+            
+        creditos_ids = df_seleccion['credito_id'].unique().tolist()
+        cuotas_vendidas_ids = df_seleccion['cuota_id'].tolist()
+        cuotas_por_credito = df_seleccion.groupby('credito_id').size().to_dict()
+        
+        fecha_v_dt = pd.to_datetime(data.fecha_venta).date() if isinstance(data.fecha_venta, str) else data.fecha_venta
+        tna = float(data.tna_descuento)
+        
+        def calculate_va(monto, fecha_venc):
+            fv = pd.to_datetime(fecha_venc).date() if isinstance(fecha_venc, str) else fecha_venc
+            dias = max(0, (fv - fecha_v_dt).days)
+            return float(monto) / (1 + (tna *30 / 365) * (dias/30))
+        
+        # 1. Fetch related Credits
+        creditos_db = db.query(Credito, Cliente).join(Cliente, Credito.cliente_cuil == Cliente.cuil).filter(Credito.id.in_(creditos_ids)).all()
+        
+        va_por_credito = {c.id: 0.0 for c, _ in creditos_db}
+        
+        # 2. Fetch related Installments (all from these credits)
+        cuotas_db = db.query(Cuota).filter(Cuota.credito_id.in_(creditos_ids)).order_by(Cuota.credito_id, Cuota.nro_cuota).all()
+        
+        cuotas_res = []
+        for c in cuotas_db:
+            incluida = c.id in cuotas_vendidas_ids
+            
+            iva_val = float(c.iva)
+            if not data.iva:
+                iva_val = 0.0
+                
+            total_c = float(c.capital) + float(c.interes) + iva_val
+            
+            va_cuota = 0.0
+            if incluida:
+                va_cuota = calculate_va(total_c, c.fecha_vencimiento)
+                va_por_credito[c.credito_id] += va_cuota
+                
+            cuotas_res.append({
+                "id": c.id,
+                "credito_id": c.credito_id,
+                "nro_cuota": c.nro_cuota,
+                "fecha_vencimiento": c.fecha_vencimiento.isoformat() if c.fecha_vencimiento else None,
+                "capital": float(c.capital),
+                "interes": float(c.interes),
+                "iva": iva_val,
+                "total_cuota": total_c,
+                "valor_actual": va_cuota if incluida else 0.0,
+                "incluida": incluida
+            })
+
+        creditos_res = []
+        for cred, cli in creditos_db:
+            creditos_res.append({
+                "id": cred.id,
+                "cliente": f"{cli.nombre} {cli.apellido}",
+                "monto_otorgado": float(cred.capital),
+                "fecha_emision": cred.fecha_emision.isoformat() if cred.fecha_emision else None,
+                "total_cuotas": cred.plazo,
+                "estado": cred.estado.value if hasattr(cred.estado, 'value') else str(cred.estado),
+                "cuotas_a_ceder": int(cuotas_por_credito.get(cred.id, 0)),
+                "valor_actual": float(va_por_credito.get(cred.id, 0.0))
+            })
+            
+        # 3. Group summary by fecha_vencimiento for *sold* installments
+        df_vendidas = df_seleccion.copy()
+        
+        if not data.iva:
+            df_vendidas['iva'] = 0.0
+            
+        df_vendidas['total_cuota'] = df_vendidas['capital'] + df_vendidas['interes'] + df_vendidas['iva']
+        
+        def calc_va_row(row):
+            return calculate_va(row['total_cuota'], row['fecha_vencimiento'])
+            
+        df_vendidas['valor_actual'] = df_vendidas.apply(calc_va_row, axis=1)
+        
+        summary_df = df_vendidas.groupby('fecha_vencimiento').agg({
+            'capital': 'sum',
+            'interes': 'sum',
+            'iva': 'sum',
+            'total_cuota': 'sum',
+            'valor_actual': 'sum',
+            'cuota_id': 'count'
+        }).reset_index()
+        
+        summary_df.rename(columns={'cuota_id': 'cantidad'}, inplace=True)
+        summary_df.sort_values('fecha_vencimiento', inplace=True)
+        
+        resumen_res = summary_df.to_dict(orient='records')
+        for r in resumen_res:
+            r['fecha_vencimiento'] = r['fecha_vencimiento'].isoformat() if hasattr(r['fecha_vencimiento'], 'isoformat') else str(r['fecha_vencimiento'])
+            
+        return {
+            "creditos": creditos_res,
+            "cuotas": cuotas_res,
+            "resumen": resumen_res
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/v1/carteras/venta", tags=["Carteras"])
+def create_venta_cartera(data: VentaCarteraRequest, db: Session = Depends(get_db)):
+    try:
+        # Sincronizar estados automáticamente antes de consultar la cartera disponible
+        sync_system_states(db)
+        
+        sell_manager = PortfolioSell(db)
+        
+        # 1. Fetch available installments
+        df_seleccion = sell_manager.fetch_available_installments_for_sale(
+            mora=data.mora,
+            fecha_emision_desde=data.fecha_emision_desde,
+            fecha_emision_hasta=data.fecha_emision_hasta,
+            fecha_vencimiento_desde=data.fecha_vencimiento_desde,
+            fecha_vencimiento_hasta=data.fecha_vencimiento_hasta
+        )
+        
+        if df_seleccion is None or df_seleccion.empty:
+            raise HTTPException(status_code=400, detail="No se encontraron cuotas disponibles para vender con los criterios seleccionados.")
+            
+        if data.creditos_excluidos:
+            df_seleccion = df_seleccion[~df_seleccion['credito_id'].isin(data.creditos_excluidos)]
+            if df_seleccion.empty:
+                raise HTTPException(status_code=400, detail="Todos los créditos fueron excluidos manualmente.")
+            
+        # 2. Execute sale
+        cartera = sell_manager.execute_portfolio_sale(
+            nombre_cartera=data.nombre_cartera,
+            fecha_venta=data.fecha_venta,
+            tna_descuento=data.tna_descuento,
+            cuit_comprador=data.cuit_comprador,
+            razon_social_comprador=data.razon_social_comprador,
+            df_seleccion=df_seleccion,
+            recurso=data.recurso,
+            iva=data.iva
+        )
+        
+        return {"status": "success", "message": f"Venta registrada exitosamente. Cartera ID: {cartera.id}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/v1/carteras/venta/{cartera_id}", tags=["Carteras"])
+def update_venta_cartera(cartera_id: int, data: VentaCarteraRequest, db: Session = Depends(get_db)):
+    try:
+        sync_system_states(db)
+        sell_manager = PortfolioSell(db)
+        
+        if data.usar_cuotas_guardadas:
+            df_seleccion = sell_manager.fetch_installments_from_cartera(cartera_id)
+        else:
+            df_seleccion = sell_manager.fetch_available_installments_for_sale(
+                mora=data.mora,
+                fecha_emision_desde=data.fecha_emision_desde,
+                fecha_emision_hasta=data.fecha_emision_hasta,
+                fecha_vencimiento_desde=data.fecha_vencimiento_desde,
+                fecha_vencimiento_hasta=data.fecha_vencimiento_hasta,
+                cartera_id=data.cartera_id
+            )
+            
+        if df_seleccion is None or df_seleccion.empty:
+            raise HTTPException(status_code=400, detail="No se encontraron cuotas para actualizar la venta.")
+            
+        if data.creditos_excluidos:
+            df_seleccion = df_seleccion[~df_seleccion['credito_id'].isin(data.creditos_excluidos)]
+            if df_seleccion.empty:
+                raise HTTPException(status_code=400, detail="Todos los créditos fueron excluidos manualmente.")
+            
+        cartera = sell_manager.update_portfolio_sale(
+            cartera_id=cartera_id,
+            nombre_cartera=data.nombre_cartera,
+            fecha_venta=data.fecha_venta,
+            tna_descuento=data.tna_descuento,
+            cuit_comprador=data.cuit_comprador,
+            razon_social_comprador=data.razon_social_comprador,
+            df_seleccion=df_seleccion,
+            recurso=data.recurso,
+            iva=data.iva
+        )
+        
+        return {"status": "success", "message": f"Cartera {cartera.id} actualizada exitosamente."}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/v1/carteras/compra", tags=["Carteras"])
+async def create_compra_cartera(
+    nombre_cartera: str = Form(...),
+    fecha_compra: date = Form(...),
+    tna_descuento: float = Form(...),
+    cuit_vendedor: str = Form(...),
+    razon_social_vendedor: str = Form(...),
+    personas_csv: UploadFile = File(...),
+    prestamos_csv: UploadFile = File(...),
+    cuotas_csv: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    import tempfile
+    import os
+    
+    # Save uploaded files temporarily
+    with tempfile.TemporaryDirectory() as temp_dir:
+        p_personas = os.path.join(temp_dir, "personas.csv")
+        p_prestamos = os.path.join(temp_dir, "prestamos.csv")
+        p_cuotas = os.path.join(temp_dir, "cuotas.csv")
+        
+        with open(p_personas, "wb") as f: f.write(await personas_csv.read())
+        with open(p_prestamos, "wb") as f: f.write(await prestamos_csv.read())
+        with open(p_cuotas, "wb") as f: f.write(await cuotas_csv.read())
+        
+        try:
+            from src.portfolio.purchase import PortfolioPurchase
+            importer = PortfolioPurchase()
+            
+            importer.create_portfolio(
+                nombre_cartera=nombre_cartera,
+                fecha_compra=fecha_compra,
+                tna_descuento=tna_descuento,
+                cuit_vendedor=cuit_vendedor,
+                razon_social_vendedor=razon_social_vendedor
+            )
+            
+            importer.read_csv(
+                personas_path=p_personas,
+                prestamos_path=p_prestamos,
+                cuotas_path=p_cuotas
+            )
+            
+            importer.validation()
+            importer.check_warnings()
+            importer.process_full_portfolio()
+            importer.save_portfolio()
+            
+            return {"status": "success", "message": "Compra de cartera importada exitosamente."}
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+@app.patch("/api/v1/carteras/{cartera_id}", tags=["Carteras"])
+def update_cartera(cartera_id: int, data: UpdateCarteraRequest, db: Session = Depends(get_db)):
+    from src.database.models import Cartera, EstadoCartera, EstadoCuotaCedida, TipoOperacionCartera, Cuota
+    
+    cartera = db.query(Cartera).filter(Cartera.id == cartera_id).first()
+    if not cartera:
+        raise HTTPException(status_code=404, detail="Cartera no encontrada")
+        
+    if cartera.estado != EstadoCartera.PENDIENTE:
+        raise HTTPException(status_code=400, detail="Solo se pueden modificar carteras en estado PENDIENTE.")
+        
+    try:
+        if data.fecha_compra is not None:
+            cartera.fecha_compra = data.fecha_compra
+        if data.tna_descuento is not None:
+            cartera.tna_descuento = data.tna_descuento
+        if data.recurso is not None:
+            cartera.recurso = data.recurso
+        if data.iva is not None:
+            cartera.iva = data.iva
+            
+        if data.estado is not None:
+            nuevo_estado_str = data.estado.upper()
+            if nuevo_estado_str in ["VENDIDA", "COMPRADA"]:
+                if nuevo_estado_str == "VENDIDA" and cartera.tipo_operacion != TipoOperacionCartera.VENTA:
+                    raise ValueError("El estado VENDIDA solo aplica a carteras de VENTA.")
+                if nuevo_estado_str == "COMPRADA" and cartera.tipo_operacion != TipoOperacionCartera.COMPRA:
+                    raise ValueError("El estado COMPRADA solo aplica a carteras de COMPRA.")
+                
+                cartera.estado = EstadoCartera[nuevo_estado_str]
+                
+                # Actualizar masivamente las cuotas a su estado final
+                cuotas_ids = [op.cuota_id for op in cartera.operaciones]
+                if cuotas_ids:
+                    db.query(Cuota).filter(Cuota.id.in_(cuotas_ids)).update(
+                        {"estado_cesion": EstadoCuotaCedida.PENDIENTE},
+                        synchronize_session=False
+                    )
+            elif nuevo_estado_str == "PENDIENTE":
+                pass # Ya está pendiente
+            else:
+                raise ValueError(f"Estado {nuevo_estado_str} no es válido.")
+
+        db.commit()
+        return {"status": "success", "message": "Cartera actualizada correctamente."}
+    except ValueError as ve:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/v1/carteras/{cartera_id}", tags=["Carteras"])
+def delete_cartera(cartera_id: int, db: Session = Depends(get_db)):
+    from src.database.models import Cartera, OperacionCartera, Cuota, EstadoCuotaCedida, EstadoCartera, TipoOperacionCartera, Credito
+    
+    cartera = db.query(Cartera).filter(Cartera.id == cartera_id).first()
+    if not cartera:
+        raise HTTPException(status_code=404, detail="Cartera no encontrada")
+        
+    if cartera.estado != EstadoCartera.PENDIENTE:
+        raise HTTPException(status_code=400, detail="No se puede eliminar una cartera que ya está CONFIRMADA (VENDIDA o COMPRADA).")
+    
+    try:
+        if cartera.tipo_operacion == TipoOperacionCartera.COMPRA:
+            # En una COMPRA, los créditos se crearon específicamente para esta cartera.
+            # Al eliminarlos, SQLAlchemy (o la BD) debería aplicar cascade a las Cuotas y a OperacionCartera.
+            # Primero eliminamos las Operaciones relacionadas para evitar problemas si faltan cascades
+            db.query(OperacionCartera).filter(OperacionCartera.cartera_id == cartera_id).delete(synchronize_session=False)
+            
+            # Buscamos los creditos asociados y los borramos uno por uno para asegurar los cascades a nivel ORM si es necesario
+            creditos_asociados = db.query(Credito).filter(Credito.cartera_id == cartera_id).all()
+            for cred in creditos_asociados:
+                db.delete(cred)
+            
+        else:
+            # En una VENTA, la cartera solo agrupa cuotas existentes.
+            # Get all related OperacionCartera records
+            operaciones = db.query(OperacionCartera).filter(OperacionCartera.cartera_id == cartera_id).all()
+            cuota_ids = [op.cuota_id for op in operaciones]
+    
+            # Revert estado_cesion for the affected cuotas
+            if cuota_ids:
+                db.query(Cuota).filter(Cuota.id.in_(cuota_ids)).update(
+                    {"estado_cesion": EstadoCuotaCedida.NO_VENDIDA},
+                    synchronize_session=False
+                )
+    
+            # Delete related OperacionCartera mapping records
+            db.query(OperacionCartera).filter(OperacionCartera.cartera_id == cartera_id).delete(synchronize_session=False)
+
+        # Delete the Cartera itself
+        db.delete(cartera)
+        db.commit()
+        return {"status": "success", "message": f"Cartera {cartera_id} eliminada correctamente."}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"No se puede eliminar la cartera (puede estar referenciada). Error: {str(e)}")
 
 # -------------------------------------------------------------------
 # Frontend

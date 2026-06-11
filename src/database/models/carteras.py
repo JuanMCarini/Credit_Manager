@@ -22,6 +22,12 @@ class TipoOperacionCartera(enum.Enum):
     RECOMPRA = "RECOMPRA"
 
 
+class EstadoCartera(enum.Enum):
+    PENDIENTE = "PENDIENTE"
+    COMPRADA = "COMPRADA"
+    VENDIDA = "VENDIDA"
+
+
 class Cartera(Base):
     """
     =============================================================================
@@ -45,6 +51,10 @@ class Cartera(Base):
     tipo_operacion = Column(
         Enum(TipoOperacionCartera), nullable=False, default=TipoOperacionCartera.COMPRA
     )
+    estado = Column(
+        Enum(EstadoCartera), nullable=False, default=EstadoCartera.PENDIENTE
+    )
+
 
     # Relationships
     creditos_incluidos = relationship("Credito", back_populates="cartera")

@@ -24,6 +24,11 @@ function switchTab(tabId) {
     document.querySelectorAll('.tab-content').forEach(tab => {
         tab.classList.remove('active');
     });
+    
+    // Reset editing state if we leave the venta cartera flow
+    if (tabId !== 'nueva-operacion-cartera' && tabId !== 'preview-venta-cartera' && typeof resetVentaCarteraUI === 'function') {
+        resetVentaCarteraUI();
+    }
     const targetTab = document.getElementById(`tab-${tabId}`);
     if (targetTab) {
         targetTab.classList.add('active');
@@ -201,6 +206,7 @@ function renderBalancesTable(data, activeGroups, reportDate) {
 
     if (data.length === 0) {
         tbody.innerHTML = `<tr><td colspan="${headers.length}" class="text-center empty-state">No se encontraron saldos.</td></tr>`;
+        updateTableTotals('table-bal');
         return;
     }
 
@@ -560,7 +566,7 @@ function updateTableTotals(tableId) {
         return span ? span.textContent.trim().toLowerCase() : th.textContent.trim().toLowerCase();
     });
 
-    const monetaryKeywords = ['capital', 'interés', 'interes', 'iva', 'total', 'saldo', 'monto', 'pagado'];
+    const monetaryKeywords = ['capital', 'interés', 'interes', 'iva', 'total', 'saldo', 'monto', 'pagado', 'valor'];
     const monetaryCols = [];
     headers.forEach((text, index) => {
         if (monetaryKeywords.some(kw => text.includes(kw)) && !text.includes('fecha') && !text.includes('nro') && !text.includes('id') && !text.includes('cuotas') && !text.includes('tna')) {
@@ -771,8 +777,8 @@ function updateTableTotals(tableId) {
     });
 
     if (visibleRows === 0) {
-        if (tfoot) tfoot.style.display = 'none';
-        return;
+        // Permitimos que la tabla vacía muestre los totales en 0.0
+        // en lugar de ocultar el footer.
     }
 
     if (!tfoot) {
@@ -2582,3 +2588,622 @@ document.addEventListener('DOMContentLoaded', () => {
     if (dateCancelCredito) dateCancelCredito.value = today;
 });
 
+// --- Operaciones de Cartera ---
+
+async function loadOperacionesCarteraTable() {
+    try {
+        const response = await fetch(`${API_URL}/api/v1/carteras`);
+        const carteras = await response.json();
+        
+        const tbody = document.getElementById('operaciones-cartera-body');
+        if (!tbody) return;
+        
+        if (carteras.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="100%" class="text-center empty-state">No hay operaciones de cartera registradas.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = carteras.map(c => {
+            const badgeClass = c.tipo_operacion.toLowerCase() === 'venta' ? 'status-venta' : 'status-compra';
+            const estadoBadgeClass = c.estado === 'PENDIENTE' ? 'status-pendiente' : (c.estado === 'VENDIDA' ? 'status-venta' : 'status-compra');
+            
+            let actions = '';
+            if (c.estado === 'PENDIENTE') {
+                actions = `
+                    <div style="display: flex; justify-content: center; align-items: center; gap: 4px;">
+                        <button class="btn-success btn-sm" style="padding: 4px 8px; font-size: 1.1em; background: transparent; border: none; box-shadow: none; cursor: pointer;" title="Confirmar" onclick="confirmarCartera(${c.id}, '${c.tipo_operacion}')">✅</button>
+                        <button class="btn-primary btn-sm" style="padding: 4px 8px; font-size: 1.1em; background: transparent; border: none; box-shadow: none; cursor: pointer;" title="Editar" onclick='openEditCarteraModal(${JSON.stringify(c)})'>✏️</button>
+                        <button class="btn-danger btn-sm" style="padding: 4px 8px; font-size: 1.1em; background: transparent; border: none; box-shadow: none; cursor: pointer;" title="Borrar" onclick="deleteOperacionCartera(${c.id})">🗑️</button>
+                    </div>
+                `;
+            } else {
+                actions = `
+                    <div style="display: flex; justify-content: center; align-items: center; gap: 4px;">
+                        <button class="btn-primary btn-sm" style="padding: 4px 8px; font-size: 1.1em; background: transparent; border: none; box-shadow: none; cursor: pointer;" title="Ver Detalle" onclick='viewOperacionCartera(${JSON.stringify(c)})'>👁️</button>
+                    </div>
+                `;
+            }
+
+            return `
+                <tr>
+                    <td>${c.id}</td>
+                    <td><strong>${c.nombre}</strong></td>
+                    <td><span class="status-badge ${badgeClass}">${c.tipo_operacion}</span></td>
+                    <td><span class="status-badge ${estadoBadgeClass}" style="background-color: ${c.estado === 'PENDIENTE' ? 'var(--text-tertiary)' : ''}">${c.estado}</span></td>
+                    <td>${c.socio}</td>
+                    <td>${c.fecha_compra || '-'}</td>
+                    <td>${(c.tna_descuento * 100).toFixed(2)}%</td>
+                    <td>${c.recurso ? 'Sí' : 'No'}</td>
+                    <td>${c.iva ? 'Sí' : 'No'}</td>
+                    <td>${actions}</td>
+                </tr>
+            `;
+        }).join('');
+    } catch (error) {
+        console.error('Error loading carteras:', error);
+        alert('Error al cargar las operaciones de cartera.');
+    }
+}
+
+async function deleteOperacionCartera(id) {
+    if (!confirm(`¿Está seguro de que desea borrar la operación de cartera #${id}? Esta acción es irreversible y podría fallar si la cartera ya tiene movimientos asociados.`)) return;
+
+    try {
+        const response = await fetch(`${API_URL}/api/v1/carteras/${id}`, {
+            method: 'DELETE'
+        });
+        
+        if (response.ok) {
+            alert(`Operación #${id} eliminada exitosamente.`);
+            loadOperacionesCarteraTable();
+        } else {
+            const errorData = await response.json();
+            alert('Error al borrar: ' + (errorData.detail || 'Desconocido'));
+        }
+    } catch (error) {
+        console.error('Error al eliminar cartera:', error);
+        alert('Error de conexión.');
+    }
+}
+
+async function openEditCarteraModal(c) {
+    // Ensure socios are loaded before trying to select one
+    await loadSociosOptionsForCartera();
+
+    // Instead of a modal, we navigate to the Venta Cartera form!
+    editingCarteraId = c.id;
+    document.getElementById('venta-nombre').value = c.nombre;
+    document.getElementById('venta-fecha').value = c.fecha_compra || '';
+    document.getElementById('venta-tna').value = (c.tna_descuento * 100).toFixed(2);
+    document.getElementById('venta-socio').value = c.socio_id; // Will only work if we fetch the ID properly, maybe we need cuit? Wait, c.socio_id is there, we need to match it. Actually the form uses CUIT as value! We need to find the option.
+    // Let's set it by iterating options using dataset.razon
+    const socioSelect = document.getElementById('venta-socio');
+    for(let i=0; i<socioSelect.options.length; i++) {
+        if (socioSelect.options[i].dataset && socioSelect.options[i].dataset.razon === c.socio) {
+            socioSelect.selectedIndex = i;
+            break;
+        }
+    }
+    
+    document.getElementById('venta-recurso').checked = c.recurso;
+    document.getElementById('venta-iva').checked = c.iva || false;
+    
+    // Hide standard Simular button, show Edit buttons
+    document.getElementById('btn-simular-venta').style.display = 'none';
+    document.getElementById('btn-recalcular-cartera').style.display = 'inline-block';
+    document.getElementById('btn-refiltrar-cartera').style.display = 'inline-block';
+    
+    document.getElementById('btn-confirmar-venta').textContent = 'Actualizar Cartera';
+    
+    switchTab('nueva-operacion-cartera');
+    
+    // Automatically fetch preview using saved installments
+    submitVentaCartera(null, true);
+}
+
+function resetVentaCarteraUI() {
+    editingCarteraId = null;
+    document.getElementById('btn-simular-venta').style.display = 'inline-block';
+    document.getElementById('btn-recalcular-cartera').style.display = 'none';
+    document.getElementById('btn-refiltrar-cartera').style.display = 'none';
+    
+    const btnConfirmar = document.getElementById('btn-confirmar-venta');
+    if (btnConfirmar) {
+        btnConfirmar.textContent = 'Confirmar Venta';
+        btnConfirmar.style.display = 'inline-block';
+    }
+    
+    window.isViewingCartera = false;
+    const volverBtn = document.getElementById('btn-volver-preview');
+    if (volverBtn) {
+        volverBtn.setAttribute('onclick', "switchTab('nueva-operacion-cartera')");
+        volverBtn.textContent = 'Volver a Filtros';
+    }
+    
+    // Refresh the tab visibility if we are resetting
+    renderPreviewVenta('creditos');
+    
+    const title = document.querySelector('#tab-preview-venta-cartera .section-title');
+    if (title) {
+        title.textContent = 'Simulación de Venta de Cartera';
+    }
+}
+
+async function viewOperacionCartera(c) {
+    try {
+        const payload = {
+            nombre_cartera: c.nombre,
+            fecha_venta: c.fecha_compra || new Date().toISOString().split('T')[0],
+            tna_descuento: c.tna_descuento || 0,
+            cuit_comprador: "0",
+            razon_social_comprador: c.socio || "",
+            mora: false,
+            recurso: c.recurso || false,
+            iva: c.iva || false,
+            fecha_emision_desde: null,
+            fecha_emision_hasta: null,
+            fecha_vencimiento_desde: null,
+            fecha_vencimiento_hasta: null,
+            creditos_excluidos: [],
+            cartera_id: c.id,
+            usar_cuotas_guardadas: true
+        };
+
+        const response = await fetch(`${API_URL}/api/v1/carteras/venta/preview`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (response.ok) {
+            currentPreviewData = await response.json();
+            
+            window.isViewingCartera = true;
+            document.getElementById('btn-confirmar-venta').style.display = 'none';
+            const volverBtn = document.getElementById('btn-volver-preview');
+            if (volverBtn) {
+                volverBtn.setAttribute('onclick', "switchTab('operaciones-cartera'); resetVentaCarteraUI();");
+                volverBtn.textContent = 'Volver a Operaciones';
+            }
+            
+            document.querySelector('#tab-preview-venta-cartera .section-title').textContent = `Detalle de Cartera: ${c.nombre} (${c.estado})`;
+            
+            switchTab('preview-venta-cartera');
+            renderPreviewVenta('creditos');
+        } else {
+            alert('Error al obtener el detalle de la cartera.');
+        }
+    } catch (e) {
+        alert('Error de conexión.');
+    }
+}
+
+
+async function confirmarCartera(id, tipo) {
+    if (!id || !tipo) {
+        id = document.getElementById('edit-cartera-id').value;
+        tipo = document.getElementById('edit-cartera-tipo').value;
+    }
+    const nuevoEstado = tipo === 'VENTA' ? 'VENDIDA' : 'COMPRADA';
+
+    if (!confirm(`¿Está seguro de que desea confirmar la cartera y cambiar su estado a ${nuevoEstado}? Esta acción bloqueará futuras modificaciones.`)) return;
+
+    try {
+        const response = await fetch(`${API_URL}/api/v1/carteras/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ estado: nuevoEstado })
+        });
+        
+        if (response.ok) {
+            alert(`Cartera confirmada como ${nuevoEstado}.`);
+            const modal = document.getElementById('edit-cartera-modal');
+            if (modal) modal.style.display = 'none';
+            loadOperacionesCarteraTable();
+        } else {
+            const err = await response.json();
+            alert('Error al confirmar: ' + err.detail);
+        }
+    } catch (error) {
+        alert('Error de conexión al servidor.');
+    }
+}
+
+function toggleOperacionForms() {
+    const tipo = document.getElementById('tipo-operacion-select').value;
+    if (tipo === 'VENTA') {
+        document.getElementById('form-venta-cartera').style.display = 'block';
+        document.getElementById('form-compra-cartera').style.display = 'none';
+    } else {
+        document.getElementById('form-venta-cartera').style.display = 'none';
+        document.getElementById('form-compra-cartera').style.display = 'block';
+    }
+}
+
+let currentVentaPayload = null;
+let currentPreviewData = null;
+let currentExcludedCreditos = [];
+let editingCarteraId = null;
+
+async function submitVentaCartera(event, usarCuotasGuardadas = false) {
+    if (event) event.preventDefault();
+    
+    // Si viene de un evento de botón, lo deshabilitamos
+    let btn = null;
+    if (event && event.target && event.target.tagName === 'FORM') {
+        btn = event.target.querySelector('button[type="submit"]');
+    } else if (event && event.target && event.target.tagName === 'BUTTON') {
+        btn = event.target;
+    }
+    
+    if (btn) {
+        btn.disabled = true;
+        btn.dataset.originalText = btn.textContent;
+        btn.textContent = 'Simulando...';
+    }
+
+    const socioVentaSelect = document.getElementById('venta-socio');
+    const selectedSocioVenta = socioVentaSelect.options[socioVentaSelect.selectedIndex];
+
+    // Reset exclusions on a new simulation
+    currentExcludedCreditos = [];
+
+    currentVentaPayload = {
+        nombre_cartera: document.getElementById('venta-nombre').value,
+        fecha_venta: document.getElementById('venta-fecha').value,
+        tna_descuento: parseFloat(document.getElementById('venta-tna').value) / 100.0,
+        cuit_comprador: selectedSocioVenta.value,
+        razon_social_comprador: selectedSocioVenta.dataset.razon,
+        mora: document.getElementById('venta-mora').checked,
+        recurso: document.getElementById('venta-recurso').checked,
+        iva: document.getElementById('venta-iva').checked,
+        fecha_emision_desde: document.getElementById('venta-emision-desde').value || null,
+        fecha_emision_hasta: document.getElementById('venta-emision-hasta').value || null,
+        fecha_vencimiento_desde: document.getElementById('venta-vto-desde').value || null,
+        fecha_vencimiento_hasta: document.getElementById('venta-vto-hasta').value || null,
+        creditos_excluidos: currentExcludedCreditos,
+        cartera_id: editingCarteraId,
+        usar_cuotas_guardadas: usarCuotasGuardadas
+    };
+
+    try {
+        const response = await fetch(`${API_URL}/api/v1/carteras/venta/preview`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(currentVentaPayload)
+        });
+
+        if (response.ok) {
+            currentPreviewData = await response.json();
+            switchTab('preview-venta-cartera');
+            renderPreviewVenta('creditos'); // show default
+        } else {
+            const result = await response.json();
+            alert('Error en simulación: ' + (result.detail || 'Error desconocido'));
+        }
+    } catch (error) {
+        console.error('Error previewing venta:', error);
+        alert('Error de conexión o de procesamiento.');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = btn.dataset.originalText || 'Simular Venta';
+        }
+    }
+}
+
+function renderPreviewVenta(tab) {
+    document.getElementById('preview-creditos-container').style.display = tab === 'creditos' ? 'block' : 'none';
+    document.getElementById('preview-cuotas-container').style.display = tab === 'cuotas' ? 'block' : 'none';
+    document.getElementById('preview-resumen-container').style.display = tab === 'resumen' ? 'block' : 'none';
+    
+    // Update active button styles
+    document.getElementById('btn-preview-creditos').className = tab === 'creditos' ? 'btn-primary' : 'btn-secondary';
+    document.getElementById('btn-preview-cuotas').className = tab === 'cuotas' ? 'btn-primary' : 'btn-secondary';
+    document.getElementById('btn-preview-resumen').className = tab === 'resumen' ? 'btn-primary' : 'btn-secondary';
+
+    // Wizard navigation update
+    const btnBack = document.getElementById('btn-preview-back');
+    const btnNext = document.getElementById('btn-preview-next');
+    const btnConfirm = document.getElementById('btn-confirmar-venta');
+    
+    if (tab === 'creditos') {
+        btnBack.style.display = 'none';
+        btnNext.style.display = 'inline-block';
+        btnNext.textContent = 'Ver Cuotas';
+        btnNext.setAttribute('onclick', "renderPreviewVenta('cuotas')");
+        if(btnConfirm) btnConfirm.style.display = 'none';
+    } else if (tab === 'cuotas') {
+        btnBack.style.display = 'inline-block';
+        btnBack.textContent = 'Ver Créditos';
+        btnBack.setAttribute('onclick', "renderPreviewVenta('creditos')");
+        btnNext.style.display = 'inline-block';
+        btnNext.textContent = 'Ver Resumen';
+        btnNext.setAttribute('onclick', "renderPreviewVenta('resumen')");
+        if(btnConfirm) btnConfirm.style.display = 'none';
+    } else if (tab === 'resumen') {
+        btnBack.style.display = 'inline-block';
+        btnBack.textContent = 'Ver Cuotas';
+        btnBack.setAttribute('onclick', "renderPreviewVenta('cuotas')");
+        btnNext.style.display = 'none';
+        if(btnConfirm && !window.isViewingCartera) btnConfirm.style.display = 'inline-block';
+    }
+
+    if (!currentPreviewData) return;
+
+    const buildHeaders = (tableId, headerId, headers) => {
+        const thead = document.getElementById(headerId);
+        let html = "<tr>";
+        headers.forEach((h, i) => {
+            html += `<th>
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                    <span>${h}</span>
+                    <span class="filter-icon filter-icon-${tableId}" data-col="${i}" onclick="openExcelFilter(event, ${i}, '${tableId}', '${headerId}')">▼</span>
+                </div>
+            </th>`;
+        });
+        html += "</tr>";
+        thead.innerHTML = html;
+    };
+
+    if (tab === 'creditos') {
+        const headers = ["ID", "Cliente", "Estado", "Fecha Emisión", "Monto Orig.", "Total Cuotas", "Cuotas a Ceder", "Valor Actual"];
+        if (!window.isViewingCartera) {
+            headers.push("Acciones");
+        }
+        buildHeaders('table-preview-creditos', 'preview-creditos-headers', headers);
+        
+        const tbody = document.getElementById('preview-creditos-body');
+        const colSpan = window.isViewingCartera ? 8 : 9;
+        if (currentPreviewData.creditos.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center empty-state">No se encontraron créditos que cumplan los filtros.</td></tr>`;
+            updateTableTotals('table-preview-creditos');
+            return;
+        }
+        tbody.innerHTML = currentPreviewData.creditos.map(c => `
+            <tr>
+                <td>${c.id}</td>
+                <td>${c.cliente}</td>
+                <td><span class="status-badge status-${c.estado.toLowerCase()}">${c.estado}</span></td>
+                <td>${c.fecha_emision || '-'}</td>
+                <td>${formatCurrency(c.monto_otorgado)}</td>
+                <td>${c.total_cuotas}</td>
+                <td>${c.cuotas_a_ceder || 0}</td>
+                <td><strong>${formatCurrency(c.valor_actual || 0)}</strong></td>
+                ${!window.isViewingCartera ? `
+                <td>
+                    <button class="btn-secondary" style="color: #e74c3c; border-color: #e74c3c;" onclick="excludeCreditoFromSimulation(${c.id})">Excluir</button>
+                </td>
+                ` : ''}
+            </tr>
+        `).join('');
+        updateTableTotals('table-preview-creditos');
+    } else if (tab === 'cuotas') {
+        const headers = ["Credito ID", "Nro Cuota", "Vencimiento", "Capital", "Interés", "IVA", "Total Cuota", "Valor Actual", "¿Incluida?"];
+        buildHeaders('table-preview-cuotas', 'preview-cuotas-headers', headers);
+        
+        const tbody = document.getElementById('preview-cuotas-body');
+        if (currentPreviewData.cuotas.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="9" class="text-center empty-state">No se encontraron cuotas.</td></tr>';
+            updateTableTotals('table-preview-cuotas');
+            return;
+        }
+        tbody.innerHTML = currentPreviewData.cuotas.map(c => `
+            <tr style="background-color: ${c.incluida ? 'rgba(46, 204, 113, 0.1)' : 'transparent'};">
+                <td>${c.credito_id}</td>
+                <td>${c.nro_cuota}</td>
+                <td>${c.fecha_vencimiento || '-'}</td>
+                <td>${formatCurrency(c.capital)}</td>
+                <td>${formatCurrency(c.interes)}</td>
+                <td>${formatCurrency(c.iva)}</td>
+                <td><strong>${formatCurrency(c.total_cuota)}</strong></td>
+                <td><strong>${formatCurrency(c.valor_actual || 0)}</strong></td>
+                <td>${c.incluida ? '<span class="status-badge status-activa">Sí</span>' : '<span class="status-badge status-cancelada">No</span>'}</td>
+            </tr>
+        `).join('');
+        updateTableTotals('table-preview-cuotas');
+    } else if (tab === 'resumen') {
+        const headers = ["Vencimiento", "Cant. Cuotas", "Capital Total", "Interés Total", "IVA Total", "Monto Total", "Valor Actual"];
+        buildHeaders('table-preview-resumen', 'preview-resumen-headers', headers);
+        
+        const tbody = document.getElementById('preview-resumen-body');
+        if (currentPreviewData.resumen.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center empty-state">No hay resumen financiero.</td></tr>';
+            updateTableTotals('table-preview-resumen');
+            return;
+        }
+        tbody.innerHTML = currentPreviewData.resumen.map(r => `
+            <tr>
+                <td><strong>${r.fecha_vencimiento || '-'}</strong></td>
+                <td>${r.cantidad}</td>
+                <td>${formatCurrency(r.capital)}</td>
+                <td>${formatCurrency(r.interes)}</td>
+                <td>${formatCurrency(r.iva)}</td>
+                <td><strong>${formatCurrency(r.total_cuota)}</strong></td>
+                <td><strong>${formatCurrency(r.valor_actual || 0)}</strong></td>
+            </tr>
+        `).join('');
+        updateTableTotals('table-preview-resumen');
+    }
+}
+
+async function excludeCreditoFromSimulation(creditoId) {
+    if (!currentVentaPayload) return;
+    if (!confirm('¿Estás seguro de que deseas excluir este crédito de la venta?')) return;
+    
+    currentExcludedCreditos.push(creditoId);
+    currentVentaPayload.creditos_excluidos = currentExcludedCreditos;
+    
+    try {
+        const response = await fetch(`${API_URL}/api/v1/carteras/venta/preview`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(currentVentaPayload)
+        });
+
+        if (!response.ok) {
+            const err = await response.json();
+            alert("Error al actualizar la simulación: " + (err.detail || 'Error desconocido'));
+            currentExcludedCreditos.pop();
+            currentVentaPayload.creditos_excluidos = currentExcludedCreditos;
+            return;
+        }
+
+        currentPreviewData = await response.json();
+        renderPreviewVenta('creditos'); // refresh the active tab
+    } catch (error) {
+        console.error(error);
+        alert("Error de red al actualizar simulación.");
+        currentExcludedCreditos.pop();
+        currentVentaPayload.creditos_excluidos = currentExcludedCreditos;
+    }
+}
+
+async function confirmVentaCartera() {
+    if (!currentVentaPayload) return;
+    
+    try {
+        const url = editingCarteraId 
+            ? `${API_URL}/api/v1/carteras/venta/${editingCarteraId}`
+            : `${API_URL}/api/v1/carteras/venta`;
+            
+        const method = editingCarteraId ? 'PUT' : 'POST';
+            
+        const response = await fetch(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(currentVentaPayload)
+        });
+
+        if (response.ok) {
+            alert(editingCarteraId ? 'Cartera actualizada con éxito.' : 'Venta de cartera registrada con éxito.');
+            document.getElementById('form-venta-cartera').reset();
+            currentVentaPayload = null;
+            currentPreviewData = null;
+            editingCarteraId = null; // reset
+            resetVentaCarteraUI(); // helper to hide edit buttons
+            switchTab('operaciones-cartera');
+            loadOperacionesCarteraTable();
+        } else {
+            const result = await response.json();
+            alert('Error al registrar venta: ' + (result.detail || 'Error desconocido'));
+        }
+    } catch (error) {
+        console.error('Error confirming venta:', error);
+        alert('Error de conexión o de procesamiento.');
+    }
+}
+
+async function submitCompraCartera(event) {
+    event.preventDefault();
+    const btn = event.target.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    btn.textContent = 'Procesando...';
+
+    const socioCompraSelect = document.getElementById('compra-socio');
+    const selectedSocioCompra = socioCompraSelect.options[socioCompraSelect.selectedIndex];
+
+    const formData = new FormData();
+    formData.append('nombre_cartera', document.getElementById('compra-nombre').value);
+    formData.append('fecha_compra', document.getElementById('compra-fecha').value);
+    formData.append('tna_descuento', parseFloat(document.getElementById('compra-tna').value) / 100.0);
+    formData.append('cuit_vendedor', selectedSocioCompra.value);
+    formData.append('razon_social_vendedor', selectedSocioCompra.dataset.razon);
+    
+    formData.append('personas_csv', document.getElementById('compra-personas-csv').files[0]);
+    formData.append('prestamos_csv', document.getElementById('compra-prestamos-csv').files[0]);
+    formData.append('cuotas_csv', document.getElementById('compra-cuotas-csv').files[0]);
+
+    try {
+        const response = await fetch(`${API_URL}/api/v1/carteras/compra`, {
+            method: 'POST',
+            body: formData
+        });
+
+        if (response.ok) {
+            alert('Compra de cartera registrada con éxito.');
+            document.getElementById('form-compra-cartera-form').reset();
+            switchTab('operaciones-cartera');
+            loadOperacionesCarteraTable();
+        } else {
+            const result = await response.json();
+            alert('Error al registrar: ' + (result.detail || 'Error desconocido'));
+        }
+    } catch (error) {
+        console.error('Error submitting compra:', error);
+        alert('Error de conexión o de procesamiento.');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Registrar Compra';
+    }
+}
+
+async function loadSociosOptionsForCartera() {
+    try {
+        const response = await fetch(`${API_URL}/api/v1/auxiliares/socios`);
+        if (!response.ok) throw new Error('Error al cargar socios comerciales');
+        
+        const socios = await response.json();
+        let optionsHtml = '<option value="" disabled selected>Seleccione un socio comercial...</option>';
+        socios.forEach(s => {
+            optionsHtml += `<option value="${s.cuit}" data-razon="${s.razon_social}">${s.razon_social} (${s.cuit})</option>`;
+        });
+        
+        document.getElementById('venta-socio').innerHTML = optionsHtml;
+        document.getElementById('compra-socio').innerHTML = optionsHtml;
+    } catch (error) {
+        console.error(error);
+        const errorHtml = '<option value="" disabled selected>Error al cargar socios</option>';
+        document.getElementById('venta-socio').innerHTML = errorHtml;
+        document.getElementById('compra-socio').innerHTML = errorHtml;
+    }
+}
+
+function openQuickAddSocioModal() {
+    document.getElementById('quick-add-socio-modal').style.display = 'flex';
+}
+
+function closeQuickAddSocioModal() {
+    document.getElementById('quick-add-socio-modal').style.display = 'none';
+    document.getElementById('form-quick-add-socio').reset();
+}
+
+async function submitQuickAddSocio(event) {
+    event.preventDefault();
+    const btn = event.target.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    btn.textContent = 'Guardando...';
+
+    const payload = {
+        cuit: document.getElementById('quick-socio-cuit').value,
+        razon_social: document.getElementById('quick-socio-razon').value,
+        domicilio_legal: document.getElementById('quick-socio-domicilio').value || undefined,
+        contacto_nombre: document.getElementById('quick-socio-contacto').value || undefined,
+        dia_corte: document.getElementById('quick-socio-dia').value ? parseInt(document.getElementById('quick-socio-dia').value, 10) : 28,
+        mail: document.getElementById('quick-socio-mail').value || undefined,
+        telefono: document.getElementById('quick-socio-telefono').value || undefined
+    };
+
+    try {
+        const response = await fetch(`${API_URL}/api/v1/auxiliares/socios`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (response.ok) {
+            alert('Socio Comercial guardado con éxito.');
+            closeQuickAddSocioModal();
+            loadSociosOptionsForCartera();
+        } else {
+            const result = await response.json();
+            alert('Error: ' + (result.detail || 'No se pudo guardar el socio comercial.'));
+        }
+    } catch (error) {
+        console.error('Error adding socio:', error);
+        alert('Error de conexión.');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Guardar';
+    }
+}
