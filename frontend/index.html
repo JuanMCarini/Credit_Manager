@@ -12,7 +12,7 @@
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;700;800&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" href="style.css?v=2">
-    <script src="main.js?v=8" defer></script>
+    <script src="main.js?v=11" defer></script>
 </head>
 
 <body>
@@ -128,6 +128,29 @@
                                 <line x1="12" y1="17" x2="12" y2="21"></line>
                             </svg>
                             Procesos de Ingesta
+                        </a>
+                    </div>
+                </div>
+
+                <div class="nav-group">
+                    <button class="nav-group-header" onclick="toggleNavGroup(this)">
+                        <span>Operaciones de Cartera</span>
+                        <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </button>
+                    <div class="nav-group-items">
+                        <a href="#operaciones-cartera" class="nav-item" onclick="switchTab('operaciones-cartera'); loadOperacionesCarteraTable();">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+                            </svg>
+                            Gestión de Operaciones
+                        </a>
+                        <a href="#nueva-operacion-cartera" class="nav-item" onclick="switchTab('nueva-operacion-cartera'); loadSociosOptionsForCartera();">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>
+                            </svg>
+                            Nueva Operación
                         </a>
                     </div>
                 </div>
@@ -609,6 +632,43 @@
                 </div>
             </div>
 
+            <!-- Modal para Editar/Confirmar Cartera -->
+            <div id="edit-cartera-modal"
+                style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); z-index: 2000; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+                <div class="glass-panel"
+                    style="background: var(--bg-base); width: 400px; padding: 24px; border-radius: var(--radius-lg); position: relative;">
+                    <h3 style="margin-bottom: 20px;">Editar Operación de Cartera</h3>
+                    <form id="edit-cartera-form" onsubmit="submitEditCartera(event)">
+                        <input type="hidden" id="edit-cartera-id">
+                        <input type="hidden" id="edit-cartera-tipo">
+                        <div class="form-group">
+                            <label for="edit-cartera-fecha">Fecha Operación</label>
+                            <input type="date" id="edit-cartera-fecha" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-cartera-tna">TNA Descuento (ej: 0.6 para 60%)</label>
+                            <input type="number" step="0.0001" id="edit-cartera-tna" required>
+                        </div>
+                        <div class="form-group" style="display: flex; flex-direction: column; gap: 8px;">
+                            <label style="display: flex; align-items: center; gap: 8px;">
+                                <input type="checkbox" id="edit-cartera-recurso">
+                                Operación con Recurso
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 8px;">
+                                <input type="checkbox" id="edit-cartera-iva">
+                                Incluye IVA
+                            </label>
+                        </div>
+                        <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px;">
+                            <button type="button" class="btn-secondary"
+                                onclick="document.getElementById('edit-cartera-modal').style.display='none'">Cancelar</button>
+                            <button type="button" class="btn-primary" style="width: auto; background-color: var(--success-color);" onclick="confirmarCartera()">Confirmar Operación</button>
+                            <button type="submit" class="btn-primary" style="width: auto;">Guardar Cambios</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
             <!-- Tab para Cuenta Corriente de un Crédito -->
             <section id="tab-credito-cuotas" class="tab-content">
                 <header class="section-header" style="display: flex; justify-content: space-between; align-items: flex-end;">
@@ -731,6 +791,273 @@
                             <tr><td colspan="100%" class="text-center empty-state">Presione Actualizar para cargar el listado.</td></tr>
                         </tbody>
                     </table>
+                </div>
+            </section>
+
+            <!-- Operaciones de Cartera Tab -->
+            <section id="tab-operaciones-cartera" class="tab-content">
+                <header class="section-header" style="display: flex; justify-content: space-between; align-items: flex-end;">
+                    <div>
+                        <h2>Operaciones de Cartera</h2>
+                        <p>Administración y registro de compras, ventas y recompras de cartera de créditos.</p>
+                    </div>
+                    <div style="display: flex; gap: 12px; margin-bottom: 8px;">
+                        <button class="btn-secondary" onclick="loadOperacionesCarteraTable()" style="height: fit-content; width: fit-content; padding-left: 24px; padding-right: 24px;">
+                            Actualizar Datos
+                        </button>
+                        <button class="btn-primary" onclick="switchTab('nueva-operacion-cartera'); loadSociosOptionsForCartera();" style="height: fit-content; width: fit-content; padding-left: 24px; padding-right: 24px;">
+                            + Nueva Operación
+                        </button>
+                    </div>
+                </header>
+                
+                <div class="glass-panel" style="overflow-x: auto; max-height: calc(100vh - 180px); overflow-y: auto;">
+                    <table class="data-table" id="table-operaciones-cartera">
+                        <thead id="operaciones-cartera-headers">
+                            <tr>
+                                <th>ID</th>
+                                <th>Nombre</th>
+                                <th>Tipo Operación</th>
+                                <th>Estado</th>
+                                <th>Socio Comercial</th>
+                                <th>Fecha</th>
+                                <th>TNA</th>
+                                <th>Recurso</th>
+                                <th>IVA</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="operaciones-cartera-body">
+                            <tr><td colspan="100%" class="text-center empty-state">Presione Actualizar para cargar el listado de operaciones de cartera.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Nueva Operación de Cartera Tab -->
+            <section id="tab-nueva-operacion-cartera" class="tab-content">
+                <header class="section-header" style="display: flex; justify-content: space-between; align-items: flex-end;">
+                    <div>
+                        <h2>Nueva Operación de Cartera</h2>
+                        <p>Ingrese los datos para registrar una nueva venta o compra de cartera.</p>
+                    </div>
+                </header>
+                
+                <div class="glass-panel" style="max-width: 800px; margin: 0 auto; padding: 32px;">
+                    <div class="form-group" style="margin-bottom: 32px;">
+                        <label for="tipo-operacion-select" style="font-size: 1.1em; margin-bottom: 8px;">Seleccione el Tipo de Operación</label>
+                        <select id="tipo-operacion-select" class="input-field" onchange="toggleOperacionForms()" style="font-size: 1.1em; padding: 12px;">
+                            <option value="VENTA">Venta de Cartera</option>
+                            <option value="COMPRA">Compra de Cartera</option>
+                        </select>
+                    </div>
+
+                    <!-- Formulario de Venta -->
+                    <form id="form-venta-cartera" onsubmit="submitVentaCartera(event)">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px;">
+                            <div class="form-group">
+                                <label>Nombre de Cartera</label>
+                                <input type="text" id="venta-nombre" class="input-field" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Fecha de Venta</label>
+                                <input type="date" id="venta-fecha" class="input-field" required>
+                            </div>
+                            <div class="form-group">
+                                <label>TNA Descuento (%)</label>
+                                <input type="number" step="0.01" id="venta-tna" class="input-field" required>
+                            </div>
+                            <div class="form-group" style="grid-column: span 2;">
+                                <label style="display: flex; justify-content: space-between; align-items: center;">
+                                    <span>Socio Comercial (Comprador)</span>
+                                    <button type="button" class="btn-secondary" style="padding: 4px 12px; font-size: 0.9em;" onclick="openQuickAddSocioModal()">+ Nuevo Socio</button>
+                                </label>
+                                <select id="venta-socio" class="input-field" required>
+                                    <option value="" disabled selected>Cargando socios...</option>
+                                </select>
+                            </div>
+                            
+                            <!-- Filtros de Fechas -->
+                            <div class="form-group">
+                                <label>Emisión Crédito Desde</label>
+                                <input type="date" id="venta-emision-desde" class="input-field" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Emisión Crédito Hasta</label>
+                                <input type="date" id="venta-emision-hasta" class="input-field" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Vencimiento Cuota Desde</label>
+                                <input type="date" id="venta-vto-desde" class="input-field" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Vencimiento Cuota Hasta</label>
+                                <input type="date" id="venta-vto-hasta" class="input-field" required>
+                            </div>
+
+                            <!-- Switches -->
+                            <div class="form-group" style="display: flex; gap: 24px; grid-column: span 2; align-items: center; justify-content: space-around; background: rgba(255,255,255,0.05); padding: 16px; border-radius: 8px;">
+                                <div style="display: flex; align-items: center; gap: 8px; font-weight: 500;">
+                                    <label class="switch">
+                                        <input type="checkbox" id="venta-mora">
+                                        <span class="slider"></span>
+                                    </label>
+                                    Incluir Mora
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 8px; font-weight: 500;">
+                                    <label class="switch">
+                                        <input type="checkbox" id="venta-recurso" checked>
+                                        <span class="slider"></span>
+                                    </label>
+                                    Con Recurso
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 8px; font-weight: 500;">
+                                    <label class="switch">
+                                        <input type="checkbox" id="venta-iva">
+                                        <span class="slider"></span>
+                                    </label>
+                                    Incluir IVA
+                                </div>
+                            </div>
+                        </div>
+                        <div id="venta-cartera-actions" style="display: flex; justify-content: flex-end; gap: 16px; margin-top: 32px; padding-top: 24px; border-top: 1px solid rgba(255,255,255,0.1);">
+                            <button type="button" class="btn-secondary" onclick="switchTab('operaciones-cartera')">Cancelar</button>
+                            <button id="btn-simular-venta" type="submit" class="btn-primary" style="padding: 12px 32px; font-size: 1.1em;">Simular Venta</button>
+                            <button id="btn-recalcular-cartera" type="button" class="btn-primary" style="padding: 12px 32px; font-size: 1.1em; display: none;" onclick="submitVentaCartera(event, true)">Recalcular Valores</button>
+                            <button id="btn-refiltrar-cartera" type="button" class="btn-secondary" style="padding: 12px 32px; font-size: 1.1em; display: none;" onclick="submitVentaCartera(event, false)">Nueva Búsqueda con Filtros</button>
+                        </div>
+                    </form>
+
+                    <!-- Formulario de Compra -->
+                    <form id="form-compra-cartera" onsubmit="submitCompraCartera(event)" style="display: none;">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px;">
+                            <div class="form-group">
+                                <label>Nombre de Cartera</label>
+                                <input type="text" id="compra-nombre" class="input-field" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Fecha de Compra</label>
+                                <input type="date" id="compra-fecha" class="input-field" required>
+                            </div>
+                            <div class="form-group">
+                                <label>TNA Descuento (%)</label>
+                                <input type="number" step="0.01" id="compra-tna" class="input-field" required>
+                            </div>
+                            <div class="form-group" style="grid-column: span 2;">
+                                <label style="display: flex; justify-content: space-between; align-items: center;">
+                                    <span>Socio Comercial (Vendedor)</span>
+                                    <button type="button" class="btn-secondary" style="padding: 4px 12px; font-size: 0.9em;" onclick="openQuickAddSocioModal()">+ Nuevo Socio</button>
+                                </label>
+                                <select id="compra-socio" class="input-field" required>
+                                    <option value="" disabled selected>Cargando socios...</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div style="margin-bottom: 24px; background: rgba(0,0,0,0.2); padding: 24px; border-radius: 8px;">
+                            <h4 style="margin-bottom: 16px; font-size: 1.1em;">Archivos a Importar (CSV)</h4>
+                            <div class="form-group" style="margin-bottom: 16px;">
+                                <label>Personas (personas.csv)</label>
+                                <input type="file" id="compra-personas-csv" accept=".csv" class="input-field" required>
+                            </div>
+                            <div class="form-group" style="margin-bottom: 16px;">
+                                <label>Préstamos (prestamos.csv)</label>
+                                <input type="file" id="compra-prestamos-csv" accept=".csv" class="input-field" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Cuotas (cuotas.csv)</label>
+                                <input type="file" id="compra-cuotas-csv" accept=".csv" class="input-field" required>
+                            </div>
+                        </div>
+                        <div style="display: flex; justify-content: flex-end; gap: 16px; margin-top: 32px; padding-top: 24px; border-top: 1px solid rgba(255,255,255,0.1);">
+                            <button type="button" class="btn-secondary" onclick="switchTab('operaciones-cartera')">Cancelar</button>
+                            <button type="submit" class="btn-primary" style="padding: 12px 32px; font-size: 1.1em;">Registrar Compra</button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            <!-- Preview Venta Cartera -->
+            <section id="tab-preview-venta-cartera" class="tab-content">
+                <header class="section-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div style="flex: 1;">
+                        <h2 class="section-title">Simulación de Venta de Cartera</h2>
+                        <p class="section-subtitle">Revise los créditos y cuotas que serán incluidos antes de confirmar la operación.</p>
+                    </div>
+                    <div>
+                        <button type="button" id="btn-volver-preview" class="btn-secondary" style="padding: 8px 16px; font-size: 0.9em;" onclick="switchTab('nueva-operacion-cartera')">Volver a Filtros</button>
+                    </div>
+                </header>
+
+                <div style="display: flex; gap: 16px; margin-bottom: 24px;">
+                    <button class="btn-secondary" id="btn-preview-creditos" onclick="renderPreviewVenta('creditos')">Ver Créditos</button>
+                    <button class="btn-secondary" id="btn-preview-cuotas" onclick="renderPreviewVenta('cuotas')">Ver Cuotas</button>
+                    <button class="btn-secondary" id="btn-preview-resumen" onclick="renderPreviewVenta('resumen')">Ver Resumen</button>
+                </div>
+
+                <!-- Contenedores de las tablas de Preview -->
+                <div id="preview-creditos-container" style="display: none;">
+                    <table class="data-table" id="table-preview-creditos">
+                        <thead id="preview-creditos-headers">
+                            <tr>
+                                <th>ID</th>
+                                <th>Cliente</th>
+                                <th>Estado</th>
+                                <th>Fecha Emisión</th>
+                                <th>Monto Orig.</th>
+                                <th>Total Cuotas</th>
+                                <th>Cuotas a Ceder</th>
+                                <th>Valor Actual</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="preview-creditos-body"></tbody>
+                    </table>
+                </div>
+
+                <div id="preview-cuotas-container" style="display: none;">
+                    <table class="data-table" id="table-preview-cuotas">
+                        <thead id="preview-cuotas-headers">
+                            <tr>
+                                <th>Credito ID</th>
+                                <th>Nro Cuota</th>
+                                <th>Vencimiento</th>
+                                <th>Capital</th>
+                                <th>Interés</th>
+                                <th>IVA</th>
+                                <th>Total Cuota</th>
+                                <th>Valor Actual</th>
+                                <th>¿Incluida?</th>
+                            </tr>
+                        </thead>
+                        <tbody id="preview-cuotas-body"></tbody>
+                    </table>
+                </div>
+
+                <div id="preview-resumen-container" style="display: none;">
+                    <table class="data-table" id="table-preview-resumen">
+                        <thead id="preview-resumen-headers">
+                            <tr>
+                                <th>Vencimiento</th>
+                                <th>Cant. Cuotas</th>
+                                <th>Capital Total</th>
+                                <th>Interés Total</th>
+                                <th>IVA Total</th>
+                                <th>Monto Total</th>
+                                <th>Valor Actual</th>
+                            </tr>
+                        </thead>
+                        <tbody id="preview-resumen-body"></tbody>
+                    </table>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-top: 32px; padding-top: 24px; border-top: 1px solid rgba(255,255,255,0.1);">
+                    <div>
+                        <button type="button" id="btn-preview-back" class="btn-secondary" style="padding: 12px 32px; font-size: 1.1em; display: none;"></button>
+                    </div>
+                    <div style="display: flex; gap: 16px;">
+                        <button type="button" id="btn-preview-next" class="btn-secondary" style="padding: 12px 32px; font-size: 1.1em;"></button>
+                        <button id="btn-confirmar-venta" type="button" class="btn-primary" style="padding: 12px 32px; font-size: 1.1em; background: linear-gradient(135deg, #10b981 0%, #059669 100%); display: none;" onclick="confirmVentaCartera()">Confirmar Venta</button>
+                    </div>
                 </div>
             </section>
 
@@ -1110,6 +1437,53 @@
 
         </main>
     </div>
-</body>
 
+    <!-- Quick Add Socio Comercial Modal -->
+    <div id="quick-add-socio-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); z-index: 3000; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+        <div class="glass-panel" style="width: 100%; max-width: 550px; max-height: 85vh; overflow-y: auto; padding: 24px; position: relative;">
+            <button class="btn-secondary" onclick="closeQuickAddSocioModal()" style="position: absolute; top: 16px; right: 16px; padding: 4px 12px;">X</button>
+            <h3 style="margin-bottom: 20px;">Nuevo Socio Comercial</h3>
+            
+            <form id="form-quick-add-socio" onsubmit="submitQuickAddSocio(event)">
+                <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 12px; margin-bottom: 20px;">
+                    <div class="form-group">
+                        <label>CUIT</label>
+                        <input type="text" id="quick-socio-cuit" class="input-field" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Razón Social</label>
+                        <input type="text" id="quick-socio-razon" class="input-field" required>
+                    </div>
+                    <div class="form-group" style="grid-column: span 2;">
+                        <label>Domicilio Legal</label>
+                        <input type="text" id="quick-socio-domicilio" class="input-field">
+                    </div>
+                    <div class="form-group">
+                        <label>Nombre de Contacto</label>
+                        <input type="text" id="quick-socio-contacto" class="input-field">
+                    </div>
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" id="quick-socio-mail" class="input-field">
+                    </div>
+                    <div class="form-group">
+                        <label>Teléfono</label>
+                        <input type="text" id="quick-socio-telefono" class="input-field">
+                    </div>
+                    <div class="form-group">
+                        <label>Día de Corte</label>
+                        <input type="number" id="quick-socio-dia" class="input-field" value="28">
+                    </div>
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 12px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 16px;">
+                    <button type="button" class="btn-secondary" onclick="closeQuickAddSocioModal()">Cancelar</button>
+                    <button type="submit" class="btn-primary">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main Entry Point -->
+    <script src="/app/main.js?v=11"></script>
+</body>
 </html>
