@@ -7,6 +7,7 @@ Author: Juan Martín Carini
 Date: 2026-05-13
 """
 
+from typing import List, Union
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -50,3 +51,28 @@ class CompanyConfig(BaseSettings):
 # Global immutable instance to be imported across the application
 # Usage: from config import COMPANY_DATA
 COMPANY_DATA = CompanyConfig()
+
+class APIConfig(BaseSettings):
+    """
+    Configuration for the API server (CORS, security, etc.).
+    """
+    allowed_origins: List[str] = Field(
+        default=["http://localhost:5173", "http://127.0.0.1:5173"],
+        description="List of allowed origins for CORS."
+    )
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        env_prefix="API_", 
+        extra="ignore",
+    )
+
+    @field_validator("allowed_origins", mode="before")
+    @classmethod
+    def parse_allowed_origins(cls, v: Union[str, List[str]]) -> List[str]:
+        if isinstance(v, str):
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
+
+API_SETTINGS = APIConfig()

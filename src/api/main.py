@@ -17,6 +17,7 @@ from src.api.routes.cobranzas import router as cobranzas_router
 from src.api.routes.auxiliares import router as auxiliares_router
 from src.api.routes.system import router as system_router
 from src.api.routes.carteras import router as carteras_router
+from src.config import API_SETTINGS
 
 # -------------------------------------------------------------------
 # Inicialización de la Aplicación
@@ -29,7 +30,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=API_SETTINGS.allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
