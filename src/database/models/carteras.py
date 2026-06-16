@@ -54,7 +54,7 @@ class Cartera(Base):
     estado = Column(
         Enum(EstadoCartera), nullable=False, default=EstadoCartera.PENDIENTE
     )
-
+    fecha_generacion = Column(Date, nullable=False, default=date.today())
 
     # Relationships
     creditos_incluidos = relationship("Credito", back_populates="cartera")
