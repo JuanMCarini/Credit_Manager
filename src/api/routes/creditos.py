@@ -12,7 +12,7 @@ from src.logic.amortization import AmortizationEngine
 router = APIRouter(tags=["Créditos"])
 
 @router.get("/simular-cuotas")
-async def simular_cuotas(
+def simular_cuotas(
     credito_id: int = Query(..., description="ID identificador del crédito de simulación"),
     capital: float = Query(..., description="Monto de capital a amortizar"),
     tna_c_iva: float = Query(..., description="Tasa Nominal Anual con IVA incluido"),
@@ -54,7 +54,7 @@ async def simular_cuotas(
 
 
 @router.post("/api/v1/creditos/originacion")
-async def create_credito(
+def create_credito(
     credito_data: CreditoCreate,
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
