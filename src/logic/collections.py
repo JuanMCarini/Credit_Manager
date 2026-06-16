@@ -433,6 +433,7 @@ class CollectionManager:
         id_val: int | str | None,
         amount: float,
         payment_date: datetime | str | None = None,
+        vto_date: datetime | str | None = None,
         tasa_iva: float = 0.21,
         proceso_id: int | None = None,
         commit: bool = True,
@@ -440,6 +441,7 @@ class CollectionManager:
 
         # 1. Normalization
         payment_date = normalize_date(payment_date)
+        vto_date = normalize_date(vto_date)
 
         # 2. Debt extraction and calculation (Early exit if there is no debt)
         df = self._get_pending_installments(identificador, id_val)
@@ -483,7 +485,7 @@ class CollectionManager:
 
         # 6. Classification of collection type
         df_cobr["tipo_cobranza"] = np.where(
-            df_cobr["fecha_vencimiento"] <= pd.Timestamp(payment_date),
+            df_cobr["fecha_vencimiento"] <= pd.Timestamp(vto_date),
             TipoCobranzaEnum.COMUN.value,
             TipoCobranzaEnum.ANTICIPO.value,
         )
@@ -504,6 +506,7 @@ class CollectionManager:
         id_val: int | str | None,
         amount: float,
         payment_date: datetime | str | None = None,
+        vto_date: datetime | str | None = None,
         tasa_iva: float = 0.21,
         proceso_id: int | None = None,
         commit: bool = True,
@@ -518,6 +521,7 @@ class CollectionManager:
 
         # 1. Normalization
         payment_date = normalize_date(payment_date)
+        vto_date = normalize_date(vto_date)
 
         # 2. Debt extraction and calculation (Early exit if there is no debt)
         df = self._get_pending_installments(identificador, id_val)
@@ -526,7 +530,7 @@ class CollectionManager:
 
         # 3. Identification of total balance to cover
 
-        a_vencer = df["fecha_vencimiento"] > payment_date
+        a_vencer = df["fecha_vencimiento"] > vto_date
         df_BCA = df.loc[a_vencer].copy()
         df.loc[a_vencer, ["interes", "iva"]] = [0.0, 0.0]
         df["total"] = df[["capital", "interes", "iva"]].sum(axis=1)
@@ -567,7 +571,7 @@ class CollectionManager:
 
         # 6. Classification of collection type
         df_cobr["tipo_cobranza"] = np.where(
-            df_cobr["fecha_vencimiento"] <= pd.Timestamp(payment_date),
+            df_cobr["fecha_vencimiento"] <= pd.Timestamp(vto_date),
             TipoCobranzaEnum.COMUN.value,
             TipoCobranzaEnum.CA.value,
         )
@@ -712,6 +716,7 @@ class CollectionManager:
         id_column: str = "A",
         amount_column: str = "B",
         payment_date: str | datetime | None = None,
+        vto_date: str | datetime | None = None,
         path: str | Path | None = None,
         early: bool = False,
         file_bytes: bytes | None = None,
@@ -720,6 +725,8 @@ class CollectionManager:
 
         if payment_date is None:
             payment_date = datetime.today()
+        if vto_date is None:
+            vto_date = datetime.today()
 
         if file_bytes is not None:
             import io
@@ -785,6 +792,7 @@ class CollectionManager:
                     row[ident],
                     row["monto"],
                     payment_date,
+                    vto_date,
                     proceso_id=p_id,
                     commit=False,
                 )
