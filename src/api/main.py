@@ -599,6 +599,7 @@ class CobranzaIndividual(BaseModel):
     id_val: str
     monto: float
     fecha_pago: Optional[date] = None
+    fecha_corte: Optional[date] = None
     anticipada: bool = False
 
 class CobranzaMasiva(BaseModel):
@@ -624,6 +625,8 @@ class VentaCarteraRequest(BaseModel):
     creditos_excluidos: List[int] = Field(default_factory=list)
     cartera_id: Optional[int] = None
     usar_cuotas_guardadas: bool = False
+    cuotas_completas: bool = False
+    socio_originador_id: Optional[List[int]] = None
 
 class UpdateCarteraRequest(BaseModel):
     fecha_compra: Optional[date] = None
@@ -640,19 +643,22 @@ def procesar_cobranza_individual(
     manager = CollectionManager(db)
     try:
         fecha_pago_dt = datetime.combine(datos.fecha_pago, datetime.min.time()) if datos.fecha_pago else datetime.today()
+        fecha_corte_dt = datetime.combine(datos.fecha_corte, datetime.min.time()) if datos.fecha_corte else None
         if datos.anticipada:
             df = manager.process_early_cancellation(
                 identificador=datos.identificador,
                 id_val=datos.id_val,
                 amount=datos.monto,
-                payment_date=fecha_pago_dt
+                payment_date=fecha_pago_dt,
+                vto_date=fecha_corte_dt
             )
         else:
             df = manager.process_standard_payment(
                 identificador=datos.identificador,
                 id_val=datos.id_val,
                 amount=datos.monto,
-                payment_date=fecha_pago_dt
+                payment_date=fecha_pago_dt,
+                vto_date=fecha_corte_dt
             )
         return {"status": "success", "message": "Cobranza individual procesada exitosamente."}
     except Exception as e:
@@ -664,6 +670,7 @@ async def procesar_cobranza_masiva(
     id_column: str = Form("A"),
     amount_column: str = Form("B"),
     fecha_pago: Optional[date] = Form(None),
+    fecha_corte: Optional[date] = Form(None),
     anticipada: bool = Form(False),
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
@@ -671,6 +678,7 @@ async def procesar_cobranza_masiva(
     manager = CollectionManager(db)
     try:
         fecha_pago_dt = datetime.combine(fecha_pago, datetime.min.time()) if fecha_pago else datetime.today()
+        fecha_corte_dt = datetime.combine(fecha_corte, datetime.min.time()) if fecha_corte else None
         file_bytes = await file.read()
         
         df = manager.process_massive_collection(
@@ -678,6 +686,7 @@ async def procesar_cobranza_masiva(
             id_column=id_column,
             amount_column=amount_column,
             payment_date=fecha_pago_dt,
+            vto_date=fecha_corte_dt,
             early=anticipada,
             file_bytes=file_bytes,
             filename=file.filename
@@ -771,6 +780,17 @@ def get_aux_table_data(tabla: str, request: TabulatorRequest, db: Session = Depe
         "last_page": last_page,
         "data": data
     }
+
+
+@app.get("/api/v1/auxiliares/socios_originadores", tags=["Auxiliares"])
+def get_socios_originadores(db: Session = Depends(get_db)):
+    from src.database.models import SocioComercial, Credito
+    originadores = db.query(SocioComercial).join(Credito, Credito.socio_originador_id == SocioComercial.id).distinct().all()
+    return [
+        {c.name: getattr(r, c.name) for c in SocioComercial.__table__.columns}
+        for r in originadores
+    ]
+
 
 
 @app.get("/api/v1/auxiliares/{tabla}", tags=["Auxiliares"])
@@ -1194,6 +1214,8 @@ def preview_venta_cartera(data: VentaCarteraRequest, db: Session = Depends(get_d
                 fecha_emision_hasta=data.fecha_emision_hasta,
                 fecha_vencimiento_desde=data.fecha_vencimiento_desde,
                 fecha_vencimiento_hasta=data.fecha_vencimiento_hasta,
+                cuotas_completas=data.cuotas_completas,
+                socio_originador_id=data.socio_originador_id,
                 cartera_id=data.cartera_id
             )
         
@@ -1215,8 +1237,8 @@ def preview_venta_cartera(data: VentaCarteraRequest, db: Session = Depends(get_d
         def calculate_va(monto, fecha_venc):
             fv = pd.to_datetime(fecha_venc).date() if isinstance(fecha_venc, str) else fecha_venc
             dias = max(0, (fv - fecha_v_dt).days)
-            return float(monto) / (1 + (tna *30 / 365) * (dias/30))
-        
+            return round(float(monto) / ((1 + (tna *30 / 365)) ** (dias/30)), 2)
+
         # 1. Fetch related Credits
         creditos_db = db.query(Credito, Cliente).join(Cliente, Credito.cliente_cuil == Cliente.cuil).filter(Credito.id.in_(creditos_ids)).all()
         
@@ -1233,7 +1255,7 @@ def preview_venta_cartera(data: VentaCarteraRequest, db: Session = Depends(get_d
             if not data.iva:
                 iva_val = 0.0
                 
-            total_c = float(c.capital) + float(c.interes) + iva_val
+            total_c = round(round(float(c.capital), 2) + round(float(c.interes), 2), 2)
             
             va_cuota = 0.0
             if incluida:
@@ -1317,7 +1339,9 @@ def create_venta_cartera(data: VentaCarteraRequest, db: Session = Depends(get_db
             fecha_emision_desde=data.fecha_emision_desde,
             fecha_emision_hasta=data.fecha_emision_hasta,
             fecha_vencimiento_desde=data.fecha_vencimiento_desde,
-            fecha_vencimiento_hasta=data.fecha_vencimiento_hasta
+            fecha_vencimiento_hasta=data.fecha_vencimiento_hasta,
+            cuotas_completas=data.cuotas_completas,
+            socio_originador_id=data.socio_originador_id
         )
         
         if df_seleccion is None or df_seleccion.empty:
@@ -1359,6 +1383,8 @@ def update_venta_cartera(cartera_id: int, data: VentaCarteraRequest, db: Session
                 fecha_emision_hasta=data.fecha_emision_hasta,
                 fecha_vencimiento_desde=data.fecha_vencimiento_desde,
                 fecha_vencimiento_hasta=data.fecha_vencimiento_hasta,
+                cuotas_completas=data.cuotas_completas,
+                socio_originador_id=data.socio_originador_id,
                 cartera_id=data.cartera_id
             )
             
@@ -1490,6 +1516,29 @@ def update_cartera(cartera_id: int, data: UpdateCarteraRequest, db: Session = De
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/v1/carteras/{cartera_id}/export", tags=["Carteras"])
+def export_cartera(cartera_id: int, db: Session = Depends(get_db)):
+    from src.database.models import Cartera
+    from fastapi.responses import FileResponse
+    import os
+    from src.portfolio.sell import PortfolioSell
+    
+    cartera = db.query(Cartera).filter(Cartera.id == cartera_id).first()
+    if not cartera:
+        raise HTTPException(status_code=404, detail="Cartera no encontrada")
+        
+    sell_manager = PortfolioSell(db)
+    sell_manager.cartera = cartera
+    sell_manager.fetch_installments_from_cartera(cartera_id)
+    
+    if sell_manager.df_cuotas_venta is None or sell_manager.df_cuotas_venta.empty:
+        raise HTTPException(status_code=400, detail="La cartera no tiene cuotas asociadas.")
+        
+    try:
+        zip_path = sell_manager.export()
+        return FileResponse(zip_path, media_type="application/zip", filename=os.path.basename(zip_path))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error exportando: {str(e)}")
 
 @app.delete("/api/v1/carteras/{cartera_id}", tags=["Carteras"])
 def delete_cartera(cartera_id: int, db: Session = Depends(get_db)):
