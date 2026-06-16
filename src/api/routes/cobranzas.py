@@ -40,7 +40,7 @@ def procesar_cobranza_individual(
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.post("/cobranzas/masiva")
-async def procesar_cobranza_masiva(
+def procesar_cobranza_masiva(
     identificador: str = Form(...),
     id_column: str = Form("A"),
     amount_column: str = Form("B"),
@@ -54,7 +54,7 @@ async def procesar_cobranza_masiva(
     try:
         fecha_pago_dt = datetime.combine(fecha_pago, datetime.min.time()) if fecha_pago else datetime.today()
         fecha_corte_dt = datetime.combine(fecha_corte, datetime.min.time()) if fecha_corte else None
-        file_bytes = await file.read()
+        file_bytes = file.file.read()
         
         df = manager.process_massive_collection(
             identificador=identificador,

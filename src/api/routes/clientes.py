@@ -10,7 +10,7 @@ from src.api.schemas.clientes import ClienteCreate
 router = APIRouter(prefix="/api/v1/clientes", tags=["Clientes"])
 
 @router.post("")
-async def create_cliente(
+def create_cliente(
     cliente_data: ClienteCreate,
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
@@ -147,7 +147,7 @@ def get_cliente_cuenta_corriente(cuil: str, db: Session = Depends(get_db)):
     return result
 
 @router.put("/{cuil}")
-async def update_cliente(
+def update_cliente(
     cuil: str,
     cliente_data: ClienteCreate,
     db: Session = Depends(get_db)

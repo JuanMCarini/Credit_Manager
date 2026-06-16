@@ -12,7 +12,7 @@ from src.reports.balances import saldos
 router = APIRouter(prefix="/api/v1/reports", tags=["Reportes"])
 
 @router.get("/balances")
-async def get_saldos(
+def get_saldos(
     fecha: Optional[datetime] = Query(None, description="Fecha de corte para el cálculo. Por defecto es hoy."),
     con_saldo: bool = Query(True, description="Filtra solo las operaciones que aún mantienen saldo deudor."),
     propias: Optional[bool] = Query(None, description="Verdadero para cartera propia, Falso para terceros, Nulo para ambas."),
@@ -58,7 +58,7 @@ async def get_saldos(
         raise HTTPException(status_code=500, detail=f"Error en la generación del reporte: {str(e)}")
 
 @router.get("/balances/excel")
-async def export_saldos_excel(
+def export_saldos_excel(
     fecha: Optional[datetime] = Query(None, description="Fecha de corte para el cálculo. Por defecto es hoy."),
     con_saldo: bool = Query(True, description="Filtra solo las operaciones que aún mantienen saldo deudor."),
     propias: Optional[bool] = Query(None, description="Verdadero para cartera propia, Falso para terceros, Nulo para ambas."),

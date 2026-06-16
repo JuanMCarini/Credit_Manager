@@ -238,7 +238,7 @@ def update_venta_cartera(cartera_id: int, data: VentaCarteraRequest, db: Session
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.post("/compra/preview")
-async def preview_compra_cartera(
+def preview_compra_cartera(
     nombre_cartera: str = Form(...),
     fecha_compra: date = Form(...),
     tna_descuento: float = Form(...),
@@ -254,9 +254,9 @@ async def preview_compra_cartera(
         p_prestamos = os.path.join(temp_dir, "prestamos.csv")
         p_cuotas = os.path.join(temp_dir, "cuotas.csv")
         
-        with open(p_personas, "wb") as f: f.write(await personas_csv.read())
-        with open(p_prestamos, "wb") as f: f.write(await prestamos_csv.read())
-        with open(p_cuotas, "wb") as f: f.write(await cuotas_csv.read())
+        with open(p_personas, "wb") as f: f.write(personas_csv.file.read())
+        with open(p_prestamos, "wb") as f: f.write(prestamos_csv.file.read())
+        with open(p_cuotas, "wb") as f: f.write(cuotas_csv.file.read())
         
         try:
             importer = PortfolioPurchase()
@@ -438,7 +438,7 @@ async def preview_compra_cartera(
             raise HTTPException(status_code=400, detail=error_msg)
 
 @router.post("/compra")
-async def create_compra_cartera(
+def create_compra_cartera(
     nombre_cartera: str = Form(...),
     fecha_compra: date = Form(...),
     tna_descuento: float = Form(...),
@@ -454,9 +454,9 @@ async def create_compra_cartera(
         p_prestamos = os.path.join(temp_dir, "prestamos.csv")
         p_cuotas = os.path.join(temp_dir, "cuotas.csv")
         
-        with open(p_personas, "wb") as f: f.write(await personas_csv.read())
-        with open(p_prestamos, "wb") as f: f.write(await prestamos_csv.read())
-        with open(p_cuotas, "wb") as f: f.write(await cuotas_csv.read())
+        with open(p_personas, "wb") as f: f.write(personas_csv.file.read())
+        with open(p_prestamos, "wb") as f: f.write(prestamos_csv.file.read())
+        with open(p_cuotas, "wb") as f: f.write(cuotas_csv.file.read())
         
         try:
             importer = PortfolioPurchase()
