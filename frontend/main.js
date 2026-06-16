@@ -26,7 +26,7 @@ function switchTab(tabId) {
     });
     
     // Reset editing state if we leave the venta cartera flow
-    if (tabId !== 'nueva-operacion-cartera' && tabId !== 'preview-venta-cartera' && typeof resetVentaCarteraUI === 'function') {
+    if (tabId !== 'nueva-operacion-cartera' && tabId !== 'preview-venta-cartera' && tabId !== 'preview-compra-cartera' && typeof resetVentaCarteraUI === 'function') {
         resetVentaCarteraUI();
     }
     const targetTab = document.getElementById(`tab-${tabId}`);
@@ -417,7 +417,15 @@ function openExcelFilter(e, colIndex, tableId = 'table-bal', headerId = 'bal-hea
 
     // Posicionamiento
     const rect = e.target.getBoundingClientRect();
-    popover.style.left = `${rect.left + window.scrollX}px`;
+    let leftPos = rect.left + window.scrollX;
+    
+    // Evitar que el menú se salga por la derecha de la pantalla
+    const popoverWidth = popover.offsetWidth || 250;
+    if (rect.left + popoverWidth > window.innerWidth - 20) {
+        leftPos = rect.right + window.scrollX - popoverWidth;
+    }
+    
+    popover.style.left = `${leftPos}px`;
     popover.style.top = `${rect.bottom + window.scrollY + 8}px`;
 
     // Interactividad
@@ -1181,7 +1189,7 @@ const AUX_SCHEMAS = {
     },
     tasas_y_comisiones: {
         fecha: { type: 'date', label: 'Fecha', required: true },
-        estado: { type: 'text', label: 'Estado', default: 'ACTIVA', required: true },
+        estado: { type: 'select', label: 'Estado', default: 'ACTIVA', required: true, options: ['ACTIVA', 'INACTIVA'] },
         socio_originador_id: { type: 'select_socio', label: 'Socio Originador', required: true },
         socio_intermediario_id: { type: 'select_socio', label: 'Socio Intermediario', required: true },
         plazo: { type: 'number', label: 'Plazo (Meses)', default: 12, required: true },
@@ -1191,6 +1199,12 @@ const AUX_SCHEMAS = {
         cobranza_originador: { type: 'number', label: '% Cobranza Originador', default: 0.0, required: true },
         cobranza_intermediario: { type: 'number', label: '% Cobranza Intermediario', default: 0.0, required: true },
         colocacion_propia: { type: 'number', label: '% Colocación Propia', default: 0.0, required: true }
+    },
+    relaciones: {
+        socio_id: { type: 'select_socio', label: 'Socio Comercial', required: true },
+        tabla: { type: 'select', label: 'Tabla (Destino)', required: true, options: ['codigos_postales', 'empleadores', 'provincias', 'socios_comerciales', 'tasas_y_comisiones'] },
+        id_local: { type: 'text', label: 'ID Local (interno)', required: true },
+        id_foraneo: { type: 'text', label: 'ID Foráneo (del socio)', required: true }
     }
 };
 
@@ -1303,6 +1317,15 @@ function openAuxModal(id = null) {
         } else if (config.type === 'checkbox') {
             const checkedAttr = value ? 'checked' : '';
             fieldHtml = `<input type="checkbox" id="aux-${key}" style="width: auto; margin-right: 8px;" ${checkedAttr}>`;
+        } else if (config.type === 'select') {
+            let optionsHtml = '<option value="">Seleccione...</option>';
+            if (config.options) {
+                config.options.forEach(opt => {
+                    const selected = String(opt) === String(value) ? 'selected' : '';
+                    optionsHtml += `<option value="${opt}" ${selected}>${opt}</option>`;
+                });
+            }
+            fieldHtml = `<select id="aux-${key}" ${requiredAttr}>${optionsHtml}</select>`;
         } else {
             const stepAttr = config.type === 'number' ? 'step="any"' : '';
             fieldHtml = `<input type="${config.type}" id="aux-${key}" value="${value}" ${requiredAttr} ${stepAttr}>`;
@@ -2717,20 +2740,24 @@ async function loadOperacionesCarteraTable() {
             const estadoBadgeClass = c.estado === 'PENDIENTE' ? 'status-pendiente' : (c.estado === 'VENDIDA' ? 'status-venta' : 'status-compra');
             
             let actions = '';
+            const exportButton = c.tipo_operacion.toLowerCase() === 'venta' 
+                ? `<button class="btn-primary btn-sm" style="padding: 4px 8px; font-size: 1.1em; background: transparent; border: none; box-shadow: none; cursor: pointer;" title="Exportar ZIP" onclick="exportCartera(${c.id})">📥</button>` 
+                : '';
+
             if (c.estado === 'PENDIENTE') {
                 actions = `
                     <div style="display: flex; justify-content: center; align-items: center; gap: 4px;">
                         <button class="btn-success btn-sm" style="padding: 4px 8px; font-size: 1.1em; background: transparent; border: none; box-shadow: none; cursor: pointer;" title="Confirmar" onclick="confirmarCartera(${c.id}, '${c.tipo_operacion}')">✅</button>
                         <button class="btn-primary btn-sm" style="padding: 4px 8px; font-size: 1.1em; background: transparent; border: none; box-shadow: none; cursor: pointer;" title="Editar" onclick='openEditCarteraModal(${JSON.stringify(c)})'>✏️</button>
                         <button class="btn-danger btn-sm" style="padding: 4px 8px; font-size: 1.1em; background: transparent; border: none; box-shadow: none; cursor: pointer;" title="Borrar" onclick="deleteOperacionCartera(${c.id})">🗑️</button>
-                        <button class="btn-primary btn-sm" style="padding: 4px 8px; font-size: 1.1em; background: transparent; border: none; box-shadow: none; cursor: pointer;" title="Exportar ZIP" onclick="exportCartera(${c.id})">📥</button>
+                        ${exportButton}
                     </div>
                 `;
             } else {
                 actions = `
                     <div style="display: flex; justify-content: center; align-items: center; gap: 4px;">
                         <button class="btn-primary btn-sm" style="padding: 4px 8px; font-size: 1.1em; background: transparent; border: none; box-shadow: none; cursor: pointer;" title="Ver Detalle" onclick='viewOperacionCartera(${JSON.stringify(c)})'>👁️</button>
-                        <button class="btn-primary btn-sm" style="padding: 4px 8px; font-size: 1.1em; background: transparent; border: none; box-shadow: none; cursor: pointer;" title="Exportar ZIP" onclick="exportCartera(${c.id})">📥</button>
+                        ${exportButton}
                     </div>
                 `;
             }
@@ -2785,8 +2812,39 @@ async function openEditCarteraModal(c) {
     // Ensure socios are loaded before trying to select one
     await loadSociosOptionsForCartera();
 
-    // Instead of a modal, we navigate to the Venta Cartera form!
     editingCarteraId = c.id;
+    
+    if (c.tipo_operacion && c.tipo_operacion.toUpperCase() === 'COMPRA') {
+        document.getElementById('compra-nombre').value = c.nombre;
+        document.getElementById('compra-fecha').value = c.fecha_compra || '';
+        document.getElementById('compra-tna').value = (c.tna_descuento * 100).toFixed(2);
+        
+        const socioSelect = document.getElementById('compra-socio');
+        for(let i=0; i<socioSelect.options.length; i++) {
+            if (socioSelect.options[i].dataset && socioSelect.options[i].dataset.razon === c.socio) {
+                socioSelect.selectedIndex = i;
+                break;
+            }
+        }
+        
+        // Reset file inputs because they must be re-selected if the user wants to re-simulate
+        document.getElementById('compra-personas-csv').value = '';
+        document.getElementById('compra-prestamos-csv').value = '';
+        document.getElementById('compra-cuotas-csv').value = '';
+        
+        document.getElementById('btn-simular-compra').textContent = 'Re-Simular Compra';
+        document.getElementById('btn-confirmar-compra').textContent = 'Actualizar Compra';
+        
+        switchTab('nueva-operacion-cartera');
+        const selectBox = document.getElementById('tipo-operacion-select');
+        if (selectBox) {
+            selectBox.value = 'COMPRA';
+            selectBox.dispatchEvent(new Event('change'));
+        }
+        return;
+    }
+
+    // Instead of a modal, we navigate to the Venta Cartera form!
     document.getElementById('venta-nombre').value = c.nombre;
     document.getElementById('venta-fecha').value = c.fecha_compra || '';
     document.getElementById('venta-tna').value = (c.tna_descuento * 100).toFixed(2);
@@ -2811,6 +2869,11 @@ async function openEditCarteraModal(c) {
     document.getElementById('btn-confirmar-venta').textContent = 'Actualizar Cartera';
     
     switchTab('nueva-operacion-cartera');
+    const selectBox = document.getElementById('tipo-operacion-select');
+    if (selectBox) {
+        selectBox.value = 'VENTA';
+        selectBox.dispatchEvent(new Event('change'));
+    }
     
     // Automatically fetch preview using saved installments
     submitVentaCartera(null, true);
@@ -3215,6 +3278,9 @@ async function confirmVentaCartera() {
     }
 }
 
+let currentCompraPayload = null;
+let currentCompraPreviewData = null;
+
 async function submitCompraCartera(event) {
     event.preventDefault();
     const btn = event.target.querySelector('button[type="submit"]');
@@ -3235,27 +3301,243 @@ async function submitCompraCartera(event) {
     formData.append('prestamos_csv', document.getElementById('compra-prestamos-csv').files[0]);
     formData.append('cuotas_csv', document.getElementById('compra-cuotas-csv').files[0]);
 
+    currentCompraPayload = formData;
+
     try {
-        const response = await fetch(`${API_URL}/api/v1/carteras/compra`, {
+        const response = await fetch(`${API_URL}/api/v1/carteras/compra/preview`, {
             method: 'POST',
             body: formData
         });
 
         if (response.ok) {
-            alert('Compra de cartera registrada con éxito.');
-            document.getElementById('form-compra-cartera-form').reset();
+            currentCompraPreviewData = await response.json();
+            switchTab('preview-compra-cartera');
+            renderPreviewCompra('creditos');
+        } else {
+            const result = await response.json();
+            if (result.report_file) {
+                alert('Hubo errores de validación. A continuación, elige dónde guardar el reporte de errores en formato Excel para revisarlos.\n\nDetalle: ' + result.detail);
+                try {
+                    const fileResponse = await fetch(`${API_URL}/api/v1/carteras/compra/reportes/${result.report_file}`);
+                    if (!fileResponse.ok) throw new Error("No se pudo descargar el reporte.");
+                    const blob = await fileResponse.blob();
+
+                    if (window.showSaveFilePicker) {
+                        const fileHandle = await window.showSaveFilePicker({
+                            suggestedName: result.report_file,
+                            types: [{
+                                description: 'Archivo Excel',
+                                accept: {'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx']},
+                            }],
+                        });
+                        const writable = await fileHandle.createWritable();
+                        await writable.write(blob);
+                        await writable.close();
+                    } else {
+                        // Fallback si el navegador no soporta showSaveFilePicker
+                        const url = window.URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.download = result.report_file;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        window.URL.revokeObjectURL(url);
+                    }
+                } catch (err) {
+                    if (err.name !== 'AbortError') {
+                        console.error('Error al guardar el reporte:', err);
+                        alert('No se pudo guardar el archivo de reporte.');
+                    }
+                }
+            } else {
+                alert('Error al simular: ' + (result.detail || 'Error desconocido'));
+            }
+        }
+    } catch (error) {
+        console.error('Error submitting compra preview:', error);
+        alert('Error de conexión o de procesamiento: ' + error.message);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Simular Compra';
+        }
+    }
+}
+
+function renderPreviewCompra(tab) {
+    document.getElementById('preview-compra-creditos-container').style.display = tab === 'creditos' ? 'block' : 'none';
+    document.getElementById('preview-compra-cuotas-container').style.display = tab === 'cuotas' ? 'block' : 'none';
+    document.getElementById('preview-compra-resumen-container').style.display = tab === 'resumen' ? 'block' : 'none';
+    
+    document.getElementById('btn-preview-compra-creditos').className = tab === 'creditos' ? 'btn-primary' : 'btn-secondary';
+    document.getElementById('btn-preview-compra-cuotas').className = tab === 'cuotas' ? 'btn-primary' : 'btn-secondary';
+    document.getElementById('btn-preview-compra-resumen').className = tab === 'resumen' ? 'btn-primary' : 'btn-secondary';
+
+    const btnBack = document.getElementById('btn-preview-compra-back');
+    const btnNext = document.getElementById('btn-preview-compra-next');
+    const btnConfirm = document.getElementById('btn-confirmar-compra');
+    
+    if (tab === 'creditos') {
+        btnBack.style.display = 'none';
+        btnNext.style.display = 'inline-block';
+        btnNext.textContent = 'Ver Cuotas';
+        btnNext.setAttribute('onclick', "renderPreviewCompra('cuotas')");
+        if(btnConfirm) btnConfirm.style.display = 'none';
+    } else if (tab === 'cuotas') {
+        btnBack.style.display = 'inline-block';
+        btnBack.textContent = 'Ver Créditos';
+        btnBack.setAttribute('onclick', "renderPreviewCompra('creditos')");
+        btnNext.style.display = 'inline-block';
+        btnNext.textContent = 'Ver Resumen';
+        btnNext.setAttribute('onclick', "renderPreviewCompra('resumen')");
+        if(btnConfirm) btnConfirm.style.display = 'none';
+    } else if (tab === 'resumen') {
+        btnBack.style.display = 'inline-block';
+        btnBack.textContent = 'Ver Cuotas';
+        btnBack.setAttribute('onclick', "renderPreviewCompra('cuotas')");
+        btnNext.style.display = 'none';
+        if(btnConfirm) btnConfirm.style.display = 'inline-block';
+    }
+
+    if (!currentCompraPreviewData) return;
+
+    const buildHeaders = (tableId, headerId, headers) => {
+        const thead = document.getElementById(headerId);
+        let html = "<tr>";
+        headers.forEach((h, i) => {
+            html += `<th>
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                    <span>${h}</span>
+                    <span class="filter-icon filter-icon-${tableId}" data-col="${i}" onclick="openExcelFilter(event, ${i}, '${tableId}', '${headerId}')">▼</span>
+                </div>
+            </th>`;
+        });
+        html += "</tr>";
+        thead.innerHTML = html;
+    };
+
+    if (tab === 'creditos') {
+        const headers = ["ID", "Cliente", "Plazo", "Cuotas a Ceder", "Rel. Cuota/Sueldo", "Capital Vendido", "Interés Vendido", "IVA Vendido", "Valor Actual CSV", "Valor Actual Recalculado"];
+        buildHeaders('table-preview-compra-creditos', 'preview-compra-creditos-headers', headers);
+
+        const tbody = document.getElementById('preview-compra-creditos-body');
+        tbody.innerHTML = '';
+        currentCompraPreviewData.creditos.forEach(c => {
+            const tr = document.createElement('tr');
+            if (c.relacion_cuota_sueldo > 40) {
+                tr.style.backgroundColor = 'rgba(231, 76, 60, 0.15)'; // Red background
+            } else if (c.relacion_cuota_sueldo > 30) {
+                tr.style.backgroundColor = 'rgba(241, 196, 15, 0.2)'; // Yellow background
+            }
+            
+            tr.innerHTML = `
+                <td>${c.id_externo || '-'}</td>
+                <td>${c.cliente_nombre || '-'}</td>
+                <td>${c.plazo || 0}</td>
+                <td>${c.cuotas_compradas || 0}</td>
+                <td>${c.relacion_cuota_sueldo > 0 ? c.relacion_cuota_sueldo + '%' : '-'}</td>
+                <td>${formatCurrency(c.capital_vendido)}</td>
+                <td>${formatCurrency(c.interes_vendido)}</td>
+                <td>${formatCurrency(c.iva_vendido)}</td>
+                <td style="${c.valor_actual_csv !== c.valor_actual ? 'color: white; background-color: rgba(231, 76, 60, 0.8);' : ''}">${formatCurrency(c.valor_actual_csv)}</td>
+                <td><strong>${formatCurrency(c.valor_actual)}</strong></td>
+            `;
+            tbody.appendChild(tr);
+        });
+        updateTableTotals('table-preview-compra-creditos');
+    } else if (tab === 'cuotas') {
+        const headers = ["ID Crédito", "ID Cuota", "Vencimiento", "Fecha Pago", "Capital", "Interés", "IVA", "Total", "Valor Actual CSV", "Valor Actual Recalculado", "¿Comprada?"];
+        buildHeaders('table-preview-compra-cuotas', 'preview-compra-cuotas-headers', headers);
+
+        const tbody = document.getElementById('preview-compra-cuotas-body');
+        tbody.innerHTML = '';
+        currentCompraPreviewData.cuotas.forEach(c => {
+            const tr = document.createElement('tr');
+            tr.style.backgroundColor = c.comprada ? 'rgba(46, 204, 113, 0.1)' : 'transparent';
+            tr.innerHTML = `
+                <td>${c.credito_id_externo}</td>
+                <td>${c.nro_cuota}</td>
+                <td>${c.fecha_vencimiento || '-'}</td>
+                <td>${c.fecha_vencimiento_pago || '-'}</td>
+                <td>${formatCurrency(c.capital)}</td>
+                <td>${formatCurrency(c.interes)}</td>
+                <td>${formatCurrency(c.iva)}</td>
+                <td>${formatCurrency(c.total)}</td>
+                <td style="${c.valor_actual_csv !== (c.valor_actual || 0) ? 'color: white; background-color: rgba(231, 76, 60, 0.8);' : ''}">${formatCurrency(c.valor_actual_csv || 0)}</td>
+                <td><strong>${formatCurrency(c.valor_actual || 0)}</strong></td>
+                <td>${c.comprada ? '<span class="status-badge status-activa">Sí</span>' : '<span class="status-badge status-cancelada">No</span>'}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+        updateTableTotals('table-preview-compra-cuotas');
+    } else if (tab === 'resumen') {
+        const headers = ["Mes Vto.", "Mes Pago", "Cant. Cuotas", "Capital Total", "Interés Total", "IVA Total", "Monto Total", "Valor Actual CSV", "Valor Actual Recalculado"];
+        buildHeaders('table-preview-compra-resumen', 'preview-compra-resumen-headers', headers);
+
+        const tbody = document.getElementById('preview-compra-resumen-body');
+        tbody.innerHTML = '';
+        currentCompraPreviewData.resumen.forEach(r => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${r.mes}</td>
+                <td>${r.mes_pago}</td>
+                <td>${r.cantidad_cuotas}</td>
+                <td>${formatCurrency(r.capital_total)}</td>
+                <td>${formatCurrency(r.interes_total)}</td>
+                <td>${formatCurrency(r.iva_total)}</td>
+                <td>${formatCurrency(r.monto_total)}</td>
+                <td style="${r.valor_actual_csv !== r.valor_actual ? 'color: white; background-color: rgba(231, 76, 60, 0.8);' : ''}">${formatCurrency(r.valor_actual_csv)}</td>
+                <td><strong>${formatCurrency(r.valor_actual)}</strong></td>
+            `;
+            tbody.appendChild(tr);
+        });
+        updateTableTotals('table-preview-compra-resumen');
+    }
+}
+
+async function confirmCompraCartera() {
+    if (!currentCompraPayload) return;
+    
+    const btn = document.getElementById('btn-confirmar-compra');
+    btn.disabled = true;
+    btn.textContent = 'Confirmando...';
+
+    try {
+        if (editingCarteraId) {
+            // Eliminar la cartera pendiente anterior para reemplazarla
+            const delRes = await fetch(`${API_URL}/api/v1/carteras/${editingCarteraId}`, { method: 'DELETE' });
+            if (!delRes.ok) {
+                const resJson = await delRes.json();
+                throw new Error("No se pudo eliminar la compra anterior para actualizarla: " + (resJson.detail || "Error desconocido"));
+            }
+        }
+
+        const response = await fetch(`${API_URL}/api/v1/carteras/compra`, {
+            method: 'POST',
+            body: currentCompraPayload
+        });
+
+        if (response.ok) {
+            alert(editingCarteraId ? 'Compra de cartera actualizada con éxito.' : 'Compra de cartera confirmada con éxito.');
+            document.getElementById('form-compra-cartera').reset();
+            editingCarteraId = null;
+            currentCompraPayload = null;
+            currentCompraPreviewData = null;
             switchTab('operaciones-cartera');
             loadOperacionesCarteraTable();
         } else {
             const result = await response.json();
-            alert('Error al registrar: ' + (result.detail || 'Error desconocido'));
+            alert('Error al confirmar: ' + (result.detail || 'Error desconocido'));
         }
     } catch (error) {
-        console.error('Error submitting compra:', error);
-        alert('Error de conexión o de procesamiento.');
+        console.error('Error confirming compra:', error);
+        alert('Error de conexión o de procesamiento: ' + error.message);
     } finally {
-        btn.disabled = false;
-        btn.textContent = 'Registrar Compra';
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Confirmar Compra';
+        }
     }
 }
 

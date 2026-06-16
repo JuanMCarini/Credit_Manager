@@ -374,6 +374,7 @@ class PortfolioPurchase:
             )
             errores_detectados = True
         else:
+            self.df_cuotas["Valor Actual CSV"] = self.df_cuotas["Valor Actual"]
             self.df_cuotas["Valor Actual"] = self.df_cuotas["VA_Calculado"]
 
         # G. Validation: IVA Consistency
@@ -409,9 +410,9 @@ class PortfolioPurchase:
                     writer, sheet_name="CUOTAS", index=False
                 )
 
-            raise RuntimeError(
-                f"Validation failed. Please review the file {nombre_reporte} to correct the data."
-            )
+            # We use a custom string format that main.py can parse, or just raise a custom exception.
+            # But to keep it simple without altering imports, we can raise a ValueError with a specific prefix
+            raise ValueError(f"REPORT_ERROR|{nombre_reporte}|Validation failed. Please review the file {nombre_reporte} to correct the data.")
         else:
             # Final cleanup of auxiliary control columns
             self.df_personas.drop(columns=["VALIDACION"], inplace=True)

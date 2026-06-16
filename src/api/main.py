@@ -1412,6 +1412,242 @@ def update_venta_cartera(cartera_id: int, data: VentaCarteraRequest, db: Session
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+@app.post("/api/v1/carteras/compra/preview", tags=["Carteras"])
+async def preview_compra_cartera(
+    nombre_cartera: str = Form(...),
+    fecha_compra: date = Form(...),
+    tna_descuento: float = Form(...),
+    cuit_vendedor: str = Form(...),
+    razon_social_vendedor: str = Form(...),
+    personas_csv: UploadFile = File(...),
+    prestamos_csv: UploadFile = File(...),
+    cuotas_csv: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    import tempfile
+    import os
+    import pandas as pd
+    
+    with tempfile.TemporaryDirectory() as temp_dir:
+        p_personas = os.path.join(temp_dir, "personas.csv")
+        p_prestamos = os.path.join(temp_dir, "prestamos.csv")
+        p_cuotas = os.path.join(temp_dir, "cuotas.csv")
+        
+        with open(p_personas, "wb") as f: f.write(await personas_csv.read())
+        with open(p_prestamos, "wb") as f: f.write(await prestamos_csv.read())
+        with open(p_cuotas, "wb") as f: f.write(await cuotas_csv.read())
+        
+        try:
+            from src.portfolio.purchase import PortfolioPurchase
+            importer = PortfolioPurchase()
+            
+            importer.create_portfolio(
+                nombre_cartera=nombre_cartera,
+                fecha_compra=fecha_compra,
+                tna_descuento=tna_descuento,
+                cuit_vendedor=cuit_vendedor,
+                razon_social_vendedor=razon_social_vendedor
+            )
+            
+            importer.read_csv(
+                personas_path=p_personas,
+                prestamos_path=p_prestamos,
+                cuotas_path=p_cuotas
+            )
+            
+            importer.validation()
+            importer.check_warnings()
+            
+            df_personas = importer.df_personas
+            df_prestamos = importer.df_prestamos
+            df_cuotas = importer.df_cuotas
+            
+            if not df_personas.empty and not df_prestamos.empty:
+                cols_to_merge = [c for c in ['ID Operación', 'CUIL', 'Apellido', 'Nombre', 'Remuneración'] if c in df_personas.columns]
+                df_merged = pd.merge(df_prestamos, df_personas[cols_to_merge], on='ID Operación', how='left')
+                df_merged['Cliente'] = df_merged['Apellido'].fillna('') + ' ' + df_merged['Nombre'].fillna('')
+            else:
+                df_merged = df_prestamos.copy()
+                df_merged['Cliente'] = "Desconocido"
+                
+            fecha_v_dt = pd.to_datetime(fecha_compra).date() if isinstance(fecha_compra, str) else fecha_compra
+            tna = float(tna_descuento)
+            
+            def calculate_va(monto, fecha_venc):
+                try:
+                    fv = pd.to_datetime(fecha_venc, dayfirst=True).date()
+                except Exception:
+                    fv = pd.to_datetime(fecha_venc).date()
+                dias = max(0, (fv - fecha_v_dt).days)
+                return round(float(monto) / ((1 + (tna *30 / 365)) ** (dias/30)), 2)
+                
+            def safe_float(val, default=0.0):
+                try:
+                    v = float(val)
+                    import math
+                    return default if math.isnan(v) else v
+                except (TypeError, ValueError):
+                    return default
+
+            # DEBUG: Print cuotas state after validation
+            print(f"DEBUG df_cuotas columns: {list(df_cuotas.columns)}")
+            print(f"DEBUG df_cuotas shape: {df_cuotas.shape}")
+            print(f"DEBUG df_cuotas['Valor Actual'] sample: {df_cuotas['Valor Actual'].head(10).tolist()}")
+            print(f"DEBUG df_cuotas['Valor Actual'] dtype: {df_cuotas['Valor Actual'].dtype}")
+            
+            # Ensure Valor Actual is numeric after validation transforms
+            df_cuotas['Valor Actual'] = pd.to_numeric(df_cuotas['Valor Actual'], errors='coerce').fillna(0)
+            
+            print(f"DEBUG after to_numeric - VA sample: {df_cuotas['Valor Actual'].head(10).tolist()}")
+            print(f"DEBUG VA > 0 count: {(df_cuotas['Valor Actual'] > 0).sum()}")
+            
+            # Filter only purchased installments (Valor Actual > 0)
+            df_cuotas_compradas = df_cuotas[df_cuotas['Valor Actual'] > 0].copy()
+            
+            print(f"DEBUG df_cuotas_compradas shape: {df_cuotas_compradas.shape}")
+            
+            # Calcular plazo y cuotas compradas por crédito
+            plazo_series = df_cuotas.groupby("ID Operación").size()
+            compradas_series = df_cuotas[df_cuotas["Valor Actual"] > 0].groupby("ID Operación").size()
+            val_act_series = df_cuotas[df_cuotas["Valor Actual"] > 0].groupby("ID Operación")["Valor Actual"].sum()
+            val_act_csv_series = df_cuotas[df_cuotas["Valor Actual"] > 0].groupby("ID Operación")["Valor Actual CSV"].sum()
+            
+            creditos_res = []
+            for _, row in df_merged.iterrows():
+                id_op = row.get("ID Operación", "")
+                cap_vend = safe_float(row.get("Capital Vendido", row.get("Capital", 0)))
+                int_vend = safe_float(row.get("Interés Vendido", row.get("Interés", 0)))
+                iva_vend = safe_float(row.get("IVA Vendido", row.get("IVA", 0)))
+                val_act = float(val_act_series.get(id_op, 0.0))
+                val_act_csv = float(val_act_csv_series.get(id_op, 0.0))
+                
+                plazo = int(plazo_series.get(id_op, 0))
+                cuotas_compradas = int(compradas_series.get(id_op, 0))
+                
+                remuneracion = safe_float(row.get("Remuneración", 0))
+                valor_cuota = safe_float(row.get("Importe Cuota", 0))
+                relacion_cuota_sueldo = 0
+                if remuneracion > 0:
+                    relacion_cuota_sueldo = round((valor_cuota / remuneracion) * 100, 0)
+                
+                creditos_res.append({
+                    "id_externo": str(id_op),
+                    "cliente_nombre": str(row.get("Cliente", "")).strip() or str(row.get("CUIL", "")),
+                    "capital_vendido": cap_vend,
+                    "interes_vendido": int_vend,
+                    "iva_vendido": iva_vend,
+                    "valor_actual": val_act,
+                    "valor_actual_csv": val_act_csv,
+                    "plazo": plazo,
+                    "cuotas_compradas": cuotas_compradas,
+                    "relacion_cuota_sueldo": relacion_cuota_sueldo
+                })
+                
+            cuotas_res = []
+            for _, row in df_cuotas.iterrows():
+                cap = safe_float(row.get("Capital", 0))
+                interes = safe_float(row.get("Interés", 0))
+                iva = safe_float(row.get("IVA", 0))
+                total = cap + interes + iva
+                val_act = safe_float(row.get("Valor Actual", 0))
+                val_act_csv = safe_float(row.get("Valor Actual CSV", 0))
+                
+                cuotas_res.append({
+                    "credito_id_externo": str(row.get("ID Operación", "")),
+                    "nro_cuota": str(row.get("ID Cuota", "")),
+                    "fecha_vencimiento": str(row.get("Fecha Vto.", "")),
+                    "fecha_vencimiento_pago": str(row.get("Fecha Vto. Pago", "")),
+                    "capital": cap,
+                    "interes": interes,
+                    "iva": iva,
+                    "total": total,
+                    "valor_actual": val_act,
+                    "valor_actual_csv": val_act_csv,
+                    "comprada": val_act > 0
+                })
+                
+            # Parse dates flexibly for resumen (only purchased installments)
+            df_cuotas_compradas['Fecha Vto. parsed'] = pd.to_datetime(df_cuotas_compradas['Fecha Vto.'], dayfirst=True, errors='coerce')
+            df_cuotas_compradas['Fecha Vto. parsed'] = df_cuotas_compradas['Fecha Vto. parsed'].fillna(pd.to_datetime(df_cuotas_compradas['Fecha Vto.'], errors='coerce'))
+            df_cuotas_compradas['Mes_Año'] = df_cuotas_compradas['Fecha Vto. parsed'].dt.strftime('%Y-%m')
+            
+            df_cuotas_compradas['Fecha Pago parsed'] = pd.to_datetime(df_cuotas_compradas['Fecha Vto. Pago'], dayfirst=False, errors='coerce')
+            df_cuotas_compradas['Fecha Pago parsed'] = df_cuotas_compradas['Fecha Pago parsed'].fillna(pd.to_datetime(df_cuotas_compradas['Fecha Vto. Pago'], errors='coerce'))
+            df_cuotas_compradas['Mes_Año_Pago'] = df_cuotas_compradas['Fecha Pago parsed'].dt.strftime('%Y-%m')
+            
+            resumen_dict = {}
+            for _, row in df_cuotas_compradas.iterrows():
+                mes_anio = row.get('Mes_Año', 'Desconocido')
+                if pd.isna(mes_anio): mes_anio = 'Desconocido'
+                
+                mes_pago = row.get('Mes_Año_Pago', 'Desconocido')
+                if pd.isna(mes_pago): mes_pago = mes_anio
+                
+                cap = safe_float(row.get("Capital", 0))
+                interes = safe_float(row.get("Interés", 0))
+                iva = safe_float(row.get("IVA", 0))
+                total = cap + interes + iva
+                val_act = safe_float(row.get("Valor Actual", 0))
+                val_act_csv = safe_float(row.get("Valor Actual CSV", 0))
+                
+                if mes_anio not in resumen_dict:
+                    resumen_dict[mes_anio] = {
+                        "mes": mes_anio, 
+                        "mes_pago": mes_pago,
+                        "cantidad_cuotas": 0, 
+                        "capital_total": 0.0,
+                        "interes_total": 0.0,
+                        "iva_total": 0.0,
+                        "monto_total": 0.0, 
+                        "valor_actual": 0.0,
+                        "valor_actual_csv": 0.0
+                    }
+                    
+                resumen_dict[mes_anio]["cantidad_cuotas"] += 1
+                resumen_dict[mes_anio]["capital_total"] += cap
+                resumen_dict[mes_anio]["interes_total"] += interes
+                resumen_dict[mes_anio]["iva_total"] += iva
+                resumen_dict[mes_anio]["monto_total"] += total
+                resumen_dict[mes_anio]["valor_actual"] += val_act
+                resumen_dict[mes_anio]["valor_actual_csv"] += val_act_csv
+                
+            resumen_res = list(resumen_dict.values())
+            resumen_res.sort(key=lambda x: x["mes"])
+            
+            for r in resumen_res:
+                r["capital_total"] = round(r["capital_total"], 2)
+                r["interes_total"] = round(r["interes_total"], 2)
+                r["iva_total"] = round(r["iva_total"], 2)
+                r["monto_total"] = round(r["monto_total"], 2)
+                r["valor_actual"] = round(r["valor_actual"], 2)
+                r["valor_actual_csv"] = round(r["valor_actual_csv"], 2)
+            
+            # Filter out months with no actual value (not purchased)
+            resumen_res = [r for r in resumen_res if r["valor_actual"] > 0]
+                
+            return {
+                "status": "success",
+                "creditos": creditos_res,
+                "cuotas": cuotas_res,
+                "resumen": resumen_res
+            }
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            error_msg = str(e)
+            if "REPORT_ERROR|" in error_msg:
+                parts = error_msg.split("|", 2)
+                if len(parts) == 3:
+                    file_name = parts[1]
+                    user_msg = parts[2]
+                    from fastapi.responses import JSONResponse
+                    return JSONResponse(status_code=400, content={
+                        "detail": user_msg,
+                        "report_file": file_name
+                    })
+            raise HTTPException(status_code=400, detail=error_msg)
+
 @app.post("/api/v1/carteras/compra", tags=["Carteras"])
 async def create_compra_cartera(
     nombre_cartera: str = Form(...),
@@ -1457,12 +1693,36 @@ async def create_compra_cartera(
             
             importer.validation()
             importer.check_warnings()
-            importer.process_full_portfolio()
             importer.save_portfolio()
             
             return {"status": "success", "message": "Compra de cartera importada exitosamente."}
         except Exception as e:
-            raise HTTPException(status_code=400, detail=str(e))
+            error_msg = str(e)
+            if "REPORT_ERROR|" in error_msg:
+                parts = error_msg.split("|", 2)
+                if len(parts) == 3:
+                    file_name = parts[1]
+                    user_msg = parts[2]
+                    from fastapi.responses import JSONResponse
+                    return JSONResponse(status_code=400, content={
+                        "detail": user_msg,
+                        "report_file": file_name
+                    })
+            raise HTTPException(status_code=400, detail=error_msg)
+
+@app.get("/api/v1/carteras/compra/reportes/{filename}", tags=["Carteras"])
+def download_import_report(filename: str):
+    import os
+    from fastapi.responses import FileResponse
+    # Basic validation to prevent directory traversal
+    if "REPORTE" not in filename or "/" in filename or "\\" in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    
+    file_path = os.path.join(os.getcwd(), filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Report file not found")
+        
+    return FileResponse(file_path, filename=filename, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 @app.patch("/api/v1/carteras/{cartera_id}", tags=["Carteras"])
 def update_cartera(cartera_id: int, data: UpdateCarteraRequest, db: Session = Depends(get_db)):
@@ -1542,7 +1802,7 @@ def export_cartera(cartera_id: int, db: Session = Depends(get_db)):
 
 @app.delete("/api/v1/carteras/{cartera_id}", tags=["Carteras"])
 def delete_cartera(cartera_id: int, db: Session = Depends(get_db)):
-    from src.database.models import Cartera, OperacionCartera, Cuota, EstadoCuotaCedida, EstadoCartera, TipoOperacionCartera, Credito
+    from src.database.models import Cartera, OperacionCartera, Cuota, EstadoCuotaCedida, EstadoCartera, TipoOperacionCartera, Credito, Cliente
     
     cartera = db.query(Cartera).filter(Cartera.id == cartera_id).first()
     if not cartera:
@@ -1550,26 +1810,57 @@ def delete_cartera(cartera_id: int, db: Session = Depends(get_db)):
         
     if cartera.estado != EstadoCartera.PENDIENTE:
         raise HTTPException(status_code=400, detail="No se puede eliminar una cartera que ya está CONFIRMADA (VENDIDA o COMPRADA).")
-    
+        
     try:
         if cartera.tipo_operacion == TipoOperacionCartera.COMPRA:
-            # En una COMPRA, los créditos se crearon específicamente para esta cartera.
-            # Al eliminarlos, SQLAlchemy (o la BD) debería aplicar cascade a las Cuotas y a OperacionCartera.
-            # Primero eliminamos las Operaciones relacionadas para evitar problemas si faltan cascades
+            from src.database.models import Cobranza, TipoCobranzaEnum
+            has_cobranzas = db.query(Cobranza).join(Cuota).join(Credito).filter(
+                Credito.cartera_id == cartera_id,
+                Cobranza.tipo_cobranza != TipoCobranzaEnum.CNC.value
+            ).first()
+            if has_cobranzas:
+                raise HTTPException(status_code=400, detail="No se puede eliminar la cartera porque tiene cobranzas asociadas y debería estar confirmada.")
+                
+            # Borrar operaciones
             db.query(OperacionCartera).filter(OperacionCartera.cartera_id == cartera_id).delete(synchronize_session=False)
             
-            # Buscamos los creditos asociados y los borramos uno por uno para asegurar los cascades a nivel ORM si es necesario
             creditos_asociados = db.query(Credito).filter(Credito.cartera_id == cartera_id).all()
-            for cred in creditos_asociados:
-                db.delete(cred)
+            creditos_ids = [c.id for c in creditos_asociados]
+            clientes_cuils = {cred.cliente_cuil for cred in creditos_asociados if cred.cliente_cuil}
+            
+            if creditos_ids:
+                cuotas = db.query(Cuota).filter(Cuota.credito_id.in_(creditos_ids)).all()
+                cuotas_ids = [c.id for c in cuotas]
+                
+                # Borrar cobranzas de esas cuotas
+                if cuotas_ids:
+                    from src.database.models import Cobranza
+                    db.query(Cobranza).filter(Cobranza.cuota_id.in_(cuotas_ids)).delete(synchronize_session=False)
+                
+                # Borrar cuotas
+                db.query(Cuota).filter(Cuota.credito_id.in_(creditos_ids)).delete(synchronize_session=False)
+                
+                # Borrar creditos
+                db.query(Credito).filter(Credito.cartera_id == cartera_id).delete(synchronize_session=False)
+                
+            # Borrar los clientes si no tienen otros créditos activos
+            from sqlalchemy import or_
+            for cuil in clientes_cuils:
+                otros = db.query(Credito).filter(
+                    Credito.cliente_cuil == cuil,
+                    or_(Credito.cartera_id != cartera_id, Credito.cartera_id.is_(None))
+                ).first()
+                if not otros:
+                    db.query(Cliente).filter(Cliente.cuil == cuil).delete(synchronize_session=False)
             
         else:
+            if hasattr(cartera, "liquidaciones") and len(cartera.liquidaciones) > 0:
+                raise HTTPException(status_code=400, detail="No se puede eliminar la cartera porque tiene liquidaciones asociadas y debería estar confirmada.")
+                
             # En una VENTA, la cartera solo agrupa cuotas existentes.
-            # Get all related OperacionCartera records
             operaciones = db.query(OperacionCartera).filter(OperacionCartera.cartera_id == cartera_id).all()
             cuota_ids = [op.cuota_id for op in operaciones]
     
-            # Revert estado_cesion for the affected cuotas
             if cuota_ids:
                 db.query(Cuota).filter(Cuota.id.in_(cuota_ids)).update(
                     {"estado_cesion": EstadoCuotaCedida.NO_VENDIDA},

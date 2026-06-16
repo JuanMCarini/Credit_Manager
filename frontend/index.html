@@ -146,7 +146,7 @@
                             </svg>
                             Gestión de Operaciones
                         </a>
-                        <a href="#nueva-operacion-cartera" class="nav-item" onclick="switchTab('nueva-operacion-cartera'); loadSociosOptionsForCartera();">
+                        <a href="#nueva-operacion-cartera" class="nav-item" onclick="switchTab('nueva-operacion-cartera'); resetVentaCarteraUI(); resetCompraCarteraUI(); loadSociosOptionsForCartera();">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>
                             </svg>
@@ -527,6 +527,7 @@
                                 <option value="empleadores">Empleadores</option>
                                 <option value="socios">Socios Comerciales</option>
                                 <option value="tasas_y_comisiones">Tasas y Comisiones</option>
+                                <option value="relaciones">Relaciones</option>
                             </select>
                         </div>
                         <div>
@@ -805,7 +806,7 @@
                         <button class="btn-secondary" onclick="loadOperacionesCarteraTable()" style="height: fit-content; width: fit-content; padding-left: 24px; padding-right: 24px;">
                             Actualizar Datos
                         </button>
-                        <button class="btn-primary" onclick="switchTab('nueva-operacion-cartera'); loadSociosOptionsForCartera();" style="height: fit-content; width: fit-content; padding-left: 24px; padding-right: 24px;">
+                        <button class="btn-primary" onclick="switchTab('nueva-operacion-cartera'); resetVentaCarteraUI(); resetCompraCarteraUI(); loadSociosOptionsForCartera();" style="height: fit-content; width: fit-content; padding-left: 24px; padding-right: 24px;">
                             + Nueva Operación
                         </button>
                     </div>
@@ -991,7 +992,7 @@
                         </div>
                         <div style="display: flex; justify-content: flex-end; gap: 16px; margin-top: 32px; padding-top: 24px; border-top: 1px solid rgba(255,255,255,0.1);">
                             <button type="button" class="btn-secondary" onclick="switchTab('operaciones-cartera')">Cancelar</button>
-                            <button type="submit" class="btn-primary" style="padding: 12px 32px; font-size: 1.1em;">Registrar Compra</button>
+                            <button type="submit" class="btn-primary" style="padding: 12px 32px; font-size: 1.1em;" id="btn-simular-compra">Simular Compra</button>
                         </div>
                     </form>
                 </div>
@@ -1078,6 +1079,60 @@
                     <div style="display: flex; gap: 16px;">
                         <button type="button" id="btn-preview-next" class="btn-secondary" style="padding: 12px 32px; font-size: 1.1em;"></button>
                         <button id="btn-confirmar-venta" type="button" class="btn-primary" style="padding: 12px 32px; font-size: 1.1em; background: linear-gradient(135deg, #10b981 0%, #059669 100%); display: none;" onclick="confirmVentaCartera()">Confirmar Venta</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Preview Compra Cartera -->
+            <section id="tab-preview-compra-cartera" class="tab-content">
+                <header class="section-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div style="flex: 1;">
+                        <h2 class="section-title">Simulación de Compra de Cartera</h2>
+                        <p class="section-subtitle">Revise los créditos y cuotas importados desde los archivos CSV antes de confirmar la compra.</p>
+                    </div>
+                    <div>
+                        <button type="button" id="btn-volver-preview-compra" class="btn-secondary" style="padding: 8px 16px; font-size: 0.9em;" onclick="switchTab('nueva-operacion-cartera')">Volver al Formulario</button>
+                    </div>
+                </header>
+
+                <div style="display: flex; gap: 16px; margin-bottom: 24px;">
+                    <button class="btn-secondary" id="btn-preview-compra-creditos" onclick="renderPreviewCompra('creditos')">Ver Créditos</button>
+                    <button class="btn-secondary" id="btn-preview-compra-cuotas" onclick="renderPreviewCompra('cuotas')">Ver Cuotas</button>
+                    <button class="btn-secondary" id="btn-preview-compra-resumen" onclick="renderPreviewCompra('resumen')">Ver Resumen</button>
+                </div>
+
+                <!-- Contenedores de las tablas de Preview Compra -->
+                <div id="preview-compra-creditos-container" style="display: none;">
+                    <table class="data-table" id="table-preview-compra-creditos">
+                        <thead id="preview-compra-creditos-headers">
+                        </thead>
+                        <tbody id="preview-compra-creditos-body"></tbody>
+                    </table>
+                </div>
+
+                <div id="preview-compra-cuotas-container" style="display: none;">
+                    <table class="data-table" id="table-preview-compra-cuotas">
+                        <thead id="preview-compra-cuotas-headers">
+                        </thead>
+                        <tbody id="preview-compra-cuotas-body"></tbody>
+                    </table>
+                </div>
+
+                <div id="preview-compra-resumen-container" style="display: none;">
+                    <table class="data-table" id="table-preview-compra-resumen">
+                        <thead id="preview-compra-resumen-headers">
+                        </thead>
+                        <tbody id="preview-compra-resumen-body"></tbody>
+                    </table>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-top: 32px; padding-top: 24px; border-top: 1px solid rgba(255,255,255,0.1);">
+                    <div>
+                        <button type="button" id="btn-preview-compra-back" class="btn-secondary" style="padding: 12px 32px; font-size: 1.1em; display: none;"></button>
+                    </div>
+                    <div style="display: flex; gap: 16px;">
+                        <button type="button" id="btn-preview-compra-next" class="btn-secondary" style="padding: 12px 32px; font-size: 1.1em;"></button>
+                        <button type="button" id="btn-confirmar-compra" class="btn-primary" style="padding: 12px 32px; font-size: 1.1em; background: linear-gradient(135deg, #10b981 0%, #059669 100%); display: none;" onclick="confirmCompraCartera()">Confirmar Compra</button>
                     </div>
                 </div>
             </section>
@@ -1513,6 +1568,6 @@
     </div>
 
     <!-- Main Entry Point -->
-    <script src="/app/main.js?v=11"></script>
+    <script src="/app/main.js?v=20"></script>
 </body>
 </html>
