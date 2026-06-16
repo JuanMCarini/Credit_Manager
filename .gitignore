@@ -221,3 +221,8 @@ __marimo__/
 data/
 *.db
 *.xlsx
+
+# Environment Files
+.env
+.env.*
+!.env.example
