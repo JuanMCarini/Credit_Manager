@@ -38,6 +38,15 @@ class TipoCredito(enum.Enum):
     ALEMAN = "SISTEMA ALEMAN"
     PENALTY = "PENALTY"
 
+    @property
+    def id(self) -> int:
+        mapping = {
+            "SISTEMA FRANCES": 1,
+            "SISTEMA ALEMAN": 2,
+            "PENALTY": 3,
+        }
+        return mapping[self.value]
+
 
 class Credito(Base):
     """

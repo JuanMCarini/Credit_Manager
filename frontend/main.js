@@ -277,7 +277,7 @@ let excelFilters = {
     'table-clientes': {}
 };
 
-function getUniqueValuesForCol(tableId, colIndex) {
+function getAllUniqueValuesForCol(tableId, colIndex) {
     const tbody = document.querySelector(`#${tableId} tbody`);
     const trs = tbody.getElementsByTagName("tr");
     const vals = new Set();
@@ -285,6 +285,57 @@ function getUniqueValuesForCol(tableId, colIndex) {
         if (trs[i].classList.contains('sub-row')) continue;
         const td = trs[i].getElementsByTagName("td")[colIndex];
         if (td) vals.add(td.textContent.trim());
+    }
+    return vals;
+}
+
+function getUniqueValuesForCol(tableId, colIndex) {
+    const tbody = document.querySelector(`#${tableId} tbody`);
+    const trs = tbody.getElementsByTagName("tr");
+    const vals = new Set();
+    
+    for (let i = 0; i < trs.length; i++) {
+        const tr = trs[i];
+        if (tr.classList.contains('sub-row')) continue;
+        
+        let passesOtherFilters = true;
+        const tds = tr.getElementsByTagName("td");
+        
+        for (const [filterColStr, filterObj] of Object.entries(excelFilters[tableId] || {})) {
+            const fCol = parseInt(filterColStr);
+            if (fCol === colIndex) continue; // Ignoramos el filtro de esta misma columna
+            
+            if (tds[fCol]) {
+                const txtValue = tds[fCol].textContent.trim();
+                let match = true;
+                
+                if (filterObj.isDate && txtValue !== '-' && txtValue !== '') {
+                    const dateVal = new Date(txtValue + 'T00:00:00');
+                    if (filterObj.desde) {
+                        const desde = new Date(filterObj.desde + 'T00:00:00');
+                        if (dateVal < desde) match = false;
+                    }
+                    if (filterObj.hasta) {
+                        const hasta = new Date(filterObj.hasta + 'T00:00:00');
+                        if (dateVal > hasta) match = false;
+                    }
+                }
+                
+                if (match && !filterObj.allowedSet.has(txtValue)) {
+                    match = false;
+                }
+                
+                if (!match) {
+                    passesOtherFilters = false;
+                    break;
+                }
+            }
+        }
+        
+        if (passesOtherFilters) {
+            const td = tds[colIndex];
+            if (td) vals.add(td.textContent.trim());
+        }
     }
     return Array.from(vals).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
 }
@@ -459,8 +510,18 @@ function closeExcelFilter() {
 
 function applyExcelFilter(colIndex, tableId, headerId) {
     const selected = new Set();
-    document.querySelectorAll(".excel-val-cb:checked").forEach(cb => {
-        selected.add(cb.value);
+    const renderedCheckboxes = document.querySelectorAll(".excel-val-cb");
+    const renderedValues = new Set();
+    
+    let allRenderedChecked = true;
+
+    renderedCheckboxes.forEach(cb => {
+        renderedValues.add(cb.value);
+        if (cb.checked) {
+            selected.add(cb.value);
+        } else {
+            allRenderedChecked = false;
+        }
     });
 
     let desde = '';
@@ -475,10 +536,26 @@ function applyExcelFilter(colIndex, tableId, headerId) {
         if (elHasta) hasta = elHasta.value;
     }
 
-    const totalCheckboxes = document.querySelectorAll(".excel-val-cb").length;
-    if (selected.size === totalCheckboxes && !desde && !hasta) {
+    if (allRenderedChecked && !desde && !hasta) {
         delete excelFilters[tableId][colIndex];
     } else {
+        const existingFilter = excelFilters[tableId] && excelFilters[tableId][colIndex];
+        if (existingFilter && existingFilter.allowedSet) {
+            existingFilter.allowedSet.forEach(val => {
+                if (!renderedValues.has(val)) {
+                    selected.add(val);
+                }
+            });
+        } else {
+            const allVals = getAllUniqueValuesForCol(tableId, colIndex);
+            allVals.forEach(val => {
+                if (!renderedValues.has(val)) {
+                    selected.add(val);
+                }
+            });
+        }
+        
+        if (!excelFilters[tableId]) excelFilters[tableId] = {};
         excelFilters[tableId][colIndex] = { isDate, desde, hasta, allowedSet: selected };
     }
 
@@ -1176,7 +1253,12 @@ async function loadAuxTable() {
                 }
                 return `<td>${val}</td>`;
             }).join('')}
-                <td><button class="btn-secondary" style="padding:4px 8px; font-size:12px;" onclick="openAuxModal(${row.id})">Editar</button></td>
+                <td>
+                    <div style="display: flex; gap: 4px;">
+                        <button class="btn-secondary" style="padding:4px 8px; font-size:12px;" onclick="openAuxModal(${row.id})">✏️ Editar</button>
+                        ${currentAuxTable === 'socios' ? `<button class="btn-secondary" style="padding:4px 8px; font-size:12px; color: var(--error); border-color: var(--error);" onclick="deleteAuxRecord(${row.id})">🗑️ Borrar</button>` : ''}
+                    </div>
+                </td>
             </tr>`;
         }).join('');
 
@@ -1285,6 +1367,27 @@ async function saveAuxRecord(e) {
     } catch (error) {
         feedback.style.color = "var(--error)";
         feedback.textContent = "Error de red al conectar con el servidor.";
+    }
+}
+
+async function deleteAuxRecord(id) {
+    if (!currentAuxTable) return;
+    if (!confirm(`¿Estás seguro de que deseas eliminar este registro?`)) return;
+
+    try {
+        const res = await fetch(`${API_URL}/api/v1/auxiliares/${currentAuxTable}/${id}`, {
+            method: 'DELETE'
+        });
+        const data = await res.json();
+
+        if (res.ok) {
+            alert("Registro eliminado con éxito.");
+            loadAuxTable();
+        } else {
+            alert(`No se puede eliminar: ${data.detail || 'Error desconocido'}`);
+        }
+    } catch (e) {
+        alert("Ocurrió un error de red al intentar eliminar el registro.");
     }
 }
 
@@ -2347,6 +2450,7 @@ window.submitCobranzaIndividual = async function (e) {
         id_val: document.getElementById('cob-ind-valor').value,
         monto: parseFloat(document.getElementById('cob-ind-monto').value),
         fecha_pago: document.getElementById('cob-ind-fecha').value || null,
+        fecha_corte: document.getElementById('cob-ind-fecha-corte').value || null,
         anticipada: document.getElementById('cob-ind-tipo').value === 'anticipada'
     };
 
@@ -2395,6 +2499,11 @@ window.submitCobranzaMasiva = async function (e) {
     const fecha = document.getElementById('cob-mas-fecha').value;
     if (fecha) {
         formData.append('fecha_pago', fecha);
+    }
+
+    const fechaCorte = document.getElementById('cob-mas-fecha-corte').value;
+    if (fechaCorte) {
+        formData.append('fecha_corte', fechaCorte);
     }
 
     formData.append('anticipada', document.getElementById('cob-mas-tipo').value === 'anticipada');
@@ -2614,12 +2723,14 @@ async function loadOperacionesCarteraTable() {
                         <button class="btn-success btn-sm" style="padding: 4px 8px; font-size: 1.1em; background: transparent; border: none; box-shadow: none; cursor: pointer;" title="Confirmar" onclick="confirmarCartera(${c.id}, '${c.tipo_operacion}')">✅</button>
                         <button class="btn-primary btn-sm" style="padding: 4px 8px; font-size: 1.1em; background: transparent; border: none; box-shadow: none; cursor: pointer;" title="Editar" onclick='openEditCarteraModal(${JSON.stringify(c)})'>✏️</button>
                         <button class="btn-danger btn-sm" style="padding: 4px 8px; font-size: 1.1em; background: transparent; border: none; box-shadow: none; cursor: pointer;" title="Borrar" onclick="deleteOperacionCartera(${c.id})">🗑️</button>
+                        <button class="btn-primary btn-sm" style="padding: 4px 8px; font-size: 1.1em; background: transparent; border: none; box-shadow: none; cursor: pointer;" title="Exportar ZIP" onclick="exportCartera(${c.id})">📥</button>
                     </div>
                 `;
             } else {
                 actions = `
                     <div style="display: flex; justify-content: center; align-items: center; gap: 4px;">
                         <button class="btn-primary btn-sm" style="padding: 4px 8px; font-size: 1.1em; background: transparent; border: none; box-shadow: none; cursor: pointer;" title="Ver Detalle" onclick='viewOperacionCartera(${JSON.stringify(c)})'>👁️</button>
+                        <button class="btn-primary btn-sm" style="padding: 4px 8px; font-size: 1.1em; background: transparent; border: none; box-shadow: none; cursor: pointer;" title="Exportar ZIP" onclick="exportCartera(${c.id})">📥</button>
                     </div>
                 `;
             }
@@ -2643,6 +2754,10 @@ async function loadOperacionesCarteraTable() {
         console.error('Error loading carteras:', error);
         alert('Error al cargar las operaciones de cartera.');
     }
+}
+
+function exportCartera(id) {
+    window.open(`${API_URL}/api/v1/carteras/${id}/export`, '_blank');
 }
 
 async function deleteOperacionCartera(id) {
@@ -2746,7 +2861,9 @@ async function viewOperacionCartera(c) {
             fecha_vencimiento_hasta: null,
             creditos_excluidos: [],
             cartera_id: c.id,
-            usar_cuotas_guardadas: true
+            usar_cuotas_guardadas: true,
+            cuotas_completas: false,
+            socio_originador_id: null
         };
 
         const response = await fetch(`${API_URL}/api/v1/carteras/venta/preview`, {
@@ -2863,7 +2980,11 @@ async function submitVentaCartera(event, usarCuotasGuardadas = false) {
         fecha_vencimiento_hasta: document.getElementById('venta-vto-hasta').value || null,
         creditos_excluidos: currentExcludedCreditos,
         cartera_id: editingCarteraId,
-        usar_cuotas_guardadas: usarCuotasGuardadas
+        usar_cuotas_guardadas: usarCuotasGuardadas,
+        cuotas_completas: document.getElementById('venta-cuotas-completas') ? document.getElementById('venta-cuotas-completas').checked : true,
+        socio_originador_id: document.getElementById('venta-filtrar-socios').checked 
+            ? Array.from(document.querySelectorAll('#venta-socios-originadores .socio-originador-checkbox:checked')).map(cb => parseInt(cb.value))
+            : null
     };
 
     try {
@@ -3140,22 +3261,40 @@ async function submitCompraCartera(event) {
 
 async function loadSociosOptionsForCartera() {
     try {
-        const response = await fetch(`${API_URL}/api/v1/auxiliares/socios`);
-        if (!response.ok) throw new Error('Error al cargar socios comerciales');
+        const [responseSocios, responseOriginadores] = await Promise.all([
+            fetch(`${API_URL}/api/v1/auxiliares/socios`),
+            fetch(`${API_URL}/api/v1/auxiliares/socios_originadores`)
+        ]);
         
-        const socios = await response.json();
+        if (!responseSocios.ok || !responseOriginadores.ok) throw new Error('Error al cargar socios comerciales');
+        
+        const socios = await responseSocios.json();
+        const originadores = await responseOriginadores.json();
+        
         let optionsHtml = '<option value="" disabled selected>Seleccione un socio comercial...</option>';
         socios.forEach(s => {
             optionsHtml += `<option value="${s.cuit}" data-razon="${s.razon_social}">${s.razon_social} (${s.cuit})</option>`;
         });
         
+        let originadoresHtml = '';
+        originadores.forEach(s => {
+            originadoresHtml += `
+                <label style="display: flex; gap: 8px; align-items: center; padding: 4px; cursor: pointer;">
+                    <input type="checkbox" value="${s.id}" class="socio-originador-checkbox" disabled>
+                    <span style="font-size: 14px; font-weight: 500;">${s.razon_social}</span>
+                </label>
+            `;
+        });
+        
         document.getElementById('venta-socio').innerHTML = optionsHtml;
         document.getElementById('compra-socio').innerHTML = optionsHtml;
+        document.getElementById('venta-socios-originadores').innerHTML = originadoresHtml;
     } catch (error) {
         console.error(error);
         const errorHtml = '<option value="" disabled selected>Error al cargar socios</option>';
         document.getElementById('venta-socio').innerHTML = errorHtml;
         document.getElementById('compra-socio').innerHTML = errorHtml;
+        document.getElementById('venta-socios-originadores').innerHTML = errorHtml;
     }
 }
 
@@ -3206,4 +3345,12 @@ async function submitQuickAddSocio(event) {
         btn.disabled = false;
         btn.textContent = 'Guardar';
     }
+}
+
+function toggleSociosCheckboxes(checked) {
+    const container = document.getElementById('venta-socios-originadores');
+    container.style.opacity = checked ? '1' : '0.5';
+    container.style.pointerEvents = checked ? 'auto' : 'none';
+    const checkboxes = container.querySelectorAll('.socio-originador-checkbox');
+    checkboxes.forEach(cb => cb.disabled = !checked);
 }
