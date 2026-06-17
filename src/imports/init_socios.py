@@ -44,8 +44,10 @@ def ensure_socios_exist(df_socios: pd.DataFrame):
             generic_cuit_counter += 1
         else:
             # We clean the CUIT just in case it was typed with hyphens
-            cuit_clean = "".join(filter(str.isdigit, str(cuit)))
-            
+            cuit_str = str(cuit)
+            if cuit_str.endswith(".0"):
+                cuit_str = cuit_str[:-2]
+            cuit_clean = "".join(filter(str.isdigit, cuit_str))
         try:
             
             # create_socio inherently validates for duplicates and raises ValueError if it exists

@@ -1,10 +1,10 @@
 from typing import Any, Dict, List
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import or_
 
-from src.database import get_db, Cliente
+from src.database import get_db, Cliente, Credito, Cuota
 from src.api.schemas.clientes import ClienteCreate
 
 router = APIRouter(prefix="/api/v1/clientes", tags=["Clientes"])
@@ -38,7 +38,10 @@ def create_cliente(
 
 @router.get("")
 def get_clientes_list(db: Session = Depends(get_db)):
-    clientes = db.query(Cliente).all()
+    clientes = db.query(Cliente).options(
+        joinedload(Cliente.provincia), 
+        joinedload(Cliente.empleador)
+    ).all()
     result = []
     for c in clientes:
         prov = c.provincia.nombre if c.provincia else "-"
@@ -95,7 +98,9 @@ def get_cliente(cuil: str, db: Session = Depends(get_db)):
 
 @router.get("/{cuil}/cuenta_corriente")
 def get_cliente_cuenta_corriente(cuil: str, db: Session = Depends(get_db)):
-    cliente = db.query(Cliente).filter(Cliente.cuil == cuil).first()
+    cliente = db.query(Cliente).options(
+        joinedload(Cliente.creditos).joinedload(Credito.cuotas).joinedload(Cuota.cobranzas)
+    ).filter(Cliente.cuil == cuil).first()
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
     
