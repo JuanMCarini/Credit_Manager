@@ -1,7 +1,7 @@
 from typing import Optional
 from datetime import date, datetime
 from fastapi import APIRouter, Depends, HTTPException, Form, UploadFile, File
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import desc
 
 from src.database import get_db
@@ -106,8 +106,8 @@ def update_proceso(proceso_id: int, data: ProcesoUpdate, db: Session = Depends(g
 
 @router.delete("/procesos/{proceso_id}")
 def delete_proceso(proceso_id: int, db: Session = Depends(get_db)):
-    from src.database.models.cobranzas import Proceso
-    proceso = db.query(Proceso).filter(Proceso.id == proceso_id).first()
+    from src.database.models.cobranzas import Proceso, Cobranza
+    proceso = db.query(Proceso).options(joinedload(Proceso.cobranzas).joinedload(Cobranza.liquidaciones)).filter(Proceso.id == proceso_id).first()
     if not proceso:
         raise HTTPException(status_code=404, detail="Proceso no encontrado")
         
@@ -142,7 +142,8 @@ def delete_proceso(proceso_id: int, db: Session = Depends(get_db)):
 @router.get("/cobranzas")
 def get_cobranzas(db: Session = Depends(get_db)):
     from src.database.models.cobranzas import Cobranza
-    cobranzas = db.query(Cobranza).order_by(desc(Cobranza.fecha)).limit(5000).all()
+    from src.database.models import Cuota, Credito
+    cobranzas = db.query(Cobranza).options(joinedload(Cobranza.cuota).joinedload(Cuota.credito)).order_by(desc(Cobranza.fecha)).limit(5000).all()
     result = []
     for c in cobranzas:
         cuota_nro = c.cuota.nro_cuota if c.cuota else "-"

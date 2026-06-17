@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 from datetime import date
 
@@ -25,17 +25,17 @@ def sync_system_states(db: Session = Depends(get_db)):
         if _LAST_SYNC_DATE == hoy and _LAST_SYNC_STATE_HASH == current_state_hash:
             return {"status": "success", "message": "Estados ya se encontraban sincronizados."}
 
-        cuotas = db.query(Cuota).all()
+        cuotas = db.query(Cuota).options(joinedload(Cuota.cobranzas)).all()
         for c in cuotas:
             c.actualizar_estado(hoy)
 
-        creditos = db.query(Credito).all()
+        creditos = db.query(Credito).options(joinedload(Credito.cuotas)).all()
         for cred in creditos:
             if cred.fecha_emision == hoy:
                 continue
             cred.actualizar_estado()
         
-        clientes = db.query(Cliente).all()
+        clientes = db.query(Cliente).options(joinedload(Cliente.creditos)).all()
         for cli in clientes:
             creditos_cli = cli.creditos
             if not creditos_cli:

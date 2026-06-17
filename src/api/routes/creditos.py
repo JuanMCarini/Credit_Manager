@@ -1,7 +1,7 @@
 from typing import Any, Dict, List
 from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from src.database import get_db, Credito
 from src.database.models import EstadoCredito, Cuota
@@ -98,7 +98,7 @@ def update_credito_estado(credito_id: int, data: CreditoEstadoUpdate, db: Sessio
 
 @router.get("/api/v1/creditos/{credito_id}/cuotas")
 def get_credito_cuotas(credito_id: int, db: Session = Depends(get_db)):
-    cuotas = db.query(Cuota).filter(Cuota.credito_id == credito_id).order_by(Cuota.nro_cuota).all()
+    cuotas = db.query(Cuota).options(joinedload(Cuota.cobranzas)).filter(Cuota.credito_id == credito_id).order_by(Cuota.nro_cuota).all()
     
     result = []
     for c in cuotas:
@@ -140,7 +140,7 @@ def get_credito_cuotas(credito_id: int, db: Session = Depends(get_db)):
 
 @router.get("/api/v1/creditos")
 def get_creditos_list(db: Session = Depends(get_db)):
-    creditos = db.query(Credito).all()
+    creditos = db.query(Credito).options(joinedload(Credito.cliente), joinedload(Credito.socio_originador)).all()
     result = []
     for c in creditos:
         nombre_cliente = f"{c.cliente.apellido}, {c.cliente.nombre}" if c.cliente else "-"
@@ -165,7 +165,7 @@ def get_creditos_list(db: Session = Depends(get_db)):
 
 @router.delete("/api/v1/creditos/{credito_id}")
 def delete_credito(credito_id: int, db: Session = Depends(get_db)):
-    credito = db.query(Credito).filter(Credito.id == credito_id).first()
+    credito = db.query(Credito).options(joinedload(Credito.cuotas).joinedload(Cuota.cobranzas)).filter(Credito.id == credito_id).first()
     if not credito:
         raise HTTPException(status_code=404, detail="Crédito no encontrado")
         

@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Form, UploadFile, File
 from fastapi.responses import JSONResponse, FileResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from src.database import get_db
 from src.database.models import Cartera, EstadoCartera, EstadoCuotaCedida, TipoOperacionCartera, Cuota, OperacionCartera, Credito, Cliente
@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api/v1/carteras", tags=["Carteras"])
 @router.get("")
 def get_carteras(db: Session = Depends(get_db)):
     from src.database.models import SocioComercial
-    carteras = db.query(Cartera).join(SocioComercial, Cartera.socio_id == SocioComercial.id).all()
+    carteras = db.query(Cartera).options(joinedload(Cartera.socio)).all()
     
     result = []
     for c in carteras:
@@ -503,7 +503,7 @@ def download_import_report(filename: str):
 
 @router.patch("/{cartera_id}")
 def update_cartera(cartera_id: int, data: UpdateCarteraRequest, db: Session = Depends(get_db)):
-    cartera = db.query(Cartera).filter(Cartera.id == cartera_id).first()
+    cartera = db.query(Cartera).options(joinedload(Cartera.operaciones)).filter(Cartera.id == cartera_id).first()
     if not cartera:
         raise HTTPException(status_code=404, detail="Cartera no encontrada")
         

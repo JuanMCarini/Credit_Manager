@@ -149,7 +149,7 @@ with SessionLocal() as db:
                 mapping = {
                     "id_externo": ext_id,
                     "cliente_cuil": row['CUIL_clean'] if pd.notna(row['CUIL_clean']) else None,
-                    "socio_originador_id": socio_id,
+                    "socio_originador_id": int(socio_id) if socio_id is not None and pd.notna(socio_id) else None,
                     "capital": float(row['Capital_num']),
                     "plazo": int(row['Plazo_num']),
                     "tna_c_iva": float(row['TNA_calc']),

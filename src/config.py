@@ -76,3 +76,26 @@ class APIConfig(BaseSettings):
         return v
 
 API_SETTINGS = APIConfig()
+
+class DatabaseConfig(BaseSettings):
+    """
+    Configuration for the Database connection.
+    """
+    user: str = Field(default="postgres", description="Database user")
+    password: str = Field(default="postgres", description="Database password")
+    host: str = Field(default="localhost", description="Database host")
+    port: int = Field(default=5432, description="Database port")
+    name: str = Field(default="credit_manager", description="Database name")
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        env_prefix="DB_",
+        extra="ignore",
+    )
+
+    @property
+    def database_url(self) -> str:
+        return f"postgresql+pg8000://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}"
+
+DATABASE_SETTINGS = DatabaseConfig()

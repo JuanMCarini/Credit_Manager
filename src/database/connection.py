@@ -13,19 +13,12 @@ from sqlalchemy.event import listens_for
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-# Resolve the absolute path to the project root (two levels up from src/database)
-BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+from src.config import DATABASE_SETTINGS
 
-# Define the data directory at the project root
-DATA_DIR = os.path.join(BASE_DIR, "data")
-os.makedirs(DATA_DIR, exist_ok=True)
-
-# Database URL targeting the new isolated directory
-SQLALCHEMY_DATABASE_URL = f"sqlite:///{os.path.join(DATA_DIR, 'credit_manager.db')}"
-
-# Create the engine
+# Create the engine using the configuration from environment
 engine = create_engine(
-    SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
+    DATABASE_SETTINGS.database_url,
+    # You might want to add pool_size or max_overflow here for production
 )
 
 # Create a session factory
@@ -46,13 +39,4 @@ def get_db():
         db.close()
 
 
-# --- ADD THIS BLOCK ---
-@listens_for(Engine, "connect")
-def set_sqlite_pragma(dbapi_connection, connection_record):
-    """
-    Forces SQLite to respect Foreign Key constraints
-    every time a new connection to the database is opened.
-    """
-    cursor = dbapi_connection.cursor()
-    cursor.execute("PRAGMA foreign_keys=ON")
-    cursor.close()
+
