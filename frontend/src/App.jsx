@@ -9,7 +9,10 @@ import CreditListPage from './pages/CreditListPage';
 import AuxiliaryTablesPage from './pages/AuxiliaryTablesPage';
 import SystemActionsPage from './pages/SystemActionsPage';
 import CollectionsListPage from './pages/CollectionsListPage';
+import CollectionsProcessingPage from './pages/CollectionsProcessingPage';
 import ProcesosListPage from './pages/ProcesosListPage';
+import PortfolioOperationsPage from './pages/PortfolioOperationsPage';
+import PortfolioOriginationPage from './pages/PortfolioOriginationPage';
 
 function App() {
   return (
@@ -24,7 +27,10 @@ function App() {
           <Route path="alta-cliente" element={<ClientRegistrationPage />} />
           <Route path="alta-credito" element={<CreditOriginationPage />} />
           <Route path="cobranzas" element={<CollectionsListPage />} />
+          <Route path="procesamiento-cobranzas" element={<CollectionsProcessingPage />} />
           <Route path="procesos" element={<ProcesosListPage />} />
+          <Route path="operaciones-cartera" element={<PortfolioOperationsPage />} />
+          <Route path="nueva-operacion-cartera" element={<PortfolioOriginationPage />} />
           <Route path="auxiliares" element={<AuxiliaryTablesPage />} />
           <Route path="acciones" element={<SystemActionsPage />} />
         </Route>

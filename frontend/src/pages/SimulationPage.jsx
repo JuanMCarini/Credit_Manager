@@ -43,7 +43,12 @@ const SimulationPage = () => {
     }
   };
 
-  const totalPagado = cuotas.reduce((acc, c) => acc + c.capital + c.interes + c.iva, 0);
+  const totals = cuotas.reduce((acc, c) => ({
+    capital: acc.capital + c.capital,
+    interes: acc.interes + c.interes,
+    iva: acc.iva + c.iva,
+    total: acc.total + c.capital + c.interes + c.iva
+  }), { capital: 0, interes: 0, iva: 0, total: 0 });
 
   return (
     <section className="tab-content active" style={{ animation: 'fadeIn 0.4s ease' }}>
@@ -105,7 +110,7 @@ const SimulationPage = () => {
             {cuotas.length > 0 && (
               <div className="summary-pills" style={{ display: 'flex' }}>
                 <div className="pill">Cuotas: {cuotas.length}</div>
-                <div className="pill">Total a Pagar: {formatCurrency(totalPagado)}</div>
+                <div className="pill">Total a Pagar: {formatCurrency(totals.total)}</div>
               </div>
             )}
           </div>
@@ -139,6 +144,17 @@ const SimulationPage = () => {
                   ))
                 )}
               </tbody>
+              {cuotas.length > 0 && (
+                <tfoot style={{ background: 'rgba(255, 255, 255, 0.05)', fontWeight: 'bold' }}>
+                  <tr>
+                    <td colSpan="2" style={{ textAlign: 'right' }}>TOTALES:</td>
+                    <td>{formatCurrency(totals.capital)}</td>
+                    <td>{formatCurrency(totals.interes)}</td>
+                    <td>{formatCurrency(totals.iva)}</td>
+                    <td style={{ color: 'var(--accent-primary)' }}>{formatCurrency(totals.total)}</td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
         </div>

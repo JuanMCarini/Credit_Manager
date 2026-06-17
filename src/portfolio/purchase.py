@@ -6,6 +6,8 @@ Date: 2026-05-12
 """
 
 import math
+import os
+import tempfile
 from datetime import date, datetime
 from pathlib import Path
 
@@ -396,10 +398,11 @@ class PortfolioPurchase:
         if errores_detectados:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             nombre_reporte = f"REPORTE_ERRORES_IMPORTACION_{timestamp}.xlsx"
+            ruta_reporte = os.path.join(tempfile.gettempdir(), nombre_reporte)
 
-            print(f"\n❌ INCONSISTENCIES FOUND. Generating report: {nombre_reporte}")
+            print(f"\n❌ INCONSISTENCIES FOUND. Generating report: {ruta_reporte}")
 
-            with pd.ExcelWriter(nombre_reporte, engine="openpyxl") as writer:
+            with pd.ExcelWriter(ruta_reporte, engine="openpyxl") as writer:
                 self.df_personas.to_excel(writer, sheet_name="PERSONAS", index=False)
 
                 self.df_prestamos.sort_values(
@@ -599,9 +602,10 @@ class PortfolioPurchase:
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             nombre_reporte = f"ALERTAS_OPERATIVAS_CARTERA_{timestamp}.xlsx"
+            ruta_reporte = os.path.join(tempfile.gettempdir(), nombre_reporte)
 
-            print(f"\nGenerating report for administration: {nombre_reporte}")
-            with pd.ExcelWriter(nombre_reporte, engine="openpyxl") as writer:
+            print(f"\nGenerating report for administration: {ruta_reporte}")
+            with pd.ExcelWriter(ruta_reporte, engine="openpyxl") as writer:
                 if not df_personas_alertas.empty:
                     df_personas_alertas.to_excel(
                         writer, sheet_name="CONTACTO_FALTANTE", index=False

@@ -495,7 +495,8 @@ def download_import_report(filename: str):
     if "REPORTE" not in filename or "/" in filename or "\\" in filename:
         raise HTTPException(status_code=400, detail="Invalid filename")
     
-    file_path = os.path.join(os.getcwd(), filename)
+    import tempfile
+    file_path = os.path.join(tempfile.gettempdir(), filename)
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Report file not found")
         

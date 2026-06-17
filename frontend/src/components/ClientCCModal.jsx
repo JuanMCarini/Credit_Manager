@@ -13,6 +13,8 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
   const [filter, setFilter] = useState({ Credito: String(initialFilterCredito), Cuota: '', Vto: { start: '', end: '' }, Estado: [] });
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [showEstadoFilter, setShowEstadoFilter] = useState(false);
+  const [anticipadaMode, setAnticipadaMode] = useState(false);
+  const [fechaCorte, setFechaCorte] = useState(new Date().toISOString().split('T')[0]);
 
   const ESTADOS_DISPONIBLES = ['PENDIENTE', 'CANCELADA', 'MOROSA'];
 
@@ -74,8 +76,46 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
         return 0;
       });
     }
+
+    // Apply anticipada logic if enabled
+    if (anticipadaMode) {
+      result = result.map(c => {
+        if (c.estado === 'PENDIENTE') {
+          let isAfterCorte = true;
+          if (c.vencimiento && fechaCorte) {
+            const parts = c.vencimiento.split('/');
+            if (parts.length === 3) {
+              const rowDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
+              isAfterCorte = rowDate > fechaCorte;
+            }
+          }
+          if (isAfterCorte) {
+            return {
+              ...c,
+              interes: 0,
+              iva: 0,
+              total_esperado: c.capital,
+              saldo_pendiente: c.capital - c.total_cobrado
+            };
+          }
+        }
+        return c;
+      });
+    }
+
     return result;
-  }, [data, filter, sortConfig]);
+  }, [data, filter, sortConfig, anticipadaMode, fechaCorte]);
+
+  const totals = React.useMemo(() => {
+    return filteredAndSortedData.reduce((acc, curr) => ({
+      capital: acc.capital + (curr.capital || 0),
+      interes: acc.interes + (curr.interes || 0),
+      iva: acc.iva + (curr.iva || 0),
+      total_esperado: acc.total_esperado + (curr.total_esperado || 0),
+      total_cobrado: acc.total_cobrado + (curr.total_cobrado || 0),
+      saldo_pendiente: acc.saldo_pendiente + (curr.saldo_pendiente || 0)
+    }), { capital: 0, interes: 0, iva: 0, total_esperado: 0, total_cobrado: 0, saldo_pendiente: 0 });
+  }, [filteredAndSortedData]);
 
   const SortIcon = ({ columnKey }) => {
     if (sortConfig.key !== columnKey) return <span style={{ opacity: 0.3, marginLeft: '5px' }}>↕</span>;
@@ -98,9 +138,32 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
           color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '20px'
         }}>✕</button>
         
-        <h2 style={{ marginBottom: '20px', fontFamily: 'var(--font-heading)' }}>
-          Cuenta Corriente Unificada: {clientName ? `${clientName} (CUIL: ${cuil})` : cuil}
-        </h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px', flexWrap: 'wrap', gap: '16px' }}>
+          <h2 style={{ margin: 0, fontFamily: 'var(--font-heading)' }}>
+            Cuenta Corriente Unificada: {clientName ? `${clientName} (CUIL: ${cuil})` : cuil}
+          </h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', background: 'rgba(255,255,255,0.05)', padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+              <div className="toggle-switch">
+                <input type="checkbox" checked={anticipadaMode} onChange={(e) => setAnticipadaMode(e.target.checked)} />
+                <span className="slider"></span>
+              </div>
+              <span style={{ fontSize: '13px', fontWeight: 'bold' }}>Cancelación Anticipada</span>
+            </label>
+            
+            {anticipadaMode && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderLeft: '1px solid rgba(255,255,255,0.1)', paddingLeft: '16px' }}>
+                <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Fecha Corte:</span>
+                <input 
+                  type="date" 
+                  value={fechaCorte} 
+                  onChange={(e) => setFechaCorte(e.target.value)}
+                  style={{ padding: '4px 8px', fontSize: '12px', width: 'auto' }}
+                />
+              </div>
+            )}
+          </div>
+        </div>
         
         {loading ? (
           <div style={{ textAlign: 'center', padding: '40px' }}>Cargando cuenta corriente...</div>
@@ -207,6 +270,18 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
                   })
                 )}
               </tbody>
+              <tfoot style={{ background: 'rgba(255, 255, 255, 0.05)', fontWeight: 'bold' }}>
+                <tr>
+                  <td colSpan="3" style={{ textAlign: 'right' }}>TOTALES:</td>
+                  <td>{formatCurrency(totals.capital)}</td>
+                  <td>{formatCurrency(totals.interes)}</td>
+                  <td>{formatCurrency(totals.iva)}</td>
+                  <td>{formatCurrency(totals.total_esperado)}</td>
+                  <td style={{ color: 'var(--accent-secondary)' }}>{formatCurrency(totals.total_cobrado)}</td>
+                  <td style={{ color: totals.saldo_pendiente > 0 ? 'var(--error)' : 'inherit' }}>{formatCurrency(totals.saldo_pendiente)}</td>
+                  <td></td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         )}

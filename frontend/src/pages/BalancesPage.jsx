@@ -96,6 +96,15 @@ const BalancesPage = () => {
     headers = ["ID Crédito", "Proveedor", "Originador", "Cliente CUIL", "Cartera", "Nro. Cuota", "Fecha Vencimiento", "Capital", "Interés", "IVA", "Total Saldo"];
   }
 
+  const totals = React.useMemo(() => {
+    return results.reduce((acc, curr) => ({
+      capital: acc.capital + (curr.Capital || 0),
+      interes: acc.interes + (curr['Interés'] || 0),
+      iva: acc.iva + (curr.IVA || 0),
+      total: acc.total + (curr.Total || curr.total || 0)
+    }), { capital: 0, interes: 0, iva: 0, total: 0 });
+  }, [results]);
+
   return (
     <section className="tab-content active" style={{ animation: 'fadeIn 0.4s ease' }}>
       <header className="section-header">
@@ -208,6 +217,17 @@ const BalancesPage = () => {
                   })
                 )}
               </tbody>
+              {results.length > 0 && (
+                <tfoot style={{ background: 'rgba(255, 255, 255, 0.05)', fontWeight: 'bold' }}>
+                  <tr>
+                    <td colSpan={headers.length - 4} style={{ textAlign: 'right' }}>TOTALES:</td>
+                    <td>{formatCurrency(totals.capital)}</td>
+                    <td>{formatCurrency(totals.interes)}</td>
+                    <td>{formatCurrency(totals.iva)}</td>
+                    <td style={{ color: 'var(--accent-secondary)' }}>{formatCurrency(totals.total)}</td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
         </div>

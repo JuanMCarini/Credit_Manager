@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import axiosClient from '../api/axiosClient';
 
 const formatCurrency = (num) => {
@@ -6,11 +7,15 @@ const formatCurrency = (num) => {
 };
 
 const CollectionsListPage = () => {
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const initialProcesoId = queryParams.get('proceso_id') || '';
+
   const [cobranzas, setCobranzas] = useState([]);
   const [procesos, setProcesos] = useState([]);
   const [loading, setLoading] = useState(false);
   
-  const [filter, setFilter] = useState({ ID: '', ProcesoID: '', CUIL: '', CreditoID: '', CuotaNro: '', Tipo: [], Total: '', Fecha: { start: '', end: '' } });
+  const [filter, setFilter] = useState({ ID: '', ProcesoID: initialProcesoId, CUIL: '', CreditoID: '', CuotaNro: '', Tipo: [], Total: '', Fecha: { start: '', end: '' } });
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [showTipoFilter, setShowTipoFilter] = useState(false);
 
@@ -76,6 +81,15 @@ const CollectionsListPage = () => {
     }
     return result;
   }, [cobranzas, filter, sortConfig]);
+
+  const totals = useMemo(() => {
+    return filteredAndSortedCobranzas.reduce((acc, curr) => ({
+      capital: acc.capital + (curr.Capital || 0),
+      interes: acc.interes + (curr['Interés'] || 0),
+      iva: acc.iva + (curr.IVA || 0),
+      total: acc.total + (curr.Total || 0)
+    }), { capital: 0, interes: 0, iva: 0, total: 0 });
+  }, [filteredAndSortedCobranzas]);
 
   const SortIcon = ({ columnKey }) => {
     if (sortConfig.key !== columnKey) return <span style={{ opacity: 0.3, marginLeft: '5px' }}>↕</span>;
@@ -207,6 +221,16 @@ const CollectionsListPage = () => {
                 ))
               )}
             </tbody>
+            <tfoot style={{ background: 'rgba(255, 255, 255, 0.05)', fontWeight: 'bold' }}>
+              <tr>
+                <td colSpan="6" style={{ textAlign: 'right' }}>TOTALES:</td>
+                <td>{formatCurrency(totals.capital)}</td>
+                <td>{formatCurrency(totals.interes)}</td>
+                <td>{formatCurrency(totals.iva)}</td>
+                <td style={{ color: 'var(--accent-secondary)' }}>{formatCurrency(totals.total)}</td>
+                <td></td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       </div>

@@ -11,6 +11,9 @@ const useAppStore = create((set) => ({
   isLoadingAuxiliares: false,
   error: null,
 
+  editingCompra: null,
+  setEditingCompra: (compra) => set({ editingCompra: compra }),
+
   fetchAuxiliares: async () => {
     set({ isLoadingAuxiliares: true, error: null });
     try {

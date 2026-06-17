@@ -259,12 +259,11 @@ class PortfolioSell:
 
         # 1. Partner
         socio = self.db.query(SocioComercial)
-        if cuit_comprador is None and razon_social_comprador is None:
+        if not cuit_comprador and not razon_social_comprador:
             raise ValueError("CUIT and Razon Social must be provided.")
-        elif cuit_comprador is None:
+        elif not cuit_comprador:
             socio = socio.filter(
-                SocioComercial.razon_social
-                == str(razon_social_comprador).strip().upper()
+                SocioComercial.razon_social.ilike(str(razon_social_comprador).strip())
             ).first()
         else:
             socio = socio.filter(
@@ -364,12 +363,11 @@ class PortfolioSell:
 
         # 1. Partner (Comprador)
         socio = self.db.query(SocioComercial)
-        if cuit_comprador is None and razon_social_comprador is None:
+        if not cuit_comprador and not razon_social_comprador:
             raise ValueError("CUIT and Razon Social must be provided.")
-        elif cuit_comprador is None:
+        elif not cuit_comprador:
             socio = socio.filter(
-                SocioComercial.razon_social
-                == str(razon_social_comprador).strip().upper()
+                SocioComercial.razon_social.ilike(str(razon_social_comprador).strip())
             ).first()
         else:
             socio = socio.filter(
