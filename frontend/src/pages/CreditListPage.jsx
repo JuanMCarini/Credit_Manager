@@ -95,6 +95,10 @@ const CreditListPage = () => {
     return result;
   }, [creditos, filter, sortConfig]);
 
+  const totalCapital = useMemo(() => {
+    return filteredAndSortedCreditos.reduce((acc, c) => acc + (c.Capital || 0), 0);
+  }, [filteredAndSortedCreditos]);
+
   const SortIcon = ({ columnKey }) => {
     if (sortConfig.key !== columnKey) return <span style={{ opacity: 0.3, marginLeft: '5px' }}>↕</span>;
     return <span style={{ marginLeft: '5px' }}>{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>;
@@ -195,6 +199,13 @@ const CreditListPage = () => {
                 ))
               )}
             </tbody>
+            <tfoot style={{ background: 'rgba(255, 255, 255, 0.05)', fontWeight: 'bold' }}>
+              <tr>
+                <td colSpan="2" style={{ textAlign: 'right' }}>TOTAL:</td>
+                <td>{formatCurrency(totalCapital)}</td>
+                <td colSpan="5"></td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       </div>

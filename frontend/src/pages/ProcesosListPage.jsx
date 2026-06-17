@@ -1,15 +1,23 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axiosClient from '../api/axiosClient';
 
 const ProcesosListPage = () => {
   const [procesos, setProcesos] = useState([]);
   const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
   
   const [filter, setFilter] = useState({ ID: '', Tipo: [], Estado: [], Fecha: { start: '', end: '' } });
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   
   const [showTipoFilter, setShowTipoFilter] = useState(false);
   const [showEstadoFilter, setShowEstadoFilter] = useState(false);
+
+  // Edit Modal State
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingRecord, setEditingRecord] = useState(null);
+  const [editFormData, setEditFormData] = useState({ estado: '', descripcion: '' });
+  const [feedback, setFeedback] = useState(null);
 
   const TIPOS_DISPONIBLES = ['INDIVIDUAL', 'MASIVO_CSV'];
   const ESTADOS_DISPONIBLES = ['COMPLETADO', 'REVERTIDO', 'PROCESANDO', 'FALLIDO'];
@@ -38,6 +46,38 @@ const ProcesosListPage = () => {
       fetchProcesos();
     } catch (error) {
       alert("Error eliminando proceso: " + (error.response?.data?.detail || error.message));
+    }
+  };
+
+  const handleEditOpen = (record) => {
+    setEditingRecord(record);
+    setEditFormData({
+      estado: record.Estado || '',
+      descripcion: record['Descripción'] || ''
+    });
+    setFeedback(null);
+    setIsEditing(true);
+  };
+
+  const handleEditClose = () => {
+    setIsEditing(false);
+    setEditingRecord(null);
+    setEditFormData({ estado: '', descripcion: '' });
+  };
+
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+    setFeedback(null);
+    try {
+      await axiosClient.put(`/api/v1/procesos/${editingRecord.ID}`, {
+        estado: editFormData.estado,
+        descripcion: editFormData.descripcion || null
+      });
+      setFeedback({ type: 'success', message: 'Proceso actualizado exitosamente.' });
+      await fetchProcesos();
+      setTimeout(() => handleEditClose(), 1500);
+    } catch (error) {
+      setFeedback({ type: 'error', message: error.response?.data?.detail || "Error al actualizar el proceso." });
     }
   };
 
@@ -147,6 +187,10 @@ const ProcesosListPage = () => {
                   )}
                 </th>
 
+                <th onClick={() => handleSort('Descripción')} style={{ cursor: 'pointer' }}>
+                  Descripción <SortIcon columnKey="Descripción" />
+                </th>
+
                 <th onClick={() => handleSort('Fecha Ejecución')} style={{ cursor: 'pointer' }}>
                   Fecha Ejecución <SortIcon columnKey="Fecha Ejecución" />
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '5px' }} onClick={e => e.stopPropagation()}>
@@ -155,13 +199,13 @@ const ProcesosListPage = () => {
                   </div>
                 </th>
                 
-                <th>Acciones</th>
+                <th style={{ textAlign: 'center' }}>Acciones</th>
               </tr>
             </thead>
             <tbody>
               {filteredAndSortedProcesos.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="text-center empty-state" style={{ padding: '40px' }}>
+                  <td colSpan="6" className="text-center empty-state" style={{ padding: '40px' }}>
                     {loading ? "Cargando..." : "No hay procesos para mostrar con los filtros actuales."}
                   </td>
                 </tr>
@@ -179,9 +223,20 @@ const ProcesosListPage = () => {
                          {p.Estado}
                        </span>
                     </td>
+                    <td>{p["Descripción"] || "-"}</td>
                     <td>{p["Fecha Ejecución"]}</td>
                     <td>
-                      <button className="btn-secondary" onClick={() => handleDelete(p.ID)} style={{ padding: '4px 8px', fontSize: '11px', color: 'var(--error)' }}>🗑️ Eliminar Lote</button>
+                      <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
+                        <button className="btn-secondary" onClick={() => navigate(`/cobranzas?proceso_id=${p.ID}`)} style={{ padding: '4px 8px', fontSize: '12px' }} title="Ver Cobranzas del Lote">
+                          👁️ Ver Cobranzas
+                        </button>
+                        <button className="btn-secondary" onClick={() => handleEditOpen(p)} style={{ padding: '4px 8px', fontSize: '12px' }} title="Editar Proceso">
+                          ✏️
+                        </button>
+                        <button className="btn-secondary" onClick={() => handleDelete(p.ID)} style={{ padding: '4px 8px', fontSize: '12px', color: 'var(--danger-color)' }} title="Eliminar Proceso">
+                          🗑️
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -190,6 +245,72 @@ const ProcesosListPage = () => {
           </table>
         </div>
       </div>
+
+      {isEditing && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px',
+          backdropFilter: 'blur(4px)'
+        }}>
+          <div className="glass-panel" style={{
+            width: '100%', maxWidth: '500px',
+            position: 'relative', padding: '32px'
+          }}>
+            <button onClick={handleEditClose} className="btn-secondary" style={{
+              position: 'absolute', top: '16px', right: '16px', padding: '4px 12px'
+            }}>X</button>
+            <h3 style={{ marginBottom: '24px', fontFamily: 'var(--font-heading)' }}>
+              Editar Proceso #{editingRecord?.ID}
+            </h3>
+            
+            {feedback && (
+              <div style={{ 
+                marginBottom: '20px', padding: '12px', borderRadius: '8px', fontSize: '14px',
+                backgroundColor: feedback.type === 'error' ? 'rgba(239,68,68,0.1)' : 'rgba(16,185,129,0.1)', 
+                color: feedback.type === 'error' ? 'var(--danger-color)' : 'var(--success-color)' 
+              }}>
+                {feedback.message}
+              </div>
+            )}
+
+            <form onSubmit={handleEditSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div className="form-group">
+                <label>Estado del Proceso</label>
+                <select 
+                  value={editFormData.estado} 
+                  onChange={e => setEditFormData({...editFormData, estado: e.target.value})}
+                  className="input-field"
+                  required
+                >
+                  <option value="">Seleccione Estado...</option>
+                  {ESTADOS_DISPONIBLES.map(est => <option key={est} value={est}>{est}</option>)}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label>Descripción / Observaciones</label>
+                <textarea 
+                  value={editFormData.descripcion} 
+                  onChange={e => setEditFormData({...editFormData, descripcion: e.target.value})}
+                  className="input-field"
+                  rows="3"
+                  placeholder="Ingrese observaciones sobre este lote de cobranzas..."
+                />
+              </div>
+
+              <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                <button type="button" onClick={handleEditClose} className="btn-secondary">
+                  Cancelar
+                </button>
+                <button type="submit" className="btn-primary">
+                  Guardar Cambios
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </section>
   );
 };
