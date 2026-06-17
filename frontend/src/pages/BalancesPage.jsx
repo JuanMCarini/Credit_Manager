@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import axiosClient, { downloadFile } from '../api/axiosClient';
 
 const formatCurrency = (num) => {
@@ -18,19 +18,28 @@ const BalancesPage = () => {
     propias: ''
   });
 
-  const [groupings, setGroupings] = useState({
-    clientes: false,
-    carteras: false,
-    socios: false,
-    originador: false,
-    vencimientos: false,
-    dueno: false,
-    recurso: false,
-    iva: false
-  });
+  const availableGroups = {
+    credito: 'ID Crédito',
+    clientes: 'Cliente',
+    carteras: 'Cartera',
+    socios: 'Proveedor/Socio',
+    originador: 'Originador',
+    vencimientos: 'Vencimiento',
+    dueno: 'Dueño',
+    recurso: 'Recurso',
+    iva: 'Tasa IVA'
+  };
+
+  const [selectedGroupings, setSelectedGroupings] = useState([]);
 
   const handleGroupChange = (key) => {
-    setGroupings(prev => ({ ...prev, [key]: !prev[key] }));
+    setSelectedGroupings(prev => {
+      if (prev.includes(key)) {
+        return prev.filter(k => k !== key);
+      } else {
+        return [...prev, key];
+      }
+    });
   };
 
   const buildParams = () => {
@@ -39,13 +48,9 @@ const BalancesPage = () => {
     if (!filters.conSaldo) params.append('con_saldo', 'false');
     if (filters.propias !== '') params.append('propias', filters.propias);
 
-    const activeGrpKeys = Object.keys(groupings).filter(k => groupings[k]);
-    if (activeGrpKeys.length > 0) {
+    if (selectedGroupings.length > 0) {
       params.append('agrupar', 'true');
-      activeGrpKeys.forEach(k => {
-        if (k === 'dueno') params.append('dueño', 'true');
-        else params.append(k, 'true');
-      });
+      params.append('agrupadores', selectedGroupings.join(','));
     }
     return params;
   };
@@ -57,16 +62,19 @@ const BalancesPage = () => {
       const params = buildParams();
       const res = await axiosClient.get(`/api/v1/reports/balances?${params}`);
       
-      const newActiveGroups = [];
-      if (groupings.clientes) newActiveGroups.push({ id: 'CUIL Cliente', label: 'Cliente' });
-      if (groupings.carteras) newActiveGroups.push({ id: 'ID Cartera', label: 'Cartera' });
-      if (groupings.socios) newActiveGroups.push({ id: 'Proveedor', label: 'Proveedor/Socio' });
-      if (groupings.originador) newActiveGroups.push({ id: 'Originador', label: 'Originador' });
-      if (groupings.vencimientos) newActiveGroups.push({ id: 'Fecha Vencimiento', label: 'Vencimiento' });
-      if (groupings.dueno) newActiveGroups.push({ id: 'Dueño', label: 'Dueño' });
-      if (groupings.recurso) newActiveGroups.push({ id: 'recurso', label: 'Recurso' });
-      if (groupings.iva) newActiveGroups.push({ id: 'iva_operado', label: 'Tasa IVA' });
-
+      const groupMapper = {
+        credito: { id: 'ID Credito', label: 'ID Crédito' },
+        clientes: { id: 'CUIL Cliente', label: 'Cliente' },
+        carteras: { id: 'ID Cartera', label: 'Cartera' },
+        socios: { id: 'Proveedor', label: 'Proveedor/Socio' },
+        originador: { id: 'Originador', label: 'Originador' },
+        vencimientos: { id: 'Fecha Vencimiento', label: 'Vencimiento' },
+        dueno: { id: 'Dueño', label: 'Dueño' },
+        recurso: { id: 'recurso', label: 'Recurso' },
+        iva: { id: 'iva_operado', label: 'Tasa IVA' }
+      };
+      
+      const newActiveGroups = selectedGroupings.map(k => groupMapper[k]);
       setActiveGroups(newActiveGroups);
       setResults(res.data);
       setReportDate(filters.fecha ? new Date(filters.fecha + 'T00:00:00') : new Date());
@@ -96,7 +104,7 @@ const BalancesPage = () => {
     headers = ["ID Crédito", "Proveedor", "Originador", "Cliente CUIL", "Cartera", "Nro. Cuota", "Fecha Vencimiento", "Capital", "Interés", "IVA", "Total Saldo"];
   }
 
-  const totals = React.useMemo(() => {
+  const totals = useMemo(() => {
     return results.reduce((acc, curr) => ({
       capital: acc.capital + (curr.Capital || 0),
       interes: acc.interes + (curr['Interés'] || 0),
@@ -136,12 +144,38 @@ const BalancesPage = () => {
           </div>
 
           <div className="input-group">
-            <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)' }}>Agrupar por:</label>
+            <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)' }}>Agrupar por (el orden de selección define la jerarquía):</label>
+            
+            {selectedGroupings.length > 0 && (
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Orden:</span>
+                {selectedGroupings.map((key, index) => (
+                  <React.Fragment key={`pill-${key}`}>
+                    <div style={{ 
+                      background: 'var(--primary)', 
+                      color: 'white', 
+                      padding: '4px 12px', 
+                      borderRadius: '16px',
+                      fontSize: '0.85rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}>
+                      <span style={{ opacity: 0.7 }}>{index + 1}.</span> 
+                      {availableGroups[key]}
+                      <button type="button" onClick={() => handleGroupChange(key)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', padding: '0 0 0 4px', fontSize: '1rem', lineHeight: 1 }}>&times;</button>
+                    </div>
+                    {index < selectedGroupings.length - 1 && <span style={{ color: 'var(--text-secondary)' }}>&gt;</span>}
+                  </React.Fragment>
+                ))}
+              </div>
+            )}
+
             <div className="grouping-options" style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: 'var(--radius-sm)' }}>
-              {Object.keys(groupings).map(key => (
+              {Object.entries(availableGroups).map(([key, label]) => (
                 <label key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={groupings[key]} onChange={() => handleGroupChange(key)} /> 
-                  {key.charAt(0).toUpperCase() + key.slice(1).replace('Dueno', 'Dueño')}
+                  <input type="checkbox" checked={selectedGroupings.includes(key)} onChange={() => handleGroupChange(key)} /> 
+                  {label}
                 </label>
               ))}
             </div>

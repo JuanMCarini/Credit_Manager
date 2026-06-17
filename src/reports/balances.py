@@ -19,14 +19,7 @@ def saldos(
     con_saldo: bool = True,
     propias: bool | None = None,
     agrupar: bool = False,
-    clientes: bool = False,
-    carteras: bool = False,
-    socios: bool = False,
-    originador: bool = False,
-    vencimientos: bool = False,
-    dueño: bool = False,
-    recurso: bool = False,
-    iva: bool = False,
+    agrupadores: list[str] | None = None,
 ):
     """
     =============================================================================
@@ -149,34 +142,20 @@ def saldos(
     else:
         df = df[df["Dueño"] != COMPANY_DATA.razon_social]
 
-    # 5. Dynamic Grouping (Returning raw numbers)
-    if agrupar and (
-        clientes
-        or socios
-        or carteras
-        or originador
-        or vencimientos
-        or dueño
-        or recurso
-        or iva
-    ):
-        lista_agrupadores = []
-        if clientes:
-            lista_agrupadores.append("cliente_cuil")
-        if socios:
-            lista_agrupadores.append("Proveedor")
-        if carteras:
-            lista_agrupadores.append("cartera_id")
-        if originador:
-            lista_agrupadores.append("Originador")
-        if dueño:
-            lista_agrupadores.append("Dueño")
-        if vencimientos:
-            lista_agrupadores.append("fecha_vencimiento")
-        if recurso:
-            lista_agrupadores.append("recurso")
-        if iva:
-            lista_agrupadores.append("iva_operado")
+    if agrupar and agrupadores:
+        mapper = {
+            "credito": "credito_id",
+            "clientes": "cliente_cuil",
+            "socios": "Proveedor",
+            "carteras": "cartera_id",
+            "originador": "Originador",
+            "dueno": "Dueño",
+            "dueño": "Dueño",
+            "vencimientos": "fecha_vencimiento",
+            "recurso": "recurso",
+            "iva": "iva_operado"
+        }
+        lista_agrupadores = [mapper[g] for g in agrupadores if g in mapper]
 
         # We perform the sum but skip the string formatting
         df = df.groupby(lista_agrupadores, dropna=False)[["capital", "interes", "iva", "total"]].sum()
