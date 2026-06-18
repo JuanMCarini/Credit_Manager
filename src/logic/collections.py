@@ -11,7 +11,6 @@ from pathlib import Path
 
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
-from IPython.display import display
 from sqlalchemy import text  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
@@ -118,27 +117,27 @@ class CollectionManager:
         # 2. Ruteo optimizado con match-case, pero encadenando JOINs y WHEREs programáticos
         match identificador:
             case "CREDITO_ID":
-                val_id = int(val_id)
+                val_id = int(float(val_id))
                 query = query.filter(Cuota.credito_id == val_id)
 
             case "ID_EXTERNO":
-                val_id = str(int(val_id))
+                val_id = str(int(float(val_id)))
                 query = query.join(Credito).filter(Credito.id_externo == val_id)
 
             case "CLIENTE_CUIL":
-                val_id = str(int(val_id))
+                val_id = str(int(float(val_id)))
                 query = query.join(Credito).filter(Credito.cliente_cuil == val_id)
 
             case "CLIENTE_DNI":
                 # SQLAlchemy encadena los joins mágicamente usando las relationships() que ya definiste en models.py
-                val_id = str(int(val_id))
+                val_id = str(int(float(val_id)))
                 query = (
                     query.join(Credito)
                     .join(Cliente)
                     .filter(Cliente.documento == val_id)
                 )
             case "PROVEEDOR_CUIT":
-                val_id = str(int(val_id))
+                val_id = str(int(float(val_id)))
                 query = (
                     query.join(Credito)
                     .join(Cartera, Credito.cartera_id == Cartera.id)
@@ -804,7 +803,6 @@ class CollectionManager:
             if problems:
                 self.db.rollback()
                 df_prob = df.loc[df[ident].isin(problems)]
-                display(df_prob)
                 raise ValueError(
                     f"Se encontraron problemas al procesar las siguientes filas: {problems}. Se aplicó un rollback total."
                 )

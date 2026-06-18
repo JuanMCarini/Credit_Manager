@@ -11,7 +11,7 @@ from src.logic.amortization import AmortizationEngine
 
 router = APIRouter(tags=["Créditos"])
 
-@router.get("/simular-cuotas")
+@router.get("/api/v1/creditos/simular-cuotas")
 def simular_cuotas(
     credito_id: int = Query(..., description="ID identificador del crédito de simulación"),
     capital: float = Query(..., description="Monto de capital a amortizar"),

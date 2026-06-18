@@ -1,0 +1,9 @@
+pytest==9.0.3
+ipython==9.13.0
+jupyter_client==8.8.0
+jupyter_core==5.9.1
+ipykernel==7.2.0
+matplotlib==3.10.9
+debugpy==1.8.20
+nbstripout
+watchfiles==1.2.0

@@ -1,7 +1,4 @@
-import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog
-
 
 def select_file(title: str = "Select a file") -> Path:
     """
@@ -16,6 +13,8 @@ def select_file(title: str = "Select a file") -> Path:
         Path: A pathlib.Path object representing the chosen file destination.
     =============================================================================
     """
+    import tkinter as tk
+    from tkinter import filedialog
     # 1. Create a hidden root window to initialize the dialog
     root = tk.Tk()
     root.withdraw()
@@ -56,6 +55,8 @@ def select_directory(title: str = "Select a folder") -> Path:
         Path: A pathlib.Path object representing the chosen directory.
     =============================================================================
     """
+    import tkinter as tk
+    from tkinter import filedialog
     # 1. Create a hidden root window to initialize the dialog
     root = tk.Tk()
     root.withdraw()

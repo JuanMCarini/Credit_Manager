@@ -33,7 +33,7 @@ graph TD
 * **ORM & Base de Datos**: SQLAlchemy & SQLite (forzando `PRAGMA foreign_keys=ON`)
 * **Configuración y Validación**: Pydantic & Pydantic-Settings
 * **Framework Web (Backend)**: FastAPI & Uvicorn
-* **Framework Web (Frontend)**: React & Vite (v2) / HTML & Vanilla JS (v1)
+* **Framework Web (Frontend)**: React & Vite
 * **Pruebas**: Pytest
 * **Lectura de Archivos**: openpyxl (para lectura de archivos Excel)
 
@@ -42,11 +42,12 @@ graph TD
 ```text
 Credit_Manager/
 ├── .env                  # Variables de entorno y metadatos de la empresa administradora
+├── docker-compose.yml    # Configuración de contenedores y servicios con Docker
 ├── data/                 # Almacenamiento local de la base de datos SQLite y archivos CSV/Excel
-├── frontend/             # Cliente web v1 (Vanilla JS, HTML, CSS)
-├── frontend-v2/          # Cliente web v2 moderno (React, Vite)
+├── frontend/             # Cliente web (React, Vite)
 ├── notebooks/            # Notebooks Jupyter para pruebas interactivas y auditorías
 ├── src/
+    ├── config.py         # Configuración centralizada de la aplicación
     ├── api/              # Endpoints, ruteo y configuración del servidor FastAPI
     │   ├── main.py       # Punto de entrada de la API web
     │   └── routes/       # Definición de rutas adicionales de la API
@@ -105,6 +106,12 @@ Crea un archivo `.env` en la raíz del proyecto basándote en la configuración 
 ```env
 ADMINISTRADORA_NAME="YOYO S.A."
 ADMINISTRADORA_CUIT="30713257880"
+```
+
+### 5. (Opcional) Despliegue con Docker
+Puedes levantar el sistema completo usando Docker Compose:
+```bash
+docker-compose up -d
 ```
 
 ## 🚀 Uso y Ejecución

@@ -18,6 +18,12 @@ from src.api.routes.auxiliares import router as auxiliares_router
 from src.api.routes.system import router as system_router
 from src.api.routes.carteras import router as carteras_router
 from src.config import API_SETTINGS
+from src.database import Base, engine
+
+# -------------------------------------------------------------------
+# Inicialización de la Base de Datos
+# -------------------------------------------------------------------
+Base.metadata.create_all(bind=engine)
 
 # -------------------------------------------------------------------
 # Inicialización de la Aplicación
@@ -61,6 +67,5 @@ app.include_router(system_router)
 app.include_router(carteras_router)
 
 # -------------------------------------------------------------------
-# Frontend
+# Frontend (Ahora servido por Nginx)
 # -------------------------------------------------------------------
-app.mount("/app", StaticFiles(directory="frontend", html=True), name="frontend")

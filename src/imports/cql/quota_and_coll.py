@@ -126,8 +126,8 @@ mask_null_penalty = df_cobranzas["credito_id"].isna() & (df_cobranzas["Línea"] 
 df_cobranzas = df_cobranzas.loc[~mask_null_penalty]
 
 if not df_cobranzas[df_cobranzas["credito_id"].isna()].empty:
-    from IPython.display import display
-    display(df_cobranzas[df_cobranzas["credito_id"].isna()])
+    print("Mostrando DataFrame sin creditor_id:")
+    print(df_cobranzas[df_cobranzas["credito_id"].isna()])
     raise ValueError("No credits found for the displayed collections")
 
 df_cobranzas["credito_id"] = df_cobranzas["credito_id"].astype(int)
