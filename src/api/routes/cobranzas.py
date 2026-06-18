@@ -140,32 +140,59 @@ def delete_proceso(proceso_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Error eliminando el proceso: {str(e)}")
 
 @router.get("/cobranzas")
-def get_cobranzas(db: Session = Depends(get_db)):
+def get_cobranzas(
+    skip: int = 0,
+    limit: int = 50,
+    proceso_id: Optional[str] = None,
+    cuil: Optional[str] = None,
+    credito_id: Optional[str] = None,
+    id_cobranza: Optional[str] = None,
+    tipo: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
     from src.database.models.cobranzas import Cobranza
     from src.database.models import Cuota, Credito
-    cobranzas = db.query(Cobranza).options(joinedload(Cobranza.cuota).joinedload(Cuota.credito)).order_by(desc(Cobranza.fecha)).limit(5000).all()
+    
+    query = db.query(Cobranza).options(joinedload(Cobranza.cuota).joinedload(Cuota.credito))
+    
+    if proceso_id:
+        query = query.filter(Cobranza.proceso_id == int(proceso_id))
+    if id_cobranza:
+        query = query.filter(Cobranza.id == int(id_cobranza))
+    if tipo:
+        query = query.filter(Cobranza.tipo_cobranza == tipo)
+    if cuil or credito_id:
+        query = query.join(Cuota)
+        if credito_id:
+            query = query.filter(Cuota.credito_id == int(credito_id))
+        if cuil:
+            query = query.join(Credito).filter(Credito.cliente_cuil.like(f"%{cuil}%"))
+            
+    total = query.count()
+    cobranzas = query.order_by(desc(Cobranza.fecha)).offset(skip).limit(limit).all()
+    
     result = []
     for c in cobranzas:
-        cuota_nro = c.cuota.nro_cuota if c.cuota else "-"
+        cuota_nro = str(c.cuota.nro_cuota) if c.cuota else "-"
         cuota_vto = c.cuota.fecha_vencimiento.strftime("%Y-%m-%d") if c.cuota and c.cuota.fecha_vencimiento else "-"
-        credito_id = c.cuota.credito_id if c.cuota else "-"
-        cliente_cuil = c.cuota.credito.cliente_cuil if c.cuota and c.cuota.credito else "-"
+        credito_id_str = str(c.cuota.credito_id) if c.cuota else "-"
+        cliente_cuil_str = c.cuota.credito.cliente_cuil if c.cuota and c.cuota.credito else "-"
         
         result.append({
             "ID": c.id,
-            "Proceso ID": c.proceso_id or "-",
-            "Fecha Emisión": c.fecha.strftime("%Y-%m-%d") if c.fecha else "-",
-            "Crédito ID": credito_id,
-            "Cliente CUIL": cliente_cuil,
+            "Proceso ID": str(c.proceso_id) if c.proceso_id else "-",
+            "Fecha Emision": c.fecha.strftime("%Y-%m-%d") if c.fecha else "-",
+            "Credito ID": credito_id_str,
+            "Cliente CUIL": cliente_cuil_str,
             "Cuota Nro": cuota_nro,
             "Fecha Vencimiento": cuota_vto,
             "Tipo": c.tipo_cobranza.value if hasattr(c.tipo_cobranza, 'value') else str(c.tipo_cobranza),
             "Capital": float(c.capital),
-            "Interés": float(c.interes),
+            "Interes": float(c.interes),
             "IVA": float(c.iva),
             "Total": float(c.capital + c.interes + c.iva)
         })
-    return result
+    return {"items": result, "total": total}
 
 @router.delete("/cobranzas/{cobranza_id}")
 def delete_cobranza(cobranza_id: int, db: Session = Depends(get_db)):

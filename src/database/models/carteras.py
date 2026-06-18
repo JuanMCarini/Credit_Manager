@@ -6,7 +6,7 @@ from sqlalchemy import (
     Column,
     Date,
     Enum,
-    Float,
+    Numeric,
     ForeignKey,
     Integer,
     String,
@@ -46,7 +46,7 @@ class Cartera(Base):
     iva = Column(Boolean, default=False)
     recurso = Column(Boolean, default=True)
 
-    tna_descuento = Column(Float, nullable=False)
+    tna_descuento = Column(Numeric(15, 6), nullable=False)
 
     tipo_operacion = Column(
         Enum(TipoOperacionCartera), nullable=False, default=TipoOperacionCartera.COMPRA

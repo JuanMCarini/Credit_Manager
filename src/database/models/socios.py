@@ -2,12 +2,13 @@ import enum
 from datetime import date
 
 from sqlalchemy import (
+    Boolean,
     Column,
     Date,
     Enum,
-    Float,
     ForeignKey,
     Integer,
+    Numeric,
     String,
     UniqueConstraint,
     func
@@ -111,7 +112,7 @@ class AnticiposSinAplicar(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     fecha = Column(Date, nullable=False)
     socio_id = Column(Integer, ForeignKey("socios_comerciales.id"), nullable=False)
-    monto = Column(Float, nullable=False)
+    monto = Column(Numeric(15, 2), nullable=False)
 
 
 class Relacion(Base):
@@ -215,15 +216,15 @@ class TasaYComision(Base):
     socio_intermediario_id = Column(Integer, ForeignKey("socios_comerciales.id"), nullable=False)
 
     plazo = Column(Integer, nullable=False, default=12)
-    tna_c_iva = Column(Float, nullable=False, default=0.0)
+    tna_c_iva = Column(Numeric(15, 6), nullable=False, default=0.0)
 
-    colocacion_originador = Column(Float, nullable=False, default=0.0)
-    colocacion_intermediario = Column(Float, nullable=False, default=0.0)
+    colocacion_originador = Column(Numeric(15, 6), nullable=False, default=0.0)
+    colocacion_intermediario = Column(Numeric(15, 6), nullable=False, default=0.0)
 
-    cobranza_originador = Column(Float, nullable=False, default=0.0)
-    cobranza_intermediario = Column(Float, nullable=False, default=0.0)
+    cobranza_originador = Column(Numeric(15, 6), nullable=False, default=0.0)
+    cobranza_intermediario = Column(Numeric(15, 6), nullable=False, default=0.0)
 
-    colocacion_propia = Column(Float, nullable=False, default=0.0)
+    colocacion_propia = Column(Numeric(15, 6), nullable=False, default=0.0)
 
     socio_originador = relationship("SocioComercial", foreign_keys=[socio_originador_id], back_populates="comisiones_originadas")
     socio_intermediario = relationship("SocioComercial", foreign_keys=[socio_intermediario_id], back_populates="comisiones_intermediarias")

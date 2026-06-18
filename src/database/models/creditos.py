@@ -6,7 +6,7 @@ from sqlalchemy import (
     Column,
     Date,
     Enum,
-    Float,
+    Numeric,
     ForeignKey,
     Integer,
     String,
@@ -75,8 +75,8 @@ class Credito(Base):
     cartera_id = Column(Integer, ForeignKey("carteras.id"), nullable=True)
     comision_id = Column(Integer, ForeignKey("tasas_y_comisiones.id"), nullable=True)
 
-    capital = Column(Float, nullable=False)
-    tna_c_iva = Column(Float, nullable=False)
+    capital = Column(Numeric(15, 2), nullable=False)
+    tna_c_iva = Column(Numeric(15, 6), nullable=False)
     plazo = Column(Integer, nullable=False)
     fecha_emision = Column(Date, nullable=False)
 
@@ -93,7 +93,7 @@ class Credito(Base):
     # Relationships
     cliente = relationship("Cliente", back_populates="creditos")
     cuotas = relationship(
-        "Cuota", back_populates="credito", cascade="all, delete-orphan"
+        "Cuota", back_populates="credito", cascade="all, delete-orphan", lazy="selectin"
     )
     socio_originador = relationship(
         "SocioComercial", back_populates="creditos_originados"
@@ -260,9 +260,9 @@ class Cuota(Base):
     nro_cuota = Column(Integer, nullable=False)
 
     fecha_vencimiento = Column(Date, nullable=False)
-    capital = Column(Float, nullable=False)
-    interes = Column(Float, nullable=False)
-    iva = Column(Float, default=0.0)
+    capital = Column(Numeric(15, 2), nullable=False)
+    interes = Column(Numeric(15, 2), nullable=False)
+    iva = Column(Numeric(15, 2), default=0.0)
 
     estado = Column(Enum(EstadoCuota), nullable=False, default=EstadoCuota.PENDIENTE)
     estado_cesion = Column(
@@ -273,7 +273,7 @@ class Cuota(Base):
 
     # Relationships
     credito = relationship("Credito", back_populates="cuotas")
-    movimientos_cartera = relationship("OperacionCartera", back_populates="cuota")
+    movimientos_cartera = relationship("OperacionCartera", back_populates="cuota", lazy="selectin")
     cobranzas = relationship("Cobranza", back_populates="cuota")
     liquidaciones = relationship("LiquidacionCuotaCedida", back_populates="cuota")
 

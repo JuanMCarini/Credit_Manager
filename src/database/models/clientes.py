@@ -6,7 +6,7 @@ from sqlalchemy import (
     Column,
     Date,
     Enum,
-    Float,
+    Numeric,
     ForeignKey,
     Integer,
     String,
@@ -123,7 +123,7 @@ class Cliente(Base):
 
     # Employment details / Status
     fecha_ingreso = Column(Date, nullable=True)
-    remuneracion = Column(Float, default=0.0)  # Monthly income for credit scoring
+    remuneracion = Column(Numeric(15, 2), default=0.0)  # Monthly income for credit scoring
 
     
     # Relationships
