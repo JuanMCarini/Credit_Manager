@@ -176,13 +176,14 @@ class CollectionManager:
         """
         import pandas as pd
 
+        from sqlalchemy import select
+        
         # 1. Preparation of the safe IN clause
-        cuotas_ids = tuple(df_ctas.index)
-        in_clause = f"({cuotas_ids[0]})" if len(cuotas_ids) == 1 else str(cuotas_ids)
+        cuotas_ids = list(df_ctas.index)
 
-        # 2. Extraction of historical collections
-        cobr_query = text(f"SELECT * FROM cobranzas WHERE cuota_id IN {in_clause}")
-        df_cobr = pd.read_sql(cobr_query, self.db.get_bind(), index_col="cuota_id")
+        # 2. Extraction of historical collections via SQLAlchemy Core API
+        stmt = select(Cobranza).where(Cobranza.cuota_id.in_(cuotas_ids))
+        df_cobr = pd.read_sql(stmt, self.db.get_bind(), index_col="cuota_id")
 
         # 3. Grouping and data crossing (Vectorized)
         df_cobr_sum = df_cobr.groupby("cuota_id")[["capital", "interes", "iva"]].sum()
@@ -290,20 +291,19 @@ class CollectionManager:
         for col in ["capital", "interes", "iva"]:
             df_cobr[col] = df_cobr[col].round(2)
 
-        new_collections = []
+        records = []
         for row in df_cobr.itertuples():
-            cobranza = Cobranza(
-                cuota_id=row.Index,
-                proceso_id=proceso_id,
-                tipo_cobranza=row.tipo_cobranza,
-                capital=row.capital,
-                interes=row.interes,
-                iva=row.iva,
-                fecha=payment_date,
-            )
-            new_collections.append(cobranza)
+            records.append({
+                "cuota_id": row.Index,
+                "proceso_id": proceso_id,
+                "tipo_cobranza": row.tipo_cobranza,
+                "capital": row.capital,
+                "interes": row.interes,
+                "iva": row.iva,
+                "fecha": payment_date,
+            })
 
-        self.db.add_all(new_collections)
+        self.db.bulk_insert_mappings(Cobranza, records)
         self.db.flush()
 
         # 2. Identify and update all affected credits dynamically

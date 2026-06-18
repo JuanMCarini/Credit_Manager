@@ -7,7 +7,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     Enum,
-    Float,
+    Numeric,
     ForeignKey,
     Integer,
     String,
@@ -108,9 +108,9 @@ class Cobranza(Base):
         default=TipoCobranzaEnum.COMUN.value,
     )
 
-    capital = Column(Float, nullable=False)
-    interes = Column(Float, nullable=False)
-    iva = Column(Float, nullable=False)
+    capital = Column(Numeric(15, 2), nullable=False)
+    interes = Column(Numeric(15, 2), nullable=False)
+    iva = Column(Numeric(15, 2), nullable=False)
     fecha = Column(Date, nullable=False)
 
     # Relationships
@@ -154,9 +154,9 @@ class LiquidacionCuotaCedida(Base):
         default=TipoLiquidacionEnum.NORMAL.value,
     )
 
-    capital = Column(Float, nullable=False, default=0.0)
-    interes = Column(Float, nullable=False, default=0.0)
-    iva = Column(Float, nullable=False, default=0.0)
+    capital = Column(Numeric(15, 2), nullable=False, default=0.0)
+    interes = Column(Numeric(15, 2), nullable=False, default=0.0)
+    iva = Column(Numeric(15, 2), nullable=False, default=0.0)
     fecha_pago = Column(Date, nullable=True)
     cancelada = Column(Boolean, nullable=False, default=False)
 
