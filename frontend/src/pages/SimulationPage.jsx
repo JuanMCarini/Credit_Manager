@@ -34,7 +34,7 @@ const SimulationPage = () => {
         dia_corte: 28
       };
       
-      const res = await axiosClient.get('/simular-cuotas', { params });
+      const res = await axiosClient.get('/api/v1/creditos/simular-cuotas', { params });
       setCuotas(res.data);
     } catch (error) {
       alert("Ocurrió un error al simular: " + error.message);

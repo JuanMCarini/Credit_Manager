@@ -19,7 +19,30 @@ const CollectionsListPage = () => {
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [showTipoFilter, setShowTipoFilter] = useState(false);
 
-  const TIPOS_DISPONIBLES = ['COMUN', 'ANTICIPO', 'CANCELACION ANTICIPADA', 'BONIFICACION POR CANCELACION ANTICIPADA', 'CUOTA NO COMPRADA', 'PENALTY', 'RECURSO', 'AJUSTE'];
+  const getFilteredData = (excludeKey = null) => {
+    let result = [...cobranzas];
+    if (excludeKey !== 'ID' && filter.ID) result = result.filter(c => String(c.ID).includes(filter.ID));
+    if (excludeKey !== 'ProcesoID' && filter.ProcesoID) result = result.filter(c => String(c["Proceso ID"]) === filter.ProcesoID);
+    if (excludeKey !== 'CUIL' && filter.CUIL) result = result.filter(c => c["Cliente CUIL"] && c["Cliente CUIL"].includes(filter.CUIL));
+    if (excludeKey !== 'CreditoID' && filter.CreditoID) result = result.filter(c => String(c["Crédito ID"]).includes(filter.CreditoID));
+    if (excludeKey !== 'CuotaNro' && filter.CuotaNro) result = result.filter(c => String(c["Cuota Nro"]).includes(filter.CuotaNro));
+    if (excludeKey !== 'Tipo' && filter.Tipo.length > 0) result = result.filter(c => filter.Tipo.includes(c.Tipo));
+    if (excludeKey !== 'Total' && filter.Total) result = result.filter(c => String(c.Total).includes(filter.Total));
+    if (excludeKey !== 'Fecha' && filter.Fecha.start) result = result.filter(c => c["Fecha Emisión"] >= filter.Fecha.start);
+    if (excludeKey !== 'Fecha' && filter.Fecha.end) result = result.filter(c => c["Fecha Emisión"] <= filter.Fecha.end);
+    return result;
+  };
+
+  const TIPOS_DISPONIBLES = useMemo(() => {
+    const data = getFilteredData('Tipo');
+    return [...new Set(data.map(c => c.Tipo))].filter(Boolean).sort();
+  }, [cobranzas, filter]);
+
+  const procesosDisponibles = useMemo(() => {
+    const data = getFilteredData('ProcesoID');
+    const idsEnCobranzas = new Set(data.map(c => String(c["Proceso ID"])));
+    return procesos.filter(p => idsEnCobranzas.has(String(p.ID)));
+  }, [procesos, cobranzas, filter]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -56,17 +79,7 @@ const CollectionsListPage = () => {
   };
 
   const filteredAndSortedCobranzas = useMemo(() => {
-    let result = [...cobranzas];
-
-    if (filter.ID) result = result.filter(c => String(c.ID).includes(filter.ID));
-    if (filter.ProcesoID) result = result.filter(c => String(c["Proceso ID"]) === filter.ProcesoID);
-    if (filter.CUIL) result = result.filter(c => c["Cliente CUIL"] && c["Cliente CUIL"].includes(filter.CUIL));
-    if (filter.CreditoID) result = result.filter(c => String(c["Crédito ID"]).includes(filter.CreditoID));
-    if (filter.CuotaNro) result = result.filter(c => String(c["Cuota Nro"]).includes(filter.CuotaNro));
-    if (filter.Tipo.length > 0) result = result.filter(c => filter.Tipo.includes(c.Tipo));
-    if (filter.Total) result = result.filter(c => String(c.Total).includes(filter.Total));
-    if (filter.Fecha.start) result = result.filter(c => c["Fecha"] >= filter.Fecha.start);
-    if (filter.Fecha.end) result = result.filter(c => c["Fecha"] <= filter.Fecha.end);
+    let result = getFilteredData(null);
 
     if (sortConfig.key) {
       result.sort((a, b) => {
@@ -114,10 +127,10 @@ const CollectionsListPage = () => {
           <select 
             value={filter.ProcesoID} 
             onChange={e => setFilter({ ...filter, ProcesoID: e.target.value })}
-            style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--surface-color)', color: 'var(--text-color)' }}
+            style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-base)', color: 'var(--text-primary)' }}
           >
             <option value="">-- Todos los Procesos --</option>
-            {procesos.map(p => (
+            {procesosDisponibles.map(p => (
               <option key={p.ID} value={String(p.ID)}>
                 Lote #{p.ID} - {p.Tipo} ({p.Estado}) - {p["Fecha Ejecución"]}
               </option>
@@ -154,15 +167,18 @@ const CollectionsListPage = () => {
                   Cuota <SortIcon columnKey="Cuota Nro" />
                   <input type="text" placeholder="Filtrar Cuota..." value={filter.CuotaNro} onChange={e => setFilter({ ...filter, CuotaNro: e.target.value })} onClick={e => e.stopPropagation()} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
                 </th>
+                <th onClick={() => handleSort('Fecha Vencimiento')} style={{ cursor: 'pointer' }}>
+                  Fecha Vto <SortIcon columnKey="Fecha Vencimiento" />
+                </th>
                 <th onClick={() => handleSort('Tipo')} style={{ cursor: 'pointer', position: 'relative' }}>
                   Tipo <SortIcon columnKey="Tipo" />
                   <div onClick={e => { e.stopPropagation(); setShowTipoFilter(!showTipoFilter); }} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', background: 'rgba(255,255,255,0.1)', border: '1px solid var(--border-color)', borderRadius: '4px', textAlign: 'center', cursor: 'pointer' }}>
                     {filter.Tipo.length === 0 ? "Todos" : `${filter.Tipo.length} selec.`}
                   </div>
                   {showTipoFilter && (
-                    <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100, background: 'var(--surface-color)', border: '1px solid var(--border-color)', borderRadius: '4px', padding: '8px', display: 'flex', flexDirection: 'column', gap: '4px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)', marginTop: '4px' }}>
+                    <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', top: '100%', left: 0, minWidth: 'max-content', zIndex: 100, background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: '4px', padding: '8px', display: 'flex', flexDirection: 'column', gap: '4px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)', marginTop: '4px', textAlign: 'left' }}>
                       {TIPOS_DISPONIBLES.map(est => (
-                        <label key={est} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 'normal', cursor: 'pointer' }}>
+                        <label key={est} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 'normal', cursor: 'pointer', whiteSpace: 'nowrap' }}>
                           <input type="checkbox" checked={filter.Tipo.includes(est)} onChange={() => handleTipoToggle(est)} />
                           {est}
                         </label>
@@ -183,8 +199,8 @@ const CollectionsListPage = () => {
                   Total Cobrado <SortIcon columnKey="Total" />
                   <input type="text" placeholder="Filtrar Total..." value={filter.Total} onChange={e => setFilter({ ...filter, Total: e.target.value })} onClick={e => e.stopPropagation()} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
                 </th>
-                <th onClick={() => handleSort('Fecha')} style={{ cursor: 'pointer' }}>
-                  Fecha Pago <SortIcon columnKey="Fecha" />
+                <th onClick={() => handleSort('Fecha Emisión')} style={{ cursor: 'pointer' }}>
+                  Fecha Pago <SortIcon columnKey="Fecha Emisión" />
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '5px' }} onClick={e => e.stopPropagation()}>
                     <input type="date" value={filter.Fecha.start} onChange={e => setFilter({ ...filter, Fecha: { ...filter.Fecha, start: e.target.value } })} style={{ width: '100%', padding: '4px', fontSize: '10px' }} title="Desde" />
                     <input type="date" value={filter.Fecha.end} onChange={e => setFilter({ ...filter, Fecha: { ...filter.Fecha, end: e.target.value } })} style={{ width: '100%', padding: '4px', fontSize: '10px' }} title="Hasta" />
@@ -195,7 +211,7 @@ const CollectionsListPage = () => {
             <tbody>
               {filteredAndSortedCobranzas.length === 0 ? (
                 <tr>
-                  <td colSpan="11" className="text-center empty-state" style={{ padding: '40px' }}>
+                  <td colSpan="12" className="text-center empty-state" style={{ padding: '40px' }}>
                     {loading ? "Cargando..." : "No hay cobranzas para mostrar con los filtros actuales."}
                   </td>
                 </tr>
@@ -207,6 +223,7 @@ const CollectionsListPage = () => {
                     <td>{c["Cliente CUIL"]}</td>
                     <td>{c["Crédito ID"]}</td>
                     <td>{c["Cuota Nro"]}</td>
+                    <td>{c["Fecha Vencimiento"]}</td>
                     <td>
                        <span className={`status-badge status-${(c.Tipo || '').toLowerCase().replace(/ /g, '-')}`}>
                          {c.Tipo}
@@ -216,14 +233,14 @@ const CollectionsListPage = () => {
                     <td>{formatCurrency(c['Interés'])}</td>
                     <td>{formatCurrency(c.IVA)}</td>
                     <td style={{ fontWeight: 'bold' }}>{formatCurrency(c.Total)}</td>
-                    <td>{c.Fecha}</td>
+                    <td>{c["Fecha Emisión"]}</td>
                   </tr>
                 ))
               )}
             </tbody>
             <tfoot style={{ background: 'rgba(255, 255, 255, 0.05)', fontWeight: 'bold' }}>
               <tr>
-                <td colSpan="6" style={{ textAlign: 'right' }}>TOTALES:</td>
+                <td colSpan="7" style={{ textAlign: 'right' }}>TOTALES:</td>
                 <td>{formatCurrency(totals.capital)}</td>
                 <td>{formatCurrency(totals.interes)}</td>
                 <td>{formatCurrency(totals.iva)}</td>

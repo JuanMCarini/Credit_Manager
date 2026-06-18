@@ -12,8 +12,7 @@ from datetime import date, datetime
 from typing import Optional, Union
 
 import pandas as pd
-from IPython.display import display
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy import not_
 from sqlalchemy.orm import Session, aliased
 
@@ -141,7 +140,7 @@ class SettlementManager:
             ["capital", "interes", "iva"]
         ].sum()
         df_group["total"] = df_group[["capital", "interes", "iva"]].sum(axis=1)
-        display(df_group.map("$ {:,.2f}".format))
+        print(df_group.map("$ {:,.2f}".format))
 
         return df
 
@@ -296,7 +295,7 @@ class SettlementManager:
         for col in ["capital", "interes", "iva"]:
             df[col] = df[col].astype(float)
 
-        display(df.head(2))
+        print(df.head(2))
         cancel_all = (amount == 0)
         cuotas_afectadas = set()
         for i, row in df.iterrows():

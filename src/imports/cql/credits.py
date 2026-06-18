@@ -11,7 +11,7 @@ import warnings
 import pandas as pd
 import numpy as np
 import numpy_financial as npf
-from IPython.display import display
+from sqlalchemy.orm import Session
 from src.database import engine, SessionLocal, Credito
 from src.database.models import EstadoCredito, TipoCredito
 from . import read as read_files

@@ -5,9 +5,8 @@ from datetime import date
 from typing import Optional, Union
 
 import pandas as pd
-from IPython.display import display
 from sqlalchemy import func
-from sqlalchemy.orm import session
+from sqlalchemy.orm import Session
 
 from src.database.connection import SessionLocal
 from src.database.models import (
@@ -34,7 +33,7 @@ class PortfolioSell:
     Manages the selection and sale of active portfolio installments to third parties.
     """
 
-    def __init__(self, db_session: session | None = None):
+    def __init__(self, db_session: Session | None = None):
         """
         Initializes the portfolio sales manager with an active database session
         and empty state containers for tracking transactional elements.
