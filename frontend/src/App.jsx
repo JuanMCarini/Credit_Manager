@@ -15,6 +15,7 @@ import CollectionsProcessingPage from './pages/CollectionsProcessingPage';
 import ProcesosListPage from './pages/ProcesosListPage';
 import PortfolioOperationsPage from './pages/PortfolioOperationsPage';
 import PortfolioOriginationPage from './pages/PortfolioOriginationPage';
+import UsersListPage from './pages/UsersListPage';
 
 function App() {
   return (
@@ -39,6 +40,11 @@ function App() {
             <Route path="nueva-operacion-cartera" element={<PortfolioOriginationPage />} />
             <Route path="auxiliares" element={<AuxiliaryTablesPage />} />
             <Route path="acciones" element={<SystemActionsPage />} />
+            
+            {/* Rutas exclusivas Administrador */}
+            <Route element={<ProtectedRoute allowedRoles={[]} />}>
+              <Route path="usuarios" element={<UsersListPage />} />
+            </Route>
           </Route>
         </Route>
       </Routes>

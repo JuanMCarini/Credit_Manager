@@ -72,3 +72,54 @@ def audit_log(accion: str):
         db.commit()
         return current_user
     return _audit_log
+
+async def enforce_rbac(request: Request, db: Session = Depends(get_db)):
+    """
+    Global dependency to enforce Role-Based Access Control on modifying actions.
+    """
+    if request.method not in ["POST", "PUT", "DELETE", "PATCH"]:
+        return
+
+    path = request.url.path
+    if path == "/api/auth/login":
+        return
+
+    # Extraer el token manualmente del header
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    
+    token = auth_header.split(" ")[1]
+    
+    # Reutilizar get_current_user para validar token y obtener usuario
+    current_user = await get_current_user(token=token, db=db)
+    
+    if path == "/api/usuarios/me/password":
+        return
+
+    rol = current_user.rol.nombre
+    
+    if rol == TipoRolEnum.ADMINISTRADOR:
+        return
+    elif rol == TipoRolEnum.AUDITOR:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Acción no permitida: Los auditores solo tienen acceso de lectura."
+        )
+    elif rol == TipoRolEnum.OPERADOR_COBRANZAS:
+        if not (path.startswith("/api/v1/cobranzas") or path.startswith("/api/v1/procesos")):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, 
+                detail="Acción no permitida: Solo puede modificar cobranzas y procesos de ingesta."
+            )
+    elif rol == TipoRolEnum.OFICIAL_CREDITO:
+        if not (path.startswith("/api/v1/clientes") or path.startswith("/api/v1/creditos")):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, 
+                detail="Acción no permitida: Solo puede modificar clientes y créditos."
+            )
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Rol no reconocido."
+        )

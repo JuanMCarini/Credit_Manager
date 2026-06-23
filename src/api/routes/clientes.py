@@ -200,7 +200,11 @@ def delete_cliente(cuil: str, db: Session = Depends(get_db)):
     cliente = db.query(Cliente).filter(Cliente.cuil == cuil).first()
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
-    
+    # Chequear manualmente si tiene créditos para evitar errores de SQLAlchemy de Foreign Keys nulos
+    has_credits = db.query(Credito).filter(Credito.cliente_cuil == cuil).first()
+    if has_credits:
+        raise HTTPException(status_code=400, detail="No se puede borrar este cliente porque ya tiene préstamos o cuotas asociadas en el historial.")
+        
     try:
         db.delete(cliente)
         db.commit()
