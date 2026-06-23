@@ -24,7 +24,7 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
         const res = await axiosClient.get(`/api/v1/clientes/${cuil}/cuenta_corriente`);
         setData(res.data);
       } catch (err) {
-        setError(err.message);
+        setError(err.response?.data?.detail || err.message);
       } finally {
         setLoading(false);
       }
