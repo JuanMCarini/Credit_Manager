@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import axiosClient from '../api/axiosClient';
 import { useDebounce } from '../hooks/useDebounce';
 
@@ -12,6 +12,7 @@ const CollectionsListPage = () => {
   const location = useLocation();
   const queryParams = new URLSearchParams(location.search);
   const initialProcesoId = queryParams.get('proceso_id') || '';
+  const queryClient = useQueryClient();
 
   const [page, setPage] = useState(0);
   const limit = 50;
@@ -62,6 +63,19 @@ const CollectionsListPage = () => {
   const handleFilterChange = (key, value) => {
     setFilter(prev => ({ ...prev, [key]: value }));
     setPage(0); // Reset page on filter change
+  };
+
+  const handleDelete = async (id) => {
+    if (window.confirm(`¿Estás seguro de que deseas eliminar la cobranza #${id}? Esta acción no se puede deshacer.`)) {
+      try {
+        await axiosClient.delete(`/api/v1/cobranzas/${id}`);
+        queryClient.invalidateQueries({ queryKey: ['cobranzas'] });
+        alert('Cobranza eliminada exitosamente.');
+      } catch (error) {
+        console.error('Error al eliminar cobranza:', error);
+        alert(`Error al eliminar cobranza: ${error.response?.data?.detail || error.message}`);
+      }
+    }
   };
 
   const totals = useMemo(() => {
@@ -137,24 +151,25 @@ const CollectionsListPage = () => {
                 <th>IVA</th>
                 <th>Total Cobrado</th>
                 <th>Fecha Pago</th>
+                <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan="12" className="text-center empty-state" style={{ padding: '40px' }}>
+                  <td colSpan="13" className="text-center empty-state" style={{ padding: '40px' }}>
                     Cargando datos...
                   </td>
                 </tr>
               ) : isError ? (
                 <tr>
-                  <td colSpan="12" className="text-center empty-state" style={{ padding: '40px', color: 'red' }}>
+                  <td colSpan="13" className="text-center empty-state" style={{ padding: '40px', color: 'red' }}>
                     Error cargando datos: {error.message}
                   </td>
                 </tr>
               ) : cobranzas.length === 0 ? (
                 <tr>
-                  <td colSpan="12" className="text-center empty-state" style={{ padding: '40px' }}>
+                  <td colSpan="13" className="text-center empty-state" style={{ padding: '40px' }}>
                     No hay cobranzas para mostrar con los filtros actuales.
                   </td>
                 </tr>
@@ -177,6 +192,21 @@ const CollectionsListPage = () => {
                     <td>{formatCurrency(c.IVA)}</td>
                     <td style={{ fontWeight: 'bold' }}>{formatCurrency(c.Total)}</td>
                     <td>{c["Fecha Emision"]}</td>
+                    <td>
+                      <button 
+                        className="btn-danger" 
+                        onClick={() => handleDelete(c.ID)}
+                        title="Eliminar Cobranza"
+                        style={{ padding: '5px 10px', fontSize: '12px' }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+                          <path d="M3 6h18"></path>
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                          <line x1="10" y1="11" x2="10" y2="17"></line>
+                          <line x1="14" y1="11" x2="14" y2="17"></line>
+                        </svg>
+                      </button>
+                    </td>
                   </tr>
                 ))
               )}
@@ -188,6 +218,7 @@ const CollectionsListPage = () => {
                 <td>{formatCurrency(totals.interes)}</td>
                 <td>{formatCurrency(totals.iva)}</td>
                 <td style={{ color: 'var(--accent-secondary)' }}>{formatCurrency(totals.total)}</td>
+                <td></td>
                 <td></td>
               </tr>
             </tfoot>
