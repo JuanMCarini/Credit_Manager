@@ -17,6 +17,7 @@ from src.api.routes.cobranzas import router as cobranzas_router
 from src.api.routes.auxiliares import router as auxiliares_router
 from src.api.routes.system import router as system_router
 from src.api.routes.carteras import router as carteras_router
+from src.api.routes.auth import router as auth_router
 from src.config import API_SETTINGS
 from src.database import Base, engine
 
@@ -58,6 +59,7 @@ async def health_check() -> Dict[str, str]:
 # Registro de Routers
 # -------------------------------------------------------------------
 
+app.include_router(auth_router)
 app.include_router(clientes_router)
 app.include_router(creditos_router)
 app.include_router(reportes_router)
