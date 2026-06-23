@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
+import { Edit, KeyRound, FileText, Trash2 } from 'lucide-react';
 import UserFormModal from '../components/UserFormModal';
 import UserPasswordModal from '../components/UserPasswordModal';
+import UserAuditModal from '../components/UserAuditModal';
 
 const UsersListPage = () => {
   const [users, setUsers] = useState([]);
@@ -11,6 +13,7 @@ const UsersListPage = () => {
   
   const [showFormModal, setShowFormModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showAuditModal, setShowAuditModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
 
   const fetchData = async () => {
@@ -47,6 +50,11 @@ const UsersListPage = () => {
   const handleChangePasswordClick = (user) => {
     setSelectedUser(user);
     setShowPasswordModal(true);
+  };
+
+  const handleAuditClick = (user) => {
+    setSelectedUser(user);
+    setShowAuditModal(true);
   };
 
   const handleDeleteClick = async (user) => {
@@ -113,10 +121,19 @@ const UsersListPage = () => {
                         {user.is_active ? 'Activo' : 'Inactivo'}
                       </span>
                     </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <button className="btn btn-sm btn-secondary" style={{ marginRight: '5px' }} onClick={() => handleEditClick(user)}>Editar</button>
-                      <button className="btn btn-sm btn-secondary" style={{ marginRight: '5px' }} onClick={() => handleChangePasswordClick(user)}>Clave</button>
-                      <button className="btn btn-sm" style={{ background: 'var(--error)', color: 'white', border: 'none' }} onClick={() => handleDeleteClick(user)}>Borrar</button>
+                    <td style={{ textAlign: 'right', display: 'flex', gap: '5px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                      <button className="btn btn-sm btn-secondary" title="Editar Usuario" onClick={() => handleEditClick(user)}>
+                        <Edit size={16} />
+                      </button>
+                      <button className="btn btn-sm btn-secondary" title="Cambiar Contraseña" onClick={() => handleChangePasswordClick(user)}>
+                        <KeyRound size={16} />
+                      </button>
+                      <button className="btn btn-sm btn-secondary" title="Ver Auditoría" onClick={() => handleAuditClick(user)}>
+                        <FileText size={16} />
+                      </button>
+                      <button className="btn btn-sm btn-secondary" style={{ color: 'var(--error)' }} title="Borrar Usuario" onClick={() => handleDeleteClick(user)}>
+                        <Trash2 size={16} />
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -145,6 +162,13 @@ const UsersListPage = () => {
           user={selectedUser} 
           onClose={() => setShowPasswordModal(false)} 
           onSuccess={handleModalSuccess} 
+        />
+      )}
+
+      {showAuditModal && selectedUser && (
+        <UserAuditModal 
+          user={selectedUser} 
+          onClose={() => setShowAuditModal(false)} 
         />
       )}
     </div>

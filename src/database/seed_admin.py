@@ -20,7 +20,7 @@ def seed_admin():
         if not db.query(auth.Usuario).filter_by(email="admin@creditmanager.com").first():
             admin_user = auth.Usuario(
                 email="admin@creditmanager.com",
-                hashed_password=get_password_hash("AdminPass123!"),
+                hashed_password=get_password_hash("123456"),
                 nombre_completo="Usuario Maestro",
                 rol_id=admin_role.id if admin_role else None
             )

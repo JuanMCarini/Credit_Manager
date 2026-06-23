@@ -38,3 +38,17 @@ class UsuarioResponse(UsuarioBase):
 
     class Config:
         from_attributes = True
+
+from datetime import datetime
+
+class RegistroAuditoriaResponse(BaseModel):
+    id: int
+    timestamp: datetime
+    accion: str
+    endpoint: str
+    metodo: str
+    direccion_ip: Optional[str] = None
+    estado: str
+
+    class Config:
+        from_attributes = True

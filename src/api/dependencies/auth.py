@@ -100,7 +100,7 @@ async def enforce_rbac(request: Request, db: Session = Depends(get_db)):
     rol = current_user.rol.nombre
     
     if rol == TipoRolEnum.ADMINISTRADOR:
-        return
+        pass
     elif rol == TipoRolEnum.AUDITOR:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, 
@@ -123,3 +123,62 @@ async def enforce_rbac(request: Request, db: Session = Depends(get_db)):
             status_code=status.HTTP_403_FORBIDDEN, 
             detail="Rol no reconocido."
         )
+
+    # Si llegó hasta aquí, la acción de modificación fue aprobada por RBAC.
+    # Registramos en auditoría solo si no es de /api/usuarios, ya que usuarios ya tiene sus propios logs específicos.
+    if not path.startswith("/api/usuarios"):
+        # Traducir a lenguaje humano
+        metodo_str = "Acción"
+        if request.method == "POST":
+            metodo_str = "Crear"
+        elif request.method in ["PUT", "PATCH"]:
+            metodo_str = "Editar"
+        elif request.method == "DELETE":
+            metodo_str = "Borrar"
+
+        entidad_str = "Registro"
+        if "clientes" in path:
+            entidad_str = "Cliente"
+        elif "creditos" in path:
+            entidad_str = "Crédito"
+        elif "cobranzas" in path:
+            entidad_str = "Cobranza"
+        elif "procesos" in path:
+            entidad_str = "Proceso"
+        elif "auxiliares" in path:
+            entidad_str = "Tabla Auxiliar"
+
+        # Intentar extraer el ID de la ruta (útil para Edición y Borrado)
+        # Ejemplo: /api/v1/clientes/20363297588 -> El ID es 20363297588
+        partes_ruta = path.rstrip("/").split("/")
+        id_registro = ""
+        ultima_parte = partes_ruta[-1]
+        
+        # Si la última parte de la URL no es el nombre del recurso, asumimos que es el ID en la URL
+        if ultima_parte not in ["clientes", "creditos", "cobranzas", "procesos", "auxiliares", "provincias", "empleadores", "socios", "tasas_y_comisiones", "relaciones"]:
+            id_registro = f" (ID: {ultima_parte})"
+        
+        # Si es POST, el ID no está en la URL, intentamos sacarlo del cuerpo de la petición (ej. CUIL al crear cliente)
+        if request.method == "POST" and not id_registro:
+            try:
+                body = await request.json()
+                if isinstance(body, dict):
+                    if "cuil" in body:
+                        id_registro = f" (ID: {body['cuil']})"
+                    elif "id" in body:
+                        id_registro = f" (ID: {body['id']})"
+            except Exception:
+                pass # Si no hay body o no es JSON, lo ignoramos
+
+        accion_legible = f"{metodo_str} {entidad_str}{id_registro}"
+
+        log = RegistroAuditoria(
+            usuario_id=current_user.id,
+            accion=accion_legible,
+            endpoint=path,
+            metodo=request.method,
+            direccion_ip=request.client.host if request.client else None,
+            estado="Éxito"
+        )
+        db.add(log)
+        db.commit()
