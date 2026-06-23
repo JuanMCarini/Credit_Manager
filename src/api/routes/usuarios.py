@@ -12,8 +12,11 @@ from src.api.schemas.usuarios import (
     UsuarioUpdate, 
     UsuarioPasswordUpdate, 
     UsuarioMyPasswordUpdate, 
-    RolResponse
+    RolResponse,
+    RegistroAuditoriaResponse
 )
+
+from sqlalchemy import desc
 
 router = APIRouter(prefix="/api/usuarios", tags=["Usuarios"])
 
@@ -31,6 +34,18 @@ def list_usuarios(db: Session = Depends(get_db)):
     """Listar todos los usuarios (Solo Administrador)"""
     usuarios = db.query(Usuario).all()
     return usuarios
+
+@router.get("/{user_id}/auditoria", response_model=List[RegistroAuditoriaResponse], dependencies=[admin_only])
+def get_user_audit_logs(user_id: int, db: Session = Depends(get_db)):
+    """Obtener el historial de auditoría de un usuario específico (Solo Administrador)"""
+    from src.database.models.auth import RegistroAuditoria
+    
+    db_user = db.query(Usuario).filter(Usuario.id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        
+    logs = db.query(RegistroAuditoria).filter(RegistroAuditoria.usuario_id == user_id).order_by(desc(RegistroAuditoria.timestamp)).limit(100).all()
+    return logs
 
 @router.post("", response_model=UsuarioResponse, status_code=status.HTTP_201_CREATED, dependencies=[admin_only, Depends(audit_log("Crear Usuario"))])
 def create_usuario(usuario: UsuarioCreate, db: Session = Depends(get_db)):
