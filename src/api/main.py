@@ -18,6 +18,7 @@ from src.api.routes.auxiliares import router as auxiliares_router
 from src.api.routes.system import router as system_router
 from src.api.routes.carteras import router as carteras_router
 from src.api.routes.auth import router as auth_router
+from src.api.routes.usuarios import router as usuarios_router
 from src.config import API_SETTINGS
 from src.database import Base, engine
 
@@ -29,10 +30,14 @@ Base.metadata.create_all(bind=engine)
 # -------------------------------------------------------------------
 # Inicialización de la Aplicación
 # -------------------------------------------------------------------
+from src.api.dependencies.auth import enforce_rbac
+from fastapi import Depends
+
 app = FastAPI(
     title="Credit Manager Core Engine API",
     description="API RESTful para interactuar con el motor financiero de gestión de cartera de créditos.",
     version="1.0.0",
+    dependencies=[Depends(enforce_rbac)],
 )
 
 app.add_middleware(
@@ -67,6 +72,7 @@ app.include_router(cobranzas_router)
 app.include_router(auxiliares_router)
 app.include_router(system_router)
 app.include_router(carteras_router)
+app.include_router(usuarios_router)
 
 # -------------------------------------------------------------------
 # Frontend (Ahora servido por Nginx)

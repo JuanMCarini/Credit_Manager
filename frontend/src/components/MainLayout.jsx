@@ -3,10 +3,13 @@ import Sidebar from './Sidebar';
 import { useEffect } from 'react';
 import useAppStore from '../store/useAppStore';
 import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import ChangeMyPasswordModal from './ChangeMyPasswordModal';
 
 const MainLayout = () => {
   const { fetchAuxiliares, checkApiStatus } = useAppStore();
   const navigate = useNavigate();
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
 
   useEffect(() => {
     checkApiStatus();
@@ -28,12 +31,21 @@ const MainLayout = () => {
     <div className="app-container">
       <Sidebar />
       <main className="main-content">
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '24px', gap: '10px' }}>
+          <button className="btn-secondary" onClick={() => setShowPasswordModal(true)}>
+            Cambiar Contraseña
+          </button>
           <button className="btn-secondary" onClick={handleLogout}>
             Cerrar Sesión
           </button>
         </div>
         <Outlet />
+        {showPasswordModal && (
+          <ChangeMyPasswordModal 
+            onClose={() => setShowPasswordModal(false)} 
+            onSuccess={() => setShowPasswordModal(false)} 
+          />
+        )}
       </main>
     </div>
   );
