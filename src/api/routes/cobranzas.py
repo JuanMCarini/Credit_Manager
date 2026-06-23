@@ -1,19 +1,23 @@
 from typing import Optional
 from datetime import date, datetime
-from fastapi import APIRouter, Depends, HTTPException, Form, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Form, UploadFile, File, Request
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import desc
 
 from src.database import get_db
 from src.logic.collections import CollectionManager
 from src.api.schemas.cobranzas import CobranzaIndividual, CobranzaMasiva, ProcesoUpdate
+from src.api.dependencies.auth import get_current_user
+from src.database.models.auth import Usuario, RegistroAuditoria
 
 router = APIRouter(prefix="/api/v1", tags=["Cobranzas"])
 
 @router.post("/cobranzas/individual")
 def procesar_cobranza_individual(
+    request: Request,
     datos: CobranzaIndividual,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
 ):
     manager = CollectionManager(db)
     try:
@@ -35,12 +39,29 @@ def procesar_cobranza_individual(
                 payment_date=fecha_pago_dt,
                 vto_date=fecha_corte_dt
             )
-        return {"status": "success", "message": "Cobranza individual procesada exitosamente."}
+        
+        proceso_id = df.attrs.get("proceso_id") if hasattr(df, "attrs") else None
+        
+        accion_text = f"Crear Proceso Individual (ID: {proceso_id}) - {datos.identificador}: {datos.id_val}" if proceso_id else f"Crear Cobranza Individual - {datos.identificador}: {datos.id_val}"
+
+        log = RegistroAuditoria(
+            usuario_id=current_user.id,
+            accion=accion_text,
+            endpoint=request.url.path,
+            metodo=request.method,
+            direccion_ip=request.client.host if request.client else None,
+            estado="Éxito"
+        )
+        db.add(log)
+        db.commit()
+
+        return {"status": "success", "message": "Cobranza individual procesada exitosamente.", "proceso_id": proceso_id}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.post("/cobranzas/masiva")
 def procesar_cobranza_masiva(
+    request: Request,
     identificador: str = Form(...),
     id_column: str = Form("A"),
     amount_column: str = Form("B"),
@@ -48,7 +69,8 @@ def procesar_cobranza_masiva(
     fecha_corte: Optional[date] = Form(None),
     anticipada: bool = Form(False),
     file: UploadFile = File(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
 ):
     manager = CollectionManager(db)
     try:
@@ -66,7 +88,23 @@ def procesar_cobranza_masiva(
             file_bytes=file_bytes,
             filename=file.filename
         )
-        return {"status": "success", "message": "Cobranza masiva procesada exitosamente."}
+        
+        proceso_id = df.attrs.get("proceso_id") if hasattr(df, "attrs") else None
+
+        accion_text = f"Crear Proceso Masivo (ID: {proceso_id}) - {identificador}" if proceso_id else f"Crear Cobranza Masiva - {identificador}"
+
+        log = RegistroAuditoria(
+            usuario_id=current_user.id,
+            accion=accion_text,
+            endpoint=request.url.path,
+            metodo=request.method,
+            direccion_ip=request.client.host if request.client else None,
+            estado="Éxito"
+        )
+        db.add(log)
+        db.commit()
+
+        return {"status": "success", "message": "Cobranza masiva procesada exitosamente.", "proceso_id": proceso_id}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -153,20 +191,27 @@ def get_cobranzas(
     from src.database.models.cobranzas import Cobranza
     from src.database.models import Cuota, Credito
     
-    query = db.query(Cobranza).options(joinedload(Cobranza.cuota).joinedload(Cuota.credito))
+    base_query = db.query(Cobranza).options(joinedload(Cobranza.cuota).joinedload(Cuota.credito))
     
     if proceso_id:
-        query = query.filter(Cobranza.proceso_id == int(proceso_id))
+        base_query = base_query.filter(Cobranza.proceso_id == int(proceso_id))
     if id_cobranza:
-        query = query.filter(Cobranza.id == int(id_cobranza))
-    if tipo:
-        query = query.filter(Cobranza.tipo_cobranza == tipo)
+        base_query = base_query.filter(Cobranza.id == int(id_cobranza))
     if cuil or credito_id:
-        query = query.join(Cuota)
+        base_query = base_query.join(Cuota)
         if credito_id:
-            query = query.filter(Cuota.credito_id == int(credito_id))
+            base_query = base_query.filter(Cuota.credito_id == int(credito_id))
         if cuil:
-            query = query.join(Credito).filter(Credito.cliente_cuil.like(f"%{cuil}%"))
+            base_query = base_query.join(Credito).filter(Credito.cliente_cuil.like(f"%{cuil}%"))
+            
+    # Calculate available types before applying the tipo filter
+    distinct_tipos = base_query.with_entities(Cobranza.tipo_cobranza).distinct().all()
+    available_tipos = [t[0].value if hasattr(t[0], 'value') else str(t[0]) for t in distinct_tipos]
+
+    query = base_query
+    if tipo:
+        tipo_list = [t.strip() for t in tipo.split(",")]
+        query = query.filter(Cobranza.tipo_cobranza.in_(tipo_list))
             
     total = query.count()
     cobranzas = query.order_by(desc(Cobranza.fecha)).offset(skip).limit(limit).all()
@@ -192,7 +237,7 @@ def get_cobranzas(
             "IVA": float(c.iva),
             "Total": float(c.capital + c.interes + c.iva)
         })
-    return {"items": result, "total": total}
+    return {"items": result, "total": total, "available_tipos": available_tipos}
 
 @router.delete("/cobranzas/{cobranza_id}")
 def delete_cobranza(cobranza_id: int, db: Session = Depends(get_db)):

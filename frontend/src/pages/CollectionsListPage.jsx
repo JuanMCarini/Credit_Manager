@@ -58,6 +58,7 @@ const CollectionsListPage = () => {
 
   const cobranzas = data?.items || [];
   const totalItems = data?.total || 0;
+  const availableTipos = data?.available_tipos || ['COMUN', 'ANTICIPO', 'CANCELACION ANTICIPADA', 'BONIFICACION POR CANCELACION ANTICIPADA', 'CUOTA NO COMPRADA', 'PENALTY', 'RECURSO', 'AJUSTE'];
   const totalPages = Math.ceil(totalItems / limit);
 
   const handleFilterChange = (key, value) => {
@@ -142,9 +143,43 @@ const CollectionsListPage = () => {
                 </th>
                 <th>Cuota</th>
                 <th>Fecha Vto</th>
-                <th>
+                <th style={{ position: 'relative' }}>
                   Tipo
-                  <input type="text" placeholder="Tipo..." value={filter.Tipo} onChange={e => handleFilterChange('Tipo', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                  <details style={{ position: 'relative', marginTop: '5px' }}>
+                    <summary style={{ fontSize: '11px', padding: '4px', cursor: 'pointer', background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: '4px', listStyle: 'none', userSelect: 'none' }}>
+                      {filter.Tipo ? `${filter.Tipo.split(',').length} seleccionados` : 'Todos...'}
+                    </summary>
+                    <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 100, background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: '4px', padding: '8px', width: '200px', maxHeight: '250px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)', textAlign: 'left' }}>
+                       {[
+                         { val: 'COMUN', label: 'COMUN' },
+                         { val: 'ANTICIPO', label: 'ANTICIPO' },
+                         { val: 'CANCELACION ANTICIPADA', label: 'CANCELACION ANT.' },
+                         { val: 'BONIFICACION POR CANCELACION ANTICIPADA', label: 'BONIFICACION CA' },
+                         { val: 'CUOTA NO COMPRADA', label: 'CUOTA NO COMPRADA' },
+                         { val: 'PENALTY', label: 'PENALTY' },
+                         { val: 'RECURSO', label: 'RECURSO' },
+                         { val: 'AJUSTE', label: 'AJUSTE' }
+                       ].filter(op => availableTipos.includes(op.val)).map(op => {
+                         const currentSelected = filter.Tipo ? filter.Tipo.split(',') : [];
+                         const isChecked = currentSelected.includes(op.val);
+                         const handleChange = (e) => {
+                           let newSelected = [...currentSelected];
+                           if (e.target.checked) newSelected.push(op.val);
+                           else newSelected = newSelected.filter(v => v !== op.val);
+                           handleFilterChange('Tipo', newSelected.join(','));
+                         };
+                         return (
+                           <label key={op.val} style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', cursor: 'pointer', fontWeight: 'normal' }}>
+                             <input type="checkbox" checked={isChecked} onChange={handleChange} />
+                             {op.label}
+                           </label>
+                         );
+                       })}
+                       {availableTipos.length === 0 && (
+                         <div style={{ fontSize: '11px', color: 'var(--text-muted)', padding: '4px' }}>No hay tipos disponibles</div>
+                       )}
+                    </div>
+                  </details>
                 </th>
                 <th>Capital</th>
                 <th>Interés</th>

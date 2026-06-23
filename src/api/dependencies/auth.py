@@ -170,6 +170,10 @@ async def enforce_rbac(request: Request, db: Session = Depends(get_db)):
             except Exception:
                 pass # Si no hay body o no es JSON, lo ignoramos
 
+        # Para cobranzas masivas o individuales, posponemos el log al endpoint para poder incluir el ID del proceso
+        if request.method == "POST" and path in ["/api/v1/cobranzas/masiva", "/api/v1/cobranzas/individual"]:
+            return
+
         accion_legible = f"{metodo_str} {entidad_str}{id_registro}"
 
         log = RegistroAuditoria(
