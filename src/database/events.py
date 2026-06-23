@@ -61,15 +61,15 @@ def auto_adjust_rounding_errors(session, flush_context, instances):
             continue
 
         # 3. Calcular totales esperados de la cuota
-        esperado_cap = round(cuota.capital, 2)
-        esperado_int = round(cuota.interes, 2)
-        esperado_iva = round(cuota.iva, 2)
+        esperado_cap = round(float(cuota.capital or 0), 2)
+        esperado_int = round(float(cuota.interes or 0), 2)
+        esperado_iva = round(float(cuota.iva or 0), 2)
         esperado_total = round(esperado_cap + esperado_int + esperado_iva, 2)
 
         # 4. Calcular el acumulado cobrado usando la relación ya sincronizada
-        cobrado_cap = round(sum(c.capital for c in cuota.cobranzas if c not in session.deleted), 2)
-        cobrado_int = round(sum(c.interes for c in cuota.cobranzas if c not in session.deleted), 2)
-        cobrado_iva = round(sum(c.iva for c in cuota.cobranzas if c not in session.deleted), 2)
+        cobrado_cap = round(sum(float(c.capital or 0) for c in cuota.cobranzas if c not in session.deleted), 2)
+        cobrado_int = round(sum(float(c.interes or 0) for c in cuota.cobranzas if c not in session.deleted), 2)
+        cobrado_iva = round(sum(float(c.iva or 0) for c in cuota.cobranzas if c not in session.deleted), 2)
         cobrado_total = round(cobrado_cap + cobrado_int + cobrado_iva, 2)
 
         # 5. Calcular la diferencia residual
