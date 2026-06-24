@@ -28,6 +28,7 @@ class LiquidacionProcessRequest(BaseModel):
     fecha_corte: Optional[date] = None
     fecha_vencimiento_desde: Optional[date] = None
     fecha_vencimiento_hasta: Optional[date] = None
+    con_recurso: bool = False
 
 class LiquidacionPreviewResponse(BaseModel):
     cuota_id: int

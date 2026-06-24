@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import axiosClient from '../api/axiosClient';
+import ExcelDateFilter from '../components/ExcelDateFilter';
 
 const PortfolioLiquidationsProcessingPage = () => {
   const [formData, setFormData] = useState({
@@ -7,7 +8,8 @@ const PortfolioLiquidationsProcessingPage = () => {
     id_val: '',
     fecha_corte: '',
     fecha_vencimiento_desde: '',
-    fecha_vencimiento_hasta: ''
+    fecha_vencimiento_hasta: '',
+    con_recurso: false
   });
   
   const [previewData, setPreviewData] = useState(null);
@@ -17,7 +19,7 @@ const PortfolioLiquidationsProcessingPage = () => {
   const [filters, setFilters] = useState({
     credito_id: '',
     nro_cuota: '',
-    fecha_vencimiento: '',
+    fecha_vencimiento: [],
     cartera_id: '',
     tipo_liquidacion: ''
   });
@@ -54,7 +56,8 @@ const PortfolioLiquidationsProcessingPage = () => {
           : formData.id_val,
         fecha_corte: formData.fecha_corte || null,
         fecha_vencimiento_desde: formData.fecha_vencimiento_desde || null,
-        fecha_vencimiento_hasta: formData.fecha_vencimiento_hasta || null
+        fecha_vencimiento_hasta: formData.fecha_vencimiento_hasta || null,
+        con_recurso: formData.con_recurso
       };
       const res = await axiosClient.post('/api/v1/liquidaciones/preview', payload);
       setPreviewData(res.data);
@@ -79,7 +82,8 @@ const PortfolioLiquidationsProcessingPage = () => {
           : formData.id_val,
         fecha_corte: formData.fecha_corte || null,
         fecha_vencimiento_desde: formData.fecha_vencimiento_desde || null,
-        fecha_vencimiento_hasta: formData.fecha_vencimiento_hasta || null
+        fecha_vencimiento_hasta: formData.fecha_vencimiento_hasta || null,
+        con_recurso: formData.con_recurso
       };
       await axiosClient.post('/api/v1/liquidaciones/procesar', payload);
       alert("Liquidaciones procesadas exitosamente.");
@@ -90,7 +94,8 @@ const PortfolioLiquidationsProcessingPage = () => {
         id_val: '',
         fecha_corte: '',
         fecha_vencimiento_desde: '',
-        fecha_vencimiento_hasta: ''
+        fecha_vencimiento_hasta: '',
+        con_recurso: false
       });
     } catch (error) {
       alert("Error al procesar: " + (error.response?.data?.detail || error.message));
@@ -105,11 +110,16 @@ const PortfolioLiquidationsProcessingPage = () => {
 
   const uniqueTipos = previewData ? [...new Set(previewData.map(item => item.tipo_liquidacion))] : [];
 
+  const uniqueVencimientos = useMemo(() => {
+    if (!previewData) return [];
+    return [...new Set(previewData.map(d => d.fecha_vencimiento))].sort();
+  }, [previewData]);
+
   const filteredData = previewData ? previewData.filter(item => {
     return (
       (filters.credito_id === '' || String(item.credito_id).includes(filters.credito_id)) &&
       (filters.nro_cuota === '' || String(item.nro_cuota).includes(filters.nro_cuota)) &&
-      (filters.fecha_vencimiento === '' || String(item.fecha_vencimiento).startsWith(filters.fecha_vencimiento)) &&
+      (filters.fecha_vencimiento.length === 0 || filters.fecha_vencimiento.includes(item.fecha_vencimiento)) &&
       (filters.cartera_id === '' || String(item.cartera_id).includes(filters.cartera_id)) &&
       (filters.tipo_liquidacion === '' || item.tipo_liquidacion === filters.tipo_liquidacion)
     );
@@ -170,6 +180,23 @@ const PortfolioLiquidationsProcessingPage = () => {
           <div className="form-group">
             <label>Vencimiento Hasta (opcional)</label>
             <input type="date" name="fecha_vencimiento_hasta" value={formData.fecha_vencimiento_hasta} onChange={handleInputChange} className="form-control" />
+          </div>
+
+          <div className="form-group">
+            <label>Tipo de Operación</label>
+            <div style={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '8px', fontSize: '14px', color: 'var(--text-primary)' }}>
+                <div className="toggle-switch">
+                  <input 
+                    type="checkbox" 
+                    checked={formData.con_recurso} 
+                    onChange={(e) => setFormData(prev => ({ ...prev, con_recurso: e.target.checked }))}
+                  />
+                  <span className="slider"></span>
+                </div>
+                {formData.con_recurso ? 'Operaciones Con Recurso' : 'Operaciones Sin Recurso'}
+              </label>
+            </div>
           </div>
 
           <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
@@ -244,9 +271,17 @@ const PortfolioLiquidationsProcessingPage = () => {
                     Nro Cuota
                     <input type="text" placeholder="Filtrar..." value={filters.nro_cuota} onChange={(e) => handleFilterChange(e, 'nro_cuota')} style={{ display: 'block', width: '100%', marginTop: '4px', padding: '4px', fontSize: '0.8rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-primary)', borderRadius: '4px' }} />
                   </th>
-                  <th>
-                    Vencimiento
-                    <input type="date" value={filters.fecha_vencimiento} onChange={(e) => handleFilterChange(e, 'fecha_vencimiento')} style={{ display: 'block', width: '100%', marginTop: '4px', padding: '4px', fontSize: '0.8rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-primary)', borderRadius: '4px' }} />
+                  <th style={{ minWidth: '220px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      Vencimiento
+                    </div>
+                    {uniqueVencimientos.length > 0 && (
+                      <ExcelDateFilter 
+                        availableDates={uniqueVencimientos}
+                        selectedDates={filters.fecha_vencimiento}
+                        onChange={(newDates) => setFilters(prev => ({ ...prev, fecha_vencimiento: newDates }))}
+                      />
+                    )}
                   </th>
                   <th>Capital</th>
                   <th>Interés</th>

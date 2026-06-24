@@ -68,6 +68,7 @@ class SettlementManager:
         fecha: Union[str, date, datetime, None] = None,
         fecha_vencimiento_desde: Union[str, date, datetime, None] = None,
         fecha_vencimiento_hasta: Union[str, date, datetime, None] = None,
+        con_recurso: Optional[bool] = None,
     ) -> pd.DataFrame:
 
         if type(id_val) is not list:
@@ -106,6 +107,9 @@ class SettlementManager:
         if fecha_vencimiento_hasta:
             fecha_vencimiento_hasta = normalize_date(fecha_vencimiento_hasta)
             query = query.filter(Cuota.fecha_vencimiento <= fecha_vencimiento_hasta)
+            
+        if con_recurso is not None:
+            query = query.filter(Cartera.recurso == con_recurso)
 
         match identificador:
             case "CLIENTE_ID" | "Socio ID":
@@ -155,6 +159,7 @@ class SettlementManager:
         fecha: Union[str, date, datetime, None] = None,
         fecha_vencimiento_desde: Union[str, date, datetime, None] = None,
         fecha_vencimiento_hasta: Union[str, date, datetime, None] = None,
+        con_recurso: Optional[bool] = None,
     ) -> tuple[pd.DataFrame, pd.DataFrame]:
 
         df_ctas = self.obtain_uncancelled_installments(
@@ -163,6 +168,7 @@ class SettlementManager:
             fecha,
             fecha_vencimiento_desde,
             fecha_vencimiento_hasta,
+            con_recurso,
         )
 
         query = self.db.query(LiquidacionCuotaCedida).filter(
