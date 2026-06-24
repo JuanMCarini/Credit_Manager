@@ -2,6 +2,7 @@
     /* Color Palette - Premium Dark Mode */
     --bg-base: #0B0E14;
     --bg-panel: rgba(22, 27, 34, 0.65);
+    --surface-color: #161B22;
     --bg-panel-hover: rgba(30, 37, 46, 0.8);
     --border-color: rgba(255, 255, 255, 0.08);
     --border-highlight: rgba(255, 255, 255, 0.15);
@@ -349,6 +350,10 @@ input:focus, select:focus {
     padding: 14px 16px;
     text-align: right;
     border-bottom: 1px solid var(--border-color);
+}
+
+.data-table th input, .data-table th select {
+    background-color: var(--surface-color) !important;
 }
 
 .data-table th:first-child, .data-table td:first-child {

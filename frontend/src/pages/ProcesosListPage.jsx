@@ -1,13 +1,14 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axiosClient from '../api/axiosClient';
+import ExcelDateFilter from '../components/ExcelDateFilter';
 
 const ProcesosListPage = () => {
   const [procesos, setProcesos] = useState([]);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   
-  const [filter, setFilter] = useState({ ID: '', Tipo: [], Estado: [], Fecha: { start: '', end: '' } });
+  const [filter, setFilter] = useState({ ID: '', Tipo: [], Estado: [], Fecha: [] });
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   
   const [showTipoFilter, setShowTipoFilter] = useState(false);
@@ -21,6 +22,8 @@ const ProcesosListPage = () => {
 
   const TIPOS_DISPONIBLES = ['INDIVIDUAL', 'MASIVO_CSV'];
   const ESTADOS_DISPONIBLES = ['COMPLETADO', 'REVERTIDO', 'PROCESANDO', 'FALLIDO'];
+
+  const AVAILABLE_FECHAS = useMemo(() => [...new Set(procesos.map(p => p["Fecha Ejecución"]).filter(Boolean))], [procesos]);
 
   const fetchProcesos = async () => {
     setLoading(true);
@@ -109,8 +112,7 @@ const ProcesosListPage = () => {
     if (filter.ID) result = result.filter(p => String(p.ID).includes(filter.ID));
     if (filter.Tipo.length > 0) result = result.filter(p => filter.Tipo.includes(p.Tipo));
     if (filter.Estado.length > 0) result = result.filter(p => filter.Estado.includes(p.Estado));
-    if (filter.Fecha.start) result = result.filter(p => p["Fecha Ejecución"] >= filter.Fecha.start);
-    if (filter.Fecha.end) result = result.filter(p => p["Fecha Ejecución"] <= filter.Fecha.end);
+    if (filter.Fecha && filter.Fecha.length > 0) result = result.filter(p => filter.Fecha.includes(p["Fecha Ejecución"]));
 
     if (sortConfig.key) {
       result.sort((a, b) => {
@@ -155,7 +157,7 @@ const ProcesosListPage = () => {
                 
                 <th onClick={() => handleSort('Tipo')} style={{ cursor: 'pointer', position: 'relative' }}>
                   Tipo <SortIcon columnKey="Tipo" />
-                  <div onClick={e => { e.stopPropagation(); setShowTipoFilter(!showTipoFilter); }} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', background: 'rgba(255,255,255,0.1)', border: '1px solid var(--border-color)', borderRadius: '4px', textAlign: 'center', cursor: 'pointer' }}>
+                  <div onClick={e => { e.stopPropagation(); setShowTipoFilter(!showTipoFilter); }} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', background: 'var(--surface-color)', border: '1px solid var(--border-color)', borderRadius: '4px', textAlign: 'center', cursor: 'pointer' }}>
                     {filter.Tipo.length === 0 ? "Todos" : `${filter.Tipo.length} selec.`}
                   </div>
                   {showTipoFilter && (
@@ -172,7 +174,7 @@ const ProcesosListPage = () => {
                 
                 <th onClick={() => handleSort('Estado')} style={{ cursor: 'pointer', position: 'relative' }}>
                   Estado <SortIcon columnKey="Estado" />
-                  <div onClick={e => { e.stopPropagation(); setShowEstadoFilter(!showEstadoFilter); }} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', background: 'rgba(255,255,255,0.1)', border: '1px solid var(--border-color)', borderRadius: '4px', textAlign: 'center', cursor: 'pointer' }}>
+                  <div onClick={e => { e.stopPropagation(); setShowEstadoFilter(!showEstadoFilter); }} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', background: 'var(--surface-color)', border: '1px solid var(--border-color)', borderRadius: '4px', textAlign: 'center', cursor: 'pointer' }}>
                     {filter.Estado.length === 0 ? "Todos" : `${filter.Estado.length} selec.`}
                   </div>
                   {showEstadoFilter && (
@@ -193,9 +195,12 @@ const ProcesosListPage = () => {
 
                 <th onClick={() => handleSort('Fecha Ejecución')} style={{ cursor: 'pointer' }}>
                   Fecha Ejecución <SortIcon columnKey="Fecha Ejecución" />
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '5px' }} onClick={e => e.stopPropagation()}>
-                    <input type="date" value={filter.Fecha.start} onChange={e => setFilter({ ...filter, Fecha: { ...filter.Fecha, start: e.target.value } })} style={{ width: '100%', padding: '4px', fontSize: '10px' }} title="Desde" />
-                    <input type="date" value={filter.Fecha.end} onChange={e => setFilter({ ...filter, Fecha: { ...filter.Fecha, end: e.target.value } })} style={{ width: '100%', padding: '4px', fontSize: '10px' }} title="Hasta" />
+                  <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
+                    <ExcelDateFilter 
+                      availableDates={AVAILABLE_FECHAS}
+                      selectedDates={filter.Fecha}
+                      onChange={dates => setFilter({ ...filter, Fecha: dates })}
+                    />
                   </div>
                 </th>
                 
