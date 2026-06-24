@@ -26,6 +26,15 @@ axiosClient.interceptors.response.use(
   (response) => response,
   (error) => {
     console.error("API Error:", error.response || error.message);
+    
+    // Redirect to login if token is expired or unauthorized
+    if (error.response && error.response.status === 401) {
+      alert("Su sesión ha expirado por inactividad. Por favor, vuelva a iniciar sesión.");
+      localStorage.removeItem('token');
+      localStorage.removeItem('userRole');
+      window.location.href = '/login';
+    }
+    
     const message = error.response?.data?.detail || error.message || "An unknown error occurred";
     const customError = new Error(message);
     customError.response = error.response;

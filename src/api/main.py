@@ -19,6 +19,7 @@ from src.api.routes.system import router as system_router
 from src.api.routes.carteras import router as carteras_router
 from src.api.routes.auth import router as auth_router
 from src.api.routes.usuarios import router as usuarios_router
+from src.api.routes.liquidaciones import router as liquidaciones_router
 from src.config import API_SETTINGS
 from src.database import Base, engine
 
@@ -73,6 +74,7 @@ app.include_router(auxiliares_router)
 app.include_router(system_router)
 app.include_router(carteras_router)
 app.include_router(usuarios_router)
+app.include_router(liquidaciones_router)
 
 # -------------------------------------------------------------------
 # Frontend (Ahora servido por Nginx)

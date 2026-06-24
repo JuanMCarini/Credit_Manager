@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List
 from datetime import date, datetime
 from fastapi import APIRouter, Depends, HTTPException, Form, UploadFile, File, Request
 from sqlalchemy.orm import Session, joinedload
@@ -324,3 +324,5 @@ def modificar_cobranza(cobranza_id: int, datos: CobranzaIndividual, db: Session 
         return {"status": "success", "message": "Cobranza modificada exitosamente."}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+

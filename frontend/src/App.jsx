@@ -15,6 +15,8 @@ import CollectionsProcessingPage from './pages/CollectionsProcessingPage';
 import ProcesosListPage from './pages/ProcesosListPage';
 import PortfolioOperationsPage from './pages/PortfolioOperationsPage';
 import PortfolioOriginationPage from './pages/PortfolioOriginationPage';
+import PortfolioLiquidationsPage from './pages/PortfolioLiquidationsPage';
+import PortfolioLiquidationsProcessingPage from './pages/PortfolioLiquidationsProcessingPage';
 import UsersListPage from './pages/UsersListPage';
 
 function App() {
@@ -37,6 +39,8 @@ function App() {
             <Route path="procesamiento-cobranzas" element={<CollectionsProcessingPage />} />
             <Route path="procesos" element={<ProcesosListPage />} />
             <Route path="operaciones-cartera" element={<PortfolioOperationsPage />} />
+            <Route path="liquidaciones-cartera" element={<PortfolioLiquidationsPage />} />
+            <Route path="procesar-liquidaciones" element={<PortfolioLiquidationsProcessingPage />} />
             <Route path="nueva-operacion-cartera" element={<PortfolioOriginationPage />} />
             <Route path="auxiliares" element={<AuxiliaryTablesPage />} />
             <Route path="acciones" element={<SystemActionsPage />} />
