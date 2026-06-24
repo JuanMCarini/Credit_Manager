@@ -151,7 +151,7 @@ const AuxiliaryTablesPage = () => {
         <p>Visor de tablas maestras cacheadas desde el Core Engine. Permite editar y eliminar registros siempre que no existan dependencias activas.</p>
       </header>
       
-      {feedback && (
+      {!editingRecord && !isCreating && feedback && (
         <div style={{ 
           marginBottom: '20px', padding: '16px', borderRadius: '8px', fontSize: '15px', fontWeight: 500, 
           backgroundColor: feedback.type === 'error' ? 'rgba(239,68,68,0.1)' : 'rgba(16,185,129,0.1)', 
@@ -248,6 +248,16 @@ const AuxiliaryTablesPage = () => {
             <h3 style={{ marginBottom: '24px', fontFamily: 'var(--font-heading)' }}>
               {isCreating ? 'Agregar Nuevo Registro' : `Editar ${currentTableConfig.name}`}
             </h3>
+            
+            {(editingRecord || isCreating) && feedback && (
+              <div style={{ 
+                marginBottom: '20px', padding: '16px', borderRadius: '8px', fontSize: '15px', fontWeight: 500, 
+                backgroundColor: feedback.type === 'error' ? 'rgba(239,68,68,0.1)' : 'rgba(16,185,129,0.1)', 
+                color: feedback.type === 'error' ? 'var(--danger-color)' : 'var(--success-color)' 
+              }}>
+                {feedback.message}
+              </div>
+            )}
             
             <form onSubmit={handleEditSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
