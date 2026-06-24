@@ -183,46 +183,66 @@ def pagar_proceso_liquidaciones(
         saldo_anticipos = db.query(func.sum(AnticiposSinAplicar.monto)).filter(AnticiposSinAplicar.socio_id == socio_id).scalar() or 0.0
         saldo_anticipos = float(saldo_anticipos)
         
-        deuda_proceso = db.query(
+        deuda_proceso_recurso = db.query(
             func.sum(LiquidacionCuotaCedida.capital + LiquidacionCuotaCedida.interes + LiquidacionCuotaCedida.iva)
         ).filter(
             LiquidacionCuotaCedida.proceso_id == proceso_id,
             LiquidacionCuotaCedida.cancelada == False,
             LiquidacionCuotaCedida.tipo_liquidacion == TipoLiquidacionEnum.RECURSO.value
         ).scalar() or 0.0
-        deuda_proceso = float(deuda_proceso)
+        deuda_proceso_recurso = float(deuda_proceso_recurso)
+        
+        deuda_proceso_sin_recurso = db.query(
+            func.sum(LiquidacionCuotaCedida.capital + LiquidacionCuotaCedida.interes + LiquidacionCuotaCedida.iva)
+        ).filter(
+            LiquidacionCuotaCedida.proceso_id == proceso_id,
+            LiquidacionCuotaCedida.cancelada == False,
+            LiquidacionCuotaCedida.tipo_liquidacion != TipoLiquidacionEnum.RECURSO.value
+        ).scalar() or 0.0
+        deuda_proceso_sin_recurso = float(deuda_proceso_sin_recurso)
         
         mensaje = ""
         if data.monto > 0:
             mensaje += f"Se ingresó el pago de ${data.monto:.2f} a los anticipos. "
             
-        if deuda_proceso == 0:
+        if deuda_proceso_recurso == 0 and deuda_proceso_sin_recurso == 0:
             proceso.estado = EstadoProcesoEnum.COMPLETADO
             db.commit()
-            return {"status": "success", "message": mensaje + "El proceso no tiene deuda pendiente de cuotas con recurso."}
+            return {"status": "success", "message": mensaje + "El proceso no tiene deuda pendiente."}
 
-        if saldo_anticipos >= deuda_proceso:
-            db.add(AnticiposSinAplicar(fecha=data.fecha_pago, socio_id=socio_id, monto=-deuda_proceso))
-            
-            sm = SettlementManager(db)
-            df, _, cantidad_canceladas = sm.canceled_settlements(
+        sm = SettlementManager(db)
+
+        if deuda_proceso_recurso > 0:
+            if saldo_anticipos >= deuda_proceso_recurso:
+                db.add(AnticiposSinAplicar(fecha=data.fecha_pago, socio_id=socio_id, monto=-deuda_proceso_recurso))
+                
+                df, _, cant_recurso = sm.canceled_settlements(
+                    fecha_pago=data.fecha_pago,
+                    amount=0,
+                    proceso_id=proceso_id,
+                    tipos_liquidacion=[TipoLiquidacionEnum.RECURSO.value]
+                )
+                mensaje += f"Se cancelaron {cant_recurso} liquidaciones con recurso. "
+            else:
+                mensaje += f"Saldo insuficiente (${saldo_anticipos:.2f}) para cancelar liquidaciones con recurso (${deuda_proceso_recurso:.2f}). "
+
+        if deuda_proceso_sin_recurso > 0:
+            tipos_sin_recurso = [t.value for t in TipoLiquidacionEnum if t.value != TipoLiquidacionEnum.RECURSO.value]
+            df, _, cant_sin_recurso = sm.canceled_settlements(
                 fecha_pago=data.fecha_pago,
                 amount=0,
                 proceso_id=proceso_id,
-                tipos_liquidacion=[TipoLiquidacionEnum.RECURSO.value]
+                tipos_liquidacion=tipos_sin_recurso
             )
-            
-            pendientes = db.query(LiquidacionCuotaCedida).filter(
-                LiquidacionCuotaCedida.proceso_id == proceso_id,
-                LiquidacionCuotaCedida.cancelada == False
-            ).count()
-            
-            if pendientes == 0:
-                proceso.estado = EstadoProcesoEnum.COMPLETADO
-                
-            mensaje += f"El saldo total (${saldo_anticipos:.2f}) cubrió la deuda de ${deuda_proceso:.2f}. Se cancelaron {cantidad_canceladas} liquidaciones con recurso."
-        else:
-            mensaje += f"El saldo total de anticipos (${saldo_anticipos:.2f}) no alcanza para cancelar el proceso completo (${deuda_proceso:.2f}). No se aplicaron pagos a liquidaciones."
+            mensaje += f"Se cancelaron {cant_sin_recurso} liquidaciones sin recurso. "
+
+        pendientes = db.query(LiquidacionCuotaCedida).filter(
+            LiquidacionCuotaCedida.proceso_id == proceso_id,
+            LiquidacionCuotaCedida.cancelada == False
+        ).count()
+        
+        if pendientes == 0:
+            proceso.estado = EstadoProcesoEnum.COMPLETADO
             
         db.commit()
         return {"status": "success", "message": mensaje.strip()}

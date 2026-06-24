@@ -10,6 +10,14 @@ const PortfolioLiquidationsPage = () => {
   const [procesos, setProcesos] = useState([]);
   const [loading, setLoading] = useState(false);
 
+  const [showPayModal, setShowPayModal] = useState(false);
+  const [payModalData, setPayModalData] = useState({
+    procesoId: null,
+    hasRecurso: false,
+    hasSinRecurso: false,
+    amount: 0,
+    fechaPago: new Date().toISOString().split('T')[0]
+  });
   const [filter, setFilter] = useState({
     id: '', proceso_id: '', cartera_id: '', cuota_id: '', cobranza_id: '',
     tipo_liquidacion: [], credito_id: '', nro_cuota: '', fecha_vencimiento: [],
@@ -98,23 +106,45 @@ const PortfolioLiquidationsPage = () => {
     }
   };
 
-  const handlePayProceso = async (procesoId) => {
-    const amountStr = window.prompt("Ingrese el monto a pagar (0 para pago total):", "0");
-    if (amountStr === null) return;
-    const amount = parseFloat(amountStr);
+  const handlePayProceso = (procesoId) => {
+    const liqsProceso = liquidaciones.filter(l => l.proceso_id === procesoId && !l.cancelada);
+    const hasRecurso = liqsProceso.some(l => l.tipo_liquidacion === 'RECURSO');
+    const hasSinRecurso = liqsProceso.some(l => l.tipo_liquidacion !== 'RECURSO');
+
+    if (!hasRecurso && !hasSinRecurso) {
+      alert("No hay liquidaciones pendientes en este proceso.");
+      return;
+    }
+
+    setPayModalData({
+      procesoId,
+      hasRecurso,
+      hasSinRecurso,
+      amount: 0,
+      fechaPago: new Date().toISOString().split('T')[0]
+    });
+    setShowPayModal(true);
+  };
+
+  const submitPayProceso = async () => {
+    const { procesoId, amount, fechaPago } = payModalData;
+    
     if (isNaN(amount) || amount < 0) {
       alert("Monto inválido.");
       return;
     }
-    const fechaPago = window.prompt("Ingrese la fecha de pago (YYYY-MM-DD):", new Date().toISOString().split('T')[0]);
-    if (!fechaPago) return;
+    if (!fechaPago) {
+      alert("Ingrese la fecha de pago.");
+      return;
+    }
 
     try {
       const response = await axiosClient.post(`/api/v1/procesos/${procesoId}/liquidaciones/pagar`, {
-        monto: amount,
+        monto: Number(amount),
         fecha_pago: fechaPago
       });
       alert(response.data.message || "Pago registrado con éxito.");
+      setShowPayModal(false);
       fetchLiquidacionesYProcesos();
     } catch (error) {
       alert("Error al registrar pago: " + (error.response?.data?.detail || error.message));
@@ -312,6 +342,60 @@ const PortfolioLiquidationsPage = () => {
           </table>
         )}
       </div>
+      {showPayModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 2000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px',
+          backdropFilter: 'blur(5px)'
+        }}>
+          <div className="glass-panel" style={{
+            width: '100%', maxWidth: '400px', position: 'relative', padding: '24px'
+          }}>
+            <button onClick={() => setShowPayModal(false)} className="btn-secondary" style={{
+              position: 'absolute', top: '16px', right: '16px', padding: '4px 12px'
+            }}>X</button>
+            <h3 style={{ marginBottom: '24px', fontFamily: 'var(--font-heading)' }}>Ingresar Pago</h3>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {payModalData.hasRecurso ? (
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label>Monto a Pagar (0 para usar anticipos)</label>
+                  <input 
+                    type="number" 
+                    min="0"
+                    step="0.01"
+                    className="input-field"
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)', background: 'rgba(0,0,0,0.2)', color: 'white' }}
+                    value={payModalData.amount}
+                    onChange={(e) => setPayModalData({...payModalData, amount: e.target.value})}
+                  />
+                </div>
+              ) : (
+                <p style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
+                  Confirmar el pago de las liquidaciones SIN RECURSO del proceso.
+                </p>
+              )}
+              
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label>Fecha de Pago</label>
+                <input 
+                  type="date" 
+                  className="input-field"
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)', background: 'rgba(0,0,0,0.2)', color: 'white' }}
+                  value={payModalData.fechaPago}
+                  onChange={(e) => setPayModalData({...payModalData, fechaPago: e.target.value})}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '16px' }}>
+                <button className="btn-secondary" onClick={() => setShowPayModal(false)}>Cancelar</button>
+                <button className="btn-primary" onClick={submitPayProceso} style={{ width: 'auto' }}>Aceptar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 };
