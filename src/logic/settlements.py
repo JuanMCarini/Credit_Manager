@@ -21,6 +21,7 @@ from src.database.models import (
     Cartera,
     Cobranza,
     Cuota,
+    EstadoCartera,
     EstadoCuotaCedida,
     LiquidacionCuotaCedida,
     OperacionCartera,
@@ -257,6 +258,18 @@ class SettlementManager:
         return df_cobr
 
     def execute_settlements(self, fecha_pago: Union[str, date, datetime, None], cancelada: bool=False, proceso_id: int | None = None):
+
+        if self.settlements is not None and not self.settlements.empty:
+            carteras_afectadas = self.settlements["cartera_id"].dropna().unique().tolist()
+            if carteras_afectadas:
+                carteras_pendientes = self.db.query(Cartera).filter(
+                    Cartera.id.in_(carteras_afectadas),
+                    Cartera.estado == EstadoCartera.PENDIENTE
+                ).all()
+
+                if carteras_pendientes:
+                    nombres = ", ".join([c.nombre for c in carteras_pendientes])
+                    raise ValueError(f"No se puede registrar una liquidación sobre ventas de cartera en estado PENDIENTE ({nombres}). Confirme la venta antes.")
 
         if cancelada:
             fecha_pago = normalize_date(fecha_pago, date)
