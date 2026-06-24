@@ -76,10 +76,15 @@ def get_aux_table_data(tabla: str, request: TabulatorRequest, db: Session = Depe
     query = query.offset((request.page - 1) * request.size).limit(request.size)
     records = query.all()
 
-    data = [
-        {c.name: getattr(r, c.name) for c in model.__table__.columns}
-        for r in records
-    ]
+    data = []
+    for r in records:
+        row_dict = {c.name: getattr(r, c.name) for c in model.__table__.columns}
+        if tabla == "socios":
+            from src.database.models.socios import AnticiposSinAplicar
+            from sqlalchemy import func
+            saldo = db.query(func.sum(AnticiposSinAplicar.monto)).filter(AnticiposSinAplicar.socio_id == r.id).scalar() or 0.0
+            row_dict["anticipo_vigente"] = float(saldo)
+        data.append(row_dict)
 
     return {
         "last_page": last_page,
@@ -102,10 +107,16 @@ def get_aux_table(tabla: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Tabla auxiliar no encontrada.")
     model = AUX_TABLES[tabla]
     records = db.query(model).all()
-    return [
-        {c.name: getattr(r, c.name) for c in model.__table__.columns}
-        for r in records
-    ]
+    data = []
+    for r in records:
+        row_dict = {c.name: getattr(r, c.name) for c in model.__table__.columns}
+        if tabla == "socios":
+            from src.database.models.socios import AnticiposSinAplicar
+            from sqlalchemy import func
+            saldo = db.query(func.sum(AnticiposSinAplicar.monto)).filter(AnticiposSinAplicar.socio_id == r.id).scalar() or 0.0
+            row_dict["anticipo_vigente"] = float(saldo)
+        data.append(row_dict)
+    return data
 
 @router.post("/{tabla}")
 def create_aux_record(tabla: str, payload: dict, db: Session = Depends(get_db)):

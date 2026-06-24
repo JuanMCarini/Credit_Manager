@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import axiosClient from '../api/axiosClient';
 import ClientCCModal from '../components/ClientCCModal';
 import CreditEditEstadoModal from '../components/CreditEditEstadoModal';
+import { Eye, Edit, Trash2 } from 'lucide-react';
 
 const formatCurrency = (num) => {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(num);
@@ -190,9 +191,15 @@ const CreditListPage = () => {
                     <td>{c["Fecha Emisión"]}</td>
                     <td>
                       <div style={{ display: 'flex', gap: '8px', flexWrap: 'nowrap', alignItems: 'center' }}>
-                        <button className="btn-secondary" onClick={() => setCcCuil(c["Cliente CUIL"])} style={{ padding: '4px 8px', fontSize: '11px' }}>👁️ CC</button>
-                        <button className="btn-secondary" onClick={() => setEditCredito({ id: c.ID, estado: c.Estado })} style={{ padding: '4px 8px', fontSize: '11px' }}>✏️ Estado</button>
-                        <button className="btn-secondary" onClick={() => handleDelete(c.ID)} style={{ padding: '4px 8px', fontSize: '11px', color: 'var(--error)' }}>🗑️</button>
+                        <button className="btn-secondary" onClick={() => setCcCuil(c["Cliente CUIL"])} style={{ padding: '4px 8px', fontSize: '11px' }} title="Ver Cuenta Corriente">
+                          <Eye size={16} />
+                        </button>
+                        <button className="btn-secondary" onClick={() => setEditCredito({ id: c.ID, estado: c.Estado })} style={{ padding: '4px 8px', fontSize: '11px' }} title="Editar Estado">
+                          <Edit size={16} />
+                        </button>
+                        <button className="btn-secondary" onClick={() => handleDelete(c.ID)} style={{ padding: '4px 8px', fontSize: '11px', color: 'var(--danger-color)' }} title="Eliminar">
+                          <Trash2 size={16} />
+                        </button>
                       </div>
                     </td>
                   </tr>

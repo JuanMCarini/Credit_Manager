@@ -14,7 +14,13 @@ const PortfolioLiquidationsProcessingPage = () => {
   const [loading, setLoading] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [compradores, setCompradores] = useState([]);
-  const [filterText, setFilterText] = useState('');
+  const [filters, setFilters] = useState({
+    credito_id: '',
+    nro_cuota: '',
+    fecha_vencimiento: '',
+    cartera_id: '',
+    tipo_liquidacion: ''
+  });
 
   useEffect(() => {
     const fetchCompradores = async () => {
@@ -93,12 +99,21 @@ const PortfolioLiquidationsProcessingPage = () => {
     }
   };
 
-  const filteredData = previewData ? previewData.filter(item => 
-    item.cuota_id.toString().includes(filterText) ||
-    item.cartera_id.toString().includes(filterText) ||
-    item.tipo_liquidacion.toLowerCase().includes(filterText.toLowerCase()) ||
-    (item.cobranza_id && item.cobranza_id.toString().includes(filterText))
-  ) : [];
+  const handleFilterChange = (e, field) => {
+    setFilters(prev => ({ ...prev, [field]: e.target.value }));
+  };
+
+  const uniqueTipos = previewData ? [...new Set(previewData.map(item => item.tipo_liquidacion))] : [];
+
+  const filteredData = previewData ? previewData.filter(item => {
+    return (
+      (filters.credito_id === '' || String(item.credito_id).includes(filters.credito_id)) &&
+      (filters.nro_cuota === '' || String(item.nro_cuota).includes(filters.nro_cuota)) &&
+      (filters.fecha_vencimiento === '' || String(item.fecha_vencimiento).startsWith(filters.fecha_vencimiento)) &&
+      (filters.cartera_id === '' || String(item.cartera_id).includes(filters.cartera_id)) &&
+      (filters.tipo_liquidacion === '' || item.tipo_liquidacion === filters.tipo_liquidacion)
+    );
+  }) : [];
 
   const totalCapital = filteredData.reduce((acc, curr) => acc + Number(curr.capital), 0);
   const totalInteres = filteredData.reduce((acc, curr) => acc + Number(curr.interes), 0);
@@ -169,63 +184,112 @@ const PortfolioLiquidationsProcessingPage = () => {
         <div className="glass-panel" style={{ padding: '24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', gap: '16px', flexWrap: 'wrap' }}>
             <h3 style={{ margin: 0, color: 'var(--text-primary)', flexShrink: 0 }}>Resultado de la Previsualización</h3>
-            <div style={{ flex: 1, minWidth: '250px', maxWidth: '400px' }}>
-              <input 
-                type="text" 
-                placeholder="Filtrar por Cuota, Cartera, Cobranza o Tipo..." 
-                value={filterText}
-                onChange={(e) => setFilterText(e.target.value)}
-                className="form-control"
-              />
-            </div>
-            <button className="btn-primary" style={{ backgroundColor: 'var(--success-color)' }} onClick={handleProcess} disabled={processing || previewData.length === 0}>
-              {processing ? 'Procesando...' : 'Confirmar y Ejecutar Transacción'}
+            
+            <button 
+              className="btn-primary" 
+              style={{ 
+                background: 'linear-gradient(135deg, #10b981, #059669)', 
+                color: 'white', 
+                fontWeight: 'bold', 
+                padding: '12px 28px', 
+                fontSize: '1.05rem',
+                boxShadow: '0 4px 15px rgba(16, 185, 129, 0.4)',
+                border: 'none',
+                borderRadius: '8px',
+                transition: 'all 0.3s ease',
+                cursor: processing || previewData.length === 0 ? 'not-allowed' : 'pointer',
+                opacity: processing || previewData.length === 0 ? 0.6 : 1
+              }} 
+              onClick={handleProcess} 
+              disabled={processing || previewData.length === 0}
+              onMouseOver={(e) => {
+                if (!processing && previewData.length > 0) {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 6px 20px rgba(16, 185, 129, 0.6)';
+                }
+              }}
+              onMouseOut={(e) => {
+                if (!processing && previewData.length > 0) {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 4px 15px rgba(16, 185, 129, 0.4)';
+                }
+              }}
+            >
+              {processing ? 'Procesando...' : '🚀 Confirmar y Ejecutar Transacciones'}
             </button>
           </div>
 
-          {filteredData.length === 0 ? (
-            <div className="empty-state text-center">No se encontraron liquidaciones para mostrar.</div>
-          ) : (
-            <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
-              <table className="data-table" style={{ position: 'relative' }}>
-                <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: 'var(--bg-panel)' }}>
+          <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
+            <table className="data-table" style={{ position: 'relative' }}>
+              <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: 'var(--bg-panel)' }}>
+                <tr>
+                  <th>Cuota ID</th>
+                  <th>
+                    Cartera ID
+                    <input type="text" placeholder="Filtrar..." value={filters.cartera_id} onChange={(e) => handleFilterChange(e, 'cartera_id')} style={{ display: 'block', width: '100%', marginTop: '4px', padding: '4px', fontSize: '0.8rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-primary)', borderRadius: '4px' }} />
+                  </th>
+                  <th>Cobranza ID</th>
+                  <th>
+                    Tipo Liquidación
+                    <select value={filters.tipo_liquidacion} onChange={(e) => handleFilterChange(e, 'tipo_liquidacion')} style={{ display: 'block', width: '100%', marginTop: '4px', padding: '4px', fontSize: '0.8rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-primary)', borderRadius: '4px' }}>
+                      <option value="">Todos</option>
+                      {uniqueTipos.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </th>
+                  <th>
+                    Crédito ID
+                    <input type="text" placeholder="Filtrar..." value={filters.credito_id} onChange={(e) => handleFilterChange(e, 'credito_id')} style={{ display: 'block', width: '100%', marginTop: '4px', padding: '4px', fontSize: '0.8rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-primary)', borderRadius: '4px' }} />
+                  </th>
+                  <th>
+                    Nro Cuota
+                    <input type="text" placeholder="Filtrar..." value={filters.nro_cuota} onChange={(e) => handleFilterChange(e, 'nro_cuota')} style={{ display: 'block', width: '100%', marginTop: '4px', padding: '4px', fontSize: '0.8rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-primary)', borderRadius: '4px' }} />
+                  </th>
+                  <th>
+                    Vencimiento
+                    <input type="date" value={filters.fecha_vencimiento} onChange={(e) => handleFilterChange(e, 'fecha_vencimiento')} style={{ display: 'block', width: '100%', marginTop: '4px', padding: '4px', fontSize: '0.8rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-primary)', borderRadius: '4px' }} />
+                  </th>
+                  <th>Capital</th>
+                  <th>Interés</th>
+                  <th>IVA</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredData.length === 0 ? (
                   <tr>
-                    <th>Cuota ID</th>
-                    <th>Cartera ID</th>
-                    <th>Cobranza ID</th>
-                    <th>Tipo Liquidación</th>
-                    <th>Capital</th>
-                    <th>Interés</th>
-                    <th>IVA</th>
-                    <th>Total</th>
+                    <td colSpan="11" className="text-center" style={{ padding: '32px 0' }}>
+                      <div className="empty-state">No se encontraron liquidaciones con esos filtros.</div>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {filteredData.map((l, index) => (
+                ) : (
+                  filteredData.map((l, index) => (
                     <tr key={index}>
                       <td>{l.cuota_id}</td>
                       <td>{l.cartera_id}</td>
                       <td>{l.cobranza_id || '-'}</td>
                       <td>{l.tipo_liquidacion}</td>
+                      <td>{l.credito_id}</td>
+                      <td>{l.nro_cuota}</td>
+                      <td>{l.fecha_vencimiento}</td>
                       <td>{formatMoney(l.capital)}</td>
                       <td>{formatMoney(l.interes)}</td>
                       <td>{formatMoney(l.iva)}</td>
                       <td>{formatMoney(Number(l.capital) + Number(l.interes) + Number(l.iva))}</td>
                     </tr>
-                  ))}
-                </tbody>
-                <tfoot style={{ position: 'sticky', bottom: 0, zIndex: 10, backgroundColor: 'var(--bg-panel)', fontWeight: 'bold' }}>
-                  <tr>
-                    <td colSpan="4" style={{ textAlign: 'right' }}>Totales:</td>
-                    <td>{formatMoney(totalCapital)}</td>
-                    <td>{formatMoney(totalInteres)}</td>
-                    <td>{formatMoney(totalIva)}</td>
-                    <td>{formatMoney(totalGeneral)}</td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          )}
+                  ))
+                )}
+              </tbody>
+              <tfoot style={{ position: 'sticky', bottom: 0, zIndex: 10, backgroundColor: 'var(--bg-panel)', fontWeight: 'bold' }}>
+                <tr>
+                  <td colSpan="7" style={{ textAlign: 'right' }}>Totales:</td>
+                  <td>{formatMoney(totalCapital)}</td>
+                  <td>{formatMoney(totalInteres)}</td>
+                  <td>{formatMoney(totalIva)}</td>
+                  <td>{formatMoney(totalGeneral)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
         </div>
       )}
     </section>

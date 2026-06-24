@@ -142,6 +142,94 @@ def update_proceso(proceso_id: int, data: ProcesoUpdate, db: Session = Depends(g
     db.commit()
     return {"status": "success", "message": "Proceso actualizado"}
 
+from pydantic import BaseModel
+
+class PagoProcesoRequest(BaseModel):
+    monto: float
+    fecha_pago: date
+
+@router.post("/procesos/{proceso_id}/liquidaciones/pagar")
+def pagar_proceso_liquidaciones(
+    proceso_id: int, 
+    data: PagoProcesoRequest, 
+    db: Session = Depends(get_db)
+):
+    from src.database.models.cobranzas import Proceso, EstadoProcesoEnum, TipoProcesoEnum, LiquidacionCuotaCedida, TipoLiquidacionEnum
+    from src.database.models.socios import AnticiposSinAplicar
+    from src.logic.settlements import SettlementManager
+    from sqlalchemy import func
+    
+    proceso = db.query(Proceso).filter(Proceso.id == proceso_id).first()
+    if not proceso:
+        raise HTTPException(status_code=404, detail="Proceso no encontrado")
+        
+    if proceso.tipo not in [TipoProcesoEnum.LIQUIDACIONES_MASIVAS, TipoProcesoEnum.LIQUIDACIONES_INDIVIDUALES]:
+        raise HTTPException(status_code=400, detail="El proceso no es de liquidaciones.")
+        
+    if proceso.estado == EstadoProcesoEnum.COMPLETADO:
+        raise HTTPException(status_code=400, detail="El proceso ya está COMPLETADO.")
+        
+    liq = db.query(LiquidacionCuotaCedida).filter(LiquidacionCuotaCedida.proceso_id == proceso_id).first()
+    socio_id = liq.cartera.socio_id if liq and liq.cartera else None
+    
+    if not socio_id:
+        raise HTTPException(status_code=400, detail="No se pudo determinar el Socio Comercial para este proceso.")
+    
+    try:
+        if data.monto > 0:
+            db.add(AnticiposSinAplicar(fecha=data.fecha_pago, socio_id=socio_id, monto=data.monto))
+            db.flush()
+            
+        saldo_anticipos = db.query(func.sum(AnticiposSinAplicar.monto)).filter(AnticiposSinAplicar.socio_id == socio_id).scalar() or 0.0
+        saldo_anticipos = float(saldo_anticipos)
+        
+        deuda_proceso = db.query(
+            func.sum(LiquidacionCuotaCedida.capital + LiquidacionCuotaCedida.interes + LiquidacionCuotaCedida.iva)
+        ).filter(
+            LiquidacionCuotaCedida.proceso_id == proceso_id,
+            LiquidacionCuotaCedida.cancelada == False,
+            LiquidacionCuotaCedida.tipo_liquidacion == TipoLiquidacionEnum.RECURSO.value
+        ).scalar() or 0.0
+        deuda_proceso = float(deuda_proceso)
+        
+        mensaje = ""
+        if data.monto > 0:
+            mensaje += f"Se ingresó el pago de ${data.monto:.2f} a los anticipos. "
+            
+        if deuda_proceso == 0:
+            proceso.estado = EstadoProcesoEnum.COMPLETADO
+            db.commit()
+            return {"status": "success", "message": mensaje + "El proceso no tiene deuda pendiente de cuotas con recurso."}
+
+        if saldo_anticipos >= deuda_proceso:
+            db.add(AnticiposSinAplicar(fecha=data.fecha_pago, socio_id=socio_id, monto=-deuda_proceso))
+            
+            sm = SettlementManager(db)
+            df, _, cantidad_canceladas = sm.canceled_settlements(
+                fecha_pago=data.fecha_pago,
+                amount=0,
+                proceso_id=proceso_id,
+                tipos_liquidacion=[TipoLiquidacionEnum.RECURSO.value]
+            )
+            
+            pendientes = db.query(LiquidacionCuotaCedida).filter(
+                LiquidacionCuotaCedida.proceso_id == proceso_id,
+                LiquidacionCuotaCedida.cancelada == False
+            ).count()
+            
+            if pendientes == 0:
+                proceso.estado = EstadoProcesoEnum.COMPLETADO
+                
+            mensaje += f"El saldo total (${saldo_anticipos:.2f}) cubrió la deuda de ${deuda_proceso:.2f}. Se cancelaron {cantidad_canceladas} liquidaciones con recurso."
+        else:
+            mensaje += f"El saldo total de anticipos (${saldo_anticipos:.2f}) no alcanza para cancelar el proceso completo (${deuda_proceso:.2f}). No se aplicaron pagos a liquidaciones."
+            
+        db.commit()
+        return {"status": "success", "message": mensaje.strip()}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.delete("/procesos/{proceso_id}")
 def delete_proceso(proceso_id: int, db: Session = Depends(get_db)):
     from src.database.models.cobranzas import Proceso, Cobranza
@@ -149,30 +237,42 @@ def delete_proceso(proceso_id: int, db: Session = Depends(get_db)):
     if not proceso:
         raise HTTPException(status_code=404, detail="Proceso no encontrado")
         
-    # Check if any cobranza has liquidaciones associated
-    has_liquidaciones = any(len(cobranza.liquidaciones) > 0 for cobranza in proceso.cobranzas)
-    if has_liquidaciones:
-        raise HTTPException(
-            status_code=400, 
-            detail="No se puede eliminar el proceso porque tiene liquidaciones asociadas a sus cobranzas."
-        )
+    from src.database.models.cobranzas import TipoProcesoEnum, LiquidacionCuotaCedida, EstadoProcesoEnum
+    
+    if proceso.estado == EstadoProcesoEnum.COMPLETADO:
+        raise HTTPException(status_code=400, detail="No se puede eliminar un proceso que ya está COMPLETADO.")
+
+    is_liquidacion = proceso.tipo in [TipoProcesoEnum.LIQUIDACIONES_MASIVAS, TipoProcesoEnum.LIQUIDACIONES_INDIVIDUALES]
+
+    if not is_liquidacion:
+        # Check if any cobranza has liquidaciones associated
+        has_liquidaciones = any(len(cobranza.liquidaciones) > 0 for cobranza in proceso.cobranzas)
+        if has_liquidaciones:
+            raise HTTPException(
+                status_code=400, 
+                detail="No se puede eliminar el proceso porque tiene liquidaciones asociadas a sus cobranzas."
+            )
         
     try:
         from src.database.models.creditos import TipoCredito
         from src.database.models.cobranzas import TipoCobranzaEnum
         
-        penalty_credits = []
-        for c in proceso.cobranzas:
-            if c.tipo_cobranza == TipoCobranzaEnum.PENALTY:
-                if c.cuota and c.cuota.credito and c.cuota.credito.tipo_credito == TipoCredito.PENALTY:
-                    penalty_credits.append(c.cuota.credito)
-                    
-        db.delete(proceso)
-        for pc in penalty_credits:
-            db.delete(pc)
-            
+        if is_liquidacion:
+            db.query(LiquidacionCuotaCedida).filter(LiquidacionCuotaCedida.proceso_id == proceso_id).delete(synchronize_session=False)
+            db.delete(proceso)
+        else:
+            penalty_credits = []
+            for c in proceso.cobranzas:
+                if c.tipo_cobranza == TipoCobranzaEnum.PENALTY:
+                    if c.cuota and c.cuota.credito and c.cuota.credito.tipo_credito == TipoCredito.PENALTY:
+                        penalty_credits.append(c.cuota.credito)
+                        
+            db.delete(proceso)
+            for pc in penalty_credits:
+                db.delete(pc)
+                
         db.commit()
-        return {"status": "success", "message": "Proceso y sus cobranzas eliminados exitosamente."}
+        return {"status": "success", "message": "Proceso eliminado exitosamente."}
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error eliminando el proceso: {str(e)}")

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axiosClient from '../api/axiosClient';
 import ClientEditModal from '../components/ClientEditModal';
 import ClientCCModal from '../components/ClientCCModal';
+import { CreditCard, Eye, Edit, Trash2 } from 'lucide-react';
 
 const ClientListPage = () => {
   const [clients, setClients] = useState([]);
@@ -198,10 +199,18 @@ const ClientListPage = () => {
                     <td>{c["Teléfono"]}</td>
                     <td>
                       <div style={{ display: 'flex', gap: '8px', flexWrap: 'nowrap', alignItems: 'center' }}>
-                        <button className="btn-secondary" onClick={() => navigate(`/creditos?cuil=${c.CUIL}`)} style={{ padding: '4px 8px', fontSize: '11px' }}>💳 Créditos</button>
-                        <button className="btn-secondary" onClick={() => setCcCuil(c.CUIL)} style={{ padding: '4px 8px', fontSize: '11px' }}>👁️ CC</button>
-                        <button className="btn-secondary" onClick={() => setEditCuil(c.CUIL)} style={{ padding: '4px 8px', fontSize: '11px' }}>✏️ Editar</button>
-                        <button className="btn-secondary" onClick={() => handleDelete(c.CUIL)} style={{ padding: '4px 8px', fontSize: '11px', color: 'var(--error)' }}>🗑️</button>
+                        <button className="btn-secondary" onClick={() => navigate(`/creditos?cuil=${c.CUIL}`)} style={{ padding: '4px 8px', fontSize: '11px' }} title="Créditos">
+                          <CreditCard size={16} />
+                        </button>
+                        <button className="btn-secondary" onClick={() => setCcCuil(c.CUIL)} style={{ padding: '4px 8px', fontSize: '11px' }} title="Ver Cuenta Corriente">
+                          <Eye size={16} />
+                        </button>
+                        <button className="btn-secondary" onClick={() => setEditCuil(c.CUIL)} style={{ padding: '4px 8px', fontSize: '11px' }} title="Editar">
+                          <Edit size={16} />
+                        </button>
+                        <button className="btn-secondary" onClick={() => handleDelete(c.CUIL)} style={{ padding: '4px 8px', fontSize: '11px', color: 'var(--danger-color)' }} title="Eliminar">
+                          <Trash2 size={16} />
+                        </button>
                       </div>
                     </td>
                   </tr>
