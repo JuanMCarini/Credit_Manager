@@ -61,7 +61,8 @@ def preview_liquidaciones(req: LiquidacionProcessRequest, db: Session = Depends(
             identificador=req.identificador,
             fecha=req.fecha_corte,
             fecha_vencimiento_desde=req.fecha_vencimiento_desde,
-            fecha_vencimiento_hasta=req.fecha_vencimiento_hasta
+            fecha_vencimiento_hasta=req.fecha_vencimiento_hasta,
+            con_recurso=req.con_recurso
         )
         sm.settlements_resource(df_rec)
         sm.settlements_s_resource(df_s_rec)
@@ -91,7 +92,8 @@ def procesar_liquidaciones(req: LiquidacionProcessRequest, db: Session = Depends
             identificador=req.identificador,
             fecha=req.fecha_corte,
             fecha_vencimiento_desde=req.fecha_vencimiento_desde,
-            fecha_vencimiento_hasta=req.fecha_vencimiento_hasta
+            fecha_vencimiento_hasta=req.fecha_vencimiento_hasta,
+            con_recurso=req.con_recurso
         )
         sm.settlements_resource(df_rec)
         sm.settlements_s_resource(df_s_rec)
