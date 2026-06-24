@@ -69,7 +69,7 @@ class SettlementManager:
 
         if type(id_val) is not list:
             id_val = [id_val]
-        fecha = normalize_date(fecha, str)
+        fecha = normalize_date(fecha, date)
         self.fecha_corte = fecha
         
         op_cartera_sub = aliased(OperacionCartera)
@@ -105,9 +105,10 @@ class SettlementManager:
             query = query.filter(Cuota.fecha_vencimiento <= fecha_vencimiento_hasta)
 
         match identificador:
-            case "CLIENTE_ID":
-                query = query.filter(Cartera.socio_id.in_(id_val))
-            case "CLIENTE_CUIT":
+            case "CLIENTE_ID" | "Socio ID":
+                id_val_int = [int(i) for i in id_val if str(i).isdigit()]
+                query = query.filter(Cartera.socio_id.in_(id_val_int))
+            case "CLIENTE_CUIT" | "Socio CUIT":
                 query = (query
                 .join(SocioComercial, Cartera.socio_id == SocioComercial.id)
                 .filter(SocioComercial.cuit.in_(id_val)))

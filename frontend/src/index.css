@@ -493,6 +493,6 @@ input:focus, select:focus {
   100% { transform: translateX(100%); }
 }
 
-.animate-\\[shimmer_1\\.5s_infinite\\] {
+.animate-shimmer {
   animation: shimmer 1.5s infinite;
 }
