@@ -2,6 +2,7 @@ import { useState } from 'react';
 import axiosClient from '../api/axiosClient';
 
 const CollectionsProcessingPage = () => {
+  const [operationType, setOperationType] = useState('individual');
   const [indData, setIndData] = useState({
     identificador: 'CLIENTE_DNI',
     id_val: '',
@@ -92,10 +93,23 @@ const CollectionsProcessingPage = () => {
 
       <div className="content-grid" style={{ gridTemplateColumns: '1fr' }}>
         
-        {/* Cobranza Individual */}
         <div className="glass-panel" style={{ padding: '20px', marginBottom: '24px' }}>
-          <h3 style={{ marginBottom: '12px', fontFamily: 'var(--font-heading)', fontSize: '16px' }}>Cobranza Individual</h3>
-          <form onSubmit={handleIndSubmit}>
+          <div className="form-group" style={{ marginBottom: '24px' }}>
+            <label style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-color)', marginBottom: '8px', display: 'block' }}>Tipo de Ingreso</label>
+            <select 
+              value={operationType} 
+              onChange={(e) => setOperationType(e.target.value)}
+              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--surface-color)', color: 'var(--text-color)', fontSize: '15px' }}
+            >
+              <option value="individual">Cobranza Individual</option>
+              <option value="masiva">Cobranza Masiva por Lote</option>
+            </select>
+          </div>
+
+          {operationType === 'individual' && (
+            <div style={{ animation: 'fadeIn 0.3s ease' }}>
+              <h3 style={{ marginBottom: '16px', fontFamily: 'var(--font-heading)', fontSize: '18px', color: 'var(--primary-color)' }}>Cobranza Individual</h3>
+              <form onSubmit={handleIndSubmit}>
             <div className="form-row">
               <div className="form-group">
                 <label>Tipo de Identificador *</label>
@@ -143,12 +157,13 @@ const CollectionsProcessingPage = () => {
               </div>
             )}
           </form>
-        </div>
+            </div>
+          )}
 
-        {/* Cobranza Masiva */}
-        <div className="glass-panel" style={{ padding: '20px' }}>
-          <h3 style={{ marginBottom: '12px', fontFamily: 'var(--font-heading)', fontSize: '16px' }}>Cobranza Masiva por Lote</h3>
-          <form onSubmit={handleMasSubmit}>
+          {operationType === 'masiva' && (
+            <div style={{ animation: 'fadeIn 0.3s ease' }}>
+              <h3 style={{ marginBottom: '16px', fontFamily: 'var(--font-heading)', fontSize: '18px', color: 'var(--primary-color)' }}>Cobranza Masiva por Lote</h3>
+              <form onSubmit={handleMasSubmit}>
             <div className="form-row">
               <div className="form-group">
                 <label>Tipo de Identificador *</label>
@@ -202,6 +217,8 @@ const CollectionsProcessingPage = () => {
               </div>
             )}
           </form>
+            </div>
+          )}
         </div>
 
       </div>
