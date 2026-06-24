@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo } from 'react';
 import axiosClient from '../api/axiosClient';
 import { Trash2, DollarSign } from 'lucide-react';
 
+import ExcelDateFilter from '../components/ExcelDateFilter';
+
 const PortfolioLiquidationsPage = () => {
   const [activeTab, setActiveTab] = useState('liquidaciones');
   const [liquidaciones, setLiquidaciones] = useState([]);
@@ -10,12 +12,14 @@ const PortfolioLiquidationsPage = () => {
 
   const [filter, setFilter] = useState({
     id: '', proceso_id: '', cartera_id: '', cuota_id: '', cobranza_id: '',
-    tipo_liquidacion: [], credito_id: '', nro_cuota: '', fecha_vencimiento: '',
-    capital: '', interes: '', iva: '', importe_total: '', fecha_pago: '', cancelada: ''
+    tipo_liquidacion: [], credito_id: '', nro_cuota: '', fecha_vencimiento: [],
+    capital: '', interes: '', iva: '', importe_total: '', fecha_pago: [], cancelada: ''
   });
 
   const [showTipoFilter, setShowTipoFilter] = useState(false);
   const TIPOS_DISPONIBLES = useMemo(() => [...new Set(liquidaciones.map(l => l.tipo_liquidacion).filter(Boolean))], [liquidaciones]);
+  const AVAILABLE_FECHAS_VENCIMIENTO = useMemo(() => [...new Set(liquidaciones.map(l => l.fecha_vencimiento).filter(Boolean))], [liquidaciones]);
+  const AVAILABLE_FECHAS_PAGO = useMemo(() => [...new Set(liquidaciones.map(l => l.fecha_pago).filter(Boolean))], [liquidaciones]);
 
   const handleTipoToggle = (tipo) => {
     setFilter(prev => {
@@ -38,12 +42,12 @@ const PortfolioLiquidationsPage = () => {
     if (filter.tipo_liquidacion.length > 0) result = result.filter(l => filter.tipo_liquidacion.includes(l.tipo_liquidacion));
     if (filter.credito_id) result = result.filter(l => String(l.credito_id || '').includes(filter.credito_id));
     if (filter.nro_cuota) result = result.filter(l => String(l.nro_cuota || '').includes(filter.nro_cuota));
-    if (filter.fecha_vencimiento) result = result.filter(l => String(l.fecha_vencimiento || '').includes(filter.fecha_vencimiento));
+    if (filter.fecha_vencimiento && filter.fecha_vencimiento.length > 0) result = result.filter(l => filter.fecha_vencimiento.includes(l.fecha_vencimiento));
     if (filter.capital) result = result.filter(l => String(l.capital || '').includes(filter.capital));
     if (filter.interes) result = result.filter(l => String(l.interes || '').includes(filter.interes));
     if (filter.iva) result = result.filter(l => String(l.iva || '').includes(filter.iva));
     if (filter.importe_total) result = result.filter(l => String(l.importe_total || '').includes(filter.importe_total));
-    if (filter.fecha_pago) result = result.filter(l => String(l.fecha_pago || '').includes(filter.fecha_pago));
+    if (filter.fecha_pago && filter.fecha_pago.length > 0) result = result.filter(l => filter.fecha_pago.includes(l.fecha_pago));
     if (filter.cancelada !== '') {
       const isCancelada = filter.cancelada === 'true';
       result = result.filter(l => l.cancelada === isCancelada);
@@ -188,12 +192,26 @@ const PortfolioLiquidationsPage = () => {
                 </th>
                 <th style={{ minWidth: '90px' }}>ID Crédito <br/>{renderInput('credito_id', '...')}</th>
                 <th style={{ minWidth: '90px' }}>Nro. Cuota <br/>{renderInput('nro_cuota', '...')}</th>
-                <th style={{ minWidth: '110px' }}>Vencimiento <br/>{renderInput('fecha_vencimiento', '...')}</th>
+                <th style={{ minWidth: '110px' }}>
+                  Vencimiento <br/>
+                  <ExcelDateFilter 
+                    availableDates={AVAILABLE_FECHAS_VENCIMIENTO}
+                    selectedDates={filter.fecha_vencimiento}
+                    onChange={dates => handleFilterChange('fecha_vencimiento', dates)}
+                  />
+                </th>
                 <th style={{ minWidth: '90px' }}>Capital <br/>{renderInput('capital', '...')}</th>
                 <th style={{ minWidth: '90px' }}>Interés <br/>{renderInput('interes', '...')}</th>
                 <th style={{ minWidth: '90px' }}>IVA <br/>{renderInput('iva', '...')}</th>
                 <th style={{ minWidth: '90px' }}>Total <br/>{renderInput('importe_total', '...')}</th>
-                <th style={{ minWidth: '110px' }}>Fecha Pago <br/>{renderInput('fecha_pago', '...')}</th>
+                <th style={{ minWidth: '110px' }}>
+                  Fecha Pago <br/>
+                  <ExcelDateFilter 
+                    availableDates={AVAILABLE_FECHAS_PAGO}
+                    selectedDates={filter.fecha_pago}
+                    onChange={dates => handleFilterChange('fecha_pago', dates)}
+                  />
+                </th>
                 <th style={{ minWidth: '100px' }}>
                   Estado <br/>
                   <select 
