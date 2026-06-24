@@ -4,10 +4,14 @@ from datetime import date
 
 class LiquidacionResponse(BaseModel):
     id: int
+    proceso_id: Optional[int] = None
     cuota_id: int
     cartera_id: int
     cobranza_id: Optional[int] = None
     tipo_liquidacion: str
+    credito_id: Optional[int] = None
+    nro_cuota: Optional[int] = None
+    fecha_vencimiento: Optional[date] = None
     capital: float
     interes: float
     iva: float
@@ -27,8 +31,11 @@ class LiquidacionProcessRequest(BaseModel):
 
 class LiquidacionPreviewResponse(BaseModel):
     cuota_id: int
+    credito_id: int
     cartera_id: int
     tipo_liquidacion: str
+    nro_cuota: int
+    fecha_vencimiento: date
     capital: float
     interes: float
     iva: float

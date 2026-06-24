@@ -29,7 +29,7 @@ const AuxiliaryTablesPage = () => {
   const tablesMap = {
     provincias: { name: 'Provincias', data: provincias, endpoint: 'provincias', schema: ['id', 'nombre'] },
     empleadores: { name: 'Empleadores', data: empleadores, endpoint: 'empleadores', schema: ['id', 'cuit', 'razon_social', 'es_pasivo', 'socio_comercial_id'] },
-    socios: { name: 'Socios Comerciales', data: socios, endpoint: 'socios', schema: ['id', 'razon_social', 'cuit', 'domicilio_legal', 'contacto_nombre', 'mail', 'telefono', 'dia_corte'] },
+    socios: { name: 'Socios Comerciales', data: socios, endpoint: 'socios', schema: ['id', 'razon_social', 'cuit', 'domicilio_legal', 'contacto_nombre', 'mail', 'telefono', 'dia_corte', 'anticipo_vigente'] },
     tasasYComisiones: { name: 'Tasas y Comisiones', data: tasasYComisiones, endpoint: 'tasas_y_comisiones', schema: ['id', 'fecha', 'estado', 'socio_originador_id', 'socio_intermediario_id', 'colocacion_originador', 'colocacion_intermediario', 'cobranza_originador', 'cobranza_intermediario', 'colocacion_propia', 'plazo', 'tna_c_iva'] },
     relaciones: { name: 'Relaciones Mapeadas', data: relaciones, endpoint: 'relaciones', schema: ['id', 'socio_id', 'tabla', 'id_local', 'id_foraneo'] }
   };
@@ -138,7 +138,7 @@ const AuxiliaryTablesPage = () => {
     if (percentFields.includes(col)) {
       return `${(value * 100).toFixed(2)}%`;
     }
-    if (['capital', 'interes', 'iva', 'total'].includes(col.toLowerCase())) {
+    if (['capital', 'interes', 'iva', 'total', 'anticipo_vigente'].includes(col.toLowerCase())) {
       return `$ ${parseFloat(value).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`;
     }
     return String(value);

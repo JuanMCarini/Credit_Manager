@@ -20,12 +20,15 @@ from src.database import Base
 class TipoProcesoEnum(enum.Enum):
     INDIVIDUAL = "INDIVIDUAL"
     MASIVO_CSV = "MASIVO_CSV"
+    LIQUIDACIONES_INDIVIDUALES = "LIQUIDACIONES_INDIVIDUALES"
+    LIQUIDACIONES_MASIVAS = "LIQUIDACIONES_MASIVAS"
 
 
 class EstadoProcesoEnum(enum.Enum):
     COMPLETADO = "COMPLETADO"
     REVERTIDO = "REVERTIDO"
     PROCESANDO = "PROCESANDO"
+    PENDIENTE = "PENDIENTE"
     FALLIDO = "FALLIDO"
 
 
@@ -71,6 +74,11 @@ class Proceso(Base):
     cobranzas = relationship(
         "Cobranza", 
         back_populates="proceso", 
+        cascade="all, delete-orphan"
+    )
+    liquidaciones = relationship(
+        "LiquidacionCuotaCedida",
+        back_populates="proceso",
         cascade="all, delete-orphan"
     )
 
@@ -147,6 +155,7 @@ class LiquidacionCuotaCedida(Base):
     cuota_id = Column(Integer, ForeignKey("cuotas.id"), nullable=False)
     cartera_id = Column(Integer, ForeignKey("carteras.id"), nullable=False)
     cobranza_id = Column(Integer, ForeignKey("cobranzas.id"), nullable=True)
+    proceso_id = Column(Integer, ForeignKey("procesos.id"), nullable=True)
 
     tipo_liquidacion = Column(
         Enum(TipoLiquidacionEnum, values_callable=lambda obj: [e.value for e in obj]),
@@ -164,6 +173,7 @@ class LiquidacionCuotaCedida(Base):
     cuota = relationship("Cuota", back_populates="liquidaciones")
     cartera = relationship("Cartera", back_populates="liquidaciones")
     cobranza = relationship("Cobranza", back_populates="liquidaciones")
+    proceso = relationship("Proceso", back_populates="liquidaciones")
 
     @property
     def importe_total(self) -> float:
