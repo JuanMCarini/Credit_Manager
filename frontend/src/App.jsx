@@ -12,7 +12,6 @@ import AuxiliaryTablesPage from './pages/AuxiliaryTablesPage';
 import SystemActionsPage from './pages/SystemActionsPage';
 import CollectionsListPage from './pages/CollectionsListPage';
 import CollectionsProcessingPage from './pages/CollectionsProcessingPage';
-import ProcesosListPage from './pages/ProcesosListPage';
 import PortfolioOperationsPage from './pages/PortfolioOperationsPage';
 import PortfolioOriginationPage from './pages/PortfolioOriginationPage';
 import PortfolioLiquidationsPage from './pages/PortfolioLiquidationsPage';
@@ -37,7 +36,6 @@ function App() {
             <Route path="alta-credito" element={<CreditOriginationPage />} />
             <Route path="cobranzas" element={<CollectionsListPage />} />
             <Route path="procesamiento-cobranzas" element={<CollectionsProcessingPage />} />
-            <Route path="procesos" element={<ProcesosListPage />} />
             <Route path="operaciones-cartera" element={<PortfolioOperationsPage />} />
             <Route path="liquidaciones-cartera" element={<PortfolioLiquidationsPage />} />
             <Route path="procesar-liquidaciones" element={<PortfolioLiquidationsProcessingPage />} />

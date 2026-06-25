@@ -43,7 +43,12 @@ const ExcelDateFilter = ({ availableDates, selectedDates, onChange }) => {
     const h = {};
     for (const d of validDates) {
       if (!d.includes(searchLower)) continue; // basic search over YYYY-MM-DD
-      const [year, month, day] = d.split('-');
+      let year, month, day;
+      if (d.includes('/')) {
+        [day, month, year] = d.split('/');
+      } else {
+        [year, month, day] = d.split('-');
+      }
       if (!year || !month || !day) continue;
       
       if (!h[year]) h[year] = { dates: [], months: {} };

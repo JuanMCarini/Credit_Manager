@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
+import ExcelDateFilter from './ExcelDateFilter';
 
 const formatCurrency = (num) => {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(num);
@@ -10,13 +11,14 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const [filter, setFilter] = useState({ Credito: String(initialFilterCredito), Cuota: '', Vto: { start: '', end: '' }, Estado: [] });
+  const [filter, setFilter] = useState({ Credito: String(initialFilterCredito), Cuota: '', Vto: [], Estado: [] });
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [showEstadoFilter, setShowEstadoFilter] = useState(false);
   const [anticipadaMode, setAnticipadaMode] = useState(false);
   const [fechaCorte, setFechaCorte] = useState(new Date().toISOString().split('T')[0]);
 
   const ESTADOS_DISPONIBLES = ['PENDIENTE', 'CANCELADA', 'MOROSA'];
+  const AVAILABLE_FECHAS_VTO = React.useMemo(() => [...new Set(data.map(c => c.vencimiento).filter(Boolean))], [data]);
 
   useEffect(() => {
     const fetchCC = async () => {
@@ -51,17 +53,8 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
 
     if (filter.Credito) result = result.filter(c => c.credito_id === parseInt(filter.Credito, 10));
     if (filter.Cuota) result = result.filter(c => c.nro_cuota === parseInt(filter.Cuota, 10));
-    if (filter.Vto.start || filter.Vto.end) {
-      result = result.filter(c => {
-        if (!c.vencimiento) return false;
-        const parts = c.vencimiento.split('/');
-        if (parts.length !== 3) return false;
-        const rowDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
-        
-        if (filter.Vto.start && rowDate < filter.Vto.start) return false;
-        if (filter.Vto.end && rowDate > filter.Vto.end) return false;
-        return true;
-      });
+    if (filter.Vto && filter.Vto.length > 0) {
+      result = result.filter(c => filter.Vto.includes(c.vencimiento));
     }
     if (filter.Estado.length > 0) result = result.filter(c => filter.Estado.includes(c.estado));
 
@@ -184,9 +177,12 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
                   </th>
                   <th onClick={() => handleSort('vencimiento')} style={{ cursor: 'pointer' }}>
                     Vto <SortIcon columnKey="vencimiento" />
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '5px' }} onClick={e => e.stopPropagation()}>
-                      <input type="date" value={filter.Vto.start} onChange={e => setFilter({ ...filter, Vto: { ...filter.Vto, start: e.target.value } })} style={{ width: '100%', padding: '4px', fontSize: '10px' }} title="Desde" />
-                      <input type="date" value={filter.Vto.end} onChange={e => setFilter({ ...filter, Vto: { ...filter.Vto, end: e.target.value } })} style={{ width: '100%', padding: '4px', fontSize: '10px' }} title="Hasta" />
+                    <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
+                      <ExcelDateFilter 
+                        availableDates={AVAILABLE_FECHAS_VTO}
+                        selectedDates={filter.Vto}
+                        onChange={dates => setFilter({ ...filter, Vto: dates })}
+                      />
                     </div>
                   </th>
                   <th onClick={() => handleSort('capital')} style={{ cursor: 'pointer' }}>Capital <SortIcon columnKey="capital" /></th>

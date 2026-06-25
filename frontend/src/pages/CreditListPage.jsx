@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import axiosClient from '../api/axiosClient';
 import ClientCCModal from '../components/ClientCCModal';
 import CreditEditEstadoModal from '../components/CreditEditEstadoModal';
+import ExcelDateFilter from '../components/ExcelDateFilter';
 import { Eye, Edit, Trash2 } from 'lucide-react';
 
 const formatCurrency = (num) => {
@@ -14,11 +15,13 @@ const CreditListPage = () => {
   const [loading, setLoading] = useState(false);
   const location = useLocation();
   
-  const [filter, setFilter] = useState({ ID: '', CUIL: '', Capital: '', Plazo: '', TNA: '', Estado: [], Fecha: { start: '', end: '' } });
+  const [filter, setFilter] = useState({ ID: '', CUIL: '', Capital: '', Plazo: '', TNA: '', Estado: [], Fecha: [] });
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [showEstadoFilter, setShowEstadoFilter] = useState(false);
 
   const ESTADOS_DISPONIBLES = ['APROBADO', 'ACTIVO', 'CANCELADO', 'MOROSO', 'RECHAZADO', 'JUDICIAL'];
+
+  const AVAILABLE_FECHAS_EMISION = useMemo(() => [...new Set(creditos.map(c => c["Fecha Emisión"]).filter(Boolean))], [creditos]);
 
   const [ccCuil, setCcCuil] = useState(null);
   const [editCredito, setEditCredito] = useState(null);
@@ -79,8 +82,7 @@ const CreditListPage = () => {
     if (filter.Plazo) result = result.filter(c => String(c.Plazo).includes(filter.Plazo));
     if (filter.TNA) result = result.filter(c => String((c["TNA con IVA"] * 100).toFixed(2)).includes(filter.TNA));
     if (filter.Estado.length > 0) result = result.filter(c => filter.Estado.includes(c.Estado));
-    if (filter.Fecha.start) result = result.filter(c => c["Fecha Emisión"] >= filter.Fecha.start);
-    if (filter.Fecha.end) result = result.filter(c => c["Fecha Emisión"] <= filter.Fecha.end);
+    if (filter.Fecha && filter.Fecha.length > 0) result = result.filter(c => filter.Fecha.includes(c["Fecha Emisión"]));
 
     if (sortConfig.key) {
       result.sort((a, b) => {
@@ -160,9 +162,12 @@ const CreditListPage = () => {
                 </th>
                 <th onClick={() => handleSort('Fecha Emisión')} style={{ cursor: 'pointer' }}>
                   Fecha Emisión <SortIcon columnKey="Fecha Emisión" />
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '5px' }} onClick={e => e.stopPropagation()}>
-                    <input type="date" value={filter.Fecha.start} onChange={e => setFilter({ ...filter, Fecha: { ...filter.Fecha, start: e.target.value } })} style={{ width: '100%', padding: '4px', fontSize: '10px' }} title="Desde" />
-                    <input type="date" value={filter.Fecha.end} onChange={e => setFilter({ ...filter, Fecha: { ...filter.Fecha, end: e.target.value } })} style={{ width: '100%', padding: '4px', fontSize: '10px' }} title="Hasta" />
+                  <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
+                    <ExcelDateFilter 
+                      availableDates={AVAILABLE_FECHAS_EMISION}
+                      selectedDates={filter.Fecha}
+                      onChange={dates => setFilter({ ...filter, Fecha: dates })}
+                    />
                   </div>
                 </th>
                 <th>Acciones</th>
