@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
 import useAppStore from '../store/useAppStore';
+import ExportExcelButton from '../components/ExportExcelButton';
 
 const PortfolioOriginationPage = () => {
   const { editingCompra, setEditingCompra } = useAppStore();
@@ -645,6 +646,9 @@ const PortfolioOriginationPage = () => {
 
                 return (
                 <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
+                    <ExportExcelButton data={previewData.creditos} filteredData={filtered} filename="preview_creditos" />
+                  </div>
                   <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', overflowY: 'auto', flex: 1 }}>
                     <table className="data-table" style={{ width: '100%', fontSize: '13px' }}>
                       <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-panel)', boxShadow: '0 2px 4px rgba(0,0,0,0.2)' }}>
@@ -808,6 +812,9 @@ const PortfolioOriginationPage = () => {
 
                 return (
                 <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
+                    <ExportExcelButton data={previewData.cuotas} filteredData={filtered} filename="preview_cuotas" />
+                  </div>
                   <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', overflowY: 'auto', flex: 1 }}>
                     <table className="data-table" style={{ width: '100%', fontSize: '13px' }}>
                       <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-panel)', boxShadow: '0 2px 4px rgba(0,0,0,0.2)' }}>
@@ -990,6 +997,9 @@ const PortfolioOriginationPage = () => {
 
                 return (
                 <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
+                    <ExportExcelButton data={previewData.resumen} filteredData={filtered} filename="preview_vencimientos" />
+                  </div>
                   <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', overflowY: 'auto', flex: 1 }}>
                     <table className="data-table" style={{ width: '100%', fontSize: '13px' }}>
                       <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-panel)', boxShadow: '0 2px 4px rgba(0,0,0,0.2)' }}>

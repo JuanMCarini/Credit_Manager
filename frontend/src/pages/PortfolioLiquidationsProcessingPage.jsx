@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import axiosClient from '../api/axiosClient';
 import ExcelDateFilter from '../components/ExcelDateFilter';
+import ExportExcelButton from '../components/ExportExcelButton';
 
 const PortfolioLiquidationsProcessingPage = () => {
   const [formData, setFormData] = useState({
@@ -212,8 +213,14 @@ const PortfolioLiquidationsProcessingPage = () => {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', gap: '16px', flexWrap: 'wrap' }}>
             <h3 style={{ margin: 0, color: 'var(--text-primary)', flexShrink: 0 }}>Resultado de la Previsualización</h3>
             
-            <button 
-              className="btn-primary" 
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+              <ExportExcelButton 
+                data={previewData} 
+                filteredData={filteredData} 
+                filename="preview_liquidaciones_export" 
+              />
+              <button 
+                className="btn-primary" 
               style={{ 
                 background: 'linear-gradient(135deg, #10b981, #059669)', 
                 color: 'white', 
@@ -244,6 +251,7 @@ const PortfolioLiquidationsProcessingPage = () => {
             >
               {processing ? 'Procesando...' : '🚀 Confirmar y Ejecutar Transacciones'}
             </button>
+            </div>
           </div>
 
           <div style={{ maxHeight: '500px', overflowY: 'auto' }}>

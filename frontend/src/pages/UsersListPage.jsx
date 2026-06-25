@@ -4,6 +4,7 @@ import { Edit, KeyRound, FileText, Trash2 } from 'lucide-react';
 import UserFormModal from '../components/UserFormModal';
 import UserPasswordModal from '../components/UserPasswordModal';
 import UserAuditModal from '../components/UserAuditModal';
+import ExportExcelButton from '../components/ExportExcelButton';
 
 const UsersListPage = () => {
   const [users, setUsers] = useState([]);
@@ -86,9 +87,15 @@ const UsersListPage = () => {
           </svg>
           Gestión de Usuarios
         </h1>
-        <button className="btn btn-primary" onClick={handleAddClick}>
-          Nuevo Usuario
-        </button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <ExportExcelButton 
+            data={users.map(u => ({ ...u, rol: u.rol?.nombre }))} 
+            filename="usuarios_export" 
+          />
+          <button className="btn btn-primary" onClick={handleAddClick}>
+            Nuevo Usuario
+          </button>
+        </div>
       </div>
 
       <div className="content-card glass-panel mt-4">

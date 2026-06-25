@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axiosClient from '../api/axiosClient';
+import ExportExcelButton from '../components/ExportExcelButton';
 
 const ProcesosListPage = () => {
   const [procesos, setProcesos] = useState([]);
@@ -138,9 +139,16 @@ const ProcesosListPage = () => {
           <h2>Listado de Procesos de Ingesta</h2>
           <p>Vista de procesos de cobranza, tanto masivos como individuales.</p>
         </div>
-        <button className="btn-primary" onClick={fetchProcesos} disabled={loading} style={{ width: 'auto' }}>
-          {loading ? "Actualizando..." : "Actualizar Datos"}
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button className="btn-primary" onClick={fetchProcesos} disabled={loading} style={{ width: 'auto' }}>
+            {loading ? "Actualizando..." : "Actualizar Datos"}
+          </button>
+          <ExportExcelButton 
+            data={procesos} 
+            filteredData={filteredAndSortedProcesos} 
+            filename="liquidaciones_export" 
+          />
+        </div>
       </header>
 
       <div className="results-container glass-panel">

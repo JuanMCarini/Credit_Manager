@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import axiosClient from '../api/axiosClient';
 import { useDebounce } from '../hooks/useDebounce';
 import ExcelDateFilter from '../components/ExcelDateFilter';
+import ExportExcelButton from '../components/ExportExcelButton';
 
 const formatCurrency = (num) => {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(num);
@@ -233,6 +234,22 @@ const CollectionsListPage = () => {
         <div>
           <h2>Listado Global de Cobranzas y Procesos</h2>
           <p>Vista general de las últimas cobranzas, ajustes aplicados y procesos de ingesta.</p>
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {activeTab === 'cobranzas' && (
+            <ExportExcelButton 
+              data={cobranzas} 
+              filteredData={cobranzas} 
+              filename="cobranzas_export" 
+            />
+          )}
+          {activeTab === 'procesos' && (
+            <ExportExcelButton 
+              data={procesos} 
+              filteredData={filteredAndSortedProcesos} 
+              filename="procesos_ingesta_export" 
+            />
+          )}
         </div>
       </header>
 

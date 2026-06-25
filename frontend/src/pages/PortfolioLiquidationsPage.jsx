@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import axiosClient from '../api/axiosClient';
 import { Trash2, DollarSign } from 'lucide-react';
-
 import ExcelDateFilter from '../components/ExcelDateFilter';
+import ExportExcelButton from '../components/ExportExcelButton';
 
 const PortfolioLiquidationsPage = () => {
   const [activeTab, setActiveTab] = useState('liquidaciones');
@@ -166,6 +166,20 @@ const PortfolioLiquidationsPage = () => {
           <button className="btn-secondary" onClick={fetchLiquidacionesYProcesos} disabled={loading} style={{ height: 'fit-content', width: 'fit-content', paddingLeft: '24px', paddingRight: '24px' }}>
             {loading ? 'Actualizando...' : 'Actualizar Datos'}
           </button>
+          {activeTab === 'liquidaciones' && (
+            <ExportExcelButton 
+              data={liquidaciones} 
+              filteredData={filteredLiquidaciones} 
+              filename="liquidaciones_cartera_export" 
+            />
+          )}
+          {activeTab === 'procesos' && (
+            <ExportExcelButton 
+              data={procesos} 
+              filteredData={procesos} 
+              filename="procesos_liquidaciones_export" 
+            />
+          )}
         </div>
       </header>
 

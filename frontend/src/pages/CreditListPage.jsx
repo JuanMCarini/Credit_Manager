@@ -4,6 +4,7 @@ import axiosClient from '../api/axiosClient';
 import ClientCCModal from '../components/ClientCCModal';
 import CreditEditEstadoModal from '../components/CreditEditEstadoModal';
 import ExcelDateFilter from '../components/ExcelDateFilter';
+import ExportExcelButton from '../components/ExportExcelButton';
 import { Eye, Edit, Trash2 } from 'lucide-react';
 
 const formatCurrency = (num) => {
@@ -114,9 +115,16 @@ const CreditListPage = () => {
           <h2>Listado Global de Créditos</h2>
           <p>Vista general de todos los créditos de la base de datos.</p>
         </div>
-        <button className="btn-primary" onClick={fetchCreditos} disabled={loading} style={{ width: 'auto' }}>
-          {loading ? "Actualizando..." : "Actualizar Datos"}
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button className="btn-primary" onClick={fetchCreditos} disabled={loading} style={{ width: 'auto' }}>
+            {loading ? "Actualizando..." : "Actualizar Datos"}
+          </button>
+          <ExportExcelButton 
+            data={creditos} 
+            filteredData={filteredAndSortedCreditos} 
+            filename="creditos_export" 
+          />
+        </div>
       </header>
 
       <div className="results-container glass-panel">
