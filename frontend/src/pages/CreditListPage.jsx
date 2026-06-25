@@ -196,14 +196,14 @@ const CreditListPage = () => {
                     <td>{c["Fecha Emisión"]}</td>
                     <td>
                       <div style={{ display: 'flex', gap: '8px', flexWrap: 'nowrap', alignItems: 'center' }}>
-                        <button className="btn-secondary" onClick={() => setCcCuil(c["Cliente CUIL"])} style={{ padding: '4px 8px', fontSize: '11px' }} title="Ver Cuenta Corriente">
-                          <Eye size={16} />
+                        <button className="btn-secondary" onClick={() => setCcCuil(c["Cliente CUIL"])} style={{ padding: '4px 8px', fontSize: '14px' }} title="Ver Cuenta Corriente">
+                          👁️
                         </button>
-                        <button className="btn-secondary" onClick={() => setEditCredito({ id: c.ID, estado: c.Estado })} style={{ padding: '4px 8px', fontSize: '11px' }} title="Editar Estado">
-                          <Edit size={16} />
+                        <button className="btn-secondary" onClick={() => setEditCredito({ id: c.ID, estado: c.Estado })} style={{ padding: '4px 8px', fontSize: '14px' }} title="Editar Estado">
+                          ✏️
                         </button>
-                        <button className="btn-secondary" onClick={() => handleDelete(c.ID)} style={{ padding: '4px 8px', fontSize: '11px', color: 'var(--danger-color)' }} title="Eliminar">
-                          <Trash2 size={16} />
+                        <button className="btn-secondary" onClick={() => handleDelete(c.ID)} style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--danger-color)' }} title="Eliminar">
+                          🗑️
                         </button>
                       </div>
                     </td>

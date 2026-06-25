@@ -227,13 +227,13 @@ const ProcesosListPage = () => {
                     <td>{p["Fecha Ejecución"]}</td>
                     <td>
                       <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
-                        <button className="btn-secondary" onClick={() => navigate(`/cobranzas?proceso_id=${p.ID}`)} style={{ padding: '4px 8px', fontSize: '12px' }} title="Ver Cobranzas del Lote">
-                          👁️ Ver Cobranzas
+                        <button className="btn-secondary" onClick={() => navigate(`/cobranzas?proceso_id=${p.ID}`)} style={{ padding: '4px 8px', fontSize: '14px' }} title="Ver Cobranzas del Lote">
+                          👁️
                         </button>
-                        <button className="btn-secondary" onClick={() => handleEditOpen(p)} style={{ padding: '4px 8px', fontSize: '12px' }} title="Editar Proceso">
+                        <button className="btn-secondary" onClick={() => handleEditOpen(p)} style={{ padding: '4px 8px', fontSize: '14px' }} title="Editar Proceso">
                           ✏️
                         </button>
-                        <button className="btn-secondary" onClick={() => handleDelete(p.ID)} style={{ padding: '4px 8px', fontSize: '12px', color: 'var(--danger-color)' }} title="Eliminar Proceso">
+                        <button className="btn-secondary" onClick={() => handleDelete(p.ID)} style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--danger-color)' }} title="Eliminar Proceso">
                           🗑️
                         </button>
                       </div>
