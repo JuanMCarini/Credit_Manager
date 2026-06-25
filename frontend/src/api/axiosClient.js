@@ -9,11 +9,32 @@ const axiosClient = axios.create({
   },
 });
 
+// Request interceptor to attach the auth token
+axiosClient.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers['Authorization'] = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
 // Response interceptor for centralized error handling
 axiosClient.interceptors.response.use(
   (response) => response,
   (error) => {
     console.error("API Error:", error.response || error.message);
+    
+    // Redirect to login if token is expired or unauthorized
+    if (error.response && error.response.status === 401) {
+      alert("Su sesión ha expirado por inactividad. Por favor, vuelva a iniciar sesión.");
+      localStorage.removeItem('token');
+      localStorage.removeItem('userRole');
+      window.location.href = '/login';
+    }
+    
     const message = error.response?.data?.detail || error.message || "An unknown error occurred";
     const customError = new Error(message);
     customError.response = error.response;

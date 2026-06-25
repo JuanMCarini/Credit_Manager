@@ -98,58 +98,71 @@ def get_cliente(cuil: str, db: Session = Depends(get_db)):
 
 @router.get("/{cuil}/cuenta_corriente")
 def get_cliente_cuenta_corriente(cuil: str, db: Session = Depends(get_db)):
-    cliente = db.query(Cliente).options(
-        joinedload(Cliente.creditos).joinedload(Credito.cuotas).joinedload(Cuota.cobranzas)
-    ).filter(Cliente.cuil == cuil).first()
-    if not cliente:
-        raise HTTPException(status_code=404, detail="Cliente no encontrado")
-    
-    result = []
-    for c in cliente.creditos:
-        for cuota in c.cuotas:
-            total_esperado = round(cuota.capital + cuota.interes + cuota.iva, 2)
-            total_cobrado = 0.0
-            detalle_cobranzas = []
-            
-            sorted_cobranzas = sorted(cuota.cobranzas, key=lambda cob: cob.fecha)
-            for cob in sorted_cobranzas:
-                tot = round(cob.capital + cob.interes + cob.iva, 2)
-                total_cobrado += tot
-                detalle_cobranzas.append({
-                    "id": cob.id,
-                    "fecha": cob.fecha.strftime("%d/%m/%Y"),
-                    "tipo": cob.tipo_cobranza.value if hasattr(cob.tipo_cobranza, "value") else str(cob.tipo_cobranza),
-                    "capital": round(cob.capital, 2),
-                    "interes": round(cob.interes, 2),
-                    "iva": round(cob.iva, 2),
-                    "total": tot
+    import traceback
+    try:
+        cliente = db.query(Cliente).options(
+            joinedload(Cliente.creditos).joinedload(Credito.cuotas).joinedload(Cuota.cobranzas)
+        ).filter(Cliente.cuil == cuil).first()
+        if not cliente:
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
+        
+        result = []
+        from datetime import date
+        for c in cliente.creditos:
+            for cuota in c.cuotas:
+                cuota_capital = float(cuota.capital or 0.0)
+                cuota_interes = float(cuota.interes or 0.0)
+                cuota_iva = float(cuota.iva or 0.0)
+                total_esperado = round(cuota_capital + cuota_interes + cuota_iva, 2)
+                total_cobrado = 0.0
+                detalle_cobranzas = []
+                
+                sorted_cobranzas = sorted(cuota.cobranzas, key=lambda cob: cob.fecha if cob.fecha else date.min)
+                for cob in sorted_cobranzas:
+                    cob_capital = float(cob.capital or 0.0)
+                    cob_interes = float(cob.interes or 0.0)
+                    cob_iva = float(cob.iva or 0.0)
+                    tot = round(cob_capital + cob_interes + cob_iva, 2)
+                    total_cobrado += tot
+                    detalle_cobranzas.append({
+                        "id": cob.id,
+                        "fecha": cob.fecha.strftime("%d/%m/%Y") if cob.fecha else "-",
+                        "tipo": cob.tipo_cobranza.value if hasattr(cob.tipo_cobranza, "value") else str(cob.tipo_cobranza),
+                        "capital": round(cob_capital, 2),
+                        "interes": round(cob_interes, 2),
+                        "iva": round(cob_iva, 2),
+                        "total": tot
+                    })
+                    
+                total_cobrado = round(total_cobrado, 2)
+                saldo = round(total_esperado - total_cobrado, 2)
+                
+                result.append({
+                    "credito_id": c.id,
+                    "id_externo": c.id_externo or "-",
+                    "nro_cuota": cuota.nro_cuota,
+                    "vencimiento": cuota.fecha_vencimiento.strftime("%d/%m/%Y") if cuota.fecha_vencimiento else "-",
+                    "vencimiento_raw": cuota.fecha_vencimiento or date.min,
+                    "capital": round(cuota_capital, 2),
+                    "interes": round(cuota_interes, 2),
+                    "iva": round(cuota_iva, 2),
+                    "total_esperado": total_esperado,
+                    "total_cobrado": total_cobrado,
+                    "saldo_pendiente": saldo,
+                    "estado": cuota.estado.value if hasattr(cuota.estado, "value") else str(cuota.estado) if cuota.estado else "-",
+                    "detalle_cobranzas": detalle_cobranzas
                 })
                 
-            total_cobrado = round(total_cobrado, 2)
-            saldo = round(total_esperado - total_cobrado, 2)
-            
-            result.append({
-                "credito_id": c.id,
-                "id_externo": c.id_externo or "-",
-                "nro_cuota": cuota.nro_cuota,
-                "vencimiento": cuota.fecha_vencimiento.strftime("%d/%m/%Y"),
-                "vencimiento_raw": cuota.fecha_vencimiento,
-                "capital": round(cuota.capital, 2),
-                "interes": round(cuota.interes, 2),
-                "iva": round(cuota.iva, 2),
-                "total_esperado": total_esperado,
-                "total_cobrado": total_cobrado,
-                "saldo_pendiente": saldo,
-                "estado": cuota.estado.value,
-                "detalle_cobranzas": detalle_cobranzas
-            })
-            
-    result.sort(key=lambda x: (x["vencimiento_raw"], x["credito_id"], x["nro_cuota"]))
-    
-    for r in result:
-        del r["vencimiento_raw"]
+        result.sort(key=lambda x: (str(x["vencimiento_raw"]), x["credito_id"], x["nro_cuota"]))
         
-    return result
+        for r in result:
+            del r["vencimiento_raw"]
+            
+        from fastapi.encoders import jsonable_encoder
+        json_compatible_item_data = jsonable_encoder(result)
+        return json_compatible_item_data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error traceback: {traceback.format_exc()}")
 
 @router.put("/{cuil}")
 def update_cliente(
@@ -187,7 +200,11 @@ def delete_cliente(cuil: str, db: Session = Depends(get_db)):
     cliente = db.query(Cliente).filter(Cliente.cuil == cuil).first()
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
-    
+    # Chequear manualmente si tiene créditos para evitar errores de SQLAlchemy de Foreign Keys nulos
+    has_credits = db.query(Credito).filter(Credito.cliente_cuil == cuil).first()
+    if has_credits:
+        raise HTTPException(status_code=400, detail="No se puede borrar este cliente porque ya tiene préstamos o cuotas asociadas en el historial.")
+        
     try:
         db.delete(cliente)
         db.commit()

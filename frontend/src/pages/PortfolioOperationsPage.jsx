@@ -1,15 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import axiosClient from '../api/axiosClient';
 import { CheckCircle, Edit, Trash2, XCircle, Eye } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import useAppStore from '../store/useAppStore';
 import CarteraPreviewModal from '../components/CarteraPreviewModal';
+import ExcelDateFilter from '../components/ExcelDateFilter';
 
 const PortfolioOperationsPage = () => {
   const navigate = useNavigate();
   const { setEditingCompra } = useAppStore();
   const [carteras, setCarteras] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [filterFecha, setFilterFecha] = useState([]);
   
   // States for Edit Modal
   const [showEditModal, setShowEditModal] = useState(false);
@@ -27,6 +29,14 @@ const PortfolioOperationsPage = () => {
       setLoading(false);
     }
   };
+
+  const AVAILABLE_FECHAS = useMemo(() => [...new Set(carteras.map(c => c.fecha_compra).filter(Boolean))], [carteras]);
+
+  const filteredCarteras = useMemo(() => {
+    let result = [...carteras];
+    if (filterFecha && filterFecha.length > 0) result = result.filter(c => filterFecha.includes(c.fecha_compra));
+    return result;
+  }, [carteras, filterFecha]);
 
   useEffect(() => {
     fetchCarteras();
@@ -101,7 +111,14 @@ const PortfolioOperationsPage = () => {
               <th>Tipo Operación</th>
               <th>Estado</th>
               <th>Socio Comercial</th>
-              <th>Fecha</th>
+              <th>
+                Fecha <br/>
+                <ExcelDateFilter 
+                  availableDates={AVAILABLE_FECHAS}
+                  selectedDates={filterFecha}
+                  onChange={setFilterFecha}
+                />
+              </th>
               <th>TNA</th>
               <th>Recurso</th>
               <th>IVA</th>
@@ -109,10 +126,10 @@ const PortfolioOperationsPage = () => {
             </tr>
           </thead>
           <tbody>
-            {carteras.length === 0 ? (
+            {filteredCarteras.length === 0 ? (
               <tr><td colSpan="10" className="text-center empty-state">{loading ? "Cargando..." : "No hay operaciones de cartera."}</td></tr>
             ) : (
-              carteras.map(c => (
+              filteredCarteras.map(c => (
                 <tr key={c.id}>
                   <td>{c.id}</td>
                   <td>{c.nombre}</td>
