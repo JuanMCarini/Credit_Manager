@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axiosClient from '../api/axiosClient';
 import ClientEditModal from '../components/ClientEditModal';
 import ClientCCModal from '../components/ClientCCModal';
+import ExportExcelButton from '../components/ExportExcelButton';
 import { CreditCard, Eye, Edit, Trash2 } from 'lucide-react';
 
 const ClientListPage = () => {
@@ -104,9 +105,16 @@ const ClientListPage = () => {
           <h2>Listado de Clientes</h2>
           <p>Visualización de la cartera completa de clientes.</p>
         </div>
-        <button className="btn-primary" onClick={fetchClients} disabled={loading} style={{ width: 'auto' }}>
-          {loading ? "Actualizando..." : "Actualizar Datos"}
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button className="btn-primary" onClick={fetchClients} disabled={loading} style={{ width: 'auto' }}>
+            {loading ? "Actualizando..." : "Actualizar Datos"}
+          </button>
+          <ExportExcelButton 
+            data={clients} 
+            filteredData={filteredAndSortedClients} 
+            filename="clientes_export" 
+          />
+        </div>
       </header>
 
       <div className="results-container glass-panel">

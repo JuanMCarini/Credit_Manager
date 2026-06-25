@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
 import ExcelDateFilter from './ExcelDateFilter';
+import ExportExcelButton from './ExportExcelButton';
 
 const formatCurrency = (num) => {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(num);
@@ -93,16 +94,43 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
     });
   };
 
-  const filteredAndSortedData = React.useMemo(() => {
+  const processedData = React.useMemo(() => {
     let result = [...data].map(c => {
       if (c.estado === 'NO COMPRADA') {
-        return {
-          ...c,
-          saldo_pendiente: 0
-        };
+        return { ...c, saldo_pendiente: 0 };
       }
       return c;
     });
+
+    if (anticipadaMode) {
+      result = result.map(c => {
+        if (c.estado === 'PENDIENTE') {
+          let isAfterCorte = true;
+          if (c.vencimiento && fechaCorte) {
+            const parts = c.vencimiento.split('/');
+            if (parts.length === 3) {
+              const rowDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
+              isAfterCorte = rowDate > fechaCorte;
+            }
+          }
+          if (isAfterCorte) {
+            return {
+              ...c,
+              interes: 0,
+              iva: 0,
+              total_esperado: c.capital,
+              saldo_pendiente: c.capital - (c.total_cobrado || 0)
+            };
+          }
+        }
+        return c;
+      });
+    }
+    return result;
+  }, [data, anticipadaMode, fechaCorte]);
+
+  const filteredAndSortedData = React.useMemo(() => {
+    let result = [...processedData];
 
     if (filter.Credito) result = result.filter(c => c.credito_id === parseInt(filter.Credito, 10));
     if (filter.Cuota) result = result.filter(c => c.nro_cuota === parseInt(filter.Cuota, 10));
@@ -123,45 +151,79 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
       });
     }
 
-    // Apply anticipada logic if enabled
-    if (anticipadaMode) {
-      result = result.map(c => {
-        if (c.estado === 'PENDIENTE') {
-          let isAfterCorte = true;
-          if (c.vencimiento && fechaCorte) {
-            const parts = c.vencimiento.split('/');
-            if (parts.length === 3) {
-              const rowDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
-              isAfterCorte = rowDate > fechaCorte;
-            }
-          }
-          if (isAfterCorte) {
-            return {
-              ...c,
-              interes: 0,
-              iva: 0,
-              total_esperado: c.capital,
-              saldo_pendiente: c.capital - c.total_cobrado
-            };
-          }
-        }
-        return c;
-      });
-    }
-
     return result;
-  }, [data, filter, sortConfig, anticipadaMode, fechaCorte]);
+  }, [processedData, filter, sortConfig]);
 
   const totals = React.useMemo(() => {
-    return filteredAndSortedData.reduce((acc, curr) => ({
-      capital: acc.capital + (curr.capital || 0),
-      interes: acc.interes + (curr.interes || 0),
-      iva: acc.iva + (curr.iva || 0),
-      total_esperado: acc.total_esperado + (curr.total_esperado || 0),
-      total_cobrado: acc.total_cobrado + (curr.total_cobrado || 0),
-      saldo_pendiente: acc.saldo_pendiente + (curr.saldo_pendiente || 0)
-    }), { capital: 0, interes: 0, iva: 0, total_esperado: 0, total_cobrado: 0, saldo_pendiente: 0 });
+    return filteredAndSortedData.reduce((acc, curr) => {
+      let netCapital = curr.capital || 0;
+      let netInteres = curr.interes || 0;
+      let netIva = curr.iva || 0;
+      let netTotal = curr.total_esperado || 0;
+
+      if (curr.detalle_cobranzas && curr.detalle_cobranzas.length > 0) {
+        curr.detalle_cobranzas.forEach(cob => {
+          netCapital -= (cob.capital || 0);
+          netInteres -= (cob.interes || 0);
+          netIva -= (cob.iva || 0);
+          netTotal -= (cob.total || 0);
+        });
+      }
+
+      return {
+        capital: acc.capital + netCapital,
+        interes: acc.interes + netInteres,
+        iva: acc.iva + netIva,
+        total_esperado: acc.total_esperado + netTotal,
+        total_cobrado: acc.total_cobrado + (curr.total_cobrado || 0),
+        saldo_pendiente: acc.saldo_pendiente + (curr.saldo_pendiente || 0)
+      };
+    }, { capital: 0, interes: 0, iva: 0, total_esperado: 0, total_cobrado: 0, saldo_pendiente: 0 });
   }, [filteredAndSortedData]);
+
+  const prepareExportData = React.useCallback((list) => {
+    const flat = [];
+    list.forEach(c => {
+      flat.push({
+        'ID Crédito': c.credito_id,
+        'ID Externo': c.id_externo || '-',
+        'Nro Cuota': c.nro_cuota,
+        'Tipo Registro': 'CUOTA',
+        'Estado': c.estado,
+        'Vencimiento': c.vencimiento,
+        'Fecha Cobranza': '-',
+        'Capital': c.capital,
+        'Interés': c.interes,
+        'IVA': c.iva,
+        'Total': c.total_esperado,
+        'Total Cobrado': c.total_cobrado ? -c.total_cobrado : 0,
+        'Saldo Pendiente': c.estado === 'CANCELADA' || c.estado === 'NO COMPRADA' ? 0 : c.saldo_pendiente
+      });
+      if (c.detalle_cobranzas && c.detalle_cobranzas.length > 0) {
+        c.detalle_cobranzas.forEach(cob => {
+          flat.push({
+            'ID Crédito': c.credito_id,
+            'ID Externo': c.id_externo || '-',
+            'Nro Cuota': c.nro_cuota,
+            'Tipo Registro': 'COBRANZA',
+            'Estado': cob.tipo,
+            'Vencimiento': c.vencimiento,
+            'Fecha Cobranza': cob.fecha,
+            'Capital': cob.capital ? -cob.capital : 0,
+            'Interés': cob.interes ? -cob.interes : 0,
+            'IVA': cob.iva ? -cob.iva : 0,
+            'Total': cob.total ? -cob.total : 0,
+            'Total Cobrado': 0,
+            'Saldo Pendiente': 0
+          });
+        });
+      }
+    });
+    return flat;
+  }, []);
+
+  const exportAllData = React.useMemo(() => prepareExportData(processedData), [processedData, prepareExportData]);
+  const exportFilteredData = React.useMemo(() => prepareExportData(filteredAndSortedData), [filteredAndSortedData, prepareExportData]);
 
   const SortIcon = ({ columnKey }) => {
     if (sortConfig.key !== columnKey) return <span style={{ opacity: 0.3, marginLeft: '5px' }}>↕</span>;
@@ -189,6 +251,7 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
             Cuenta Corriente Unificada: {clientName ? `${clientName} (CUIL: ${cuil})` : cuil}
           </h2>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px', background: 'rgba(255,255,255,0.05)', padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+            <ExportExcelButton data={exportAllData} filteredData={exportFilteredData} filename={`CC_${cuil}`} />
             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
               <div className="toggle-switch">
                 <input type="checkbox" checked={anticipadaMode} onChange={(e) => setAnticipadaMode(e.target.checked)} />
@@ -241,7 +304,7 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
                   <th onClick={() => handleSort('capital')} style={{ cursor: 'pointer' }}>Capital <SortIcon columnKey="capital" /></th>
                   <th onClick={() => handleSort('interes')} style={{ cursor: 'pointer' }}>Interés <SortIcon columnKey="interes" /></th>
                   <th onClick={() => handleSort('iva')} style={{ cursor: 'pointer' }}>IVA <SortIcon columnKey="iva" /></th>
-                  <th onClick={() => handleSort('total_esperado')} style={{ cursor: 'pointer' }}>Total Esp. <SortIcon columnKey="total_esperado" /></th>
+                  <th onClick={() => handleSort('total_esperado')} style={{ cursor: 'pointer' }}>Total <SortIcon columnKey="total_esperado" /></th>
                   <th onClick={() => handleSort('total_cobrado')} style={{ cursor: 'pointer' }}>Total Cob. <SortIcon columnKey="total_cobrado" /></th>
                   <th onClick={() => handleSort('saldo_pendiente')} style={{ cursor: 'pointer' }}>Saldo Pend. <SortIcon columnKey="saldo_pendiente" /></th>
                   <th onClick={() => handleSort('estado')} style={{ cursor: 'pointer', position: 'relative' }}>
@@ -285,7 +348,7 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
                           <td>{formatCurrency(c.interes)}</td>
                           <td>{formatCurrency(c.iva)}</td>
                           <td style={{ fontWeight: 600 }}>{formatCurrency(c.total_esperado)}</td>
-                          <td style={{ color: 'var(--accent-secondary)', fontWeight: 600 }}>{formatCurrency(c.total_cobrado)}</td>
+                          <td style={{ color: 'var(--accent-secondary)', fontWeight: 600 }}>{formatCurrency(c.total_cobrado ? -c.total_cobrado : 0)}</td>
                           <td style={{
                             color: c.estado === 'MOROSA' ? 'var(--error)' : c.estado === 'PENDIENTE' ? 'var(--accent-secondary)' : 'inherit',
                             fontWeight: 500
@@ -326,12 +389,13 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
                             <td colSpan="3" style={{ textAlign: 'right', borderLeft: '2px solid var(--accent-secondary)' }}>
                               ↳ Cobranza ({cob.tipo}) el {cob.fecha}
                             </td>
-                            <td>{formatCurrency(cob.capital)}</td>
-                            <td>{formatCurrency(cob.interes)}</td>
-                            <td>{formatCurrency(cob.iva)}</td>
-                            <td>-</td>
-                            <td style={{ color: 'var(--accent-secondary)' }}>{formatCurrency(cob.total)}</td>
-                            <td colSpan="2"></td>
+                            <td>{formatCurrency(cob.capital ? -cob.capital : 0)}</td>
+                            <td>{formatCurrency(cob.interes ? -cob.interes : 0)}</td>
+                            <td>{formatCurrency(cob.iva ? -cob.iva : 0)}</td>
+                            <td style={{ color: 'var(--accent-secondary)', fontWeight: 600 }}>{formatCurrency(cob.total ? -cob.total : 0)}</td>
+                            <td>{formatCurrency(0)}</td>
+                            <td>{formatCurrency(0)}</td>
+                            <td colSpan="1"></td>
                             <td style={{ textAlign: 'center' }}>
                               <button
                                 onClick={() => handleDeleteCobranza(cob.id)}
@@ -363,7 +427,7 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
                   <td>{formatCurrency(totals.interes)}</td>
                   <td>{formatCurrency(totals.iva)}</td>
                   <td>{formatCurrency(totals.total_esperado)}</td>
-                  <td style={{ color: 'var(--accent-secondary)' }}>{formatCurrency(totals.total_cobrado)}</td>
+                  <td style={{ color: 'var(--accent-secondary)' }}>{formatCurrency(totals.total_cobrado ? -totals.total_cobrado : 0)}</td>
                   <td style={{ color: totals.saldo_pendiente > 0 ? 'var(--error)' : 'inherit' }}>{formatCurrency(totals.saldo_pendiente)}</td>
                   <td colSpan="2"></td>
                 </tr>

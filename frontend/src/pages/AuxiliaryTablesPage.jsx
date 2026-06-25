@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import useAppStore from '../store/useAppStore';
 import axiosClient from '../api/axiosClient';
+import ExportExcelButton from '../components/ExportExcelButton';
 
 const AuxiliaryTablesPage = () => {
   const { provincias, empleadores, socios, tasasYComisiones, relaciones, fetchAuxiliares } = useAppStore();
@@ -206,13 +207,16 @@ const AuxiliaryTablesPage = () => {
         <div className="glass-panel" style={{ overflowX: 'auto', maxHeight: 'calc(100vh - 280px)', overflowY: 'auto' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
             <h3 style={{ margin: 0, fontFamily: 'var(--font-heading)' }}>Registros de {currentTableConfig.name}</h3>
-            <button 
-              className="btn-primary" 
-              onClick={() => openEditModal(null)}
-              style={{ padding: '8px 16px', fontSize: '14px' }}
-            >
-              + Agregar Registro
-            </button>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <ExportExcelButton data={tableData} filename={`auxiliares_${currentTableConfig.endpoint}_export`} />
+              <button 
+                className="btn-primary" 
+                onClick={() => openEditModal(null)}
+                style={{ padding: '8px 16px', fontSize: '14px' }}
+              >
+                + Agregar Registro
+              </button>
+            </div>
           </div>
           
           <table className="data-table">

@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import useAppStore from '../store/useAppStore';
 import CarteraPreviewModal from '../components/CarteraPreviewModal';
 import ExcelDateFilter from '../components/ExcelDateFilter';
+import ExportExcelButton from '../components/ExportExcelButton';
 
 const PortfolioOperationsPage = () => {
   const navigate = useNavigate();
@@ -97,6 +98,11 @@ const PortfolioOperationsPage = () => {
           <button className="btn-secondary" onClick={fetchCarteras} disabled={loading} style={{ height: 'fit-content', width: 'fit-content', paddingLeft: '24px', paddingRight: '24px' }}>
             {loading ? 'Actualizando...' : 'Actualizar Datos'}
           </button>
+          <ExportExcelButton 
+            data={carteras} 
+            filteredData={filteredCarteras} 
+            filename="operaciones_cartera_export" 
+          />
         </div>
       </header>
       

@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import axiosClient, { downloadFile } from '../api/axiosClient';
+import ExportExcelButton from '../components/ExportExcelButton';
 
 const formatCurrency = (num) => {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(num);
@@ -196,6 +197,7 @@ const BalancesPage = () => {
         <div className="table-container glass-panel fade-in" style={{ padding: '24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
             <h3 style={{ margin: 0, fontFamily: 'var(--font-heading)' }}>Resultados del Reporte</h3>
+            <ExportExcelButton data={results} filteredData={results} filename="balances_export" />
           </div>
           <div className="table-responsive" style={{ maxHeight: '500px', overflowY: 'auto' }}>
             <table className="data-table">

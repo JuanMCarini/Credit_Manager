@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import axiosClient from '../api/axiosClient';
+import ExportExcelButton from '../components/ExportExcelButton';
 
 const formatCurrency = (num) => {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(num);
@@ -108,9 +109,12 @@ const SimulationPage = () => {
           <div className="results-header">
             <h3>Cronograma Resultante</h3>
             {cuotas.length > 0 && (
-              <div className="summary-pills" style={{ display: 'flex' }}>
-                <div className="pill">Cuotas: {cuotas.length}</div>
-                <div className="pill">Total a Pagar: {formatCurrency(totals.total)}</div>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                <ExportExcelButton data={cuotas} filteredData={cuotas} filename="simulacion_export" />
+                <div className="summary-pills" style={{ display: 'flex' }}>
+                  <div className="pill">Cuotas: {cuotas.length}</div>
+                  <div className="pill">Total a Pagar: {formatCurrency(totals.total)}</div>
+                </div>
               </div>
             )}
           </div>
