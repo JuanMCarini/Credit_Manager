@@ -21,13 +21,17 @@ from src.database.models import (
     Cartera,
     Cobranza,
     Cuota,
+    EstadoCartera,
     EstadoCuotaCedida,
     LiquidacionCuotaCedida,
     OperacionCartera,
     SocioComercial,
     TipoLiquidacionEnum,
     TipoOperacionCartera,
-    TipoCobranzaEnum
+    TipoCobranzaEnum,
+    Proceso,
+    TipoProcesoEnum,
+    EstadoProcesoEnum
 )
 from src.utils.dates import normalize_date
 
@@ -65,11 +69,12 @@ class SettlementManager:
         fecha: Union[str, date, datetime, None] = None,
         fecha_vencimiento_desde: Union[str, date, datetime, None] = None,
         fecha_vencimiento_hasta: Union[str, date, datetime, None] = None,
+        con_recurso: Optional[bool] = None,
     ) -> pd.DataFrame:
 
         if type(id_val) is not list:
             id_val = [id_val]
-        fecha = normalize_date(fecha, str)
+        fecha = normalize_date(fecha, date)
         self.fecha_corte = fecha
         
         op_cartera_sub = aliased(OperacionCartera)
@@ -103,11 +108,15 @@ class SettlementManager:
         if fecha_vencimiento_hasta:
             fecha_vencimiento_hasta = normalize_date(fecha_vencimiento_hasta)
             query = query.filter(Cuota.fecha_vencimiento <= fecha_vencimiento_hasta)
+            
+        if con_recurso is not None:
+            query = query.filter(Cartera.recurso == con_recurso)
 
         match identificador:
-            case "CLIENTE_ID":
-                query = query.filter(Cartera.socio_id.in_(id_val))
-            case "CLIENTE_CUIT":
+            case "CLIENTE_ID" | "Socio ID":
+                id_val_int = [int(i) for i in id_val if str(i).isdigit()]
+                query = query.filter(Cartera.socio_id.in_(id_val_int))
+            case "CLIENTE_CUIT" | "Socio CUIT":
                 query = (query
                 .join(SocioComercial, Cartera.socio_id == SocioComercial.id)
                 .filter(SocioComercial.cuit.in_(id_val)))
@@ -151,6 +160,7 @@ class SettlementManager:
         fecha: Union[str, date, datetime, None] = None,
         fecha_vencimiento_desde: Union[str, date, datetime, None] = None,
         fecha_vencimiento_hasta: Union[str, date, datetime, None] = None,
+        con_recurso: Optional[bool] = None,
     ) -> tuple[pd.DataFrame, pd.DataFrame]:
 
         df_ctas = self.obtain_uncancelled_installments(
@@ -159,6 +169,7 @@ class SettlementManager:
             fecha,
             fecha_vencimiento_desde,
             fecha_vencimiento_hasta,
+            con_recurso,
         )
 
         query = self.db.query(LiquidacionCuotaCedida).filter(
@@ -193,9 +204,10 @@ class SettlementManager:
         df = df.loc[df[["capital", "interes", "iva"]].sum(axis=1) != 0].copy()
         df.rename(columns={"id": "cuota_id"}, inplace=True)
         df["tipo_liquidacion"] = TipoLiquidacionEnum.RECURSO
+        df["fecha_vencimiento"] = pd.to_datetime(df["fecha_vencimiento"]).dt.date
         df["cobranza_id"] = None
         df = df[
-            ["cuota_id", "cartera_id", "tipo_liquidacion", "capital", "interes", "iva", "cobranza_id"]
+            ["cuota_id", "credito_id", "cartera_id", "tipo_liquidacion", "nro_cuota", "fecha_vencimiento", "capital", "interes", "iva", "cobranza_id"]
         ]
 
         self.settlements = df
@@ -220,7 +232,7 @@ class SettlementManager:
 
         df_cobr = pd.read_sql(query.statement, self.db.get_bind(), index_col="id")
         df_cobr = df_cobr.sort_values(by="cuota_id")
-        df_cobr = df_cobr.merge(df_s_rec[["fecha_vencimiento", "cartera_iva", "cartera_id"]], left_on="cuota_id", right_index=True)
+        df_cobr = df_cobr.merge(df_s_rec[["fecha_vencimiento", "nro_cuota", "credito_id", "cartera_iva", "cartera_id"]], left_on="cuota_id", right_index=True)
         df_cobr["fecha_vencimiento"] = pd.to_datetime(df_cobr["fecha_vencimiento"])
         df_cobr.loc[~df_cobr["cartera_iva"], "iva"] = 0.0
         df_cobr["total"] = df_cobr[["capital", "interes", "iva"]].sum(axis=1)
@@ -238,18 +250,42 @@ class SettlementManager:
 
         df_cobr = df_cobr[self.settlements.columns.drop("cobranza_id")].reset_index()
         df_cobr.rename(columns={"id": "cobranza_id"}, inplace=True)
+        df_cobr["fecha_vencimiento"] = pd.to_datetime(df_cobr["fecha_vencimiento"]).dt.date
         df_cobr = df_cobr[self.settlements.columns]
 
         self.settlements = pd.concat([self.settlements, df_cobr], ignore_index=True)
 
         return df_cobr
 
-    def execute_settlements(self, fecha_pago: Union[str, date, datetime, None], cancelada: bool=False):
+    def execute_settlements(self, fecha_pago: Union[str, date, datetime, None], cancelada: bool=False, proceso_id: int | None = None):
+
+        if self.settlements is not None and not self.settlements.empty:
+            carteras_afectadas = self.settlements["cartera_id"].dropna().unique().tolist()
+            if carteras_afectadas:
+                carteras_pendientes = self.db.query(Cartera).filter(
+                    Cartera.id.in_(carteras_afectadas),
+                    Cartera.estado == EstadoCartera.PENDIENTE
+                ).all()
+
+                if carteras_pendientes:
+                    nombres = ", ".join([c.nombre for c in carteras_pendientes])
+                    raise ValueError(f"No se puede registrar una liquidación sobre ventas de cartera en estado PENDIENTE ({nombres}). Confirme la venta antes.")
 
         if cancelada:
             fecha_pago = normalize_date(fecha_pago, date)
         else:
             fecha_pago = None
+
+        if not proceso_id:
+            proceso_estado = EstadoProcesoEnum.COMPLETADO.value if cancelada else EstadoProcesoEnum.PENDIENTE.value
+            proceso = Proceso(
+                tipo=TipoProcesoEnum.LIQUIDACIONES_MASIVAS.value,
+                estado=proceso_estado,
+                descripcion="Liquidación Masiva"
+            )
+            self.db.add(proceso)
+            self.db.flush()
+            proceso_id = proceso.id
 
         new_settlements = []
         for row in self.settlements.itertuples():
@@ -266,7 +302,8 @@ class SettlementManager:
                 iva=row.iva,
                 fecha_pago=fecha_pago,
                 cancelada=cancelada,
-                cobranza_id=cobranza_id
+                cobranza_id=cobranza_id,
+                proceso_id=proceso_id
             )
             new_settlements.append(new_sett)
         self.db.add_all(new_settlements)
@@ -283,21 +320,36 @@ class SettlementManager:
             self.db.rollback()
             raise RuntimeError(f"Error persisting the settlements transaction: {e}")
 
-    def canceled_settlements(self, fecha_pago: Union[str, date, datetime, None]=None, amount: float=0):
+    def canceled_settlements(
+        self, 
+        fecha_pago: Union[str, date, datetime, None]=None, 
+        amount: float=0, 
+        proceso_id: Optional[int]=None,
+        tipos_liquidacion: Optional[list] = None
+    ):
 
         fecha_pago = normalize_date(fecha_pago, date)
         query = (
             self.db.query(LiquidacionCuotaCedida)
             .filter(LiquidacionCuotaCedida.cancelada == False)
         )
+        if proceso_id is not None:
+            query = query.filter(LiquidacionCuotaCedida.proceso_id == proceso_id)
+            
+        if tipos_liquidacion is not None:
+            query = query.filter(LiquidacionCuotaCedida.tipo_liquidacion.in_(tipos_liquidacion))
 
         df = pd.read_sql(query.statement, self.db.get_bind(), index_col="id")
+        if df.empty:
+            return df, amount, 0
+
         for col in ["capital", "interes", "iva"]:
             df[col] = df[col].astype(float)
 
-        print(df.head(2))
         cancel_all = (amount == 0)
         cuotas_afectadas = set()
+        cantidad_canceladas = 0
+        
         for i, row in df.iterrows():
             total_row = row["capital"] + row["interes"] + row["iva"]
             if cancel_all or (amount >= total_row):
@@ -308,8 +360,12 @@ class SettlementManager:
                     liq.fecha_pago = fecha_pago
                     liq.cancelada = True
                     cuotas_afectadas.add(liq.cuota_id)
-            df.loc[i, "cancelada"] = True
-            df.loc[i, "fecha_pago"] = fecha_pago
+                    cantidad_canceladas += 1
+                df.loc[i, "cancelada"] = True
+                df.loc[i, "fecha_pago"] = fecha_pago
+            else:
+                df.loc[i, "cancelada"] = False
+                df.loc[i, "fecha_pago"] = None
 
         if cuotas_afectadas:
             cuotas_db = self.db.query(Cuota).filter(Cuota.id.in_(list(cuotas_afectadas))).all()
@@ -323,7 +379,8 @@ class SettlementManager:
             self.db.rollback()
             raise RuntimeError(f"Error persisting the settlements transaction: {e}")
 
-        return df
+        sobrante = amount if not cancel_all else 0.0
+        return df, sobrante, cantidad_canceladas
 
     def __del__(self):
         """

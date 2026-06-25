@@ -8,6 +8,10 @@ Date: 2026-05-08
 # Import connection utilities
 from .connection import Base, SessionLocal, engine, get_db
 
+# Import seed functions
+from .seed_admin import seed_admin
+from .seed_geography import seed_provincias
+
 # Import all ORM models to ensure they are registered with SQLAlchemy's Base metadata
 from .models import (
     Cartera,
@@ -31,7 +35,7 @@ from .models import (
     TasaYComision,
     EstadoComisionEnum,
     TipoCredito,
-    Relacion
+    Relacion,
 )
 
 # Import events to register SQLAlchemy event listeners
@@ -64,5 +68,7 @@ __all__ = [
     "TasaYComision",
     "EstadoComisionEnum",
     "TipoCredito",
-    "Relacion"
+    "Relacion",
+    "seed_admin",
+    "seed_provincias",
 ]

@@ -358,6 +358,7 @@ class CollectionManager:
                 "Total",
             ]
         ]
+        df_cobr.attrs["proceso_id"] = proceso_id
         return df_cobr
 
     def _process_sobrante_as_penalty(
@@ -814,4 +815,5 @@ class CollectionManager:
             raise e
 
         df_cobr = pd.concat(lista_cobranzas) if lista_cobranzas else pd.DataFrame()
+        df_cobr.attrs["proceso_id"] = p_id
         return df_cobr

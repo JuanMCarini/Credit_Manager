@@ -2,6 +2,7 @@
     /* Color Palette - Premium Dark Mode */
     --bg-base: #0B0E14;
     --bg-panel: rgba(22, 27, 34, 0.65);
+    --surface-color: #161B22;
     --bg-panel-hover: rgba(30, 37, 46, 0.8);
     --border-color: rgba(255, 255, 255, 0.08);
     --border-highlight: rgba(255, 255, 255, 0.15);
@@ -159,6 +160,41 @@ h1, h2, h3, h4 {
 }
 
 /* Tabs */
+.tabs-container {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 24px;
+    background: rgba(15, 23, 42, 0.4);
+    padding: 6px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    width: fit-content;
+}
+
+.tab-button {
+    background: transparent;
+    border: none;
+    padding: 10px 24px;
+    border-radius: 8px;
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.tab-button:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.tab-button.active {
+    background: rgba(59, 130, 246, 0.15);
+    color: var(--accent-primary);
+    box-shadow: 0 0 15px rgba(59, 130, 246, 0.1);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
 .tab-content {
     animation: fadeIn 0.4s ease forwards;
 }
@@ -316,6 +352,10 @@ input:focus, select:focus {
     border-bottom: 1px solid var(--border-color);
 }
 
+.data-table th input, .data-table th select {
+    background-color: var(--surface-color) !important;
+}
+
 .data-table th:first-child, .data-table td:first-child {
     text-align: left;
 }
@@ -467,4 +507,32 @@ input:focus, select:focus {
 }
 .toggle-switch input:checked + .slider:before {
   transform: translateX(16px);
+}
+
+/* Login Page Animations */
+@keyframes blob {
+  0% { transform: translate(0px, 0px) scale(1); }
+  33% { transform: translate(30px, -50px) scale(1.1); }
+  66% { transform: translate(-20px, 20px) scale(0.9); }
+  100% { transform: translate(0px, 0px) scale(1); }
+}
+
+.animate-blob {
+  animation: blob 7s infinite;
+}
+
+.animation-delay-2000 {
+  animation-delay: 2s;
+}
+
+.animation-delay-4000 {
+  animation-delay: 4s;
+}
+
+@keyframes shimmer {
+  100% { transform: translateX(100%); }
+}
+
+.animate-shimmer {
+  animation: shimmer 1.5s infinite;
 }
