@@ -10,6 +10,7 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [processingCobranza, setProcessingCobranza] = useState(false);
 
   const [filter, setFilter] = useState({ Credito: String(initialFilterCredito), Cuota: '', Vto: [], Estado: [] });
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
@@ -17,22 +18,66 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
   const [anticipadaMode, setAnticipadaMode] = useState(false);
   const [fechaCorte, setFechaCorte] = useState(new Date().toISOString().split('T')[0]);
 
-  const ESTADOS_DISPONIBLES = ['PENDIENTE', 'CANCELADA', 'MOROSA'];
+  const ESTADOS_DISPONIBLES = ['PENDIENTE', 'CANCELADA', 'MOROSA', 'NO COMPRADA'];
   const AVAILABLE_FECHAS_VTO = React.useMemo(() => [...new Set(data.map(c => c.vencimiento).filter(Boolean))], [data]);
 
-  useEffect(() => {
-    const fetchCC = async () => {
-      try {
-        const res = await axiosClient.get(`/api/v1/clientes/${cuil}/cuenta_corriente`);
-        setData(res.data);
-      } catch (err) {
-        setError(err.response?.data?.detail || err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchCC();
+  const fetchCC = React.useCallback(async () => {
+    try {
+      const res = await axiosClient.get(`/api/v1/clientes/${cuil}/cuenta_corriente`);
+      setData(res.data);
+    } catch (err) {
+      setError(err.response?.data?.detail || err.message);
+    } finally {
+      setLoading(false);
+    }
   }, [cuil]);
+
+  useEffect(() => {
+    fetchCC();
+  }, [fetchCC]);
+
+  const handleCobrar = async (cuota) => {
+    if (!window.confirm(`¿Desea aplicar una cobranza ${anticipadaMode ? 'anticipada ' : ''}por ${formatCurrency(cuota.saldo_pendiente)} al crédito #${cuota.credito_id}?`)) {
+      return;
+    }
+
+    setProcessingCobranza(true);
+    try {
+      const payload = {
+        identificador: "CREDITO_ID",
+        id_val: String(cuota.credito_id),
+        monto: cuota.saldo_pendiente,
+        fecha_pago: anticipadaMode ? fechaCorte : new Date().toISOString().split('T')[0],
+        fecha_corte: anticipadaMode ? fechaCorte : null,
+        anticipada: anticipadaMode
+      };
+      
+      await axiosClient.post('/api/v1/cobranzas/individual', payload);
+      alert('Cobranza aplicada exitosamente');
+      fetchCC();
+    } catch (err) {
+      alert(`Error al aplicar cobranza: ${err.response?.data?.detail || err.message}`);
+    } finally {
+      setProcessingCobranza(false);
+    }
+  };
+
+  const handleDeleteCobranza = async (cobranzaId) => {
+    if (!window.confirm('¿Está seguro de que desea eliminar esta cobranza? Esta acción revertirá el pago y actualizará los saldos correspondientes.')) {
+      return;
+    }
+
+    setProcessingCobranza(true);
+    try {
+      await axiosClient.delete(`/api/v1/cobranzas/${cobranzaId}`);
+      alert('Cobranza eliminada exitosamente');
+      fetchCC();
+    } catch (err) {
+      alert(`Error al eliminar cobranza: ${err.response?.data?.detail || err.message}`);
+    } finally {
+      setProcessingCobranza(false);
+    }
+  };
 
   const handleSort = (key) => {
     let direction = 'asc';
@@ -49,7 +94,15 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
   };
 
   const filteredAndSortedData = React.useMemo(() => {
-    let result = [...data];
+    let result = [...data].map(c => {
+      if (c.estado === 'NO COMPRADA') {
+        return {
+          ...c,
+          saldo_pendiente: 0
+        };
+      }
+      return c;
+    });
 
     if (filter.Credito) result = result.filter(c => c.credito_id === parseInt(filter.Credito, 10));
     if (filter.Cuota) result = result.filter(c => c.nro_cuota === parseInt(filter.Cuota, 10));
@@ -207,12 +260,13 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
                       </div>
                     )}
                   </th>
+                  <th>Acciones</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredAndSortedData.length === 0 ? (
                   <tr>
-                    <td colSpan="10" style={{ textAlign: 'center', padding: '40px' }}>
+                    <td colSpan="11" style={{ textAlign: 'center', padding: '40px' }}>
                       No hay cuotas registradas para este cliente con los filtros actuales.
                     </td>
                   </tr>
@@ -236,16 +290,36 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
                             color: c.estado === 'MOROSA' ? 'var(--error)' : c.estado === 'PENDIENTE' ? 'var(--accent-secondary)' : 'inherit',
                             fontWeight: 500
                           }}>
-                            {c.estado === 'CANCELADA' ? '-' : formatCurrency(c.saldo_pendiente)}
+                            {c.estado === 'CANCELADA' || c.estado === 'NO COMPRADA' ? '-' : formatCurrency(c.saldo_pendiente)}
                           </td>
                           <td>
                             <span style={{
                               padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600,
-                              background: c.estado === 'CANCELADA' ? 'var(--accent-secondary)' : c.estado === 'MOROSA' ? 'var(--error)' : 'rgba(255,255,255,0.1)',
+                              background: c.estado === 'CANCELADA' ? 'var(--accent-secondary)' : c.estado === 'MOROSA' ? 'var(--error)' : c.estado === 'NO COMPRADA' ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.1)',
                               color: '#fff'
                             }}>
                               {c.estado}
                             </span>
+                          </td>
+                          <td>
+                            {(c.estado !== 'CANCELADA' && c.estado !== 'NO COMPRADA') && (
+                              <button 
+                                onClick={() => handleCobrar(c)} 
+                                disabled={processingCobranza}
+                                style={{
+                                  padding: '4px 8px',
+                                  fontSize: '11px',
+                                  background: 'var(--accent)',
+                                  color: '#fff',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  cursor: processingCobranza ? 'not-allowed' : 'pointer',
+                                  opacity: processingCobranza ? 0.7 : 1
+                                }}
+                              >
+                                Cobrar
+                              </button>
+                            )}
                           </td>
                         </tr>
                         {c.detalle_cobranzas && c.detalle_cobranzas.map((cob, j) => (
@@ -259,6 +333,25 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
                             <td>-</td>
                             <td style={{ color: 'var(--accent-secondary)' }}>{formatCurrency(cob.total)}</td>
                             <td colSpan="2"></td>
+                            <td style={{ textAlign: 'center' }}>
+                              <button
+                                onClick={() => handleDeleteCobranza(cob.id)}
+                                disabled={processingCobranza}
+                                style={{
+                                  padding: '4px 6px',
+                                  fontSize: '12px',
+                                  background: 'transparent',
+                                  color: 'var(--error)',
+                                  border: 'none',
+                                  borderRadius: '3px',
+                                  cursor: processingCobranza ? 'not-allowed' : 'pointer',
+                                  opacity: processingCobranza ? 0.5 : 1
+                                }}
+                                title="Eliminar Cobranza"
+                              >
+                                🗑️
+                              </button>
+                            </td>
                           </tr>
                         ))}
                       </React.Fragment>
@@ -275,7 +368,7 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
                   <td>{formatCurrency(totals.total_esperado)}</td>
                   <td style={{ color: 'var(--accent-secondary)' }}>{formatCurrency(totals.total_cobrado)}</td>
                   <td style={{ color: totals.saldo_pendiente > 0 ? 'var(--error)' : 'inherit' }}>{formatCurrency(totals.saldo_pendiente)}</td>
-                  <td></td>
+                  <td colSpan="2"></td>
                 </tr>
               </tfoot>
             </table>
