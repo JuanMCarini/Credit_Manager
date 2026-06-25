@@ -101,21 +101,16 @@ const Sidebar = () => {
               <line x1="12" y1="1" x2="12" y2="23" />
               <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
             </svg>
-            Listado de Cobranzas
+            Ver Listado
           </NavLink>
           <NavLink to="/procesamiento-cobranzas" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+              <path d="M9 2v20" />
+              <path d="M14 5H6.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H3" />
+              <line x1="20" y1="8" x2="20" y2="14" />
+              <line x1="23" y1="11" x2="17" y2="11" />
             </svg>
             Ingreso de Cobranzas
-          </NavLink>
-          <NavLink to="/procesos" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-              <line x1="8" y1="21" x2="16" y2="21"></line>
-              <line x1="12" y1="17" x2="12" y2="21"></line>
-            </svg>
-            Procesos de Ingesta
           </NavLink>
         </NavGroup>
 

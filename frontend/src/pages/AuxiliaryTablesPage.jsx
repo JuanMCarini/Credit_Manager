@@ -76,6 +76,8 @@ const AuxiliaryTablesPage = () => {
           emptyForm[c] = false;
         } else if (c === 'fecha') {
           emptyForm[c] = new Date().toISOString().split('T')[0]; // Default today
+        } else if (c === 'anticipo_vigente') {
+          emptyForm[c] = 0;
         } else {
           emptyForm[c] = '';
         }
@@ -109,6 +111,11 @@ const AuxiliaryTablesPage = () => {
         } else if (percentFields.includes(key) && cleanedData[key] !== null) {
           cleanedData[key] = parseFloat(cleanedData[key]) / 100.0;
         }
+      }
+      
+      // Remove read-only or computed fields before sending to the backend
+      if (currentTableConfig.endpoint === 'socios') {
+        delete cleanedData.anticipo_vigente;
       }
 
       if (isCreating) {
@@ -264,6 +271,7 @@ const AuxiliaryTablesPage = () => {
                 {columns.map(col => {
                   if (col === 'id' && !isCreating) return null; // Prevent editing ID on update
                   if (col === 'id' && isCreating) return null; // Prevent typing ID on create (auto-increment)
+                  if (col === 'anticipo_vigente' && isCreating) return null; // Prevent setting balance on create
                   
                   const relation = relationMaps[col];
                   let inputElement;
