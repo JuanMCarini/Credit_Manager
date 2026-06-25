@@ -122,17 +122,17 @@ const UsersListPage = () => {
                       </span>
                     </td>
                     <td style={{ textAlign: 'right', display: 'flex', gap: '5px', justifyContent: 'flex-end', alignItems: 'center' }}>
-                      <button className="btn btn-sm btn-secondary" title="Editar Usuario" onClick={() => handleEditClick(user)}>
-                        <Edit size={16} />
+                      <button className="btn btn-sm btn-secondary" style={{ fontSize: '14px' }} title="Editar Usuario" onClick={() => handleEditClick(user)}>
+                        ✏️
                       </button>
-                      <button className="btn btn-sm btn-secondary" title="Cambiar Contraseña" onClick={() => handleChangePasswordClick(user)}>
-                        <KeyRound size={16} />
+                      <button className="btn btn-sm btn-secondary" style={{ fontSize: '14px' }} title="Cambiar Contraseña" onClick={() => handleChangePasswordClick(user)}>
+                        🔑
                       </button>
-                      <button className="btn btn-sm btn-secondary" title="Ver Auditoría" onClick={() => handleAuditClick(user)}>
-                        <FileText size={16} />
+                      <button className="btn btn-sm btn-secondary" style={{ fontSize: '14px' }} title="Ver Auditoría" onClick={() => handleAuditClick(user)}>
+                        📄
                       </button>
-                      <button className="btn btn-sm btn-secondary" style={{ color: 'var(--error)' }} title="Borrar Usuario" onClick={() => handleDeleteClick(user)}>
-                        <Trash2 size={16} />
+                      <button className="btn btn-sm btn-secondary" style={{ fontSize: '14px', color: 'var(--error)' }} title="Borrar Usuario" onClick={() => handleDeleteClick(user)}>
+                        🗑️
                       </button>
                     </td>
                   </tr>

@@ -306,18 +306,17 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
                               <button 
                                 onClick={() => handleCobrar(c)} 
                                 disabled={processingCobranza}
+                                className="btn-secondary"
                                 style={{
                                   padding: '4px 8px',
-                                  fontSize: '11px',
-                                  background: 'var(--accent)',
-                                  color: '#fff',
-                                  border: 'none',
-                                  borderRadius: '4px',
+                                  fontSize: '14px',
                                   cursor: processingCobranza ? 'not-allowed' : 'pointer',
-                                  opacity: processingCobranza ? 0.7 : 1
+                                  opacity: processingCobranza ? 0.7 : 1,
+                                  color: 'var(--success-color)'
                                 }}
+                                title="Cobrar Cuota"
                               >
-                                Cobrar
+                                💲
                               </button>
                             )}
                           </td>
@@ -337,15 +336,13 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
                               <button
                                 onClick={() => handleDeleteCobranza(cob.id)}
                                 disabled={processingCobranza}
+                                className="btn-secondary"
                                 style={{
-                                  padding: '4px 6px',
-                                  fontSize: '12px',
-                                  background: 'transparent',
-                                  color: 'var(--error)',
-                                  border: 'none',
-                                  borderRadius: '3px',
+                                  padding: '4px 8px',
+                                  fontSize: '14px',
                                   cursor: processingCobranza ? 'not-allowed' : 'pointer',
-                                  opacity: processingCobranza ? 0.5 : 1
+                                  opacity: processingCobranza ? 0.5 : 1,
+                                  color: 'var(--danger-color)'
                                 }}
                                 title="Eliminar Cobranza"
                               >

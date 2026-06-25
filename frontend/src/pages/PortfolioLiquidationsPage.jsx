@@ -320,17 +320,17 @@ const PortfolioLiquidationsPage = () => {
                             className="btn-secondary" 
                             title="Ingresar Pago"
                             onClick={() => handlePayProceso(p.ID)}
-                            style={{ padding: '4px 8px', fontSize: '12px', color: 'var(--primary-color)' }}
+                            style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--primary-color)' }}
                           >
-                            <DollarSign size={16} />
+                            💲
                           </button>
                           <button 
                             className="btn-secondary" 
                             title="Eliminar Proceso"
                             onClick={() => handleDeleteProceso(p.ID)}
-                            style={{ padding: '4px 8px', fontSize: '12px', color: 'var(--danger-color)' }}
+                            style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--danger-color)' }}
                           >
-                            <Trash2 size={16} />
+                            🗑️
                           </button>
                         </>
                       )}
