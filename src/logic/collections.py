@@ -149,6 +149,18 @@ class CollectionManager:
                     )
                 )
 
+            case "CARTERA_ID":
+                val_id = int(float(val_id))
+                query = (
+                    query.join(Credito)
+                    .join(Cartera, Credito.cartera_id == Cartera.id)
+                    .filter(
+                        Cartera.id == val_id,
+                        Cartera.recurso == recurso,
+                        Cuota.estado.in_([EstadoCuota.PENDIENTE, EstadoCuota.MOROSA]),
+                    )
+                )
+
             case _:
                 raise ValueError(f"⚠️ '{identificador}' is not a valid identifier type.")
 
@@ -258,7 +270,8 @@ class CollectionManager:
         return df
 
     def _persist_collections(
-        self, df_cobr: pd.DataFrame, payment_date: datetime, proceso_id: int | None = None, commit: bool = True, descripcion: str | None = None
+        self, df_cobr: pd.DataFrame, payment_date: datetime, proceso_id: int | None = None, commit: bool = True, 
+        descripcion: str | None = None, tipo_proceso: str = TipoProcesoEnum.INDIVIDUAL.value
     ) -> pd.DataFrame:
         """
         =============================================================================
@@ -276,10 +289,10 @@ class CollectionManager:
         =============================================================================
         """
 
-        # Create INDIVIDUAL process if no proceso_id is provided
+        # Create process if no proceso_id is provided
         if not proceso_id:
             proceso = Proceso(
-                tipo=TipoProcesoEnum.INDIVIDUAL.value,
+                tipo=tipo_proceso,
                 estado=EstadoProcesoEnum.COMPLETADO.value,
                 descripcion=descripcion
             )
@@ -624,11 +637,27 @@ class CollectionManager:
         """
 
         from src.database.models import TipoCobranzaEnum
+        from src.database.models.carteras import EstadoCartera
 
         payment_date = normalize_date(payment_date)
         id_tipo = identificador.upper()
 
         try:
+            # 0. Verification of portfolio states
+            if id_tipo == "PROVEEDOR_CUIT":
+                carteras_pendientes = self.db.query(Cartera).join(SocioComercial).filter(
+                    SocioComercial.cuit == str(int(float(id_val))),
+                    Cartera.recurso == True,
+                    Cartera.estado == EstadoCartera.PENDIENTE
+                ).all()
+                if carteras_pendientes:
+                    ids = [c.id for c in carteras_pendientes]
+                    raise ValueError(f"⚠️ El socio posee carteras con recurso PENDIENTES de confirmación (IDs: {ids}). Debe confirmarlas antes de procesar la cobranza.")
+            elif id_tipo == "CARTERA_ID":
+                cartera = self.db.query(Cartera).filter(Cartera.id == int(float(id_val))).first()
+                if cartera and cartera.estado == EstadoCartera.PENDIENTE:
+                    raise ValueError(f"⚠️ La cartera {cartera.id} se encuentra PENDIENTE. Debe confirmarla antes de procesar la cobranza.")
+
             # 1. Dynamic query construction to query historical advances
             query_anticipos = self.db.query(AnticiposSinAplicar)
             match identificador:
@@ -686,8 +715,8 @@ class CollectionManager:
                 elif id_tipo == "CARTERA_ID":
                     self.db.execute(
                         text("""
-                            INSERT INTO anticipos_socios (socio_id, cartera_id, monto, fecha)
-                            SELECT socio_id, id, :monto, :fecha FROM carteras WHERE id = :cartera_id
+                            INSERT INTO anticipos_socios (socio_id, monto, fecha)
+                            SELECT socio_id, :monto, :fecha FROM carteras WHERE id = :cartera_id
                         """),
                         {
                             "monto": sobrante,
@@ -700,11 +729,25 @@ class CollectionManager:
             # 7. Guard clause: If no installments are collected, save the advance and exit
             if df.empty:
                 self.db.commit()
-                return self._generate_empty_collections()
+                res = self._generate_empty_collections()
+                res.attrs["anticipos_previos"] = monto_anticipos
+                res.attrs["sobrante"] = sobrante
+                res.attrs["anticipos_actualizado"] = monto_anticipos + sobrante
+                return res
 
             # 8. Final classification of collection type and delegation of persistence (which includes commit)
             df["tipo_cobranza"] = TipoCobranzaEnum.RECURSO.value
-            return self._persist_collections(df, payment_date, proceso_id=proceso_id, descripcion=f"{identificador}: {id_val}")
+            res = self._persist_collections(
+                df, 
+                payment_date, 
+                proceso_id=proceso_id, 
+                descripcion=f"{identificador}: {id_val}",
+                tipo_proceso=TipoProcesoEnum.RECURSO.value
+            )
+            res.attrs["anticipos_previos"] = monto_anticipos
+            res.attrs["sobrante"] = sobrante
+            res.attrs["anticipos_actualizado"] = monto_anticipos + sobrante
+            return res
 
         except Exception as e:
             self.db.rollback()

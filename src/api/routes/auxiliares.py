@@ -101,6 +101,30 @@ def get_socios_originadores(db: Session = Depends(get_db)):
         for r in originadores
     ]
 
+from pydantic import BaseModel
+from datetime import date
+
+class AnticipoPayload(BaseModel):
+    monto: float
+    fecha: date
+
+@router.post("/socios/{socio_id}/anticipos")
+def add_socio_anticipo(socio_id: int, payload: AnticipoPayload, db: Session = Depends(get_db)):
+    from src.database.models.socios import AnticiposSinAplicar, SocioComercial
+    socio = db.query(SocioComercial).filter(SocioComercial.id == socio_id).first()
+    if not socio:
+        raise HTTPException(status_code=404, detail="Socio comercial no encontrado.")
+    
+    nuevo_anticipo = AnticiposSinAplicar(
+        socio_id=socio_id,
+        monto=payload.monto,
+        fecha=payload.fecha
+    )
+    db.add(nuevo_anticipo)
+    db.commit()
+    
+    return {"status": "success", "message": "Anticipo registrado exitosamente."}
+
 @router.get("/{tabla}")
 def get_aux_table(tabla: str, db: Session = Depends(get_db)):
     if tabla not in AUX_TABLES:

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
 
 const CollectionsProcessingPage = () => {
@@ -25,6 +25,34 @@ const CollectionsProcessingPage = () => {
   });
   const [masFeedback, setMasFeedback] = useState({ type: '', message: '' });
   const [masLoading, setMasLoading] = useState(false);
+
+  const [recData, setRecData] = useState({
+    identificador: 'PROVEEDOR_CUIT',
+    id_val: '',
+    monto: '',
+    fecha_pago: '',
+  });
+  const [recFeedback, setRecFeedback] = useState({ type: '', message: '' });
+  const [recLoading, setRecLoading] = useState(false);
+
+  const [socios, setSocios] = useState([]);
+  const [carteras, setCarteras] = useState([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [resSocios, resCarteras] = await Promise.all([
+          axiosClient.post('/api/v1/auxiliares/socios/data', { page: 1, size: 1000 }),
+          axiosClient.get('/api/v1/carteras')
+        ]);
+        setSocios(resSocios.data.data || resSocios.data);
+        setCarteras(resCarteras.data);
+      } catch (error) {
+        console.error("Error fetching dependencies:", error);
+      }
+    };
+    fetchData();
+  }, []);
 
   const handleIndSubmit = async (e) => {
     e.preventDefault();
@@ -84,6 +112,29 @@ const CollectionsProcessingPage = () => {
     }
   };
 
+  const handleRecSubmit = async (e) => {
+    e.preventDefault();
+    setRecLoading(true);
+    setRecFeedback({ type: '', message: '' });
+
+    try {
+      const payload = {
+        identificador: recData.identificador,
+        id_val: recData.id_val,
+        monto: parseFloat(recData.monto),
+        fecha_pago: recData.fecha_pago || null,
+      };
+      const res = await axiosClient.post('/api/v1/cobranzas/recurso', payload);
+      setRecFeedback({ type: 'success', message: res.data.message || `Cobranza con Recurso procesada. ID: ${res.data.proceso_id}` });
+      setRecData({ ...recData, id_val: '', monto: '', fecha_pago: '' });
+    } catch (error) {
+      const msg = error.response?.data?.detail || error.message;
+      setRecFeedback({ type: 'error', message: `Error: ${msg}` });
+    } finally {
+      setRecLoading(false);
+    }
+  };
+
   return (
     <section className="tab-content active" style={{ animation: 'fadeIn 0.4s ease' }}>
       <header className="section-header">
@@ -103,6 +154,7 @@ const CollectionsProcessingPage = () => {
             >
               <option value="individual">Cobranza Individual</option>
               <option value="masiva">Cobranza Masiva por Lote</option>
+              <option value="recurso">Cobranza con Recurso</option>
             </select>
           </div>
 
@@ -172,7 +224,6 @@ const CollectionsProcessingPage = () => {
                   <option value="CLIENTE_CUIL">CUIL del Cliente</option>
                   <option value="CREDITO_ID">ID del Crédito</option>
                   <option value="ID_EXTERNO">ID Externo</option>
-                  <option value="PROVEEDOR_CUIT">CUIT del Socio/Proveedor (Con Recurso)</option>
                   <option value="CARTERA_ID">ID de Cartera</option>
                 </select>
               </div>
@@ -214,6 +265,61 @@ const CollectionsProcessingPage = () => {
             {masFeedback.message && (
               <div style={{ marginTop: '12px', fontSize: '14px', fontWeight: 500, color: masFeedback.type === 'error' ? 'var(--danger-color)' : 'var(--success-color)' }}>
                 {masFeedback.message}
+              </div>
+            )}
+          </form>
+            </div>
+          )}
+
+          {operationType === 'recurso' && (
+            <div style={{ animation: 'fadeIn 0.3s ease' }}>
+              <h3 style={{ marginBottom: '16px', fontFamily: 'var(--font-heading)', fontSize: '18px', color: 'var(--primary-color)' }}>Cobranza Masiva con Recurso</h3>
+              <form onSubmit={handleRecSubmit}>
+            <div className="form-row">
+              <div className="form-group">
+                <label>Tipo de Identificador *</label>
+                <select value={recData.identificador} onChange={(e) => setRecData({...recData, identificador: e.target.value, id_val: ''})} required>
+                  <option value="PROVEEDOR_CUIT">CUIT del Socio/Proveedor</option>
+                  <option value="CARTERA_ID">ID de Cartera</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Identificador *</label>
+                {recData.identificador === 'PROVEEDOR_CUIT' ? (
+                  <select value={recData.id_val} onChange={(e) => setRecData({...recData, id_val: e.target.value})} required>
+                    <option value="">Seleccione un Socio...</option>
+                    {socios.map(s => (
+                      <option key={s.id} value={s.cuit}>{s.razon_social} ({s.cuit})</option>
+                    ))}
+                  </select>
+                ) : (
+                  <select value={recData.id_val} onChange={(e) => setRecData({...recData, id_val: e.target.value})} required>
+                    <option value="">Seleccione una Cartera...</option>
+                    {carteras.map(c => (
+                      <option key={c.id} value={c.id}>{c.nombre} (ID: {c.id})</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+              <div className="form-group">
+                <label>Monto a Cobrar ($) *</label>
+                <input type="number" step="0.01" value={recData.monto} onChange={(e) => setRecData({...recData, monto: e.target.value})} required />
+              </div>
+            </div>
+            <div className="form-row">
+              <div className="form-group">
+                <label>Fecha de Cobro *</label>
+                <input type="date" value={recData.fecha_pago} onChange={(e) => setRecData({...recData, fecha_pago: e.target.value})} required />
+              </div>
+            </div>
+            <div className="form-actions" style={{ marginTop: '16px' }}>
+              <button type="submit" className="btn-primary" style={{ width: '100%', fontSize: '16px', padding: '14px' }} disabled={recLoading}>
+                {recLoading ? 'Procesando Recurso...' : 'Procesar Cobranza con Recurso'}
+              </button>
+            </div>
+            {recFeedback.message && (
+              <div style={{ marginTop: '12px', fontSize: '14px', fontWeight: 500, color: recFeedback.type === 'error' ? 'var(--danger-color)' : 'var(--success-color)' }}>
+                {recFeedback.message}
               </div>
             )}
           </form>

@@ -502,6 +502,125 @@ def download_import_report(filename: str):
         
     return FileResponse(file_path, filename=filename, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
+@router.get("/compra/{cartera_id}/preview")
+def get_compra_preview(cartera_id: int, db: Session = Depends(get_db)):
+    cartera = db.query(Cartera).filter(Cartera.id == cartera_id).first()
+    if not cartera or cartera.tipo_operacion != TipoOperacionCartera.COMPRA:
+        raise HTTPException(status_code=404, detail="Cartera de compra no encontrada")
+        
+    creditos = db.query(Credito, Cliente).join(Cliente, Credito.cliente_cuil == Cliente.cuil).filter(Credito.cartera_id == cartera_id).all()
+    if not creditos:
+        return {"creditos": [], "cuotas": [], "resumen": []}
+        
+    creditos_ids = [c.id for c, _ in creditos]
+    cuotas = db.query(Cuota).filter(Cuota.credito_id.in_(creditos_ids)).all()
+    
+    operaciones = db.query(OperacionCartera).filter(OperacionCartera.cartera_id == cartera_id).all()
+    cuota_comprada_map = {op.cuota_id: op.cuota_comercializada for op in operaciones}
+    
+    fecha_compra_dt = pd.to_datetime(cartera.fecha_compra).date()
+    tna = float(cartera.tna_descuento)
+    
+    def calculate_va(monto, fecha_venc):
+        fv = pd.to_datetime(fecha_venc).date() if isinstance(fecha_venc, str) else fecha_venc
+        if fv is None: return 0.0
+        dias = max(0, (fv - fecha_compra_dt).days)
+        return round(float(monto) / ((1 + (tna * 30 / 365)) ** (dias/30)), 2)
+
+    cuotas_res = []
+    va_por_credito = {c.id: 0.0 for c, _ in creditos}
+    cuotas_compradas_por_cred = {c.id: 0 for c, _ in creditos}
+    
+    df_cuotas_data = []
+    cred_ext_map = {c.id: c.id_externo for c, _ in creditos}
+    
+    for c in cuotas:
+        comprada = cuota_comprada_map.get(c.id, False)
+        total = round(float(c.capital) + float(c.interes) + float(c.iva), 2)
+        va = calculate_va(total, c.fecha_vencimiento) if comprada else 0.0
+        
+        if comprada:
+            va_por_credito[c.credito_id] += va
+            cuotas_compradas_por_cred[c.credito_id] += 1
+            
+        cuotas_res.append({
+            "credito_id_externo": str(cred_ext_map.get(c.credito_id, c.credito_id)),
+            "nro_cuota": str(c.nro_cuota),
+            "fecha_vencimiento": c.fecha_vencimiento.isoformat() if c.fecha_vencimiento else "",
+            "fecha_vencimiento_pago": c.fecha_vencimiento.isoformat() if c.fecha_vencimiento else "",
+            "capital": float(c.capital),
+            "interes": float(c.interes),
+            "iva": float(c.iva),
+            "total": total,
+            "valor_actual": va,
+            "valor_actual_csv": va,
+            "comprada": comprada
+        })
+        
+        if comprada:
+            df_cuotas_data.append({
+                "fecha_vencimiento": c.fecha_vencimiento,
+                "capital": float(c.capital),
+                "interes": float(c.interes),
+                "iva": float(c.iva),
+                "total": total,
+                "valor_actual": va
+            })
+            
+    creditos_res = []
+    for cred, cli in creditos:
+        cap_v = sum(float(c.capital) for c in cuotas if c.credito_id == cred.id and cuota_comprada_map.get(c.id, False))
+        int_v = sum(float(c.interes) for c in cuotas if c.credito_id == cred.id and cuota_comprada_map.get(c.id, False))
+        iva_v = sum(float(c.iva) for c in cuotas if c.credito_id == cred.id and cuota_comprada_map.get(c.id, False))
+        
+        creditos_res.append({
+            "id_externo": str(cred.id_externo or cred.id),
+            "cliente_nombre": f"{cli.apellido} {cli.nombre}".strip(),
+            "capital_vendido": cap_v,
+            "interes_vendido": int_v,
+            "iva_vendido": iva_v,
+            "valor_actual": round(va_por_credito[cred.id], 2),
+            "valor_actual_csv": round(va_por_credito[cred.id], 2),
+            "plazo": cred.plazo,
+            "cuotas_compradas": cuotas_compradas_por_cred[cred.id],
+            "relacion_cuota_sueldo": 0.0
+        })
+        
+    resumen_res = []
+    if df_cuotas_data:
+        df = pd.DataFrame(df_cuotas_data)
+        df['fecha_vencimiento_pd'] = pd.to_datetime(df['fecha_vencimiento'])
+        df['mes'] = df['fecha_vencimiento_pd'].dt.strftime('%Y-%m')
+        
+        summary = df.groupby('mes').agg({
+            'capital': 'sum',
+            'interes': 'sum',
+            'iva': 'sum',
+            'total': 'sum',
+            'valor_actual': 'sum',
+            'fecha_vencimiento': 'count'
+        }).reset_index()
+        
+        for _, row in summary.iterrows():
+            resumen_res.append({
+                "mes": row['mes'],
+                "mes_pago": row['mes'],
+                "cantidad_cuotas": int(row['fecha_vencimiento']),
+                "capital_total": round(float(row['capital']), 2),
+                "interes_total": round(float(row['interes']), 2),
+                "iva_total": round(float(row['iva']), 2),
+                "monto_total": round(float(row['total']), 2),
+                "valor_actual": round(float(row['valor_actual']), 2),
+                "valor_actual_csv": round(float(row['valor_actual']), 2)
+            })
+            
+    return {
+        "status": "success",
+        "creditos": creditos_res,
+        "cuotas": cuotas_res,
+        "resumen": resumen_res
+    }
+
 @router.patch("/{cartera_id}")
 def update_cartera(cartera_id: int, data: UpdateCarteraRequest, db: Session = Depends(get_db)):
     cartera = db.query(Cartera).options(joinedload(Cartera.operaciones)).filter(Cartera.id == cartera_id).first()

@@ -6,7 +6,7 @@ from sqlalchemy import desc
 
 from src.database import get_db
 from src.logic.collections import CollectionManager
-from src.api.schemas.cobranzas import CobranzaIndividual, CobranzaMasiva, ProcesoUpdate
+from src.api.schemas.cobranzas import CobranzaIndividual, CobranzaMasiva, CobranzaRecurso, ProcesoUpdate
 from src.api.dependencies.auth import get_current_user
 from src.database.models.auth import Usuario, RegistroAuditoria
 
@@ -105,6 +105,57 @@ def procesar_cobranza_masiva(
         db.commit()
 
         return {"status": "success", "message": "Cobranza masiva procesada exitosamente.", "proceso_id": proceso_id}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/cobranzas/recurso")
+def procesar_cobranza_recurso(
+    request: Request,
+    datos: CobranzaRecurso,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
+    manager = CollectionManager(db)
+    try:
+        fecha_pago_dt = datetime.combine(datos.fecha_pago, datetime.min.time()) if datos.fecha_pago else datetime.today()
+        
+        df = manager.process_resource(
+            identificador=datos.identificador,
+            id_val=datos.id_val,
+            amount=datos.monto,
+            payment_date=fecha_pago_dt
+        )
+        
+        proceso_id = df.attrs.get("proceso_id") if hasattr(df, "attrs") else None
+        anticipos_previos = df.attrs.get("anticipos_previos", 0.0) if hasattr(df, "attrs") else 0.0
+        sobrante = df.attrs.get("sobrante", 0.0) if hasattr(df, "attrs") else 0.0
+        anticipos_actualizado = df.attrs.get("anticipos_actualizado", 0.0) if hasattr(df, "attrs") else 0.0
+        
+        # Build dynamic message
+        if not proceso_id:
+            message = f"No se cobraron cuotas. Se agregaron ${sobrante:,.2f} a anticipos. Anticipo acumulado total: ${anticipos_actualizado:,.2f}."
+        else:
+            if sobrante > 0:
+                message = f"Cobranza procesada. ID: {proceso_id}. Sobró dinero y se mandaron ${sobrante:,.2f} a anticipos. Anticipo acumulado: ${anticipos_actualizado:,.2f}."
+            elif sobrante < 0:
+                message = f"Cobranza procesada. ID: {proceso_id}. Se usaron ${abs(sobrante):,.2f} de anticipos previos. Anticipo remanente: ${anticipos_actualizado:,.2f}."
+            else:
+                message = f"Cobranza procesada. ID: {proceso_id}."
+        
+        accion_text = f"Crear Proceso Recurso (ID: {proceso_id}) - {datos.identificador}: {datos.id_val}" if proceso_id else f"Crear Cobranza Recurso (Sin Proceso) - {datos.identificador}: {datos.id_val}"
+
+        log = RegistroAuditoria(
+            usuario_id=current_user.id,
+            accion=accion_text,
+            endpoint=request.url.path,
+            metodo=request.method,
+            direccion_ip=request.client.host if request.client else None,
+            estado="Éxito"
+        )
+        db.add(log)
+        db.commit()
+
+        return {"status": "success", "message": message, "proceso_id": proceso_id}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

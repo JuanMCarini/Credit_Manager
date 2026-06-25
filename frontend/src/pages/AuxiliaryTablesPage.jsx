@@ -5,11 +5,16 @@ import axiosClient from '../api/axiosClient';
 const AuxiliaryTablesPage = () => {
   const { provincias, empleadores, socios, tasasYComisiones, relaciones, fetchAuxiliares } = useAppStore();
   
-  const [activeTable, setActiveTable] = useState('provincias');
+  const [activeTable, setActiveTable] = useState('socios');
   const [isCreating, setIsCreating] = useState(false);
   const [editingRecord, setEditingRecord] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [feedback, setFeedback] = useState(null);
+  
+  // Advance Adjustment State
+  const [adjustingAdvance, setAdjustingAdvance] = useState(null);
+  const [advanceAmount, setAdvanceAmount] = useState('');
+  const [advanceDate, setAdvanceDate] = useState('');
 
   const relationMaps = {
     socio_comercial_id: { options: socios, valueKey: 'id', labelKey: 'razon_social' },
@@ -132,7 +137,22 @@ const AuxiliaryTablesPage = () => {
     }
   };
 
-  // Helper function to format cell values for display
+  const handleAdvanceSubmit = async (e) => {
+    e.preventDefault();
+    if (!advanceAmount || !advanceDate) return;
+    try {
+      await axiosClient.post(`/api/v1/auxiliares/socios/${adjustingAdvance.id}/anticipos`, {
+        monto: parseFloat(advanceAmount),
+        fecha: advanceDate
+      });
+      setFeedback({ type: 'success', message: 'Anticipo registrado exitosamente.' });
+      setAdjustingAdvance(null);
+      await fetchAuxiliares();
+    } catch (err) {
+      setFeedback({ type: 'error', message: err.response?.data?.detail || 'Error al registrar anticipo.' });
+    }
+  };
+
   const formatCellValue = (col, value) => {
     if (value === null || value === undefined) return '-';
     if (col === 'socio_comercial_id') {
@@ -222,6 +242,11 @@ const AuxiliaryTablesPage = () => {
                     ))}
                     <td>
                       <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
+                        {activeTable === 'socios' && (
+                          <button className="btn-secondary" style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--success-color)' }} onClick={() => {setAdjustingAdvance(row); setAdvanceAmount(''); setAdvanceDate('');}} title="Ajustar Anticipo">
+                            💲
+                          </button>
+                        )}
                         <button className="btn-secondary" style={{ padding: '4px 8px', fontSize: '14px' }} onClick={() => openEditModal(row)} title="Editar">
                           ✏️
                         </button>
@@ -268,10 +293,9 @@ const AuxiliaryTablesPage = () => {
             
             <form onSubmit={handleEditSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
-                {columns.map(col => {
-                  if (col === 'id' && !isCreating) return null; // Prevent editing ID on update
-                  if (col === 'id' && isCreating) return null; // Prevent typing ID on create (auto-increment)
-                  if (col === 'anticipo_vigente' && isCreating) return null; // Prevent setting balance on create
+                {currentTableConfig.schema.map(col => {
+                  if (col === 'id') return null;
+                  if (col === 'anticipo_vigente') return null;
                   
                   const relation = relationMaps[col];
                   let inputElement;
@@ -451,6 +475,61 @@ const AuxiliaryTablesPage = () => {
                 <button type="submit" className="btn-primary">
                   {isCreating ? 'Crear Registro' : 'Guardar Cambios'}
                 </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {adjustingAdvance && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px',
+          backdropFilter: 'blur(4px)'
+        }}>
+          <div className="glass-panel" style={{
+            width: '100%', maxWidth: '400px',
+            position: 'relative', padding: '32px'
+          }}>
+            <button 
+              onClick={() => setAdjustingAdvance(null)}
+              style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '20px' }}
+            >
+              ✕
+            </button>
+            <h3 style={{ margin: '0 0 24px 0', fontFamily: 'var(--font-heading)' }}>
+              Ajustar Anticipos: {adjustingAdvance.razon_social}
+            </h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '24px' }}>
+              Ingrese un monto positivo para agregar anticipos, o un monto negativo para descontar anticipos vigentes.
+            </p>
+            <form onSubmit={handleAdvanceSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div className="form-group">
+                <label>Monto</label>
+                <input 
+                  type="number" 
+                  step="0.01" 
+                  className="input-field" 
+                  value={advanceAmount} 
+                  onChange={e => setAdvanceAmount(e.target.value)} 
+                  placeholder="Ej: 50000 o -25000"
+                  required 
+                />
+              </div>
+              <div className="form-group">
+                <label>Fecha del Movimiento</label>
+                <input 
+                  type="date" 
+                  className="input-field" 
+                  value={advanceDate} 
+                  onChange={e => setAdvanceDate(e.target.value)} 
+                  required 
+                />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '16px' }}>
+                <button type="button" className="btn-secondary" onClick={() => setAdjustingAdvance(null)}>Cancelar</button>
+                <button type="submit" className="btn-primary">Registrar Movimiento</button>
               </div>
             </form>
           </div>

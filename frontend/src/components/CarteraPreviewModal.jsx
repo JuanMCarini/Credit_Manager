@@ -30,26 +30,32 @@ const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }
   const fetchPreview = async (usar_guardadas, overrides = {}) => {
     setLoading(true);
     try {
-      const payload = {
-        cartera_id: cartera.id,
-        usar_cuotas_guardadas: usar_guardadas,
-        creditos_excluidos: overrides.excluidos !== undefined ? overrides.excluidos : creditosExcluidos,
-        nombre_cartera: editData.nombre || 'Edicion',
-        fecha_venta: overrides.fecha || editData.fecha,
-        tna_descuento: parseFloat(overrides.tna || editData.tna) / 100,
-        cuit_comprador: '',
-        razon_social_comprador: editData.socio || '-',
-        mora: editData.mora,
-        recurso: editData.recurso,
-        iva: editData.iva,
-        cuotas_completas: editData.cuotas_completas,
-        fecha_emision_desde: editData.emision_desde || null,
-        fecha_emision_hasta: editData.emision_hasta || null,
-        fecha_vencimiento_desde: editData.vto_desde || null,
-        fecha_vencimiento_hasta: editData.vto_hasta || null,
-      };
-      const res = await axiosClient.post('/api/v1/carteras/venta/preview', payload);
-      setPreviewData(res.data);
+
+      if (cartera.tipo_operacion === 'COMPRA') {
+        const res = await axiosClient.get(`/api/v1/carteras/compra/${cartera.id}/preview`);
+        setPreviewData(res.data);
+      } else {
+        const payload = {
+          cartera_id: cartera.id,
+          usar_cuotas_guardadas: usar_guardadas,
+          creditos_excluidos: overrides.excluidos !== undefined ? overrides.excluidos : creditosExcluidos,
+          nombre_cartera: editData.nombre || 'Edicion',
+          fecha_venta: overrides.fecha || editData.fecha,
+          tna_descuento: parseFloat(overrides.tna || editData.tna) / 100,
+          cuit_comprador: '',
+          razon_social_comprador: editData.socio || '-',
+          mora: editData.mora,
+          recurso: editData.recurso,
+          iva: editData.iva,
+          cuotas_completas: editData.cuotas_completas,
+          fecha_emision_desde: editData.emision_desde || null,
+          fecha_emision_hasta: editData.emision_hasta || null,
+          fecha_vencimiento_desde: editData.vto_desde || null,
+          fecha_vencimiento_hasta: editData.vto_hasta || null,
+        };
+        const res = await axiosClient.post('/api/v1/carteras/venta/preview', payload);
+        setPreviewData(res.data);
+      }
     } catch (err) {
       alert("Error en previsualización: " + (err.response?.data?.detail || err.message));
     } finally {
