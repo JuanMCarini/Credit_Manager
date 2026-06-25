@@ -64,13 +64,11 @@ const PortfolioOperationsPage = () => {
 
   const handleEditClick = (c, readOnly = false) => {
     if (c.tipo_operacion === 'COMPRA') {
-      if (readOnly) {
-        alert('La vista de detalles para Compra no está disponible sin los archivos CSV originales.');
+      if (!readOnly) {
+        setEditingCompra(c);
+        navigate('/nueva-operacion-cartera');
         return;
       }
-      setEditingCompra(c);
-      navigate('/nueva-operacion-cartera');
-      return;
     }
     setIsReadOnly(readOnly);
     setEditingCartera(c);
@@ -150,6 +148,9 @@ const PortfolioOperationsPage = () => {
                         <>
                           <button className="btn-secondary" style={{ padding: '4px', fontSize: '12px', color: 'var(--success-color)' }} onClick={() => handleChangeEstado(c.id, c.tipo_operacion === 'VENTA' ? 'VENDIDA' : 'COMPRADA')} title="Confirmar">
                             <CheckCircle size={16} />
+                          </button>
+                          <button className="btn-secondary" style={{ padding: '4px', fontSize: '12px', color: 'var(--text-primary)' }} onClick={() => handleEditClick(c, true)} title="Ver Detalles">
+                            <Eye size={16} />
                           </button>
                           <button className="btn-secondary" style={{ padding: '4px', fontSize: '12px', color: 'var(--accent-color)' }} onClick={() => handleEditClick(c)} title="Editar">
                             <Edit size={16} />
