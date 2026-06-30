@@ -4,6 +4,7 @@ import axiosClient from '../api/axiosClient';
 import ClientCCModal from '../components/ClientCCModal';
 import CreditEditEstadoModal from '../components/CreditEditEstadoModal';
 import ExcelDateFilter from '../components/ExcelDateFilter';
+import ExcelNumberRangeFilter from '../components/ExcelNumberRangeFilter';
 import ExportExcelButton from '../components/ExportExcelButton';
 import { Eye, Edit, Trash2 } from 'lucide-react';
 
@@ -16,7 +17,7 @@ const CreditListPage = () => {
   const [loading, setLoading] = useState(false);
   const location = useLocation();
   
-  const [filter, setFilter] = useState({ ID: '', CUIL: '', Capital: '', Plazo: '', TNA: '', Estado: [], Fecha: [] });
+  const [filter, setFilter] = useState({ ID: '', CUIL: '', Capital: {}, Plazo: '', TNA: '', Estado: [], Fecha: [] });
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [showEstadoFilter, setShowEstadoFilter] = useState(false);
 
@@ -79,9 +80,20 @@ const CreditListPage = () => {
 
     if (filter.ID) result = result.filter(c => c.ID === parseInt(filter.ID, 10));
     if (filter.CUIL) result = result.filter(c => c["Cliente CUIL"] && c["Cliente CUIL"].includes(filter.CUIL));
-    if (filter.Capital) result = result.filter(c => String(c.Capital).includes(filter.Capital));
     if (filter.Plazo) result = result.filter(c => String(c.Plazo).includes(filter.Plazo));
-    if (filter.TNA) result = result.filter(c => String((c["TNA con IVA"] * 100).toFixed(2)).includes(filter.TNA));
+    if (filter.TNA) result = result.filter(c => String(c["TNA con IVA"]).includes(filter.TNA));
+
+    if (filter.Capital && typeof filter.Capital === 'object') {
+      result = result.filter(c => {
+        if (c.Capital === null || c.Capital === undefined) return false;
+        const numVal = Number(c.Capital);
+        if (isNaN(numVal)) return false;
+        if (filter.Capital.min !== undefined && numVal < filter.Capital.min) return false;
+        if (filter.Capital.max !== undefined && numVal > filter.Capital.max) return false;
+        return true;
+      });
+    }
+
     if (filter.Estado.length > 0) result = result.filter(c => filter.Estado.includes(c.Estado));
     if (filter.Fecha && filter.Fecha.length > 0) result = result.filter(c => filter.Fecha.includes(c["Fecha Emisión"]));
 
@@ -142,7 +154,12 @@ const CreditListPage = () => {
                 </th>
                 <th onClick={() => handleSort('Capital')} style={{ cursor: 'pointer' }}>
                   Capital Originado <SortIcon columnKey="Capital" />
-                  <input type="text" placeholder="Filtrar..." value={filter.Capital} onChange={e => setFilter({ ...filter, Capital: e.target.value })} onClick={e => e.stopPropagation()} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                  <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
+                    <ExcelNumberRangeFilter 
+                      selectedRange={filter.Capital} 
+                      onChange={range => setFilter({ ...filter, Capital: range })} 
+                    />
+                  </div>
                 </th>
                 <th onClick={() => handleSort('Plazo')} style={{ cursor: 'pointer' }}>
                   Plazo <SortIcon columnKey="Plazo" />

@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import axiosClient, { downloadFile } from '../api/axiosClient';
 import ExportExcelButton from '../components/ExportExcelButton';
+import ExcelDateFilter from '../components/ExcelDateFilter';
+import ExcelNumberRangeFilter from '../components/ExcelNumberRangeFilter';
 
 const formatCurrency = (num) => {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(num);
@@ -12,6 +14,9 @@ const BalancesPage = () => {
   const [activeGroups, setActiveGroups] = useState([]);
   const [reportDate, setReportDate] = useState(null);
   const [hasSearched, setHasSearched] = useState(false);
+
+  const [tableFilters, setTableFilters] = useState({});
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
 
   const [filters, setFilters] = useState({
     fecha: new Date().toISOString().split('T')[0],
@@ -78,6 +83,8 @@ const BalancesPage = () => {
       const newActiveGroups = selectedGroupings.map(k => groupMapper[k]);
       setActiveGroups(newActiveGroups);
       setResults(res.data);
+      setTableFilters({});
+      setSortConfig({ key: null, direction: 'asc' });
       setReportDate(filters.fecha ? new Date(filters.fecha + 'T00:00:00') : new Date());
       setHasSearched(true);
     } catch (error) {
@@ -98,21 +105,115 @@ const BalancesPage = () => {
 
   const isGrouping = activeGroups.length > 0;
   
-  let headers = [];
+  let columns = [];
   if (isGrouping) {
-    headers = activeGroups.map(g => g.label).concat(["Capital", "Interés", "IVA", "Total Saldo"]);
+    columns = activeGroups.map(g => ({ label: g.label, key: g.id })).concat([
+      { label: "Capital", key: "Capital" },
+      { label: "Interés", key: "Interés" },
+      { label: "IVA", key: "IVA" },
+      { label: "Total Saldo", key: "Total" }
+    ]);
   } else {
-    headers = ["ID Crédito", "Proveedor", "Originador", "Cliente CUIL", "Cartera", "Nro. Cuota", "Fecha Vencimiento", "Capital", "Interés", "IVA", "Total Saldo"];
+    columns = [
+      { label: "ID Crédito", key: "ID Credito" },
+      { label: "Proveedor", key: "Proveedor" },
+      { label: "Originador", key: "Originador" },
+      { label: "Cliente CUIL", key: "CUIL Cliente" },
+      { label: "Cartera", key: "ID Cartera" },
+      { label: "Nro. Cuota", key: "Nro. Cuota" },
+      { label: "Fecha Vencimiento", key: "Fecha Vencimiento" },
+      { label: "Capital", key: "Capital" },
+      { label: "Interés", key: "Interés" },
+      { label: "IVA", key: "IVA" },
+      { label: "Total Saldo", key: "Total" }
+    ];
   }
 
+  const filteredAndSortedResults = useMemo(() => {
+    let res = [...results];
+
+    // Aplicar filtros
+    Object.keys(tableFilters).forEach(key => {
+      const filterVal = tableFilters[key];
+      if (!filterVal || (Array.isArray(filterVal) && filterVal.length === 0)) return;
+      if (typeof filterVal === 'object' && !Array.isArray(filterVal)) {
+        if (filterVal.min === undefined && filterVal.max === undefined) return;
+      }
+      
+      res = res.filter(row => {
+        let rowVal = row[key];
+        if (key === "Total") rowVal = row.Total || row.total; // Support fallback for Total
+        
+        if (Array.isArray(filterVal)) {
+          return filterVal.includes(rowVal);
+        } else if (typeof filterVal === 'object' && filterVal !== null) {
+          // Es un rango numérico
+          const numVal = Number(rowVal);
+          if (isNaN(numVal)) return false;
+          if (filterVal.min !== undefined && numVal < filterVal.min) return false;
+          if (filterVal.max !== undefined && numVal > filterVal.max) return false;
+          return true;
+        } else {
+          if (rowVal === null || rowVal === undefined) return false;
+          return String(rowVal).toLowerCase().includes(String(filterVal).toLowerCase());
+        }
+      });
+    });
+
+    // Aplicar ordenamiento
+    if (sortConfig.key) {
+      res.sort((a, b) => {
+        let valA = a[sortConfig.key];
+        let valB = b[sortConfig.key];
+        if (sortConfig.key === "Total") {
+          valA = a.Total || a.total;
+          valB = b.Total || b.total;
+        }
+        
+        if (valA === null || valA === undefined) valA = '';
+        if (valB === null || valB === undefined) valB = '';
+        
+        if (typeof valA === 'string' && typeof valB === 'string') {
+          valA = valA.toLowerCase();
+          valB = valB.toLowerCase();
+        }
+        
+        if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+
+    return res;
+  }, [results, tableFilters, sortConfig]);
+
   const totals = useMemo(() => {
-    return results.reduce((acc, curr) => ({
+    return filteredAndSortedResults.reduce((acc, curr) => ({
       capital: acc.capital + (curr.Capital || 0),
       interes: acc.interes + (curr['Interés'] || 0),
       iva: acc.iva + (curr.IVA || 0),
       total: acc.total + (curr.Total || curr.total || 0)
     }), { capital: 0, interes: 0, iva: 0, total: 0 });
+  }, [filteredAndSortedResults]);
+
+  const availableFechas = useMemo(() => {
+    const dates = new Set();
+    results.forEach(r => {
+      if (r['Fecha Vencimiento']) dates.add(r['Fecha Vencimiento']);
+    });
+    return Array.from(dates).sort();
   }, [results]);
+
+  const handleSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
+    setSortConfig({ key, direction });
+  };
+
+  const SortIcon = ({ columnKey }) => {
+    if (sortConfig.key !== columnKey) return <span style={{ opacity: 0.3, marginLeft: '5px' }}>↕</span>;
+    return <span style={{ marginLeft: '5px' }}>{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>;
+  };
 
   return (
     <section className="tab-content active" style={{ animation: 'fadeIn 0.4s ease' }}>
@@ -197,22 +298,55 @@ const BalancesPage = () => {
         <div className="table-container glass-panel fade-in" style={{ padding: '24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
             <h3 style={{ margin: 0, fontFamily: 'var(--font-heading)' }}>Resultados del Reporte</h3>
-            <ExportExcelButton data={results} filteredData={results} filename="balances_export" />
+            <ExportExcelButton data={results} filteredData={filteredAndSortedResults} filename="balances_export" />
           </div>
           <div className="table-responsive" style={{ maxHeight: '500px', overflowY: 'auto' }}>
             <table className="data-table">
               <thead>
                 <tr>
-                  {headers.map((h, i) => <th key={i}>{h}</th>)}
+                  {columns.map((col, i) => {
+                    const isCurrency = ["Capital", "Interés", "IVA", "Total", "Total Saldo"].includes(col.label);
+                    
+                    return (
+                      <th key={i} onClick={() => handleSort(col.key)} style={{ cursor: 'pointer', position: 'relative' }}>
+                        {col.label} <SortIcon columnKey={col.key} />
+                        {col.key === 'Fecha Vencimiento' ? (
+                          <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
+                            <ExcelDateFilter 
+                              availableDates={availableFechas}
+                              selectedDates={tableFilters[col.key] || []}
+                              onChange={dates => setTableFilters({ ...tableFilters, [col.key]: dates })}
+                            />
+                          </div>
+                        ) : isCurrency ? (
+                          <div onClick={e => e.stopPropagation()}>
+                            <ExcelNumberRangeFilter
+                              selectedRange={tableFilters[col.key] || {}}
+                              onChange={range => setTableFilters({ ...tableFilters, [col.key]: range })}
+                            />
+                          </div>
+                        ) : (
+                          <input 
+                            type="text" 
+                            placeholder={`Filtrar...`} 
+                            value={tableFilters[col.key] || ''} 
+                            onChange={e => setTableFilters({ ...tableFilters, [col.key]: e.target.value })} 
+                            onClick={e => e.stopPropagation()} 
+                            style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} 
+                          />
+                        )}
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody>
-                {results.length === 0 ? (
+                {filteredAndSortedResults.length === 0 ? (
                   <tr>
-                    <td colSpan={headers.length} className="text-center empty-state">No se encontraron saldos.</td>
+                    <td colSpan={columns.length} className="text-center empty-state">No se encontraron saldos que coincidan con los filtros.</td>
                   </tr>
                 ) : (
-                  results.map((row, i) => {
+                  filteredAndSortedResults.map((row, i) => {
                     let colorTotal = "var(--accent-secondary)";
                     if (row['Fecha Vencimiento']) {
                       const vto = new Date(row['Fecha Vencimiento'] + 'T00:00:00');
@@ -253,10 +387,10 @@ const BalancesPage = () => {
                   })
                 )}
               </tbody>
-              {results.length > 0 && (
+              {filteredAndSortedResults.length > 0 && (
                 <tfoot style={{ background: 'rgba(255, 255, 255, 0.05)', fontWeight: 'bold' }}>
                   <tr>
-                    <td colSpan={headers.length - 4} style={{ textAlign: 'right' }}>TOTALES:</td>
+                    <td colSpan={columns.length - 4} style={{ textAlign: 'right' }}>TOTALES VISIBLES:</td>
                     <td>{formatCurrency(totals.capital)}</td>
                     <td>{formatCurrency(totals.interes)}</td>
                     <td>{formatCurrency(totals.iva)}</td>

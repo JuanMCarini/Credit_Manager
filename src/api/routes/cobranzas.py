@@ -360,6 +360,14 @@ def get_cobranzas(
     credito_id: Optional[str] = None,
     id_cobranza: Optional[str] = None,
     tipo: Optional[str] = None,
+    capital_min: Optional[float] = None,
+    capital_max: Optional[float] = None,
+    interes_min: Optional[float] = None,
+    interes_max: Optional[float] = None,
+    iva_min: Optional[float] = None,
+    iva_max: Optional[float] = None,
+    total_min: Optional[float] = None,
+    total_max: Optional[float] = None,
     db: Session = Depends(get_db)
 ):
     from src.database.models.cobranzas import Cobranza
@@ -386,6 +394,28 @@ def get_cobranzas(
     if tipo:
         tipo_list = [t.strip() for t in tipo.split(",")]
         query = query.filter(Cobranza.tipo_cobranza.in_(tipo_list))
+
+    if capital_min is not None:
+        query = query.filter(Cobranza.capital >= capital_min)
+    if capital_max is not None:
+        query = query.filter(Cobranza.capital <= capital_max)
+        
+    if interes_min is not None:
+        query = query.filter(Cobranza.interes >= interes_min)
+    if interes_max is not None:
+        query = query.filter(Cobranza.interes <= interes_max)
+        
+    if iva_min is not None:
+        query = query.filter(Cobranza.iva >= iva_min)
+    if iva_max is not None:
+        query = query.filter(Cobranza.iva <= iva_max)
+        
+    if total_min is not None or total_max is not None:
+        total_expr = Cobranza.capital + Cobranza.interes + Cobranza.iva
+        if total_min is not None:
+            query = query.filter(total_expr >= total_min)
+        if total_max is not None:
+            query = query.filter(total_expr <= total_max)
             
     total = query.count()
     cobranzas = query.order_by(desc(Cobranza.fecha)).offset(skip).limit(limit).all()
