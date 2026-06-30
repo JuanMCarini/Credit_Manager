@@ -58,14 +58,14 @@ def preview_venta_cartera(data: VentaCarteraRequest, db: Session = Depends(get_d
         if df_seleccion is None or df_seleccion.empty:
             return {"creditos": [], "cuotas": [], "resumen": []}
             
+        creditos_ids_all = df_seleccion['credito_id'].unique().tolist()
+        
+        df_vendidas = df_seleccion.copy()
         if data.creditos_excluidos:
-            df_seleccion = df_seleccion[~df_seleccion['credito_id'].isin(data.creditos_excluidos)]
-            if df_seleccion.empty:
-                return {"creditos": [], "cuotas": [], "resumen": []}
+            df_vendidas = df_vendidas[~df_vendidas['credito_id'].isin(data.creditos_excluidos)]
             
-        creditos_ids = df_seleccion['credito_id'].unique().tolist()
-        cuotas_vendidas_ids = df_seleccion['cuota_id'].tolist()
-        cuotas_por_credito = df_seleccion.groupby('credito_id').size().to_dict()
+        cuotas_vendidas_ids = df_vendidas['cuota_id'].tolist() if not df_vendidas.empty else []
+        cuotas_por_credito = df_vendidas.groupby('credito_id').size().to_dict() if not df_vendidas.empty else {}
         
         fecha_v_dt = pd.to_datetime(data.fecha_venta).date() if isinstance(data.fecha_venta, str) else data.fecha_venta
         tna = float(data.tna_descuento)
@@ -75,10 +75,10 @@ def preview_venta_cartera(data: VentaCarteraRequest, db: Session = Depends(get_d
             dias = max(0, (fv - fecha_v_dt).days)
             return round(float(monto) / ((1 + (tna *30 / 365)) ** (dias/30)), 2)
 
-        creditos_db = db.query(Credito, Cliente).join(Cliente, Credito.cliente_cuil == Cliente.cuil).filter(Credito.id.in_(creditos_ids)).all()
+        creditos_db = db.query(Credito, Cliente).join(Cliente, Credito.cliente_cuil == Cliente.cuil).filter(Credito.id.in_(creditos_ids_all)).all()
         va_por_credito = {c.id: 0.0 for c, _ in creditos_db}
         
-        cuotas_db = db.query(Cuota).filter(Cuota.credito_id.in_(creditos_ids)).order_by(Cuota.credito_id, Cuota.nro_cuota).all()
+        cuotas_db = db.query(Cuota).filter(Cuota.credito_id.in_(creditos_ids_all)).order_by(Cuota.credito_id, Cuota.nro_cuota).all()
         
         cuotas_res = []
         for c in cuotas_db:
@@ -119,32 +119,34 @@ def preview_venta_cartera(data: VentaCarteraRequest, db: Session = Depends(get_d
                 "valor_actual": float(va_por_credito.get(cred.id, 0.0))
             })
             
-        df_vendidas = df_seleccion.copy()
         if not data.iva:
             df_vendidas['iva'] = 0.0
             
-        df_vendidas['total_cuota'] = df_vendidas['capital'] + df_vendidas['interes'] + df_vendidas['iva']
-        
-        def calc_va_row(row):
-            return calculate_va(row['total_cuota'], row['fecha_vencimiento'])
+        if df_vendidas.empty:
+            resumen_res = []
+        else:
+            df_vendidas['total_cuota'] = df_vendidas['capital'] + df_vendidas['interes'] + df_vendidas['iva']
             
-        df_vendidas['valor_actual'] = df_vendidas.apply(calc_va_row, axis=1)
-        
-        summary_df = df_vendidas.groupby('fecha_vencimiento').agg({
-            'capital': 'sum',
-            'interes': 'sum',
-            'iva': 'sum',
-            'total_cuota': 'sum',
-            'valor_actual': 'sum',
-            'cuota_id': 'count'
-        }).reset_index()
-        
-        summary_df.rename(columns={'cuota_id': 'cantidad'}, inplace=True)
-        summary_df.sort_values('fecha_vencimiento', inplace=True)
-        
-        resumen_res = summary_df.to_dict(orient='records')
-        for r in resumen_res:
-            r['fecha_vencimiento'] = r['fecha_vencimiento'].isoformat() if hasattr(r['fecha_vencimiento'], 'isoformat') else str(r['fecha_vencimiento'])
+            def calc_va_row(row):
+                return calculate_va(row['total_cuota'], row['fecha_vencimiento'])
+                
+            df_vendidas['valor_actual'] = df_vendidas.apply(calc_va_row, axis=1)
+            
+            summary_df = df_vendidas.groupby('fecha_vencimiento').agg({
+                'capital': 'sum',
+                'interes': 'sum',
+                'iva': 'sum',
+                'total_cuota': 'sum',
+                'valor_actual': 'sum',
+                'cuota_id': 'count'
+            }).reset_index()
+            
+            summary_df.rename(columns={'cuota_id': 'cantidad'}, inplace=True)
+            summary_df.sort_values('fecha_vencimiento', inplace=True)
+            
+            resumen_res = summary_df.to_dict(orient='records')
+            for r in resumen_res:
+                r['fecha_vencimiento'] = r['fecha_vencimiento'].isoformat() if hasattr(r['fecha_vencimiento'], 'isoformat') else str(r['fecha_vencimiento'])
             
         return {
             "creditos": creditos_res,

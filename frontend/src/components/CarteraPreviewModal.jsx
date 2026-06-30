@@ -328,6 +328,9 @@ const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }
                               Valor Actual
                               <input type="text" placeholder="Filtrar..." value={filterCreditos.valor_actual || ''} onChange={e => handleFilterChange('valor_actual', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
                             </th>
+                            <th style={{ textAlign: 'center', padding: '12px', verticalAlign: 'top' }}>
+                              Acciones
+                            </th>
                           </tr>
                         ) : (
                           <tr>
@@ -373,7 +376,7 @@ const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }
                               <td style={{ textAlign: 'center', padding: '12px' }}>{c.cuotas_a_ceder}</td>
                               <td style={{ textAlign: 'right', padding: '12px', color: 'var(--accent-secondary)' }}>${(c.valor_actual||0).toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
                               <td style={{ textAlign: 'center', padding: '12px' }}>
-                                {!isReadOnly ? (
+                                {(!isReadOnly || cartera.estado === 'PENDIENTE') ? (
                                   <button 
                                     type="button"
                                     onClick={() => handleToggleExcluir(c.id)}
@@ -417,6 +420,7 @@ const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }
                           <td style={{ textAlign: 'center', padding: '12px', fontWeight: 'bold' }}>{totalCuotas}</td>
                           <td style={{ textAlign: 'center', padding: '12px', fontWeight: 'bold' }}>{totalCeder}</td>
                           <td style={{ textAlign: 'right', padding: '12px', fontWeight: 'bold', color: 'var(--accent-secondary)' }}>${totalVa.toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
+                          {tipoOperacion === 'VENTA' && <td></td>}
                         </tr>
                       </tfoot>
                     </table>
@@ -707,8 +711,8 @@ const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', padding: '16px 32px', borderTop: '1px solid rgba(255,255,255,0.1)', background: 'var(--bg-panel)' }}>
-                <button type="button" onClick={onClose} className="btn-secondary">{isReadOnly ? 'Cerrar' : 'Cancelar'}</button>
-                {!isReadOnly && (
+                <button type="button" onClick={onClose} className="btn-secondary">{(!isReadOnly || cartera.estado === 'PENDIENTE') ? 'Cancelar' : 'Cerrar'}</button>
+                {(!isReadOnly || cartera.estado === 'PENDIENTE') && (
                   <button type="button" onClick={handleGuardarEdicion} className="btn-primary" disabled={loading || previewData.resumen.length === 0}>
                     {loading ? 'Guardando...' : 'Guardar Cambios'}
                   </button>

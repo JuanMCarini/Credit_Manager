@@ -238,15 +238,15 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
       backdropFilter: 'blur(5px)'
     }}>
       <div className="glass-panel" style={{
-        width: '100%', maxWidth: '1200px', maxHeight: '90vh', overflowY: 'auto',
+        width: '100%', maxWidth: '1200px', height: '90vh', display: 'flex', flexDirection: 'column',
         position: 'relative', padding: '24px'
       }}>
         <button onClick={onClose} style={{
           position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none',
-          color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '20px'
+          color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '20px', zIndex: 100
         }}>✕</button>
         
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px', flexWrap: 'wrap', gap: '16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px', flexWrap: 'wrap', gap: '16px', flexShrink: 0 }}>
           <h2 style={{ margin: 0, fontFamily: 'var(--font-heading)' }}>
             Cuenta Corriente Unificada: {clientName ? `${clientName} (CUIL: ${cuil})` : cuil}
           </h2>
@@ -279,9 +279,9 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
         ) : error ? (
           <div style={{ color: 'var(--error)', textAlign: 'center', padding: '40px' }}>{error}</div>
         ) : (
-          <div className="table-responsive">
-            <table className="data-table" style={{ width: '100%' }}>
-              <thead>
+          <div className="table-responsive" style={{ flex: 1, overflowY: 'auto', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <table className="data-table" style={{ width: '100%', margin: 0 }}>
+              <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-panel)', boxShadow: '0 2px 4px rgba(0,0,0,0.2)' }}>
                 <tr>
                   <th onClick={() => handleSort('credito_id')} style={{ cursor: 'pointer' }}>
                     Crédito <SortIcon columnKey="credito_id" />
@@ -420,7 +420,7 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
                   })
                 )}
               </tbody>
-              <tfoot style={{ background: 'rgba(255, 255, 255, 0.05)', fontWeight: 'bold' }}>
+              <tfoot style={{ position: 'sticky', bottom: 0, zIndex: 10, background: 'var(--bg-panel)', boxShadow: '0 -2px 4px rgba(0,0,0,0.2)', fontWeight: 'bold' }}>
                 <tr>
                   <td colSpan="3" style={{ textAlign: 'right' }}>TOTALES:</td>
                   <td>{formatCurrency(totals.capital)}</td>

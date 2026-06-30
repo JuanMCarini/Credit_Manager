@@ -40,6 +40,9 @@ def procesar_cobranza_individual(
                 vto_date=fecha_corte_dt
             )
         
+        if df.empty:
+            raise ValueError("No se encontraron cuotas pendientes para el identificador proporcionado o la cobranza resultó vacía.")
+            
         proceso_id = df.attrs.get("proceso_id") if hasattr(df, "attrs") else None
         
         accion_text = f"Crear Proceso Individual (ID: {proceso_id}) - {datos.identificador}: {datos.id_val}" if proceso_id else f"Crear Cobranza Individual - {datos.identificador}: {datos.id_val}"
@@ -492,6 +495,10 @@ def modificar_cobranza(cobranza_id: int, datos: CobranzaIndividual, db: Session 
                 amount=datos.monto,
                 payment_date=fecha_pago_dt
             )
+        
+        if df.empty:
+            raise ValueError("No se encontraron cuotas pendientes para el nuevo identificador proporcionado o la cobranza resultó vacía.")
+            
         return {"status": "success", "message": "Cobranza modificada exitosamente."}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

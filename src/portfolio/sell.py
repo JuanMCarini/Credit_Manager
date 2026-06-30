@@ -473,9 +473,10 @@ class PortfolioSell:
         capital = pd.to_numeric(df["capital"].round(2), errors="coerce").fillna(0)
         interes = pd.to_numeric(df["interes"].round(2), errors="coerce").fillna(0)
         flujo_total = capital + interes
+        tna = float(self.cartera.tna_descuento)
         va_calculado = round(
             flujo_total
-            / ((1 + (self.cartera.tna_descuento * 30 / 365)) ** (dias_vto / 30)),
+            / ((1 + (tna * 30 / 365)) ** (dias_vto / 30)),
             2,
         )
         df["valor_actual"] = va_calculado
@@ -587,7 +588,7 @@ class PortfolioSell:
             if self.cartera.iva
             else 0.0
         )
-        df_crts["Tasa Compra"] = self.cartera.tna_descuento * 100
+        df_crts["Tasa Compra"] = float(self.cartera.tna_descuento) * 100
         df_crts["Valor Actual"] = df_crts["ID Operación"].map(
             df.groupby("credito_id")["valor_actual"].sum()
         )
@@ -692,7 +693,8 @@ class PortfolioSell:
         csv_files_info = self.export_to_csv()
 
         temp_dir_zip = tempfile.mkdtemp()
-        default_name = f"Cartera Nro. {str(self.cartera.id).zfill(2)} - {self.cartera.socio.razon_social} - {self.cartera.fecha_compra} - {self.cartera.tna_descuento:.2%}.zip"
+        tna = float(self.cartera.tna_descuento)
+        default_name = f"Cartera Nro. {str(self.cartera.id).zfill(2)} - {self.cartera.socio.razon_social} - {self.cartera.fecha_compra} - {tna:.2%}.zip"
 
         zip_path = os.path.join(temp_dir_zip, default_name)
 

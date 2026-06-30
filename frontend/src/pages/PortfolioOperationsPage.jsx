@@ -6,6 +6,7 @@ import useAppStore from '../store/useAppStore';
 import CarteraPreviewModal from '../components/CarteraPreviewModal';
 import ExcelDateFilter from '../components/ExcelDateFilter';
 import ExportExcelButton from '../components/ExportExcelButton';
+import * as XLSX from 'xlsx';
 
 const PortfolioOperationsPage = () => {
   const navigate = useNavigate();
@@ -87,6 +88,99 @@ const PortfolioOperationsPage = () => {
     fetchCarteras();
   };
 
+  const handleDownloadExcel = async (cartera) => {
+    try {
+      let res;
+      if (cartera.tipo_operacion === 'COMPRA') {
+        res = await axiosClient.get(`/api/v1/carteras/compra/${cartera.id}/preview`);
+      } else {
+        res = await axiosClient.post('/api/v1/carteras/venta/preview', {
+          cartera_id: cartera.id,
+          usar_cuotas_guardadas: true,
+          creditos_excluidos: [],
+          nombre_cartera: cartera.nombre || 'Export',
+          fecha_venta: cartera.fecha_compra || new Date().toISOString().split('T')[0],
+          tna_descuento: cartera.tna_descuento || 0,
+          cuit_comprador: '',
+          razon_social_comprador: cartera.socio || '',
+          mora: false, 
+          recurso: cartera.recurso || false, 
+          iva: cartera.iva || false, 
+          cuotas_completas: false
+        });
+      }
+
+      const { creditos, cuotas, resumen } = res.data;
+
+      const formatDates = (arr, dateFields) => {
+        return arr.map(item => {
+          const newItem = { ...item };
+          for (const field of dateFields) {
+            if (newItem[field]) {
+              let dateStr = newItem[field];
+              if (dateStr.length === 7) dateStr += "-01";
+              
+              const d = new Date(dateStr + "T00:00:00");
+              if (!isNaN(d)) {
+                newItem[field] = d;
+              }
+            }
+          }
+          return newItem;
+        });
+      };
+
+      const formattedCreditos = formatDates(creditos || [], ['fecha_emision']);
+      const formattedCuotas = formatDates(cuotas || [], ['fecha_vencimiento', 'fecha_vencimiento_pago']);
+      const formattedResumen = formatDates(resumen || [], ['mes', 'mes_pago', 'fecha_vencimiento']);
+
+      const wb = XLSX.utils.book_new();
+      
+      const sheetOptions = { cellDates: true, dateNF: 'dd/mm/yyyy' };
+      
+      const wsCreditos = XLSX.utils.json_to_sheet(formattedCreditos, sheetOptions);
+      XLSX.utils.book_append_sheet(wb, wsCreditos, "Créditos");
+      
+      const wsCuotas = XLSX.utils.json_to_sheet(formattedCuotas, sheetOptions);
+      XLSX.utils.book_append_sheet(wb, wsCuotas, "Cuotas");
+      
+      const wsResumen = XLSX.utils.json_to_sheet(formattedResumen, sheetOptions);
+      XLSX.utils.book_append_sheet(wb, wsResumen, "Vencimientos");
+      
+      XLSX.writeFile(wb, `Operacion_${cartera.id}_${cartera.nombre}.xlsx`);
+    } catch (error) {
+      alert("Error al descargar Excel: " + (error.response?.data?.detail || error.message));
+    }
+  };
+
+  const handleDownloadCsvs = async (cartera) => {
+    try {
+      const response = await axiosClient.get(`/api/v1/carteras/${cartera.id}/export`, {
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Venta_${cartera.id}_${cartera.nombre}.zip`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode.removeChild(link);
+    } catch (error) {
+      if (error.response && error.response.data instanceof Blob) {
+        // Parse error blob
+        const text = await error.response.data.text();
+        try {
+          const json = JSON.parse(text);
+          alert("Error al descargar CSVs: " + (json.detail || "Error desconocido"));
+        } catch {
+          alert("Error al descargar CSVs.");
+        }
+      } else {
+        alert("Error al descargar CSVs: " + (error.message || 'Error desconocido'));
+      }
+    }
+  };
+
   return (
     <section className="tab-content active" style={{ animation: 'fadeIn 0.4s ease' }}>
       <header className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
@@ -150,6 +244,14 @@ const PortfolioOperationsPage = () => {
                   <td>{c.iva ? 'Sí' : 'No'}</td>
                   <td>
                     <div style={{ display: 'flex', gap: '8px' }}>
+                      <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadExcel(c)} title="Descargar Excel de la Operación">
+                        📊
+                      </button>
+                      {c.tipo_operacion === 'VENTA' && (
+                        <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadCsvs(c)} title="Descargar CSVs Generados">
+                          📁
+                        </button>
+                      )}
                       {c.estado === 'PENDIENTE' && (
                         <>
                           <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleChangeEstado(c.id, c.tipo_operacion === 'VENTA' ? 'VENDIDA' : 'COMPRADA')} title="Confirmar">
