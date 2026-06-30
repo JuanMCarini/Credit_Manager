@@ -36,6 +36,7 @@ from .models import (
     EstadoComisionEnum,
     TipoCredito,
     Relacion,
+    Transferencia,
 )
 
 # Import events to register SQLAlchemy event listeners
@@ -71,4 +72,5 @@ __all__ = [
     "Relacion",
     "seed_admin",
     "seed_provincias",
+    "Transferencia",
 ]

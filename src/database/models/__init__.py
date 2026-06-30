@@ -4,6 +4,7 @@ from .creditos import OrigenCredito, EstadoCredito, TipoCredito, Credito, Estado
 from .carteras import TipoOperacionCartera, EstadoCartera, Cartera, OperacionCartera
 from .cobranzas import TipoProcesoEnum, EstadoProcesoEnum, Proceso, TipoCobranzaEnum, Cobranza, TipoLiquidacionEnum, LiquidacionCuotaCedida
 from .auth import TipoRolEnum, Rol, Usuario, RegistroAuditoria
+from .creditos import Transferencia
 
 __all__ = [
     "SexoEnum", "EstadoClienteEnum", "Empleador", "Provincia", "Cliente",
@@ -11,5 +12,5 @@ __all__ = [
     "OrigenCredito", "EstadoCredito", "TipoCredito", "Credito", "EstadoCuota", "EstadoCuotaCedida", "Cuota",
     "TipoOperacionCartera", "EstadoCartera", "Cartera", "OperacionCartera",
     "TipoProcesoEnum", "EstadoProcesoEnum", "Proceso", "TipoCobranzaEnum", "Cobranza", "TipoLiquidacionEnum", "LiquidacionCuotaCedida",
-    "TipoRolEnum", "Rol", "Usuario", "RegistroAuditoria"
+    "TipoRolEnum", "Rol", "Usuario", "RegistroAuditoria", "Transferencia"
 ]

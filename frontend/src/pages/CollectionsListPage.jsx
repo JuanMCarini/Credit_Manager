@@ -31,6 +31,7 @@ const CollectionsListPage = () => {
     CUIL: '', 
     CreditoID: '', 
     Tipo: '',
+    FechaVto: [],
     Capital: {},
     Interes: {},
     IVA: {},
@@ -77,6 +78,7 @@ const CollectionsListPage = () => {
         ...(f.IVA?.max !== undefined && { iva_max: f.IVA.max }),
         ...(f.Total?.min !== undefined && { total_min: f.Total.min }),
         ...(f.Total?.max !== undefined && { total_max: f.Total.max }),
+        ...(f.FechaVto && f.FechaVto.length > 0 && { vto_dates: f.FechaVto.join(',') }),
     };
     
     const res = await axiosClient.get('/api/v1/cobranzas', { params: p });
@@ -99,6 +101,7 @@ const CollectionsListPage = () => {
   const cobranzas = data?.items || [];
   const totalItems = data?.total || 0;
   const availableTipos = data?.available_tipos || ['COMUN', 'ANTICIPO', 'CANCELACION ANTICIPADA', 'BONIFICACION POR CANCELACION ANTICIPADA', 'CUOTA NO COMPRADA', 'PENALTY', 'RECURSO', 'AJUSTE'];
+  const availableVtoDates = data?.available_vto_dates || [];
   const totalPages = Math.ceil(totalItems / limit);
 
   const handleFilterChange = (key, value) => {
@@ -334,8 +337,17 @@ const CollectionsListPage = () => {
                       <input type="text" placeholder="Crédito..." value={filter.CreditoID} onChange={e => handleFilterChange('CreditoID', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
                     </th>
                     <th>Cuota</th>
-                    <th>Fecha Vto</th>
-                    <th style={{ position: 'relative' }}>
+                    <th>
+                      Fecha Vto
+                      <div style={{ marginTop: '5px' }}>
+                        <ExcelDateFilter 
+                          availableDates={availableVtoDates}
+                          selectedDates={filter.FechaVto || []}
+                          onChange={dates => handleFilterChange('FechaVto', dates)}
+                        />
+                      </div>
+                    </th>
+                    <th>
                       Tipo
                       <details style={{ position: 'relative', marginTop: '5px' }}>
                         <summary style={{ fontSize: '11px', padding: '4px', cursor: 'pointer', background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: '4px', listStyle: 'none', userSelect: 'none' }}>
@@ -447,32 +459,38 @@ const CollectionsListPage = () => {
                 </tbody>
                 <tfoot style={{ background: 'rgba(255, 255, 255, 0.05)', fontWeight: 'bold' }}>
                   {(() => {
-                    let displayTotals = totals;
-                    let label = "TOTALES (Filtro Actual):";
+                    let loteRow = null;
                     
                     if (filter.ProcesoID && procesosData) {
                       const selectedProceso = procesosData.find(p => String(p.ID) === String(filter.ProcesoID));
                       if (selectedProceso) {
-                        displayTotals = {
-                          capital: selectedProceso.Capital,
-                          interes: selectedProceso.Interes,
-                          iva: selectedProceso.IVA,
-                          total: selectedProceso.Total
-                        };
-                        label = `TOTALES (Lote #${selectedProceso.ID}):`;
+                        loteRow = (
+                          <tr style={{ opacity: 0.8, fontSize: '0.95em' }}>
+                            <td colSpan="7" style={{ textAlign: 'right' }}>TOTALES (Lote #{selectedProceso.ID}):</td>
+                            <td>{formatCurrency(selectedProceso.Capital)}</td>
+                            <td>{formatCurrency(selectedProceso.Interes)}</td>
+                            <td>{formatCurrency(selectedProceso.IVA)}</td>
+                            <td style={{ color: 'var(--text-muted)' }}>{formatCurrency(selectedProceso.Total)}</td>
+                            <td></td>
+                            <td></td>
+                          </tr>
+                        );
                       }
                     }
                     
                     return (
-                      <tr>
-                        <td colSpan="7" style={{ textAlign: 'right' }}>{label}</td>
-                        <td>{formatCurrency(displayTotals.capital)}</td>
-                        <td>{formatCurrency(displayTotals.interes)}</td>
-                        <td>{formatCurrency(displayTotals.iva)}</td>
-                        <td style={{ color: 'var(--accent-secondary)' }}>{formatCurrency(displayTotals.total)}</td>
-                        <td></td>
-                        <td></td>
-                      </tr>
+                      <>
+                        {loteRow}
+                        <tr>
+                          <td colSpan="7" style={{ textAlign: 'right' }}>TOTALES (Filtro Actual):</td>
+                          <td>{formatCurrency(totals.capital)}</td>
+                          <td>{formatCurrency(totals.interes)}</td>
+                          <td>{formatCurrency(totals.iva)}</td>
+                          <td style={{ color: 'var(--accent-secondary)' }}>{formatCurrency(totals.total)}</td>
+                          <td></td>
+                          <td></td>
+                        </tr>
+                      </>
                     );
                   })()}
                 </tfoot>

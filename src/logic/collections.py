@@ -537,7 +537,7 @@ class CollectionManager:
                 row = partial_df.index.values[0]
                 partial_df.loc[row, "total"] = unuse_amount
 
-                if unuse_amount < partial_df.loc[row, "interes"]:
+                if unuse_amount <= (partial_df.loc[row, "interes"] + partial_df.loc[row, "iva"]):
                     partial_df.loc[row, "interes"] = round(
                         unuse_amount / (1 + tasa_iva), 2
                     )

@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import axiosClient from '../api/axiosClient';
 import ClientCCModal from '../components/ClientCCModal';
 import CreditEditEstadoModal from '../components/CreditEditEstadoModal';
+import TransfersModal from '../components/TransfersModal';
 import ExcelDateFilter from '../components/ExcelDateFilter';
 import ExcelNumberRangeFilter from '../components/ExcelNumberRangeFilter';
 import ExportExcelButton from '../components/ExportExcelButton';
@@ -27,6 +28,7 @@ const CreditListPage = () => {
 
   const [ccCuil, setCcCuil] = useState(null);
   const [editCredito, setEditCredito] = useState(null);
+  const [viewTransfersCredito, setViewTransfersCredito] = useState(null);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -224,6 +226,9 @@ const CreditListPage = () => {
                         <button className="btn-secondary" onClick={() => setCcCuil(c["Cliente CUIL"])} style={{ padding: '4px 8px', fontSize: '14px' }} title="Ver Cuenta Corriente">
                           👁️
                         </button>
+                        <button className="btn-secondary" onClick={() => setViewTransfersCredito(c.ID)} style={{ padding: '4px 8px', fontSize: '14px' }} title="Ver Transferencias">
+                          💸
+                        </button>
                         <button className="btn-secondary" onClick={() => setEditCredito({ id: c.ID, estado: c.Estado })} style={{ padding: '4px 8px', fontSize: '14px' }} title="Editar Estado">
                           ✏️
                         </button>
@@ -249,6 +254,7 @@ const CreditListPage = () => {
 
       {ccCuil && <ClientCCModal cuil={ccCuil} onClose={() => setCcCuil(null)} />}
       {editCredito && <CreditEditEstadoModal creditoId={editCredito.id} currentEstado={editCredito.estado} onClose={() => setEditCredito(null)} onSuccess={fetchCreditos} />}
+      {viewTransfersCredito && <TransfersModal creditoId={viewTransfersCredito} onClose={() => setViewTransfersCredito(null)} />}
     </section>
   );
 };

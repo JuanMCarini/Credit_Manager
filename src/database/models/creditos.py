@@ -100,6 +100,7 @@ class Credito(Base):
     )
     cartera = relationship("Cartera", back_populates="creditos_incluidos")
     comision = relationship("TasaYComision", back_populates="creditos")
+    transferencias = relationship("Transferencia", back_populates="credito", cascade="all, delete-orphan")
 
     def actualizar_estado(self) -> str:
         estados_manuales = [EstadoCredito.RECHAZADO, EstadoCredito.JUDICIAL]
@@ -320,3 +321,19 @@ class Cuota(Base):
 
     def __repr__(self):
         return f"<Cuota(credito_id={self.credito_id}, nro={self.nro_cuota}, estado={self.estado}, estado_cesion={self.estado_cesion})>"
+
+
+class Transferencia(Base):
+    __tablename__ = "transferencias"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    cbu = Column(String(22), nullable=False)
+    monto = Column(Numeric(15, 2), nullable=False)
+    cuit = Column(String(11), nullable=False)
+    credito_id = Column(Integer, ForeignKey("creditos.id"), nullable=False)
+    razon_social = Column(String(255), nullable=False)
+
+    credito = relationship("Credito", back_populates="transferencias")
+
+    def __repr__(self):
+        return f"<Transferencia(cbu={self.cbu}, monto={self.monto}, cuit={self.cuit}, credito_id={self.credito_id}, razon_social={self.razon_social})>"
