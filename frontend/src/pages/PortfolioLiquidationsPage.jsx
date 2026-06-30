@@ -193,12 +193,12 @@ const PortfolioLiquidationsPage = () => {
           <table className="data-table">
             <thead>
               <tr>
-                <th style={{ minWidth: '70px' }}>ID <br/>{renderInput('id', '...')}</th>
-                <th style={{ minWidth: '90px' }}>Proceso ID <br/>{renderInput('proceso_id', '...')}</th>
-                <th style={{ minWidth: '90px' }}>Cartera ID <br/>{renderInput('cartera_id', '...')}</th>
-                <th style={{ minWidth: '90px' }}>Cuota ID <br/>{renderInput('cuota_id', '...')}</th>
-                <th style={{ minWidth: '100px' }}>Cobranza ID <br/>{renderInput('cobranza_id', '...')}</th>
-                <th style={{ minWidth: '100px', position: 'relative' }}>
+                <th style={{minWidth: '70px'}}>ID <br/>{renderInput('id', '...')}</th>
+                <th style={{minWidth: '90px'}}>Proceso ID <br/>{renderInput('proceso_id', '...')}</th>
+                <th style={{minWidth: '90px'}}>Cartera ID <br/>{renderInput('cartera_id', '...')}</th>
+                <th style={{minWidth: '90px'}}>Cuota ID <br/>{renderInput('cuota_id', '...')}</th>
+                <th style={{minWidth: '100px'}}>Cobranza ID <br/>{renderInput('cobranza_id', '...')}</th>
+                <th style={{minWidth: '100px'}}>
                   Tipo <br/>
                   <div 
                     onClick={e => { e.stopPropagation(); setShowTipoFilter(!showTipoFilter); }}
@@ -234,9 +234,9 @@ const PortfolioLiquidationsPage = () => {
                     </div>
                   )}
                 </th>
-                <th style={{ minWidth: '90px' }}>ID Crédito <br/>{renderInput('credito_id', '...')}</th>
-                <th style={{ minWidth: '90px' }}>Nro. Cuota <br/>{renderInput('nro_cuota', '...')}</th>
-                <th style={{ minWidth: '110px' }}>
+                <th style={{minWidth: '90px'}}>ID Crédito <br/>{renderInput('credito_id', '...')}</th>
+                <th style={{minWidth: '90px'}}>Nro. Cuota <br/>{renderInput('nro_cuota', '...')}</th>
+                <th style={{minWidth: '110px'}}>
                   Vencimiento <br/>
                   <ExcelDateFilter 
                     availableDates={AVAILABLE_FECHAS_VENCIMIENTO}
@@ -244,11 +244,11 @@ const PortfolioLiquidationsPage = () => {
                     onChange={dates => handleFilterChange('fecha_vencimiento', dates)}
                   />
                 </th>
-                <th style={{ minWidth: '90px' }}>Capital <br/>{renderInput('capital', '...')}</th>
-                <th style={{ minWidth: '90px' }}>Interés <br/>{renderInput('interes', '...')}</th>
-                <th style={{ minWidth: '90px' }}>IVA <br/>{renderInput('iva', '...')}</th>
-                <th style={{ minWidth: '90px' }}>Total <br/>{renderInput('importe_total', '...')}</th>
-                <th style={{ minWidth: '110px' }}>
+                <th style={{minWidth: '90px'}}>Capital <br/>{renderInput('capital', '...')}</th>
+                <th style={{minWidth: '90px'}}>Interés <br/>{renderInput('interes', '...')}</th>
+                <th style={{minWidth: '90px'}}>IVA <br/>{renderInput('iva', '...')}</th>
+                <th style={{minWidth: '90px'}}>Total <br/>{renderInput('importe_total', '...')}</th>
+                <th style={{minWidth: '110px'}}>
                   Fecha Pago <br/>
                   <ExcelDateFilter 
                     availableDates={AVAILABLE_FECHAS_PAGO}
@@ -256,7 +256,7 @@ const PortfolioLiquidationsPage = () => {
                     onChange={dates => handleFilterChange('fecha_pago', dates)}
                   />
                 </th>
-                <th style={{ minWidth: '100px' }}>
+                <th style={{minWidth: '100px'}}>
                   Estado <br/>
                   <select 
                     value={filter.cancelada} 
@@ -309,7 +309,7 @@ const PortfolioLiquidationsPage = () => {
                 <th>Estado</th>
                 <th>Descripción</th>
                 <th>Fecha Ejecución</th>
-                <th style={{ width: '80px', textAlign: 'center' }}>Acciones</th>
+                <th style={{width: '80px', textAlign: 'center'}}>Acciones</th>
               </tr>
             </thead>
             <tbody>

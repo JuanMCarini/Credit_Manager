@@ -138,7 +138,7 @@ const ClientListPage = () => {
                   Nombre <SortIcon columnKey="Nombre" />
                   <input type="text" placeholder="Filtrar Nombre..." value={filter.Nombre} onChange={e => setFilter({ ...filter, Nombre: e.target.value })} onClick={e => e.stopPropagation()} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
                 </th>
-                <th onClick={() => handleSort('Estado')} style={{ cursor: 'pointer', position: 'relative' }}>
+                <th onClick={() => handleSort('Estado')} style={{ cursor: 'pointer' }}>
                   Estado <SortIcon columnKey="Estado" />
                   <div 
                     onClick={e => { e.stopPropagation(); setShowEstadoFilter(!showEstadoFilter); }}

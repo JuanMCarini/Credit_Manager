@@ -658,18 +658,18 @@ const PortfolioOriginationPage = () => {
                   </div>
                   <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', overflowY: 'auto', flex: 1 }}>
                     <table className="data-table" style={{ width: '100%', fontSize: '13px' }}>
-                      <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-panel)', boxShadow: '0 2px 4px rgba(0,0,0,0.2)' }}>
+                      <thead style={{position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-panel)', boxShadow: '0 2px 4px rgba(0,0,0,0.2)'}}>
                         {tipoOperacion === 'VENTA' ? (
                           <tr>
-                            <th style={{ textAlign: 'left', padding: '12px', verticalAlign: 'top' }}>
+                            <th style={{textAlign: 'left', padding: '12px', verticalAlign: 'top'}}>
                               ID
                               <input type="text" placeholder="Filtrar..." value={filterCreditos.id || ''} onChange={e => handleFilterChange('id', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
                             </th>
-                            <th style={{ textAlign: 'left', padding: '12px', verticalAlign: 'top' }}>
+                            <th style={{textAlign: 'left', padding: '12px', verticalAlign: 'top'}}>
                               Cliente
                               <input type="text" placeholder="Filtrar..." value={filterCreditos.cliente || ''} onChange={e => handleFilterChange('cliente', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
                             </th>
-                            <th style={{ textAlign: 'left', padding: '12px', verticalAlign: 'top', position: 'relative' }}>
+                            <th style={{textAlign: 'left', padding: '12px', verticalAlign: 'top'}}>
                               Estado
                               <div onClick={e => { e.stopPropagation(); setShowPreviewEstadoFilter(!showPreviewEstadoFilter); }} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', background: 'rgba(255,255,255,0.1)', border: '1px solid var(--border-color)', borderRadius: '4px', textAlign: 'center', cursor: 'pointer' }}>
                                 {!(filterCreditos.estado?.length) ? "Todos" : `${filterCreditos.estado.length} selec.`}
@@ -688,46 +688,46 @@ const PortfolioOriginationPage = () => {
                                 </div>
                               )}
                             </th>
-                            <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
+                            <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                               Monto Orig.
                               <ExcelNumberRangeFilter selectedRange={filterCreditos.monto_otorgado || {}} onChange={r => handleFilterChange('monto_otorgado', r)} />
                             </th>
-                            <th style={{ textAlign: 'center', padding: '12px', verticalAlign: 'top' }}>
+                            <th style={{textAlign: 'center', padding: '12px', verticalAlign: 'top'}}>
                               Cuotas
                               <input type="text" placeholder="Filtrar..." value={filterCreditos.total_cuotas || ''} onChange={e => handleFilterChange('total_cuotas', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
                             </th>
-                            <th style={{ textAlign: 'center', padding: '12px', verticalAlign: 'top' }}>
+                            <th style={{textAlign: 'center', padding: '12px', verticalAlign: 'top'}}>
                               A Ceder
                               <input type="text" placeholder="Filtrar..." value={filterCreditos.cuotas_a_ceder || ''} onChange={e => handleFilterChange('cuotas_a_ceder', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
                             </th>
-                            <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
+                            <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                               Valor Actual
                               <ExcelNumberRangeFilter selectedRange={filterCreditos.valor_actual || {}} onChange={r => handleFilterChange('valor_actual', r)} />
                             </th>
                           </tr>
                         ) : (
                           <tr>
-                            <th style={{ textAlign: 'left', padding: '12px', verticalAlign: 'top' }}>
+                            <th style={{textAlign: 'left', padding: '12px', verticalAlign: 'top'}}>
                               ID Externo
                               <input type="text" placeholder="Filtrar..." value={filterCreditos.id_externo || ''} onChange={e => handleFilterChange('id_externo', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
                             </th>
-                            <th style={{ textAlign: 'left', padding: '12px', verticalAlign: 'top' }}>
+                            <th style={{textAlign: 'left', padding: '12px', verticalAlign: 'top'}}>
                               Cliente
                               <input type="text" placeholder="Filtrar..." value={filterCreditos.cliente_nombre || ''} onChange={e => handleFilterChange('cliente_nombre', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
                             </th>
-                            <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
+                            <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                               Cap. Vendido
                               <ExcelNumberRangeFilter selectedRange={filterCreditos.capital_vendido || {}} onChange={r => handleFilterChange('capital_vendido', r)} />
                             </th>
-                            <th style={{ textAlign: 'center', padding: '12px', verticalAlign: 'top' }}>
+                            <th style={{textAlign: 'center', padding: '12px', verticalAlign: 'top'}}>
                               Plazo
                               <input type="text" placeholder="Filtrar..." value={filterCreditos.plazo || ''} onChange={e => handleFilterChange('plazo', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
                             </th>
-                            <th style={{ textAlign: 'center', padding: '12px', verticalAlign: 'top' }}>
+                            <th style={{textAlign: 'center', padding: '12px', verticalAlign: 'top'}}>
                               Adquiridas
                               <input type="text" placeholder="Filtrar..." value={filterCreditos.cuotas_compradas || ''} onChange={e => handleFilterChange('cuotas_compradas', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
                             </th>
-                            <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
+                            <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                               Valor Actual
                               <ExcelNumberRangeFilter selectedRange={filterCreditos.valor_actual || {}} onChange={r => handleFilterChange('valor_actual', r)} />
                             </th>
@@ -830,42 +830,42 @@ const PortfolioOriginationPage = () => {
                   </div>
                   <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', overflowY: 'auto', flex: 1 }}>
                     <table className="data-table" style={{ width: '100%', fontSize: '13px' }}>
-                      <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-panel)', boxShadow: '0 2px 4px rgba(0,0,0,0.2)' }}>
+                      <thead style={{position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-panel)', boxShadow: '0 2px 4px rgba(0,0,0,0.2)'}}>
                         {tipoOperacion === 'VENTA' ? (
                           <tr>
-                            <th style={{ textAlign: 'left', padding: '12px', verticalAlign: 'top' }}>
+                            <th style={{textAlign: 'left', padding: '12px', verticalAlign: 'top'}}>
                               Crédito ID
                               <input type="text" placeholder="Filtrar..." value={filterCuotas.credito_id || ''} onChange={e => handleFilterChange('credito_id', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
                             </th>
-                            <th style={{ textAlign: 'center', padding: '12px', verticalAlign: 'top' }}>
+                            <th style={{textAlign: 'center', padding: '12px', verticalAlign: 'top'}}>
                               Nro Cuota
                               <input type="text" placeholder="Filtrar..." value={filterCuotas.nro_cuota || ''} onChange={e => handleFilterChange('nro_cuota', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
                             </th>
-                            <th style={{ textAlign: 'left', padding: '12px', verticalAlign: 'top' }}>
+                            <th style={{textAlign: 'left', padding: '12px', verticalAlign: 'top'}}>
                               Vencimiento
                               <input type="text" placeholder="Filtrar..." value={filterCuotas.fecha_vencimiento || ''} onChange={e => handleFilterChange('fecha_vencimiento', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
                             </th>
-                            <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
+                            <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                               Capital
                               <ExcelNumberRangeFilter selectedRange={filterCuotas.capital || {}} onChange={r => handleFilterChange('capital', r)} />
                             </th>
-                            <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
+                            <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                               Interés
                               <ExcelNumberRangeFilter selectedRange={filterCuotas.interes || {}} onChange={r => handleFilterChange('interes', r)} />
                             </th>
-                            <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
+                            <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                               IVA
                               <ExcelNumberRangeFilter selectedRange={filterCuotas.iva || {}} onChange={r => handleFilterChange('iva', r)} />
                             </th>
-                            <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
+                            <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                               Total Cuota
                               <ExcelNumberRangeFilter selectedRange={filterCuotas.total_cuota || {}} onChange={r => handleFilterChange('total_cuota', r)} />
                             </th>
-                            <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
+                            <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                               Valor Actual
                               <ExcelNumberRangeFilter selectedRange={filterCuotas.valor_actual || {}} onChange={r => handleFilterChange('valor_actual', r)} />
                             </th>
-                            <th style={{ textAlign: 'center', padding: '12px', verticalAlign: 'top', position: 'relative' }}>
+                            <th style={{textAlign: 'center', padding: '12px', verticalAlign: 'top'}}>
                               Incluida
                               <div onClick={e => { e.stopPropagation(); setShowPreviewIncluidaFilter(!showPreviewIncluidaFilter); }} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', background: 'rgba(255,255,255,0.1)', border: '1px solid var(--border-color)', borderRadius: '4px', textAlign: 'center', cursor: 'pointer' }}>
                                 {!(filterCuotas.incluida?.length) ? "Todos" : `${filterCuotas.incluida.length} selec.`}
@@ -887,39 +887,39 @@ const PortfolioOriginationPage = () => {
                           </tr>
                         ) : (
                           <tr>
-                            <th style={{ textAlign: 'left', padding: '12px', verticalAlign: 'top' }}>
+                            <th style={{textAlign: 'left', padding: '12px', verticalAlign: 'top'}}>
                               ID Ext.
                               <input type="text" placeholder="Filtrar..." value={filterCuotas.credito_id_externo || ''} onChange={e => handleFilterChange('credito_id_externo', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
                             </th>
-                            <th style={{ textAlign: 'center', padding: '12px', verticalAlign: 'top' }}>
+                            <th style={{textAlign: 'center', padding: '12px', verticalAlign: 'top'}}>
                               Cuota
                               <input type="text" placeholder="Filtrar..." value={filterCuotas.nro_cuota || ''} onChange={e => handleFilterChange('nro_cuota', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
                             </th>
-                            <th style={{ textAlign: 'left', padding: '12px', verticalAlign: 'top' }}>
+                            <th style={{textAlign: 'left', padding: '12px', verticalAlign: 'top'}}>
                               Vencimiento
                               <input type="text" placeholder="Filtrar..." value={filterCuotas.fecha_vencimiento || ''} onChange={e => handleFilterChange('fecha_vencimiento', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
                             </th>
-                            <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
+                            <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                               Capital
                               <ExcelNumberRangeFilter selectedRange={filterCuotas.capital || {}} onChange={r => handleFilterChange('capital', r)} />
                             </th>
-                            <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
+                            <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                               Interés
                               <ExcelNumberRangeFilter selectedRange={filterCuotas.interes || {}} onChange={r => handleFilterChange('interes', r)} />
                             </th>
-                            <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
+                            <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                               IVA
                               <ExcelNumberRangeFilter selectedRange={filterCuotas.iva || {}} onChange={r => handleFilterChange('iva', r)} />
                             </th>
-                            <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
+                            <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                               Total
                               <ExcelNumberRangeFilter selectedRange={filterCuotas.total || {}} onChange={r => handleFilterChange('total', r)} />
                             </th>
-                            <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
+                            <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                               V. Actual
                               <ExcelNumberRangeFilter selectedRange={filterCuotas.valor_actual || {}} onChange={r => handleFilterChange('valor_actual', r)} />
                             </th>
-                            <th style={{ textAlign: 'center', padding: '12px', verticalAlign: 'top', position: 'relative' }}>
+                            <th style={{textAlign: 'center', padding: '12px', verticalAlign: 'top'}}>
                               Comprada
                               <div onClick={e => { e.stopPropagation(); setShowPreviewCompradaFilter(!showPreviewCompradaFilter); }} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', background: 'rgba(255,255,255,0.1)', border: '1px solid var(--border-color)', borderRadius: '4px', textAlign: 'center', cursor: 'pointer' }}>
                                 {!(filterCuotas.comprada?.length) ? "Todos" : `${filterCuotas.comprada.length} selec.`}
@@ -1015,33 +1015,33 @@ const PortfolioOriginationPage = () => {
                   </div>
                   <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', overflowY: 'auto', flex: 1 }}>
                     <table className="data-table" style={{ width: '100%', fontSize: '13px' }}>
-                      <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-panel)', boxShadow: '0 2px 4px rgba(0,0,0,0.2)' }}>
+                      <thead style={{position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-panel)', boxShadow: '0 2px 4px rgba(0,0,0,0.2)'}}>
                         <tr>
-                          <th style={{ textAlign: 'left', padding: '12px', verticalAlign: 'top' }}>
+                          <th style={{textAlign: 'left', padding: '12px', verticalAlign: 'top'}}>
                             {tipoOperacion === 'VENTA' ? 'Mes Vto.' : 'Mes'}
                             <input type="text" placeholder="Filtrar..." value={tipoOperacion === 'VENTA' ? (filterResumen.fecha_vencimiento || '') : (filterResumen.mes || '')} onChange={e => handleFilterChange(tipoOperacion === 'VENTA' ? 'fecha_vencimiento' : 'mes', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
                           </th>
-                          <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
+                          <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                             Cuotas
                             <input type="text" placeholder="Filtrar..." value={tipoOperacion === 'VENTA' ? (filterResumen.cantidad || '') : (filterResumen.cantidad_cuotas || '')} onChange={e => handleFilterChange(tipoOperacion === 'VENTA' ? 'cantidad' : 'cantidad_cuotas', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
                           </th>
-                          <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
+                          <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                             Capital Total
                             <ExcelNumberRangeFilter selectedRange={tipoOperacion === 'VENTA' ? (filterResumen.capital || {}) : (filterResumen.capital_total || {})} onChange={r => handleFilterChange(tipoOperacion === 'VENTA' ? 'capital' : 'capital_total', r)} />
                           </th>
-                          <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
+                          <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                             Interés Total
                             <ExcelNumberRangeFilter selectedRange={tipoOperacion === 'VENTA' ? (filterResumen.interes || {}) : (filterResumen.interes_total || {})} onChange={r => handleFilterChange(tipoOperacion === 'VENTA' ? 'interes' : 'interes_total', r)} />
                           </th>
-                          <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
+                          <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                             IVA Total
                             <ExcelNumberRangeFilter selectedRange={tipoOperacion === 'VENTA' ? (filterResumen.iva || {}) : (filterResumen.iva_total || {})} onChange={r => handleFilterChange(tipoOperacion === 'VENTA' ? 'iva' : 'iva_total', r)} />
                           </th>
-                          <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
+                          <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                             Monto Total
                             <ExcelNumberRangeFilter selectedRange={tipoOperacion === 'VENTA' ? (filterResumen.total_cuota || {}) : (filterResumen.monto_total || {})} onChange={r => handleFilterChange(tipoOperacion === 'VENTA' ? 'total_cuota' : 'monto_total', r)} />
                           </th>
-                          <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
+                          <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                             Valor Actual
                             <ExcelNumberRangeFilter selectedRange={filterResumen.valor_actual || {}} onChange={r => handleFilterChange('valor_actual', r)} />
                           </th>

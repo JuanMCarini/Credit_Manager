@@ -228,7 +228,7 @@ const AuxiliaryTablesPage = () => {
                   if (col === 'es_pasivo') headerText = 'ES PASIVO';
                   return <th key={col}>{headerText}</th>;
                 })}
-                <th style={{ textAlign: 'center' }}>ACCIONES</th>
+                <th style={{textAlign: 'center'}}>ACCIONES</th>
               </tr>
             </thead>
             <tbody>

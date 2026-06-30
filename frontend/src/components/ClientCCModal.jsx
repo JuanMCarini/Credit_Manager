@@ -281,7 +281,7 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
         ) : (
           <div className="table-responsive" style={{ flex: 1, overflowY: 'auto', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
             <table className="data-table" style={{ width: '100%', margin: 0 }}>
-              <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-panel)', boxShadow: '0 2px 4px rgba(0,0,0,0.2)' }}>
+              <thead style={{position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-panel)', boxShadow: '0 2px 4px rgba(0,0,0,0.2)'}}>
                 <tr>
                   <th onClick={() => handleSort('credito_id')} style={{ cursor: 'pointer' }}>
                     Crédito <SortIcon columnKey="credito_id" />
@@ -307,7 +307,7 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
                   <th onClick={() => handleSort('total_esperado')} style={{ cursor: 'pointer' }}>Total <SortIcon columnKey="total_esperado" /></th>
                   <th onClick={() => handleSort('total_cobrado')} style={{ cursor: 'pointer' }}>Total Cob. <SortIcon columnKey="total_cobrado" /></th>
                   <th onClick={() => handleSort('saldo_pendiente')} style={{ cursor: 'pointer' }}>Saldo Pend. <SortIcon columnKey="saldo_pendiente" /></th>
-                  <th onClick={() => handleSort('estado')} style={{ cursor: 'pointer', position: 'relative' }}>
+                  <th onClick={() => handleSort('estado')} style={{ cursor: 'pointer' }}>
                     Estado <SortIcon columnKey="estado" />
                     <div onClick={e => { e.stopPropagation(); setShowEstadoFilter(!showEstadoFilter); }} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', background: 'rgba(255,255,255,0.1)', border: '1px solid var(--border-color)', borderRadius: '4px', textAlign: 'center', cursor: 'pointer' }}>
                       {filter.Estado.length === 0 ? "Todos" : `${filter.Estado.length} selec.`}

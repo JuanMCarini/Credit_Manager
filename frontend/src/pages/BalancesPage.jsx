@@ -308,7 +308,7 @@ const BalancesPage = () => {
                     const isCurrency = ["Capital", "Interés", "IVA", "Total", "Total Saldo"].includes(col.label);
                     
                     return (
-                      <th key={i} onClick={() => handleSort(col.key)} style={{ cursor: 'pointer', position: 'relative' }}>
+                      <th key={i} onClick={() => handleSort(col.key)} style={{ cursor: 'pointer' }}>
                         {col.label} <SortIcon columnKey={col.key} />
                         {col.key === 'Fecha Vencimiento' ? (
                           <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
