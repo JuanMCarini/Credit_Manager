@@ -452,6 +452,13 @@ class CollectionManager:
         # 1. Total cobrado por cuota y concepto en esta operación
         collected_per_cuota = df_cobr.groupby(level=0)[["capital", "interes", "iva", "total"]].sum()
         
+        # Intersect with df_pending to exclude newly generated penalty installments
+        valid_indices = collected_per_cuota.index.intersection(df_pending.index)
+        collected_per_cuota = collected_per_cuota.loc[valid_indices]
+        
+        if collected_per_cuota.empty:
+            return df_cobr
+        
         # 2. Total esperado por cuota original (solo las cuotas tocadas)
         expected_per_cuota = df_pending.loc[collected_per_cuota.index, ["capital", "interes", "iva", "total"]]
 

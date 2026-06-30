@@ -120,13 +120,16 @@ const CollectionsListPage = () => {
   };
 
   const totals = useMemo(() => {
+    if (data?.global_totals) {
+      return data.global_totals;
+    }
     return cobranzas.reduce((acc, curr) => ({
       capital: acc.capital + (curr.Capital || 0),
       interes: acc.interes + (curr['Interes'] || 0),
       iva: acc.iva + (curr.IVA || 0),
       total: acc.total + (curr.Total || 0)
     }), { capital: 0, interes: 0, iva: 0, total: 0 });
-  }, [cobranzas]);
+  }, [cobranzas, data]);
 
   // --- PROCESOS FETCH ---
   const fetchProcesos = async () => {
@@ -289,6 +292,18 @@ const CollectionsListPage = () => {
                   </option>
                 ))}
               </select>
+              {filter.ProcesoID && procesosData && (() => {
+                const selectedProceso = procesosData.find(p => String(p.ID) === String(filter.ProcesoID));
+                if (!selectedProceso) return null;
+                return (
+                  <div style={{ marginTop: '8px', fontSize: '12px', fontWeight: 'bold', display: 'flex', gap: '15px', padding: '6px', background: 'rgba(0,0,0,0.2)', borderRadius: '4px' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Capital: {formatCurrency(selectedProceso.Capital)}</span>
+                    <span style={{ color: 'var(--text-secondary)' }}>Interés: {formatCurrency(selectedProceso.Interes)}</span>
+                    <span style={{ color: 'var(--text-secondary)' }}>IVA: {formatCurrency(selectedProceso.IVA)}</span>
+                    <span style={{ color: 'var(--accent-primary)' }}>Total: {formatCurrency(selectedProceso.Total)}</span>
+                  </div>
+                );
+              })()}
             </div>
             <div style={{ flex: 1 }}>
                 <p style={{ fontSize: '12px', opacity: 0.7 }}>
@@ -431,15 +446,35 @@ const CollectionsListPage = () => {
                   )}
                 </tbody>
                 <tfoot style={{ background: 'rgba(255, 255, 255, 0.05)', fontWeight: 'bold' }}>
-                  <tr>
-                    <td colSpan="7" style={{ textAlign: 'right' }}>TOTALES (Pagina actual):</td>
-                    <td>{formatCurrency(totals.capital)}</td>
-                    <td>{formatCurrency(totals.interes)}</td>
-                    <td>{formatCurrency(totals.iva)}</td>
-                    <td style={{ color: 'var(--accent-secondary)' }}>{formatCurrency(totals.total)}</td>
-                    <td></td>
-                    <td></td>
-                  </tr>
+                  {(() => {
+                    let displayTotals = totals;
+                    let label = "TOTALES (Filtro Actual):";
+                    
+                    if (filter.ProcesoID && procesosData) {
+                      const selectedProceso = procesosData.find(p => String(p.ID) === String(filter.ProcesoID));
+                      if (selectedProceso) {
+                        displayTotals = {
+                          capital: selectedProceso.Capital,
+                          interes: selectedProceso.Interes,
+                          iva: selectedProceso.IVA,
+                          total: selectedProceso.Total
+                        };
+                        label = `TOTALES (Lote #${selectedProceso.ID}):`;
+                      }
+                    }
+                    
+                    return (
+                      <tr>
+                        <td colSpan="7" style={{ textAlign: 'right' }}>{label}</td>
+                        <td>{formatCurrency(displayTotals.capital)}</td>
+                        <td>{formatCurrency(displayTotals.interes)}</td>
+                        <td>{formatCurrency(displayTotals.iva)}</td>
+                        <td style={{ color: 'var(--accent-secondary)' }}>{formatCurrency(displayTotals.total)}</td>
+                        <td></td>
+                        <td></td>
+                      </tr>
+                    );
+                  })()}
                 </tfoot>
               </table>
             </div>

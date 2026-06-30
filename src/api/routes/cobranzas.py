@@ -164,16 +164,41 @@ def procesar_cobranza_recurso(
 
 @router.get("/procesos")
 def get_procesos(db: Session = Depends(get_db)):
-    from src.database.models.cobranzas import Proceso
+    from src.database.models.cobranzas import Proceso, Cobranza
+    from sqlalchemy import func
+    
     procesos = db.query(Proceso).order_by(desc(Proceso.fecha_ejecucion)).all()
+    
+    totals_query = db.query(
+        Cobranza.proceso_id,
+        func.sum(Cobranza.capital).label("capital"),
+        func.sum(Cobranza.interes).label("interes"),
+        func.sum(Cobranza.iva).label("iva"),
+        func.sum(Cobranza.capital + Cobranza.interes + Cobranza.iva).label("total")
+    ).group_by(Cobranza.proceso_id).all()
+    
+    totals_map = {
+        t.proceso_id: {
+            "capital": float(t.capital or 0),
+            "interes": float(t.interes or 0),
+            "iva": float(t.iva or 0),
+            "total": float(t.total or 0)
+        } for t in totals_query if t.proceso_id is not None
+    }
+    
     result = []
     for p in procesos:
+        p_totals = totals_map.get(p.id, {"capital": 0.0, "interes": 0.0, "iva": 0.0, "total": 0.0})
         result.append({
             "ID": p.id,
             "Tipo": p.tipo.value if hasattr(p.tipo, 'value') else str(p.tipo),
             "Estado": p.estado.value if hasattr(p.estado, 'value') else str(p.estado),
             "Descripción": p.descripcion or "-",
-            "Fecha Ejecución": p.fecha_ejecucion.strftime("%Y-%m-%d %H:%M:%S") if p.fecha_ejecucion else "-"
+            "Fecha Ejecución": p.fecha_ejecucion.strftime("%Y-%m-%d %H:%M:%S") if p.fecha_ejecucion else "-",
+            "Capital": p_totals["capital"],
+            "Interes": p_totals["interes"],
+            "IVA": p_totals["iva"],
+            "Total": p_totals["total"]
         })
     return result
 
@@ -417,7 +442,24 @@ def get_cobranzas(
         if total_max is not None:
             query = query.filter(total_expr <= total_max)
             
+    from sqlalchemy import func
+    
     total = query.count()
+    
+    agg_query = query.with_entities(
+        func.sum(Cobranza.capital).label("total_capital"),
+        func.sum(Cobranza.interes).label("total_interes"),
+        func.sum(Cobranza.iva).label("total_iva"),
+        func.sum(Cobranza.capital + Cobranza.interes + Cobranza.iva).label("total_general")
+    ).first()
+    
+    global_totals = {
+        "capital": float(agg_query.total_capital or 0),
+        "interes": float(agg_query.total_interes or 0),
+        "iva": float(agg_query.total_iva or 0),
+        "total": float(agg_query.total_general or 0)
+    }
+
     cobranzas = query.order_by(desc(Cobranza.fecha)).offset(skip).limit(limit).all()
     
     result = []
@@ -441,7 +483,7 @@ def get_cobranzas(
             "IVA": float(c.iva),
             "Total": float(c.capital + c.interes + c.iva)
         })
-    return {"items": result, "total": total, "available_tipos": available_tipos}
+    return {"items": result, "total": total, "available_tipos": available_tipos, "global_totals": global_totals}
 
 @router.delete("/cobranzas/{cobranza_id}")
 def delete_cobranza(cobranza_id: int, db: Session = Depends(get_db)):
