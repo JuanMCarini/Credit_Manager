@@ -256,7 +256,7 @@ const PortfolioLiquidationsProcessingPage = () => {
 
           <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
             <table className="data-table" style={{ position: 'relative' }}>
-              <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: 'var(--bg-panel)' }}>
+              <thead style={{position: 'sticky', top: 0, zIndex: 10, backgroundColor: 'var(--bg-panel)'}}>
                 <tr>
                   <th>Cuota ID</th>
                   <th>
@@ -279,7 +279,7 @@ const PortfolioLiquidationsProcessingPage = () => {
                     Nro Cuota
                     <input type="text" placeholder="Filtrar..." value={filters.nro_cuota} onChange={(e) => handleFilterChange(e, 'nro_cuota')} style={{ display: 'block', width: '100%', marginTop: '4px', padding: '4px', fontSize: '0.8rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-primary)', borderRadius: '4px' }} />
                   </th>
-                  <th style={{ minWidth: '220px' }}>
+                  <th style={{minWidth: '220px'}}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
                       Vencimiento
                     </div>

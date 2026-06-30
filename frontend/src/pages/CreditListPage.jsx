@@ -171,7 +171,7 @@ const CreditListPage = () => {
                   TNA <SortIcon columnKey="TNA con IVA" />
                   <input type="text" placeholder="Filtrar..." value={filter.TNA} onChange={e => setFilter({ ...filter, TNA: e.target.value })} onClick={e => e.stopPropagation()} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
                 </th>
-                <th onClick={() => handleSort('Estado')} style={{ cursor: 'pointer', position: 'relative' }}>
+                <th onClick={() => handleSort('Estado')} style={{ cursor: 'pointer' }}>
                   Estado <SortIcon columnKey="Estado" />
                   <div onClick={e => { e.stopPropagation(); setShowEstadoFilter(!showEstadoFilter); }} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', background: 'rgba(255,255,255,0.1)', border: '1px solid var(--border-color)', borderRadius: '4px', textAlign: 'center', cursor: 'pointer' }}>
                     {filter.Estado.length === 0 ? "Todos" : `${filter.Estado.length} selec.`}

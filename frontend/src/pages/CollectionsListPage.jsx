@@ -537,7 +537,7 @@ const CollectionsListPage = () => {
                     <input type="text" placeholder="Filtrar ID..." value={filterProcesos.ID} onChange={e => setFilterProcesos({ ...filterProcesos, ID: e.target.value })} onClick={e => e.stopPropagation()} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
                   </th>
                   
-                  <th onClick={() => handleSortProcesos('Tipo')} style={{ cursor: 'pointer', position: 'relative' }}>
+                  <th onClick={() => handleSortProcesos('Tipo')} style={{ cursor: 'pointer' }}>
                     Tipo <SortIcon columnKey="Tipo" />
                     <div onClick={e => { e.stopPropagation(); setShowTipoFilter(!showTipoFilter); }} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', background: 'var(--surface-color)', border: '1px solid var(--border-color)', borderRadius: '4px', textAlign: 'center', cursor: 'pointer' }}>
                       {filterProcesos.Tipo.length === 0 ? "Todos" : `${filterProcesos.Tipo.length} selec.`}
@@ -554,7 +554,7 @@ const CollectionsListPage = () => {
                     )}
                   </th>
                   
-                  <th onClick={() => handleSortProcesos('Estado')} style={{ cursor: 'pointer', position: 'relative' }}>
+                  <th onClick={() => handleSortProcesos('Estado')} style={{ cursor: 'pointer' }}>
                     Estado <SortIcon columnKey="Estado" />
                     <div onClick={e => { e.stopPropagation(); setShowEstadoFilter(!showEstadoFilter); }} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', background: 'var(--surface-color)', border: '1px solid var(--border-color)', borderRadius: '4px', textAlign: 'center', cursor: 'pointer' }}>
                       {filterProcesos.Estado.length === 0 ? "Todos" : `${filterProcesos.Estado.length} selec.`}
@@ -586,7 +586,7 @@ const CollectionsListPage = () => {
                     </div>
                   </th>
                   
-                  <th style={{ textAlign: 'center' }}>Acciones</th>
+                  <th style={{textAlign: 'center'}}>Acciones</th>
                 </tr>
               </thead>
               <tbody>

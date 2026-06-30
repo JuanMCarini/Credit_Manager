@@ -113,7 +113,7 @@ const UsersListPage = () => {
                   <th>Email</th>
                   <th>Rol</th>
                   <th>Estado</th>
-                  <th style={{ textAlign: 'right' }}>Acciones</th>
+                  <th style={{textAlign: 'right'}}>Acciones</th>
                 </tr>
               </thead>
               <tbody>
