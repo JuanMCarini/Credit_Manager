@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import axiosClient from '../api/axiosClient';
 import { useDebounce } from '../hooks/useDebounce';
 import ExcelDateFilter from '../components/ExcelDateFilter';
+import ExcelNumberRangeFilter from '../components/ExcelNumberRangeFilter';
 import ExportExcelButton from '../components/ExportExcelButton';
 
 const formatCurrency = (num) => {
@@ -29,7 +30,11 @@ const CollectionsListPage = () => {
     ProcesoID: initialProcesoId, 
     CUIL: '', 
     CreditoID: '', 
-    Tipo: ''
+    Tipo: '',
+    Capital: {},
+    Interes: {},
+    IVA: {},
+    Total: {}
   });
   
   const debouncedFilter = useDebounce(filter, 500);
@@ -55,17 +60,26 @@ const CollectionsListPage = () => {
   // --- COBRANZAS FETCH ---
   const fetchCobranzas = async ({ queryKey }) => {
     const [_key, pageIndex, filters] = queryKey;
-    const params = {
-      skip: pageIndex * limit,
-      limit: limit,
-      ...(filters.ID && { id_cobranza: filters.ID }),
-      ...(filters.ProcesoID && { proceso_id: filters.ProcesoID }),
-      ...(filters.CUIL && { cuil: filters.CUIL }),
-      ...(filters.CreditoID && { credito_id: filters.CreditoID }),
-      ...(filters.Tipo && { tipo: filters.Tipo }),
+    const f = { ...filters };
+    const p = { 
+        skip: pageIndex * limit, 
+        limit: limit,
+        ...(f.ID && { id_cobranza: f.ID }),
+        ...(f.ProcesoID && { proceso_id: f.ProcesoID }),
+        ...(f.CUIL && { cuil: f.CUIL }),
+        ...(f.CreditoID && { credito_id: f.CreditoID }),
+        ...(f.Tipo && { tipo: f.Tipo }),
+        ...(f.Capital?.min !== undefined && { capital_min: f.Capital.min }),
+        ...(f.Capital?.max !== undefined && { capital_max: f.Capital.max }),
+        ...(f.Interes?.min !== undefined && { interes_min: f.Interes.min }),
+        ...(f.Interes?.max !== undefined && { interes_max: f.Interes.max }),
+        ...(f.IVA?.min !== undefined && { iva_min: f.IVA.min }),
+        ...(f.IVA?.max !== undefined && { iva_max: f.IVA.max }),
+        ...(f.Total?.min !== undefined && { total_min: f.Total.min }),
+        ...(f.Total?.max !== undefined && { total_max: f.Total.max }),
     };
     
-    const res = await axiosClient.get('/api/v1/cobranzas', { params });
+    const res = await axiosClient.get('/api/v1/cobranzas', { params: p });
     return res.data;
   };
 
@@ -344,10 +358,22 @@ const CollectionsListPage = () => {
                         </div>
                       </details>
                     </th>
-                    <th>Capital</th>
-                    <th>Interés</th>
-                    <th>IVA</th>
-                    <th>Total Cobrado</th>
+                    <th>
+                      Capital
+                      <ExcelNumberRangeFilter selectedRange={filter.Capital} onChange={r => handleFilterChange('Capital', r)} />
+                    </th>
+                    <th>
+                      Interés
+                      <ExcelNumberRangeFilter selectedRange={filter.Interes} onChange={r => handleFilterChange('Interes', r)} />
+                    </th>
+                    <th>
+                      IVA
+                      <ExcelNumberRangeFilter selectedRange={filter.IVA} onChange={r => handleFilterChange('IVA', r)} />
+                    </th>
+                    <th>
+                      Total Cobrado
+                      <ExcelNumberRangeFilter selectedRange={filter.Total} onChange={r => handleFilterChange('Total', r)} />
+                    </th>
                     <th>Fecha Pago</th>
                     <th>Acciones</th>
                   </tr>

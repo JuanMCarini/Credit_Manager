@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
 import useAppStore from '../store/useAppStore';
 import ExportExcelButton from '../components/ExportExcelButton';
+import ExcelNumberRangeFilter from '../components/ExcelNumberRangeFilter';
 
 const PortfolioOriginationPage = () => {
   const { editingCompra, setEditingCompra } = useAppStore();
@@ -629,6 +630,12 @@ const PortfolioOriginationPage = () => {
                   return Object.keys(filterCreditos).every(key => {
                     const filterVal = filterCreditos[key];
                     if (filterVal === undefined || filterVal === null || filterVal === '' || (Array.isArray(filterVal) && filterVal.length === 0)) return true;
+                    if (typeof filterVal === 'object' && !Array.isArray(filterVal) && ('min' in filterVal || 'max' in filterVal)) {
+                      const val = Number(c[key] || 0);
+                      if (filterVal.min !== undefined && filterVal.min !== null && filterVal.min !== '' && val < Number(filterVal.min)) return false;
+                      if (filterVal.max !== undefined && filterVal.max !== null && filterVal.max !== '' && val > Number(filterVal.max)) return false;
+                      return true;
+                    }
                     if (Array.isArray(filterVal)) {
                       return filterVal.includes(String(c[key] || ''));
                     }
@@ -683,7 +690,7 @@ const PortfolioOriginationPage = () => {
                             </th>
                             <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
                               Monto Orig.
-                              <input type="text" placeholder="Filtrar..." value={filterCreditos.monto_otorgado || ''} onChange={e => handleFilterChange('monto_otorgado', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <ExcelNumberRangeFilter selectedRange={filterCreditos.monto_otorgado || {}} onChange={r => handleFilterChange('monto_otorgado', r)} />
                             </th>
                             <th style={{ textAlign: 'center', padding: '12px', verticalAlign: 'top' }}>
                               Cuotas
@@ -695,7 +702,7 @@ const PortfolioOriginationPage = () => {
                             </th>
                             <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
                               Valor Actual
-                              <input type="text" placeholder="Filtrar..." value={filterCreditos.valor_actual || ''} onChange={e => handleFilterChange('valor_actual', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <ExcelNumberRangeFilter selectedRange={filterCreditos.valor_actual || {}} onChange={r => handleFilterChange('valor_actual', r)} />
                             </th>
                           </tr>
                         ) : (
@@ -710,7 +717,7 @@ const PortfolioOriginationPage = () => {
                             </th>
                             <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
                               Cap. Vendido
-                              <input type="text" placeholder="Filtrar..." value={filterCreditos.capital_vendido || ''} onChange={e => handleFilterChange('capital_vendido', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <ExcelNumberRangeFilter selectedRange={filterCreditos.capital_vendido || {}} onChange={r => handleFilterChange('capital_vendido', r)} />
                             </th>
                             <th style={{ textAlign: 'center', padding: '12px', verticalAlign: 'top' }}>
                               Plazo
@@ -722,7 +729,7 @@ const PortfolioOriginationPage = () => {
                             </th>
                             <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
                               Valor Actual
-                              <input type="text" placeholder="Filtrar..." value={filterCreditos.valor_actual || ''} onChange={e => handleFilterChange('valor_actual', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <ExcelNumberRangeFilter selectedRange={filterCreditos.valor_actual || {}} onChange={r => handleFilterChange('valor_actual', r)} />
                             </th>
                           </tr>
                         )}
@@ -793,6 +800,12 @@ const PortfolioOriginationPage = () => {
                   return Object.keys(filterCuotas).every(key => {
                     const filterVal = filterCuotas[key];
                     if (filterVal === undefined || filterVal === null || filterVal === '' || (Array.isArray(filterVal) && filterVal.length === 0)) return true;
+                    if (typeof filterVal === 'object' && !Array.isArray(filterVal) && ('min' in filterVal || 'max' in filterVal)) {
+                      const val = Number(c[key] || 0);
+                      if (filterVal.min !== undefined && filterVal.min !== null && filterVal.min !== '' && val < Number(filterVal.min)) return false;
+                      if (filterVal.max !== undefined && filterVal.max !== null && filterVal.max !== '' && val > Number(filterVal.max)) return false;
+                      return true;
+                    }
                     if (Array.isArray(filterVal)) {
                       if (key === 'incluida' || key === 'comprada') return filterVal.includes(c[key] ? 'Sí' : 'No');
                       return filterVal.includes(String(c[key] || ''));
@@ -834,23 +847,23 @@ const PortfolioOriginationPage = () => {
                             </th>
                             <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
                               Capital
-                              <input type="text" placeholder="Filtrar..." value={filterCuotas.capital || ''} onChange={e => handleFilterChange('capital', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <ExcelNumberRangeFilter selectedRange={filterCuotas.capital || {}} onChange={r => handleFilterChange('capital', r)} />
                             </th>
                             <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
                               Interés
-                              <input type="text" placeholder="Filtrar..." value={filterCuotas.interes || ''} onChange={e => handleFilterChange('interes', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <ExcelNumberRangeFilter selectedRange={filterCuotas.interes || {}} onChange={r => handleFilterChange('interes', r)} />
                             </th>
                             <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
                               IVA
-                              <input type="text" placeholder="Filtrar..." value={filterCuotas.iva || ''} onChange={e => handleFilterChange('iva', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <ExcelNumberRangeFilter selectedRange={filterCuotas.iva || {}} onChange={r => handleFilterChange('iva', r)} />
                             </th>
                             <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
                               Total Cuota
-                              <input type="text" placeholder="Filtrar..." value={filterCuotas.total_cuota || ''} onChange={e => handleFilterChange('total_cuota', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <ExcelNumberRangeFilter selectedRange={filterCuotas.total_cuota || {}} onChange={r => handleFilterChange('total_cuota', r)} />
                             </th>
                             <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
                               Valor Actual
-                              <input type="text" placeholder="Filtrar..." value={filterCuotas.valor_actual || ''} onChange={e => handleFilterChange('valor_actual', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <ExcelNumberRangeFilter selectedRange={filterCuotas.valor_actual || {}} onChange={r => handleFilterChange('valor_actual', r)} />
                             </th>
                             <th style={{ textAlign: 'center', padding: '12px', verticalAlign: 'top', position: 'relative' }}>
                               Incluida
@@ -888,23 +901,23 @@ const PortfolioOriginationPage = () => {
                             </th>
                             <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
                               Capital
-                              <input type="text" placeholder="Filtrar..." value={filterCuotas.capital || ''} onChange={e => handleFilterChange('capital', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <ExcelNumberRangeFilter selectedRange={filterCuotas.capital || {}} onChange={r => handleFilterChange('capital', r)} />
                             </th>
                             <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
                               Interés
-                              <input type="text" placeholder="Filtrar..." value={filterCuotas.interes || ''} onChange={e => handleFilterChange('interes', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <ExcelNumberRangeFilter selectedRange={filterCuotas.interes || {}} onChange={r => handleFilterChange('interes', r)} />
                             </th>
                             <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
                               IVA
-                              <input type="text" placeholder="Filtrar..." value={filterCuotas.iva || ''} onChange={e => handleFilterChange('iva', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <ExcelNumberRangeFilter selectedRange={filterCuotas.iva || {}} onChange={r => handleFilterChange('iva', r)} />
                             </th>
                             <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
                               Total
-                              <input type="text" placeholder="Filtrar..." value={filterCuotas.total || ''} onChange={e => handleFilterChange('total', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <ExcelNumberRangeFilter selectedRange={filterCuotas.total || {}} onChange={r => handleFilterChange('total', r)} />
                             </th>
                             <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
                               V. Actual
-                              <input type="text" placeholder="Filtrar..." value={filterCuotas.valor_actual || ''} onChange={e => handleFilterChange('valor_actual', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <ExcelNumberRangeFilter selectedRange={filterCuotas.valor_actual || {}} onChange={r => handleFilterChange('valor_actual', r)} />
                             </th>
                             <th style={{ textAlign: 'center', padding: '12px', verticalAlign: 'top', position: 'relative' }}>
                               Comprada
@@ -1014,23 +1027,23 @@ const PortfolioOriginationPage = () => {
                           </th>
                           <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
                             Capital Total
-                            <input type="text" placeholder="Filtrar..." value={tipoOperacion === 'VENTA' ? (filterResumen.capital || '') : (filterResumen.capital_total || '')} onChange={e => handleFilterChange(tipoOperacion === 'VENTA' ? 'capital' : 'capital_total', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                            <ExcelNumberRangeFilter selectedRange={tipoOperacion === 'VENTA' ? (filterResumen.capital || {}) : (filterResumen.capital_total || {})} onChange={r => handleFilterChange(tipoOperacion === 'VENTA' ? 'capital' : 'capital_total', r)} />
                           </th>
                           <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
                             Interés Total
-                            <input type="text" placeholder="Filtrar..." value={tipoOperacion === 'VENTA' ? (filterResumen.interes || '') : (filterResumen.interes_total || '')} onChange={e => handleFilterChange(tipoOperacion === 'VENTA' ? 'interes' : 'interes_total', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                            <ExcelNumberRangeFilter selectedRange={tipoOperacion === 'VENTA' ? (filterResumen.interes || {}) : (filterResumen.interes_total || {})} onChange={r => handleFilterChange(tipoOperacion === 'VENTA' ? 'interes' : 'interes_total', r)} />
                           </th>
                           <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
                             IVA Total
-                            <input type="text" placeholder="Filtrar..." value={tipoOperacion === 'VENTA' ? (filterResumen.iva || '') : (filterResumen.iva_total || '')} onChange={e => handleFilterChange(tipoOperacion === 'VENTA' ? 'iva' : 'iva_total', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                            <ExcelNumberRangeFilter selectedRange={tipoOperacion === 'VENTA' ? (filterResumen.iva || {}) : (filterResumen.iva_total || {})} onChange={r => handleFilterChange(tipoOperacion === 'VENTA' ? 'iva' : 'iva_total', r)} />
                           </th>
                           <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
                             Monto Total
-                            <input type="text" placeholder="Filtrar..." value={tipoOperacion === 'VENTA' ? (filterResumen.total_cuota || '') : (filterResumen.monto_total || '')} onChange={e => handleFilterChange(tipoOperacion === 'VENTA' ? 'total_cuota' : 'monto_total', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                            <ExcelNumberRangeFilter selectedRange={tipoOperacion === 'VENTA' ? (filterResumen.total_cuota || {}) : (filterResumen.monto_total || {})} onChange={r => handleFilterChange(tipoOperacion === 'VENTA' ? 'total_cuota' : 'monto_total', r)} />
                           </th>
                           <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
                             Valor Actual
-                            <input type="text" placeholder="Filtrar..." value={filterResumen.valor_actual || ''} onChange={e => handleFilterChange('valor_actual', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                            <ExcelNumberRangeFilter selectedRange={filterResumen.valor_actual || {}} onChange={r => handleFilterChange('valor_actual', r)} />
                           </th>
                         </tr>
                       </thead>
