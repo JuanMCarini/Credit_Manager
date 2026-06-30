@@ -393,6 +393,7 @@ def get_cobranzas(
     iva_max: Optional[float] = None,
     total_min: Optional[float] = None,
     total_max: Optional[float] = None,
+    vto_dates: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     from src.database.models.cobranzas import Cobranza
@@ -404,21 +405,39 @@ def get_cobranzas(
         base_query = base_query.filter(Cobranza.proceso_id == int(proceso_id))
     if id_cobranza:
         base_query = base_query.filter(Cobranza.id == int(id_cobranza))
-    if cuil or credito_id:
-        base_query = base_query.join(Cuota)
+    has_cuota_filters = bool(cuil or credito_id or vto_dates)
+    if has_cuota_filters:
+        base_query = base_query.outerjoin(Cuota)
         if credito_id:
             base_query = base_query.filter(Cuota.credito_id == int(credito_id))
         if cuil:
-            base_query = base_query.join(Credito).filter(Credito.cliente_cuil.like(f"%{cuil}%"))
+            base_query = base_query.outerjoin(Credito, Cuota.credito_id == Credito.id).filter(Credito.cliente_cuil.like(f"%{cuil}%"))
             
-    # Calculate available types before applying the tipo filter
     distinct_tipos = base_query.with_entities(Cobranza.tipo_cobranza).distinct().all()
     available_tipos = [t[0].value if hasattr(t[0], 'value') else str(t[0]) for t in distinct_tipos]
+
+    vto_query = base_query
+    if not has_cuota_filters:
+        vto_query = vto_query.outerjoin(Cuota)
+    distinct_vto = vto_query.with_entities(Cuota.fecha_vencimiento).filter(Cuota.fecha_vencimiento != None).distinct().all()
+    available_vto_dates = [d[0].strftime("%Y-%m-%d") for d in distinct_vto if d[0]]
 
     query = base_query
     if tipo:
         tipo_list = [t.strip() for t in tipo.split(",")]
         query = query.filter(Cobranza.tipo_cobranza.in_(tipo_list))
+
+    if vto_dates:
+        from datetime import datetime
+        vto_list_str = [d.strip() for d in vto_dates.split(",")]
+        vto_list_date = []
+        for d_str in vto_list_str:
+            try:
+                vto_list_date.append(datetime.strptime(d_str, "%Y-%m-%d").date())
+            except ValueError:
+                pass
+        if vto_list_date:
+            query = query.filter(Cuota.fecha_vencimiento.in_(vto_list_date))
 
     if capital_min is not None:
         query = query.filter(Cobranza.capital >= capital_min)
@@ -483,7 +502,7 @@ def get_cobranzas(
             "IVA": float(c.iva),
             "Total": float(c.capital + c.interes + c.iva)
         })
-    return {"items": result, "total": total, "available_tipos": available_tipos, "global_totals": global_totals}
+    return {"items": result, "total": total, "available_tipos": available_tipos, "available_vto_dates": available_vto_dates, "global_totals": global_totals}
 
 @router.delete("/cobranzas/{cobranza_id}")
 def delete_cobranza(cobranza_id: int, db: Session = Depends(get_db)):

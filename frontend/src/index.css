@@ -336,6 +336,8 @@ input:focus, select:focus {
 
 .table-responsive {
     overflow-x: auto;
+    overflow-y: auto;
+    max-height: calc(100vh - 250px);
     border-radius: var(--radius-md);
     border: 1px solid var(--border-color);
 }
@@ -361,12 +363,21 @@ input:focus, select:focus {
 }
 
 .data-table th {
-    background: rgba(0, 0, 0, 0.3);
+    background: #0B0E14; /* Solid background to prevent rows from showing through */
     color: var(--text-secondary);
     font-weight: 600;
     font-size: 12px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    box-shadow: 0 1px 0 var(--border-color); /* Alternative to border-bottom for sticky elements */
+}
+
+.data-table th:hover,
+.data-table th:focus-within {
+    z-index: 20;
 }
 
 .data-table tr:last-child td {

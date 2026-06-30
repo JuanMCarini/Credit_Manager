@@ -3,7 +3,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 
-from src.database import get_db, Credito
+from src.database import get_db, Credito, Transferencia
 from src.database.models import EstadoCredito, Cuota
 from src.api.schemas.creditos import CreditoCreate, CreditoEstadoUpdate
 from src.logic.origination import LoanOriginator
@@ -136,6 +136,25 @@ def get_credito_cuotas(credito_id: int, db: Session = Depends(get_db)):
             "detalle_cobranzas": detalle_cobranzas
         })
         
+    return result
+
+@router.get("/api/v1/creditos/{credito_id}/transferencias")
+def get_credito_transferencias(credito_id: int, db: Session = Depends(get_db)):
+    credito = db.query(Credito).filter(Credito.id == credito_id).first()
+    if not credito:
+        raise HTTPException(status_code=404, detail="Crédito no encontrado")
+        
+    transferencias = db.query(Transferencia).filter(Transferencia.credito_id == credito_id).all()
+    
+    result = []
+    for t in transferencias:
+        result.append({
+            "id": t.id,
+            "cbu": t.cbu,
+            "monto": float(t.monto),
+            "cuit": t.cuit,
+            "razon_social": t.razon_social
+        })
     return result
 
 @router.get("/api/v1/creditos")
