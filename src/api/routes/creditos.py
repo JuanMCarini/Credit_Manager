@@ -69,7 +69,8 @@ def create_credito(
             issuance_date=credito_data.fecha_emision,
             due_day=credito_data.dia_vencimiento,
             type=credito_data.tipo_credito,
-            comision_id=credito_data.comision_id
+            comision_id=credito_data.comision_id,
+            transferencias_data=credito_data.transferencias
         )
         return {
             "status": "success",

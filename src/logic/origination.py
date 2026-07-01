@@ -14,6 +14,7 @@ from src.database.models import (
     EstadoCredito,
     SocioComercial,
     TipoCredito,
+    Transferencia,
 )
 from src.logic.amortization import AmortizationEngine
 
@@ -122,6 +123,7 @@ class LoanOriginator:
         due_day: int = 28,
         type: TipoCredito = TipoCredito.FRANCES,
         comision_id: int | None = None,
+        transferencias_data: list = None,
     ) -> Credito:
         """
         =============================================================================
@@ -138,6 +140,19 @@ class LoanOriginator:
             self._generate_credit_and_schedule(
                 capital, tna_c_iva, term, partner_id, issuance_date, due_day, cutoff_day, type, comision_id
             )
+
+            if transferencias_data:
+                for t_data in transferencias_data:
+                    # Depending on if it's Pydantic model or dict
+                    t_dict = t_data.dict() if hasattr(t_data, 'dict') else t_data
+                    transferencia = Transferencia(
+                        credito_id=self.credit.id,
+                        cbu=t_dict['cbu'],
+                        monto=t_dict['monto'],
+                        cuit=t_dict['cuit'],
+                        razon_social=t_dict['razon_social']
+                    )
+                    self.db.add(transferencia)
 
             self.db.commit()
             return self.credit
@@ -157,6 +172,7 @@ class LoanOriginator:
         due_day: int = 28,
         type: TipoCredito = TipoCredito.FRANCES,
         comision_id: int | None = None,
+        transferencias_data: list = None,
     ) -> Credito:
         """
         =============================================================================
@@ -194,6 +210,18 @@ class LoanOriginator:
                 type,
                 comision_id,
             )
+
+            if transferencias_data:
+                for t_data in transferencias_data:
+                    t_dict = t_data.dict() if hasattr(t_data, 'dict') else t_data
+                    transferencia = Transferencia(
+                        credito_id=self.credit.id,
+                        cbu=t_dict['cbu'],
+                        monto=t_dict['monto'],
+                        cuit=t_dict['cuit'],
+                        razon_social=t_dict['razon_social']
+                    )
+                    self.db.add(transferencia)
 
             self.db.commit()
             return self.credit

@@ -21,6 +21,8 @@ const AuxiliaryTablesPage = () => {
     socio_comercial_id: { options: socios, valueKey: 'id', labelKey: 'razon_social' },
     socio_originador_id: { options: socios, valueKey: 'id', labelKey: 'razon_social' },
     socio_intermediario_id: { options: socios, valueKey: 'id', labelKey: 'razon_social' },
+    gasto_1_socio_id: { options: socios, valueKey: 'id', labelKey: 'razon_social' },
+    gasto_2_socio_id: { options: socios, valueKey: 'id', labelKey: 'razon_social' },
     socio_id: { options: socios, valueKey: 'id', labelKey: 'razon_social' },
     provincia_id: { options: provincias, valueKey: 'id', labelKey: 'nombre' },
     id_provincia: { options: provincias, valueKey: 'id', labelKey: 'nombre' }
@@ -29,14 +31,15 @@ const AuxiliaryTablesPage = () => {
   const percentFields = [
     'colocacion_originador', 'colocacion_intermediario', 
     'cobranza_originador', 'cobranza_intermediario', 
-    'colocacion_propia', 'tna_c_iva', 'tna_s_iva', 'alicuota_iva'
+    'colocacion_propia', 'tna_c_iva', 'tna_s_iva', 'alicuota_iva',
+    'gasto_1_porcentaje', 'gasto_2_porcentaje'
   ];
   
   const tablesMap = {
     provincias: { name: 'Provincias', data: provincias, endpoint: 'provincias', schema: ['id', 'nombre'] },
     empleadores: { name: 'Empleadores', data: empleadores, endpoint: 'empleadores', schema: ['id', 'cuit', 'razon_social', 'es_pasivo', 'socio_comercial_id'] },
-    socios: { name: 'Socios Comerciales', data: socios, endpoint: 'socios', schema: ['id', 'razon_social', 'cuit', 'domicilio_legal', 'contacto_nombre', 'mail', 'telefono', 'dia_corte', 'anticipo_vigente'] },
-    tasasYComisiones: { name: 'Tasas y Comisiones', data: tasasYComisiones, endpoint: 'tasas_y_comisiones', schema: ['id', 'fecha', 'estado', 'socio_originador_id', 'socio_intermediario_id', 'colocacion_originador', 'colocacion_intermediario', 'cobranza_originador', 'cobranza_intermediario', 'colocacion_propia', 'plazo', 'tna_c_iva'] },
+    socios: { name: 'Socios Comerciales', data: socios, endpoint: 'socios', schema: ['id', 'razon_social', 'cuit', 'domicilio_legal', 'contacto_nombre', 'mail', 'telefono', 'dia_corte', 'cbu', 'anticipo_vigente'] },
+    tasasYComisiones: { name: 'Tasas y Comisiones', data: tasasYComisiones, endpoint: 'tasas_y_comisiones', schema: ['id', 'fecha', 'estado', 'socio_originador_id', 'socio_intermediario_id', 'colocacion_originador', 'colocacion_intermediario', 'cobranza_originador', 'cobranza_intermediario', 'colocacion_propia', 'gasto_1_porcentaje', 'gasto_1_socio_id', 'gasto_2_porcentaje', 'gasto_2_socio_id', 'plazo', 'tna_c_iva'] },
     relaciones: { name: 'Relaciones Mapeadas', data: relaciones, endpoint: 'relaciones', schema: ['id', 'socio_id', 'tabla', 'id_local', 'id_foraneo'] }
   };
 

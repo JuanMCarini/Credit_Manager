@@ -35,6 +35,7 @@ class SocioComercial(Base):
     mail = Column(String(150), nullable=True)
     telefono = Column(String(50), nullable=True)
     dia_corte = Column(Integer, default=28)
+    cbu = Column(String(22), nullable=True)
 
     # Relationships
     carteras = relationship("Cartera", back_populates="socio")
@@ -47,6 +48,12 @@ class SocioComercial(Base):
     )
     comisiones_intermediarias = relationship(
         "TasaYComision", foreign_keys="[TasaYComision.socio_intermediario_id]", back_populates="socio_intermediario"
+    )
+    gastos_1 = relationship(
+        "TasaYComision", foreign_keys="[TasaYComision.gasto_1_socio_id]", back_populates="socio_gasto_1"
+    )
+    gastos_2 = relationship(
+        "TasaYComision", foreign_keys="[TasaYComision.gasto_2_socio_id]", back_populates="socio_gasto_2"
     )
     empleadores = relationship("Empleador", back_populates="socio_comercial")
     politicas_crediticias = relationship("PoliticaCrediticia", back_populates="socio_originador")
@@ -62,6 +69,11 @@ class SocioComercial(Base):
         db = db or SessionLocal()
         cuit_str = str(cuit).strip()
         rs_str = str(razon_social).strip()
+
+        if "cbu" in kwargs and kwargs["cbu"]:
+            kwargs["cbu"] = "".join(filter(str.isdigit, str(kwargs["cbu"])))
+            if len(kwargs["cbu"]) > 22:
+                kwargs["cbu"] = kwargs["cbu"][:22]
 
         existe = (
             db.query(cls)
@@ -93,6 +105,11 @@ class SocioComercial(Base):
         socio = db.query(cls).filter_by(id=socio_id).first()
         if not socio:
             raise ValueError(f"No Socio Comercial was found with ID {socio_id}.")
+
+        if "cbu" in kwargs and kwargs["cbu"]:
+            kwargs["cbu"] = "".join(filter(str.isdigit, str(kwargs["cbu"])))
+            if len(kwargs["cbu"]) > 22:
+                kwargs["cbu"] = kwargs["cbu"][:22]
 
         try:
             for key, value in kwargs.items():
@@ -226,8 +243,16 @@ class TasaYComision(Base):
 
     colocacion_propia = Column(Numeric(15, 6), nullable=False, default=0.0)
 
+    gasto_1_porcentaje = Column(Numeric(15, 6), nullable=True, default=0.0)
+    gasto_1_socio_id = Column(Integer, ForeignKey("socios_comerciales.id"), nullable=True)
+
+    gasto_2_porcentaje = Column(Numeric(15, 6), nullable=True, default=0.0)
+    gasto_2_socio_id = Column(Integer, ForeignKey("socios_comerciales.id"), nullable=True)
+
     socio_originador = relationship("SocioComercial", foreign_keys=[socio_originador_id], back_populates="comisiones_originadas")
     socio_intermediario = relationship("SocioComercial", foreign_keys=[socio_intermediario_id], back_populates="comisiones_intermediarias")
+    socio_gasto_1 = relationship("SocioComercial", foreign_keys=[gasto_1_socio_id], back_populates="gastos_1")
+    socio_gasto_2 = relationship("SocioComercial", foreign_keys=[gasto_2_socio_id], back_populates="gastos_2")
     creditos = relationship("Credito", back_populates="comision")
 
 
