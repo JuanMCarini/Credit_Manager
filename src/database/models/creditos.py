@@ -11,7 +11,9 @@ from sqlalchemy import (
     Integer,
     String,
     UniqueConstraint,
+    DateTime,
 )
+from sqlalchemy.sql import func
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship
 
@@ -101,6 +103,7 @@ class Credito(Base):
     cartera = relationship("Cartera", back_populates="creditos_incluidos")
     comision = relationship("TasaYComision", back_populates="creditos")
     transferencias = relationship("Transferencia", back_populates="credito", cascade="all, delete-orphan")
+    documentos_legajo = relationship("DocumentoLegajo", back_populates="credito", cascade="all, delete-orphan")
 
     def actualizar_estado(self) -> str:
         estados_manuales = [EstadoCredito.RECHAZADO, EstadoCredito.JUDICIAL]
@@ -337,3 +340,19 @@ class Transferencia(Base):
 
     def __repr__(self):
         return f"<Transferencia(cbu={self.cbu}, monto={self.monto}, cuit={self.cuit}, credito_id={self.credito_id}, razon_social={self.razon_social})>"
+
+
+class DocumentoLegajo(Base):
+    __tablename__ = "documentos_legajo"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    credito_id = Column(Integer, ForeignKey("creditos.id"), nullable=False)
+    nombre_archivo = Column(String(255), nullable=False)
+    ruta_archivo = Column(String(500), nullable=False)
+    tipo_archivo = Column(String(50), nullable=False)
+    fecha_subida = Column(DateTime, default=func.now(), nullable=False)
+
+    credito = relationship("Credito", back_populates="documentos_legajo")
+
+    def __repr__(self):
+        return f"<DocumentoLegajo(id={self.id}, credito_id={self.credito_id}, nombre_archivo={self.nombre_archivo})>"
