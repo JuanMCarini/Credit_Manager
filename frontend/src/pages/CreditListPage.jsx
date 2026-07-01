@@ -18,13 +18,10 @@ const CreditListPage = () => {
   const [loading, setLoading] = useState(false);
   const location = useLocation();
   
-  const [filter, setFilter] = useState({ ID: '', CUIL: '', Capital: {}, Plazo: '', TNA: '', Estado: [], Fecha: [] });
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+  const [filter, setFilter] = useState({ ID: '', CUIL: '', Capital: {}, Plazo: '', TNA: '', Estado: [], Fecha: [], TipoCredito: [] });
+  const [sortConfig, setSortConfig] = useState({ key: 'ID', direction: 'desc' });
   const [showEstadoFilter, setShowEstadoFilter] = useState(false);
-
-  const ESTADOS_DISPONIBLES = ['APROBADO', 'ACTIVO', 'CANCELADO', 'MOROSO', 'RECHAZADO', 'JUDICIAL'];
-
-  const AVAILABLE_FECHAS_EMISION = useMemo(() => [...new Set(creditos.map(c => c["Fecha Emisión"]).filter(Boolean))], [creditos]);
+  const [showTipoCreditoFilter, setShowTipoCreditoFilter] = useState(false);
 
   const [ccCuil, setCcCuil] = useState(null);
   const [editCredito, setEditCredito] = useState(null);
@@ -77,14 +74,25 @@ const CreditListPage = () => {
     });
   };
 
-  const filteredAndSortedCreditos = useMemo(() => {
-    let result = [...creditos];
+  const handleTipoCreditoToggle = (tipo) => {
+    setFilter(prev => {
+      const current = prev.TipoCredito;
+      if (current.includes(tipo)) return { ...prev, TipoCredito: current.filter(e => e !== tipo) };
+      return { ...prev, TipoCredito: [...current, tipo] };
+    });
+  };
 
+  const getFilteredData = (excludeKey = null) => {
+    let result = [...creditos];
     if (filter.ID) result = result.filter(c => c.ID === parseInt(filter.ID, 10));
     if (filter.CUIL) result = result.filter(c => c["Cliente CUIL"] && c["Cliente CUIL"].includes(filter.CUIL));
     if (filter.Plazo) result = result.filter(c => String(c.Plazo).includes(filter.Plazo));
     if (filter.TNA) result = result.filter(c => String(c["TNA con IVA"]).includes(filter.TNA));
-
+    
+    if (excludeKey !== 'TipoCredito' && filter.TipoCredito && filter.TipoCredito.length > 0) {
+      result = result.filter(c => filter.TipoCredito.includes(c["Tipo Crédito"]));
+    }
+    
     if (filter.Capital && typeof filter.Capital === 'object') {
       result = result.filter(c => {
         if (c.Capital === null || c.Capital === undefined) return false;
@@ -96,9 +104,19 @@ const CreditListPage = () => {
       });
     }
 
-    if (filter.Estado.length > 0) result = result.filter(c => filter.Estado.includes(c.Estado));
-    if (filter.Fecha && filter.Fecha.length > 0) result = result.filter(c => filter.Fecha.includes(c["Fecha Emisión"]));
+    if (excludeKey !== 'Estado' && filter.Estado && filter.Estado.length > 0) {
+      result = result.filter(c => filter.Estado.includes(c.Estado));
+    }
+    
+    if (excludeKey !== 'Fecha' && filter.Fecha && filter.Fecha.length > 0) {
+      result = result.filter(c => filter.Fecha.includes(c["Fecha Emisión"]));
+    }
 
+    return result;
+  };
+
+  const filteredAndSortedCreditos = useMemo(() => {
+    let result = getFilteredData();
     if (sortConfig.key) {
       result.sort((a, b) => {
         let valA = a[sortConfig.key] ?? '';
@@ -112,6 +130,18 @@ const CreditListPage = () => {
     }
     return result;
   }, [creditos, filter, sortConfig]);
+
+  const ESTADOS_DISPONIBLES = useMemo(() => {
+    return [...new Set(getFilteredData('Estado').map(c => c.Estado).filter(Boolean))].sort();
+  }, [creditos, filter]);
+
+  const AVAILABLE_TIPOS_CREDITO = useMemo(() => {
+    return [...new Set(getFilteredData('TipoCredito').map(c => c["Tipo Crédito"]).filter(Boolean))].sort();
+  }, [creditos, filter]);
+
+  const AVAILABLE_FECHAS_EMISION = useMemo(() => {
+    return [...new Set(getFilteredData('Fecha').map(c => c["Fecha Emisión"]).filter(Boolean))].sort();
+  }, [creditos, filter]);
 
   const totalCapital = useMemo(() => {
     return filteredAndSortedCreditos.reduce((acc, c) => acc + (c.Capital || 0), 0);
@@ -171,6 +201,22 @@ const CreditListPage = () => {
                   TNA <SortIcon columnKey="TNA con IVA" />
                   <input type="text" placeholder="Filtrar..." value={filter.TNA} onChange={e => setFilter({ ...filter, TNA: e.target.value })} onClick={e => e.stopPropagation()} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
                 </th>
+                <th onClick={() => handleSort('Tipo Crédito')} style={{ cursor: 'pointer' }}>
+                  Tipo Crédito <SortIcon columnKey="Tipo Crédito" />
+                  <div onClick={e => { e.stopPropagation(); setShowTipoCreditoFilter(!showTipoCreditoFilter); }} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', background: 'rgba(255,255,255,0.1)', border: '1px solid var(--border-color)', borderRadius: '4px', textAlign: 'center', cursor: 'pointer' }}>
+                    {filter.TipoCredito.length === 0 ? "Todos" : `${filter.TipoCredito.length} selec.`}
+                  </div>
+                  {showTipoCreditoFilter && (
+                    <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100, background: 'var(--surface-color)', border: '1px solid var(--border-color)', borderRadius: '4px', padding: '8px', display: 'flex', flexDirection: 'column', gap: '4px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)', marginTop: '4px' }}>
+                      {AVAILABLE_TIPOS_CREDITO.map(tipo => (
+                        <label key={tipo} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 'normal', cursor: 'pointer' }}>
+                          <input type="checkbox" checked={filter.TipoCredito.includes(tipo)} onChange={() => handleTipoCreditoToggle(tipo)} />
+                          {tipo}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </th>
                 <th onClick={() => handleSort('Estado')} style={{ cursor: 'pointer' }}>
                   Estado <SortIcon columnKey="Estado" />
                   <div onClick={e => { e.stopPropagation(); setShowEstadoFilter(!showEstadoFilter); }} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', background: 'rgba(255,255,255,0.1)', border: '1px solid var(--border-color)', borderRadius: '4px', textAlign: 'center', cursor: 'pointer' }}>
@@ -203,7 +249,7 @@ const CreditListPage = () => {
             <tbody>
               {filteredAndSortedCreditos.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="text-center empty-state" style={{ padding: '40px' }}>
+                  <td colSpan="9" className="text-center empty-state" style={{ padding: '40px' }}>
                     {loading ? "Cargando..." : "No hay créditos para mostrar con los filtros actuales."}
                   </td>
                 </tr>
@@ -215,6 +261,7 @@ const CreditListPage = () => {
                     <td>{formatCurrency(c.Capital)}</td>
                     <td>{c.Plazo}</td>
                     <td>{(c["TNA con IVA"] * 100).toFixed(2)}%</td>
+                    <td>{c["Tipo Crédito"]}</td>
                     <td>
                        <span className={`status-badge status-${(c.Estado || 'activo').toLowerCase()}`}>
                          {c.Estado}
@@ -245,7 +292,7 @@ const CreditListPage = () => {
               <tr>
                 <td colSpan="2" style={{ textAlign: 'right' }}>TOTAL:</td>
                 <td>{formatCurrency(totalCapital)}</td>
-                <td colSpan="5"></td>
+                <td colSpan="6"></td>
               </tr>
             </tfoot>
           </table>
