@@ -1,11 +1,17 @@
 from typing import Any, Dict, List
 from datetime import date
-from fastapi import APIRouter, Depends, HTTPException, Query
+import os
+import shutil
+from io import BytesIO
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Response
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session, joinedload
+from pypdf import PdfWriter, PdfReader
+from PIL import Image
 
 from src.database import get_db, Credito, Transferencia
-from src.database.models import EstadoCredito, Cuota
-from src.api.schemas.creditos import CreditoCreate, CreditoEstadoUpdate
+from src.database.models import EstadoCredito, Cuota, DocumentoLegajo
+from src.api.schemas.creditos import CreditoCreate, CreditoEstadoUpdate, DocumentoLegajoOut
 from src.logic.origination import LoanOriginator
 from src.logic.amortization import AmortizationEngine
 
@@ -209,3 +215,103 @@ def delete_credito(credito_id: int, db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error eliminando el crédito: {str(e)}")
+
+# --- LEGAJO DOCUMENTOS ENDPOINTS ---
+
+UPLOAD_DIR = "data/uploads/legajos"
+
+@router.post("/api/v1/creditos/{credito_id}/documentos", response_model=DocumentoLegajoOut)
+async def upload_documento(credito_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
+    credito = db.query(Credito).filter(Credito.id == credito_id).first()
+    if not credito:
+        raise HTTPException(status_code=404, detail="Crédito no encontrado")
+        
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    file_path = os.path.join(UPLOAD_DIR, f"{credito_id}_{file.filename}")
+    
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        
+    nuevo_doc = DocumentoLegajo(
+        credito_id=credito_id,
+        nombre_archivo=file.filename,
+        ruta_archivo=file_path,
+        tipo_archivo=file.content_type
+    )
+    db.add(nuevo_doc)
+    db.commit()
+    db.refresh(nuevo_doc)
+    return nuevo_doc
+
+@router.get("/api/v1/creditos/{credito_id}/documentos", response_model=List[DocumentoLegajoOut])
+def get_documentos(credito_id: int, db: Session = Depends(get_db)):
+    docs = db.query(DocumentoLegajo).filter(DocumentoLegajo.credito_id == credito_id).all()
+    return docs
+
+@router.delete("/api/v1/creditos/{credito_id}/documentos/{doc_id}")
+def delete_documento(credito_id: int, doc_id: int, db: Session = Depends(get_db)):
+    doc = db.query(DocumentoLegajo).filter(DocumentoLegajo.id == doc_id, DocumentoLegajo.credito_id == credito_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento no encontrado")
+        
+    if os.path.exists(doc.ruta_archivo):
+        os.remove(doc.ruta_archivo)
+        
+    db.delete(doc)
+    db.commit()
+    return {"status": "success", "message": "Documento eliminado"}
+
+@router.get("/api/v1/creditos/{credito_id}/documentos/merged/download")
+def download_merged_pdf(credito_id: int, db: Session = Depends(get_db)):
+    docs = db.query(DocumentoLegajo).filter(DocumentoLegajo.credito_id == credito_id).all()
+    if not docs:
+        raise HTTPException(status_code=404, detail="No hay documentos para este crédito")
+
+    merger = PdfWriter()
+    
+    for doc in docs:
+        if not os.path.exists(doc.ruta_archivo):
+            continue
+            
+        if doc.tipo_archivo.startswith('image/'):
+            try:
+                img = Image.open(doc.ruta_archivo)
+                if img.mode != 'RGB':
+                    img = img.convert('RGB')
+                
+                img_pdf_io = BytesIO()
+                img.save(img_pdf_io, format='PDF')
+                img_pdf_io.seek(0)
+                
+                reader = PdfReader(img_pdf_io)
+                merger.append(reader)
+            except Exception as e:
+                print(f"Error converting image {doc.ruta_archivo}: {e}")
+        elif doc.tipo_archivo == 'application/pdf' or doc.nombre_archivo.lower().endswith('.pdf'):
+            try:
+                merger.append(doc.ruta_archivo)
+            except Exception as e:
+                print(f"Error appending PDF {doc.ruta_archivo}: {e}")
+                
+    output_pdf = BytesIO()
+    merger.write(output_pdf)
+    
+    return Response(
+        content=output_pdf.getvalue(), 
+        media_type="application/pdf", 
+        headers={"Content-Disposition": f"attachment; filename=legajo_credito_{credito_id}.pdf"}
+    )
+
+@router.get("/api/v1/creditos/{credito_id}/documentos/{doc_id}/download")
+def download_documento(credito_id: int, doc_id: int, db: Session = Depends(get_db)):
+    doc = db.query(DocumentoLegajo).filter(DocumentoLegajo.id == doc_id, DocumentoLegajo.credito_id == credito_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento no encontrado")
+        
+    if not os.path.exists(doc.ruta_archivo):
+        raise HTTPException(status_code=404, detail="El archivo físico no existe")
+        
+    return FileResponse(doc.ruta_archivo, filename=doc.nombre_archivo)
+
+
+

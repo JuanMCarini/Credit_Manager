@@ -1,5 +1,5 @@
 from typing import Optional, List
-from datetime import date
+from datetime import date, datetime
 from pydantic import BaseModel
 from src.database.models.creditos import TipoCredito
 
@@ -23,3 +23,13 @@ class CreditoCreate(BaseModel):
 
 class CreditoEstadoUpdate(BaseModel):
     estado: str
+
+class DocumentoLegajoOut(BaseModel):
+    id: int
+    credito_id: int
+    nombre_archivo: str
+    tipo_archivo: str
+    fecha_subida: datetime
+
+    class Config:
+        from_attributes = True
