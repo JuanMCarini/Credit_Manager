@@ -3,6 +3,12 @@ import axiosClient from '../api/axiosClient';
 import useAppStore from '../store/useAppStore';
 import ClientForm from '../components/ClientForm';
 import ClientCCModal from '../components/ClientCCModal';
+import TransfersForm from '../components/TransfersForm';
+import CurrencyInput from '../components/CurrencyInput';
+
+const formatCurrency = (value) => {
+  return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(value);
+};
 
 const CreditOriginationPage = () => {
   const { empleadores, socios, tasasYComisiones } = useAppStore();
@@ -15,12 +21,17 @@ const CreditOriginationPage = () => {
   const [loadingSearch, setLoadingSearch] = useState(false);
   const [loadingClient, setLoadingClient] = useState(false);
   const [clientFeedback, setClientFeedback] = useState(null);
+  const [loadingSimulation, setLoadingSimulation] = useState(false);
+  const [simulation, setSimulation] = useState(null);
+  const [transfers, setTransfers] = useState([]);
   const [loadingCredit, setLoadingCredit] = useState(false);
 
   const [ccModalData, setCcModalData] = useState(null);
   
+  const [computedCapitalBruto, setComputedCapitalBruto] = useState(0);
+
   const [creditoForm, setCreditoForm] = useState({
-    capital: '',
+    capital_neto: '',
     tasa_id: '',
     tipo: 'SISTEMA FRANCES',
     socio_id: '',
@@ -94,25 +105,100 @@ const CreditOriginationPage = () => {
     }
   };
 
-  const handleCreditoSubmit = async (e) => {
+  const handleSimulateCredit = async (e) => {
     e.preventDefault();
+    const selectedTasa = tasasYComisiones.find(t => t.id === parseInt(creditoForm.tasa_id));
+    if (!selectedTasa) {
+      alert("Debe seleccionar una tasa.");
+      return;
+    }
+    setLoadingSimulation(true);
     try {
-      const selectedTasa = tasasYComisiones.find(t => t.id === parseInt(creditoForm.tasa_id));
-      if (!selectedTasa) {
-        alert("Debe seleccionar una tasa.");
-        return;
+      const g1 = parseFloat(selectedTasa.gasto_1_porcentaje || 0);
+      const g2 = parseFloat(selectedTasa.gasto_2_porcentaje || 0);
+      const capitalNeto = parseFloat(creditoForm.capital_neto);
+      
+      if (1 - g1 - g2 <= 0) {
+        throw new Error("Los gastos superan o igualan el 100% del capital. Ajuste la tasa seleccionada.");
       }
-      setLoadingCredit(true);
+      
+      const capitalBruto = capitalNeto / (1 - g1 - g2);
+      setComputedCapitalBruto(capitalBruto);
 
+      const params = new URLSearchParams({
+        credito_id: 0,
+        capital: capitalBruto,
+        tna_c_iva: selectedTasa.tna_c_iva,
+        plazo: selectedTasa.plazo,
+        fecha_emision: creditoForm.fecha_emision
+      });
+      const res = await axiosClient.get(`/api/v1/creditos/simular-cuotas?${params.toString()}`);
+      setSimulation(res.data);
+      
+      const newTransfers = [];
+      newTransfers.push({
+        cbu: cliente.cbu || '',
+        cuit: cliente.cuil,
+        razon_social: `${cliente.nombre} ${cliente.apellido}`,
+        monto: capitalNeto
+      });
+
+      if (g1 > 0 && selectedTasa.gasto_1_socio_id) {
+        const socio1 = socios.find(s => s.id === selectedTasa.gasto_1_socio_id);
+        if (socio1) {
+          newTransfers.push({
+            cbu: socio1.cbu || '',
+            cuit: socio1.cuit,
+            razon_social: socio1.razon_social,
+            monto: capitalBruto * g1
+          });
+        }
+      }
+
+      if (g2 > 0 && selectedTasa.gasto_2_socio_id) {
+        const socio2 = socios.find(s => s.id === selectedTasa.gasto_2_socio_id);
+        if (socio2) {
+          newTransfers.push({
+            cbu: socio2.cbu || '',
+            cuit: socio2.cuit,
+            razon_social: socio2.razon_social,
+            monto: capitalBruto * g2
+          });
+        }
+      }
+      
+      setTransfers(newTransfers);
+      setStep(4);
+    } catch (error) {
+      alert("Error al simular crédito: " + (error.response?.data?.detail || error.message));
+    } finally {
+      setLoadingSimulation(false);
+    }
+  };
+
+  const handleConfirmCredit = async () => {
+    const selectedTasa = tasasYComisiones.find(t => t.id === parseInt(creditoForm.tasa_id));
+    if (!selectedTasa) return;
+
+    const currentTotal = transfers.reduce((sum, t) => sum + parseFloat(t.monto || 0), 0);
+    
+    if (Math.abs(computedCapitalBruto - currentTotal) > 0.05) {
+      alert("La suma de las transferencias debe ser igual al capital bruto a otorgar.");
+      return;
+    }
+
+    setLoadingCredit(true);
+    try {
       const payload = {
         cliente_cuil: cliente.cuil,
-        capital: parseFloat(creditoForm.capital),
+        capital: computedCapitalBruto,
         tna_c_iva: parseFloat(selectedTasa.tna_c_iva),
         plazo: selectedTasa.plazo,
         tipo_credito: creditoForm.tipo,
         socio_originador_id: creditoForm.socio_id ? parseInt(creditoForm.socio_id) : null,
         comision_id: selectedTasa.comision_id || null,
-        fecha_emision: creditoForm.fecha_emision
+        fecha_emision: creditoForm.fecha_emision,
+        transferencias: transfers
       };
 
       const res = await axiosClient.post('/api/v1/creditos/originacion', payload);
@@ -123,7 +209,10 @@ const CreditOriginationPage = () => {
       setStep(1);
       setCliente(null);
       setSearchCuil('');
-      setCreditoForm({ ...creditoForm, capital: '', tasa_id: '' });
+      setCreditoForm({ capital_neto: '', tasa_id: '', tipo: 'SISTEMA FRANCES', socio_id: '', fecha_emision: new Date().toISOString().split('T')[0] });
+      setComputedCapitalBruto(0);
+      setSimulation(null);
+      setTransfers([]);
     } catch (error) {
       alert("Error al originar crédito: " + (error.response?.data?.detail || error.message));
     } finally {
@@ -192,11 +281,15 @@ const CreditOriginationPage = () => {
               <button className="btn-secondary" onClick={() => setStep(2)}>Volver a los datos</button>
             </div>
             
-            <form onSubmit={handleCreditoSubmit}>
+            <form onSubmit={handleSimulateCredit}>
               <div className="form-row">
                 <div className="form-group">
-                  <label>Capital a Otorgar *</label>
-                  <input type="number" step="0.01" value={creditoForm.capital} onChange={(e) => setCreditoForm({...creditoForm, capital: e.target.value})} required />
+                  <label>Capital Neto (Mano) *</label>
+                  <CurrencyInput 
+                    value={creditoForm.capital_neto} 
+                    onChange={(val) => setCreditoForm({...creditoForm, capital_neto: val})} 
+                    required={true} 
+                  />
                 </div>
                 <div className="form-group" style={{ gridColumn: 'span 2' }}>
                   <label>Condiciones (Plazo y TNA) *</label>
@@ -230,11 +323,70 @@ const CreditOriginationPage = () => {
                 </div>
               </div>
               <div className="form-actions" style={{ marginTop: '24px' }}>
-                <button type="submit" className="btn-primary" disabled={loadingCredit} style={{ width: '100%', fontSize: '16px', padding: '14px' }}>
-                  {loadingCredit ? "Procesando Originación..." : "Originación de Crédito"}
+                <button type="submit" className="btn-primary" disabled={loadingSimulation} style={{ width: '100%', fontSize: '16px', padding: '14px' }}>
+                  {loadingSimulation ? "Simulando..." : "Simular Crédito"}
                 </button>
               </div>
             </form>
+          </div>
+        )}
+
+        {step === 4 && simulation && (
+          <div className="form-container glass-panel fade-in">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '16px', margin: 0 }}>
+                Paso 4: Simulación y Transferencias
+              </h3>
+              <button className="btn-secondary" onClick={() => setStep(3)}>Volver a condiciones</button>
+            </div>
+            
+            <div className="table-responsive" style={{ marginBottom: '24px', maxHeight: '300px', overflowY: 'auto' }}>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Cuota</th>
+                    <th>Vencimiento</th>
+                    <th>Capital</th>
+                    <th>Interés</th>
+                    <th>IVA</th>
+                    <th>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {simulation.map((c, idx) => {
+                    const totalCuota = parseFloat(c.capital) + parseFloat(c.interes) + parseFloat(c.iva);
+                    return (
+                      <tr key={idx}>
+                        <td>{c.nro_cuota}</td>
+                        <td>{c.fecha_vencimiento}</td>
+                        <td>{formatCurrency(c.capital)}</td>
+                        <td>{formatCurrency(c.interes)}</td>
+                        <td>{formatCurrency(c.iva)}</td>
+                        <td><strong>{formatCurrency(totalCuota)}</strong></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <TransfersForm 
+              transfers={transfers}
+              onChange={setTransfers}
+              totalRequired={computedCapitalBruto}
+            />
+
+            <div className="form-actions" style={{ marginTop: '32px' }}>
+              <button 
+                type="button" 
+                className="btn-primary" 
+                onClick={handleConfirmCredit}
+                disabled={loadingCredit || Math.abs(computedCapitalBruto - transfers.reduce((sum, t) => sum + parseFloat(t.monto || 0), 0)) > 0.05} 
+                style={{ width: '100%', fontSize: '16px', padding: '14px' }}
+              >
+                {loadingCredit ? "Procesando Originación..." : "Confirmar y Originar"}
+              </button>
+            </div>
           </div>
         )}
       </div>

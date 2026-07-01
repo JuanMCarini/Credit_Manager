@@ -1,7 +1,13 @@
-from typing import Optional
+from typing import Optional, List
 from datetime import date
 from pydantic import BaseModel
 from src.database.models.creditos import TipoCredito
+
+class TransferenciaCreate(BaseModel):
+    cbu: str
+    monto: float
+    cuit: str
+    razon_social: str
 
 class CreditoCreate(BaseModel):
     cliente_cuil: str
@@ -13,6 +19,7 @@ class CreditoCreate(BaseModel):
     fecha_emision: Optional[date] = None
     dia_vencimiento: int = 28
     tipo_credito: TipoCredito = TipoCredito.FRANCES
+    transferencias: Optional[List[TransferenciaCreate]] = []
 
 class CreditoEstadoUpdate(BaseModel):
     estado: str
