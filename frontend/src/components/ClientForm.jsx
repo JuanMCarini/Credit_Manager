@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import useAppStore from '../store/useAppStore';
+import CurrencyInput from './CurrencyInput';
 
 const ClientForm = ({ initialData, onSubmit, loading, feedback, buttonText = "Guardar Cliente" }) => {
   const { provincias, empleadores } = useAppStore();
@@ -109,7 +110,13 @@ const ClientForm = ({ initialData, onSubmit, loading, feedback, buttonText = "Gu
       </h3>
       <div className="form-row">
         <div className="form-group"><label>Fecha Ingreso</label><input type="date" name="fecha_ingreso" value={form.fecha_ingreso || ''} onChange={handleChange} /></div>
-        <div className="form-group"><label>Remuneración Declarada ($)</label><input type="number" step="0.01" name="remuneracion" value={form.remuneracion || ''} onChange={handleChange} /></div>
+        <div className="form-group">
+          <label>Remuneración Declarada ($)</label>
+          <CurrencyInput 
+            value={form.remuneracion} 
+            onChange={(val) => setForm({ ...form, remuneracion: val })} 
+          />
+        </div>
         <div className="form-group"><label>Nro. Legajo Laboral</label><input type="text" name="legajo" value={form.legajo || ''} onChange={handleChange} /></div>
         <div className="form-group">
           <label>Empleador</label>
