@@ -132,16 +132,16 @@ const CreditListPage = () => {
   }, [creditos, filter, sortConfig]);
 
   const ESTADOS_DISPONIBLES = useMemo(() => {
-    return [...new Set(getFilteredData('Estado').map(c => c.Estado).filter(Boolean))].sort();
-  }, [creditos, filter]);
+    return [...new Set(filteredAndSortedCreditos.map(c => c.Estado).filter(Boolean))].sort();
+  }, [filteredAndSortedCreditos]);
 
   const AVAILABLE_TIPOS_CREDITO = useMemo(() => {
-    return [...new Set(getFilteredData('TipoCredito').map(c => c["Tipo Crédito"]).filter(Boolean))].sort();
-  }, [creditos, filter]);
+    return [...new Set(filteredAndSortedCreditos.map(c => c["Tipo Crédito"]).filter(Boolean))].sort();
+  }, [filteredAndSortedCreditos]);
 
   const AVAILABLE_FECHAS_EMISION = useMemo(() => {
-    return [...new Set(getFilteredData('Fecha').map(c => c["Fecha Emisión"]).filter(Boolean))].sort();
-  }, [creditos, filter]);
+    return [...new Set(filteredAndSortedCreditos.map(c => c["Fecha Emisión"]).filter(Boolean))].sort();
+  }, [filteredAndSortedCreditos]);
 
   const totalCapital = useMemo(() => {
     return filteredAndSortedCreditos.reduce((acc, c) => acc + (c.Capital || 0), 0);
