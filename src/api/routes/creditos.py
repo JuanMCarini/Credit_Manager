@@ -1,9 +1,9 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from datetime import date
 import os
 import shutil
 from io import BytesIO
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Response, Form
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 from pypdf import PdfWriter, PdfReader
@@ -221,7 +221,7 @@ def delete_credito(credito_id: int, db: Session = Depends(get_db)):
 UPLOAD_DIR = "data/uploads/legajos"
 
 @router.post("/api/v1/creditos/{credito_id}/documentos", response_model=DocumentoLegajoOut)
-async def upload_documento(credito_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def upload_documento(credito_id: int, file: UploadFile = File(...), transferencia_id: Optional[int] = Form(None), db: Session = Depends(get_db)):
     credito = db.query(Credito).filter(Credito.id == credito_id).first()
     if not credito:
         raise HTTPException(status_code=404, detail="Crédito no encontrado")
@@ -236,11 +236,28 @@ async def upload_documento(credito_id: int, file: UploadFile = File(...), db: Se
         credito_id=credito_id,
         nombre_archivo=file.filename,
         ruta_archivo=file_path,
-        tipo_archivo=file.content_type
+        tipo_archivo=file.content_type,
+        transferencia_id=transferencia_id
     )
     db.add(nuevo_doc)
     db.commit()
     db.refresh(nuevo_doc)
+
+    if credito.estado in (EstadoCredito.APROBADO, "APROBADO", "EstadoCredito.APROBADO"):
+        transferencias = db.query(Transferencia).filter(Transferencia.credito_id == credito_id).all()
+        if transferencias:
+            todas_con_comprobante = True
+            for t in transferencias:
+                doc_count = db.query(DocumentoLegajo).filter(DocumentoLegajo.transferencia_id == t.id).count()
+                if doc_count == 0:
+                    todas_con_comprobante = False
+                    break
+            
+            if todas_con_comprobante:
+                db.query(Credito).filter(Credito.id == credito_id).update({"estado": EstadoCredito.ACTIVO.name})
+                db.commit()
+                db.refresh(credito)
+
     return nuevo_doc
 
 @router.get("/api/v1/creditos/{credito_id}/documentos", response_model=List[DocumentoLegajoOut])
