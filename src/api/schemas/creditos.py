@@ -28,8 +28,10 @@ class DocumentoLegajoOut(BaseModel):
     id: int
     credito_id: int
     nombre_archivo: str
+    ruta_archivo: str
     tipo_archivo: str
     fecha_subida: datetime
+    transferencia_id: Optional[int] = None
 
     class Config:
         from_attributes = True

@@ -1,11 +1,17 @@
 import { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
 
+const formatCurrency = (num) => {
+  return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(num);
+};
+
 const LegajoModal = ({ creditoId, onClose }) => {
   const [documentos, setDocumentos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [file, setFile] = useState(null);
+  const [transferencias, setTransferencias] = useState([]);
+  const [selectedTransferencia, setSelectedTransferencia] = useState('');
 
   const fetchDocumentos = async () => {
     setLoading(true);
@@ -22,8 +28,18 @@ const LegajoModal = ({ creditoId, onClose }) => {
   useEffect(() => {
     if (creditoId) {
       fetchDocumentos();
+      fetchTransferencias();
     }
   }, [creditoId]);
+
+  const fetchTransferencias = async () => {
+    try {
+      const res = await axiosClient.get(`/api/v1/creditos/${creditoId}/transferencias`);
+      setTransferencias(res.data);
+    } catch (error) {
+      console.error("Error cargando transferencias", error);
+    }
+  };
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -36,6 +52,9 @@ const LegajoModal = ({ creditoId, onClose }) => {
     setUploading(true);
     const formData = new FormData();
     formData.append('file', file);
+    if (selectedTransferencia) {
+      formData.append('transferencia_id', selectedTransferencia);
+    }
 
     try {
       await axiosClient.post(`/api/v1/creditos/${creditoId}/documentos`, formData, {
@@ -44,6 +63,7 @@ const LegajoModal = ({ creditoId, onClose }) => {
         },
       });
       setFile(null);
+      setSelectedTransferencia('');
       document.getElementById('legajoFileInput').value = '';
       fetchDocumentos();
     } catch (error) {
@@ -114,6 +134,18 @@ const LegajoModal = ({ creditoId, onClose }) => {
             onChange={handleFileChange}
             style={{ flex: 1, padding: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px' }}
           />
+          <select 
+            value={selectedTransferencia}
+            onChange={(e) => setSelectedTransferencia(e.target.value)}
+            style={{ padding: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', color: 'white' }}
+          >
+            <option value="">Vincular a Transf. (Opcional)</option>
+            {transferencias.map(t => (
+              <option key={t.id} value={t.id}>
+                #{t.id} - {formatCurrency(t.monto)} - {t.banco || t.razon_social}
+              </option>
+            ))}
+          </select>
           <button className="btn-primary" onClick={handleUpload} disabled={!file || uploading} style={{ width: 'auto' }}>
             {uploading ? "Subiendo..." : "Subir Archivo"}
           </button>
@@ -144,7 +176,14 @@ const LegajoModal = ({ creditoId, onClose }) => {
               <tbody>
                 {documentos.map(doc => (
                   <tr key={doc.id}>
-                    <td>{doc.nombre_archivo}</td>
+                    <td>
+                      <div>{doc.nombre_archivo}</div>
+                      {doc.transferencia_id && (
+                        <div style={{ fontSize: '12px', color: 'var(--primary-color)', marginTop: '4px' }}>
+                          🔗 Vinculado a Transf. #{doc.transferencia_id}
+                        </div>
+                      )}
+                    </td>
                     <td>{new Date(doc.fecha_subida).toLocaleString('es-AR')}</td>
                     <td>
                       <div style={{ display: 'flex', gap: '8px' }}>

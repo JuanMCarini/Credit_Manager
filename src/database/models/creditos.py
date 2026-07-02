@@ -351,8 +351,10 @@ class DocumentoLegajo(Base):
     ruta_archivo = Column(String(500), nullable=False)
     tipo_archivo = Column(String(50), nullable=False)
     fecha_subida = Column(DateTime, default=func.now(), nullable=False)
+    transferencia_id = Column(Integer, ForeignKey("transferencias.id"), nullable=True)
 
     credito = relationship("Credito", back_populates="documentos_legajo")
+    transferencia = relationship("Transferencia", backref="documentos_legajo")
 
     def __repr__(self):
         return f"<DocumentoLegajo(id={self.id}, credito_id={self.credito_id}, nombre_archivo={self.nombre_archivo})>"

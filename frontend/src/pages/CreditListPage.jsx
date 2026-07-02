@@ -307,7 +307,7 @@ const CreditListPage = () => {
       {ccCuil && <ClientCCModal cuil={ccCuil} onClose={() => setCcCuil(null)} />}
       {editCredito && <CreditEditEstadoModal creditoId={editCredito.id} currentEstado={editCredito.estado} onClose={() => setEditCredito(null)} onSuccess={fetchCreditos} />}
       {viewTransfersCredito && <TransfersModal creditoId={viewTransfersCredito} onClose={() => setViewTransfersCredito(null)} />}
-      {viewLegajoCredito && <LegajoModal creditoId={viewLegajoCredito} onClose={() => setViewLegajoCredito(null)} />}
+      {viewLegajoCredito && <LegajoModal creditoId={viewLegajoCredito} onClose={() => { setViewLegajoCredito(null); fetchCreditos(); }} />}
     </section>
   );
 };
