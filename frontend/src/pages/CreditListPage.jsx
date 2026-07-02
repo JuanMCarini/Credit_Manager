@@ -19,10 +19,11 @@ const CreditListPage = () => {
   const [loading, setLoading] = useState(false);
   const location = useLocation();
   
-  const [filter, setFilter] = useState({ ID: '', CUIL: '', Capital: {}, Plazo: '', TNA: '', Estado: [], Fecha: [], TipoCredito: [] });
+  const [filter, setFilter] = useState({ ID: '', CUIL: '', Capital: {}, Plazo: '', TNA: '', Estado: [], Fecha: [], TipoCredito: [], SaldoMora: {}, DiasMora: {} });
   const [sortConfig, setSortConfig] = useState({ key: 'ID', direction: 'desc' });
   const [showEstadoFilter, setShowEstadoFilter] = useState(false);
   const [showTipoCreditoFilter, setShowTipoCreditoFilter] = useState(false);
+  const [fechaCorte, setFechaCorte] = useState(() => new Date().toISOString().split('T')[0]);
 
   const [ccCuil, setCcCuil] = useState(null);
   const [editCredito, setEditCredito] = useState(null);
@@ -38,7 +39,7 @@ const CreditListPage = () => {
   const fetchCreditos = async () => {
     setLoading(true);
     try {
-      const res = await axiosClient.get('/api/v1/creditos');
+      const res = await axiosClient.get('/api/v1/creditos', { params: { fecha_corte: fechaCorte } });
       setCreditos(res.data);
     } catch (error) {
       alert("Error cargando créditos: " + error.message);
@@ -49,7 +50,7 @@ const CreditListPage = () => {
 
   useEffect(() => {
     fetchCreditos();
-  }, []);
+  }, [fechaCorte]);
 
   const handleDelete = async (id) => {
     if (!window.confirm(`¿Está seguro que desea eliminar el crédito #${id}?`)) return;
@@ -106,6 +107,28 @@ const CreditListPage = () => {
       });
     }
 
+    if (filter.SaldoMora && typeof filter.SaldoMora === 'object') {
+      result = result.filter(c => {
+        if (c["Saldo en Mora"] === null || c["Saldo en Mora"] === undefined) return false;
+        const numVal = Number(c["Saldo en Mora"]);
+        if (isNaN(numVal)) return false;
+        if (filter.SaldoMora.min !== undefined && numVal < filter.SaldoMora.min) return false;
+        if (filter.SaldoMora.max !== undefined && numVal > filter.SaldoMora.max) return false;
+        return true;
+      });
+    }
+
+    if (filter.DiasMora && typeof filter.DiasMora === 'object') {
+      result = result.filter(c => {
+        if (c["Días de Mora"] === null || c["Días de Mora"] === undefined) return false;
+        const numVal = Number(c["Días de Mora"]);
+        if (isNaN(numVal)) return false;
+        if (filter.DiasMora.min !== undefined && numVal < filter.DiasMora.min) return false;
+        if (filter.DiasMora.max !== undefined && numVal > filter.DiasMora.max) return false;
+        return true;
+      });
+    }
+
     if (excludeKey !== 'Estado' && filter.Estado && filter.Estado.length > 0) {
       result = result.filter(c => filter.Estado.includes(c.Estado));
     }
@@ -149,6 +172,10 @@ const CreditListPage = () => {
     return filteredAndSortedCreditos.reduce((acc, c) => acc + (c.Capital || 0), 0);
   }, [filteredAndSortedCreditos]);
 
+  const totalMora = useMemo(() => {
+    return filteredAndSortedCreditos.reduce((acc, c) => acc + (c["Saldo en Mora"] || 0), 0);
+  }, [filteredAndSortedCreditos]);
+
   const SortIcon = ({ columnKey }) => {
     if (sortConfig.key !== columnKey) return <span style={{ opacity: 0.3, marginLeft: '5px' }}>↕</span>;
     return <span style={{ marginLeft: '5px' }}>{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>;
@@ -161,7 +188,16 @@ const CreditListPage = () => {
           <h2>Listado Global de Créditos</h2>
           <p>Vista general de todos los créditos de la base de datos.</p>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(255,255,255,0.05)', padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--border-color)' }}>
+            <span style={{ fontSize: '12px', color: 'var(--text-color)', opacity: 0.8 }}>Fecha Corte:</span>
+            <input 
+              type="date" 
+              value={fechaCorte} 
+              onChange={e => setFechaCorte(e.target.value)} 
+              style={{ background: 'transparent', border: 'none', color: 'var(--text-color)', outline: 'none', fontSize: '12px', cursor: 'pointer', colorScheme: 'dark' }}
+            />
+          </div>
           <button className="btn-primary" onClick={fetchCreditos} disabled={loading} style={{ width: 'auto' }}>
             {loading ? "Actualizando..." : "Actualizar Datos"}
           </button>
@@ -235,6 +271,24 @@ const CreditListPage = () => {
                     </div>
                   )}
                 </th>
+                <th onClick={() => handleSort('Saldo en Mora')} style={{ cursor: 'pointer' }}>
+                  Saldo Mora <SortIcon columnKey="Saldo en Mora" />
+                  <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
+                    <ExcelNumberRangeFilter 
+                      selectedRange={filter.SaldoMora} 
+                      onChange={range => setFilter({ ...filter, SaldoMora: range })} 
+                    />
+                  </div>
+                </th>
+                <th onClick={() => handleSort('Días de Mora')} style={{ cursor: 'pointer' }}>
+                  Días Mora <SortIcon columnKey="Días de Mora" />
+                  <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
+                    <ExcelNumberRangeFilter 
+                      selectedRange={filter.DiasMora} 
+                      onChange={range => setFilter({ ...filter, DiasMora: range })} 
+                    />
+                  </div>
+                </th>
                 <th onClick={() => handleSort('Fecha Emisión')} style={{ cursor: 'pointer' }}>
                   Fecha Emisión <SortIcon columnKey="Fecha Emisión" />
                   <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
@@ -251,7 +305,7 @@ const CreditListPage = () => {
             <tbody>
               {filteredAndSortedCreditos.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="text-center empty-state" style={{ padding: '40px' }}>
+                  <td colSpan="11" className="text-center empty-state" style={{ padding: '40px' }}>
                     {loading ? "Cargando..." : "No hay créditos para mostrar con los filtros actuales."}
                   </td>
                 </tr>
@@ -269,6 +323,8 @@ const CreditListPage = () => {
                          {c.Estado}
                        </span>
                     </td>
+                    <td>{formatCurrency(c["Saldo en Mora"])}</td>
+                    <td>{c["Días de Mora"]}</td>
                     <td>{c["Fecha Emisión"]}</td>
                     <td>
                       <div style={{ display: 'flex', gap: '8px', flexWrap: 'nowrap', alignItems: 'center' }}>
@@ -297,7 +353,9 @@ const CreditListPage = () => {
               <tr>
                 <td colSpan="2" style={{ textAlign: 'right' }}>TOTAL:</td>
                 <td>{formatCurrency(totalCapital)}</td>
-                <td colSpan="6"></td>
+                <td colSpan="4"></td>
+                <td>{formatCurrency(totalMora)}</td>
+                <td colSpan="3"></td>
               </tr>
             </tfoot>
           </table>

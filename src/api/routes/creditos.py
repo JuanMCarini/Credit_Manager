@@ -13,7 +13,7 @@ from pypdf import PdfWriter, PdfReader
 from PIL import Image
 
 from src.database import get_db, Credito, Transferencia
-from src.database.models import EstadoCredito, Cuota, DocumentoLegajo
+from src.database.models import EstadoCredito, Cuota, DocumentoLegajo, EstadoCuota
 from src.api.schemas.creditos import CreditoCreate, CreditoEstadoUpdate, DocumentoLegajoOut
 from src.logic.origination import LoanOriginator
 from src.logic.amortization import AmortizationEngine
@@ -168,10 +168,49 @@ def get_credito_transferencias(credito_id: int, db: Session = Depends(get_db)):
     return result
 
 @router.get("/api/v1/creditos")
-def get_creditos_list(db: Session = Depends(get_db)):
-    creditos = db.query(Credito).options(joinedload(Credito.cliente), joinedload(Credito.socio_originador)).all()
+def get_creditos_list(fecha_corte: Optional[date] = Query(None, description="Fecha de corte para calcular mora"), db: Session = Depends(get_db)):
+    if fecha_corte is None:
+        fecha_corte = date.today()
+        
+    creditos = db.query(Credito).options(
+        joinedload(Credito.cliente), 
+        joinedload(Credito.socio_originador),
+        joinedload(Credito.cuotas).joinedload(Cuota.cobranzas)
+    ).all()
     result = []
     for c in creditos:
+        saldo_mora = 0.0
+        dias_mora = 0
+        min_vencimiento_mora = None
+
+        for cuota in c.cuotas:
+            if cuota.estado == EstadoCuota.NO_COMPRADA:
+                continue
+            if cuota.fecha_vencimiento <= fecha_corte:
+                c_capital = float(cuota.capital) if cuota.capital is not None else 0.0
+                c_interes = float(cuota.interes) if cuota.interes is not None else 0.0
+                c_iva = float(cuota.iva) if cuota.iva is not None else 0.0
+                total_esperado = round(c_capital + c_interes + c_iva, 2)
+                
+                total_cobrado = 0.0
+                for cob in cuota.cobranzas:
+                    cob_cap = float(cob.capital) if cob.capital is not None else 0.0
+                    cob_int = float(cob.interes) if cob.interes is not None else 0.0
+                    cob_iva = float(cob.iva) if cob.iva is not None else 0.0
+                    total_cobrado += round(cob_cap + cob_int + cob_iva, 2)
+                    
+                total_cobrado = round(total_cobrado, 2)
+                saldo_pendiente = round(total_esperado - total_cobrado, 2)
+                if saldo_pendiente > 0.01: # Use 0.01 to handle minor float differences
+                    saldo_mora += float(saldo_pendiente)
+                    if min_vencimiento_mora is None or cuota.fecha_vencimiento < min_vencimiento_mora:
+                        min_vencimiento_mora = cuota.fecha_vencimiento
+        
+        if min_vencimiento_mora:
+            dias_mora = (fecha_corte - min_vencimiento_mora).days
+            if dias_mora < 0:
+                dias_mora = 0
+
         nombre_cliente = f"{c.cliente.apellido}, {c.cliente.nombre}" if c.cliente else "-"
         origen = c.origen.value if hasattr(c.origen, 'value') else str(c.origen)
         socio = c.socio_originador.razon_social if c.socio_originador else "-"
@@ -188,7 +227,9 @@ def get_creditos_list(db: Session = Depends(get_db)):
             "Fecha Emisión": c.fecha_emision.strftime("%Y-%m-%d"),
             "Estado": c.estado.value if c.estado else "-",
             "Tipo Crédito": c.tipo_credito.value if c.tipo_credito else "-",
-            "Día Vto": c.dia_vencimiento
+            "Día Vto": c.dia_vencimiento,
+            "Saldo en Mora": float(round(saldo_mora, 2)),
+            "Días de Mora": dias_mora
         })
     return result
 
