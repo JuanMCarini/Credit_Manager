@@ -221,8 +221,8 @@ def delete_credito(credito_id: int, db: Session = Depends(get_db)):
 
 # --- LEGAJO DOCUMENTOS ENDPOINTS ---
 
-UPLOAD_DIR = "data/uploads/legajos"
-
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+UPLOAD_DIR = os.path.join(project_root, "data", "uploads", "legajos")
 @router.post("/api/v1/creditos/{credito_id}/documentos", response_model=DocumentoLegajoOut)
 async def upload_documento(credito_id: int, file: UploadFile = File(...), transferencia_id: Optional[int] = Form(None), db: Session = Depends(get_db)):
     credito = db.query(Credito).filter(Credito.id == credito_id).first()
@@ -274,8 +274,11 @@ def delete_documento(credito_id: int, doc_id: int, db: Session = Depends(get_db)
     if not doc:
         raise HTTPException(status_code=404, detail="Documento no encontrado")
         
-    if os.path.exists(doc.ruta_archivo):
-        os.remove(doc.ruta_archivo)
+    basename = os.path.basename(doc.ruta_archivo.replace('\\', '/'))
+    full_path = os.path.join(UPLOAD_DIR, basename)
+    
+    if os.path.exists(full_path):
+        os.remove(full_path)
         
     db.delete(doc)
     db.commit()
@@ -290,12 +293,15 @@ def download_merged_pdf(credito_id: int, db: Session = Depends(get_db)):
     merger = PdfWriter()
     
     for doc in docs:
-        if not os.path.exists(doc.ruta_archivo):
+        basename = os.path.basename(doc.ruta_archivo.replace('\\', '/'))
+        full_path = os.path.join(UPLOAD_DIR, basename)
+        
+        if not os.path.exists(full_path):
             continue
             
         if doc.tipo_archivo.startswith('image/'):
             try:
-                img = Image.open(doc.ruta_archivo)
+                img = Image.open(full_path)
                 if img.mode != 'RGB':
                     img = img.convert('RGB')
                 
@@ -306,12 +312,12 @@ def download_merged_pdf(credito_id: int, db: Session = Depends(get_db)):
                 reader = PdfReader(img_pdf_io)
                 merger.append(reader)
             except Exception as e:
-                print(f"Error converting image {doc.ruta_archivo}: {e}")
+                print(f"Error converting image {full_path}: {e}")
         elif doc.tipo_archivo == 'application/pdf' or doc.nombre_archivo.lower().endswith('.pdf'):
             try:
-                merger.append(doc.ruta_archivo)
+                merger.append(full_path)
             except Exception as e:
-                print(f"Error appending PDF {doc.ruta_archivo}: {e}")
+                print(f"Error appending PDF {full_path}: {e}")
                 
     output_pdf = BytesIO()
     merger.write(output_pdf)
@@ -328,10 +334,13 @@ def download_documento(credito_id: int, doc_id: int, db: Session = Depends(get_d
     if not doc:
         raise HTTPException(status_code=404, detail="Documento no encontrado")
         
-    if not os.path.exists(doc.ruta_archivo):
+    basename = os.path.basename(doc.ruta_archivo.replace('\\', '/'))
+    full_path = os.path.join(UPLOAD_DIR, basename)
+    
+    if not os.path.exists(full_path):
         raise HTTPException(status_code=404, detail="El archivo físico no existe")
         
-    return FileResponse(doc.ruta_archivo, filename=doc.nombre_archivo)
+    return FileResponse(full_path, filename=doc.nombre_archivo)
 
 @router.post("/api/v1/creditos/procesos/upload-batch")
 async def upload_batch_documentos(files: List[UploadFile] = File(...), db: Session = Depends(get_db)):

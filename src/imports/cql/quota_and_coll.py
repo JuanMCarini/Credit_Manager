@@ -228,6 +228,8 @@ def import_quotas_and_coll(data: CQLData):
                     db.flush()
                     db.commit()
 
+            print(f"✅ Se importaron {len(df_cuotas)} cuotas y {len(df_cobranzas)} cobranzas exitosamente.")
+
         except Exception as e:
             db.rollback()
             raise e

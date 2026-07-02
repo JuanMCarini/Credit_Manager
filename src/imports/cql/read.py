@@ -23,6 +23,8 @@ class CQLData:
     df_inventario: pd.DataFrame
     df_socios_excel: pd.DataFrame
     df_transferencias: pd.DataFrame
+    legajos_path: Path
+    comprobantes_path: Path
 
 def load_cql_data() -> CQLData:
     # Request the folder from the user using a dialog box
@@ -41,6 +43,8 @@ def load_cql_data() -> CQLData:
     inventario = folder_path / "Reporte - Inv. Créditos.xlsx"
     socios = folder_path / "Socios Comerciales.xlsx"
     transferencias = folder_path / "Transferencias.TXT"
+    legajos = folder_path / "LEGAJOS"
+    comprobantes = folder_path / "COMPROBANTES DE TRANSFERENCIAS"
 
     # Verify the existence of the mandatory files in the directory
     required_files = {
@@ -84,5 +88,7 @@ def load_cql_data() -> CQLData:
         df_cobranzas=df_cobranzas,
         df_inventario=df_inventario,
         df_socios_excel=df_socios_excel,
-        df_transferencias=df_transferencias
+        df_transferencias=df_transferencias,
+        legajos_path=legajos,
+        comprobantes_path=comprobantes
     )

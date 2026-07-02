@@ -75,7 +75,17 @@ const ClientForm = ({ initialData, onSubmit, loading, feedback, buttonText = "Gu
             <option value="O">Otro</option>
           </select>
         </div>
-        <div className="form-group"><label>Estado Civil</label><input type="text" name="estado_civil" value={form.estado_civil || ''} onChange={handleChange} /></div>
+        <div className="form-group">
+          <label>Estado Civil</label>
+          <select name="estado_civil" value={form.estado_civil || ''} onChange={handleChange}>
+            <option value="">Seleccione</option>
+            <option value="Soltero/a">Soltero/a</option>
+            <option value="Casado/a">Casado/a</option>
+            <option value="Divorciado/a">Divorciado/a</option>
+            <option value="Viudo/a">Viudo/a</option>
+            <option value="Unión Convivencial">Unión Convivencial</option>
+          </select>
+        </div>
         <div className="form-group"><label>Nacionalidad</label><input type="text" name="nacionalidad" value={form.nacionalidad || ''} onChange={handleChange} /></div>
       </div>
 
