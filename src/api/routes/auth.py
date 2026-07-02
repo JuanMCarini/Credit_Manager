@@ -33,3 +33,20 @@ def logout(current_user: Usuario = Depends(get_current_user)):
     """
     return {"msg": "Logout successful"}
 
+@router.post("/refresh", response_model=Token)
+def refresh_token(current_user: Usuario = Depends(get_current_user)):
+    """
+    Endpoint to refresh the JWT access token. Requires a valid, non-expired token.
+    """
+    access_token = create_access_token(
+        data={"sub": current_user.email, "rol": current_user.rol.nombre}
+    )
+    return {
+        "access_token": access_token, 
+        "token_type": "bearer", 
+        "user": {
+            "email": current_user.email, 
+            "nombre": current_user.nombre_completo, 
+            "rol": current_user.rol.nombre
+        }
+    }
