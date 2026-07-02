@@ -1,11 +1,14 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from datetime import date
 import os
 import shutil
+import zipfile
+import re
 from io import BytesIO
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Response, Form
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import or_
 from pypdf import PdfWriter, PdfReader
 from PIL import Image
 
@@ -330,5 +333,125 @@ def download_documento(credito_id: int, doc_id: int, db: Session = Depends(get_d
         
     return FileResponse(doc.ruta_archivo, filename=doc.nombre_archivo)
 
+@router.post("/api/v1/creditos/procesos/upload-batch")
+async def upload_batch_documentos(files: List[UploadFile] = File(...), db: Session = Depends(get_db)):
+    procesados = []
+    errores = []
 
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    
+    # Pre-fetch all credits to match efficiently against filenames
+    creditos_bd = db.query(Credito.id, Credito.id_externo).all()
 
+    def process_file_logic(filename: str, file_bytes: bytes, content_type: str = "application/octet-stream"):
+        try:
+            name_without_ext = os.path.splitext(filename)[0]
+            # 1. Match Transferencia -> T-{ID}-{NUM}.ext (tolerates spaces)
+            transfer_match = re.search(r"^T\s*-\s*(.+?)\s*-\s*(\d+)$", name_without_ext, re.IGNORECASE)
+            
+            credito = None
+            transferencia = None
+
+            if transfer_match:
+                cred_id_str = transfer_match.group(1)
+                transf_index_str = transfer_match.group(2)
+                transf_index = int(transf_index_str)
+
+                # Find credit
+                if cred_id_str.isdigit():
+                    credito = db.query(Credito).filter(or_(Credito.id == int(cred_id_str), Credito.id_externo == cred_id_str)).first()
+                else:
+                    credito = db.query(Credito).filter(Credito.id_externo == cred_id_str).first()
+
+                if not credito:
+                    errores.append({"archivo": filename, "error": f"Crédito no encontrado para '{cred_id_str}'"})
+                    return
+
+                # Find transfer
+                transferencias = db.query(Transferencia).filter(Transferencia.credito_id == credito.id).order_by(Transferencia.id).all()
+                if 1 <= transf_index <= len(transferencias):
+                    transferencia = transferencias[transf_index - 1]
+                else:
+                    errores.append({"archivo": filename, "error": f"Transferencia índice {transf_index} no válida para crédito {credito.id}"})
+                    return
+
+            else:
+                # 2. Extract potential IDs from filename
+                posibles_creditos = set()
+                
+                for c_id, c_id_ext in creditos_bd:
+                    # Check by ID using word boundaries
+                    if re.search(rf'\b{c_id}\b', name_without_ext):
+                        posibles_creditos.add(c_id)
+                    # Check by ID_externo
+                    if c_id_ext and str(c_id_ext) in name_without_ext:
+                        posibles_creditos.add(c_id)
+                
+                if len(posibles_creditos) == 1:
+                    credito_id_encontrado = list(posibles_creditos)[0]
+                    credito = db.query(Credito).filter(Credito.id == credito_id_encontrado).first()
+                elif len(posibles_creditos) > 1:
+                    errores.append({"archivo": filename, "error": f"Nombre ambiguo: coincide con {len(posibles_creditos)} créditos distintos ({list(posibles_creditos)})"})
+                    return
+                else:
+                    errores.append({"archivo": filename, "error": "No se pudo inferir el ID de crédito en el nombre del archivo"})
+                    return
+
+            # File save
+            file_path = os.path.join(UPLOAD_DIR, f"{credito.id}_{filename}")
+            with open(file_path, "wb") as f:
+                f.write(file_bytes)
+
+            nuevo_doc = DocumentoLegajo(
+                credito_id=credito.id,
+                nombre_archivo=filename,
+                ruta_archivo=file_path,
+                tipo_archivo=content_type,
+                transferencia_id=transferencia.id if transferencia else None
+            )
+            db.add(nuevo_doc)
+            
+            # Check state transition to ACTIVO
+            if credito.estado in (EstadoCredito.APROBADO, "APROBADO", "EstadoCredito.APROBADO"):
+                transf_todas = db.query(Transferencia).filter(Transferencia.credito_id == credito.id).all()
+                if transf_todas:
+                    todas_con_comprobante = True
+                    # We might not have committed the new_doc yet, so check if all *other* transferencias have docs
+                    for t in transf_todas:
+                        if transferencia and t.id == transferencia.id:
+                            continue # we are adding it right now
+                        doc_count = db.query(DocumentoLegajo).filter(DocumentoLegajo.transferencia_id == t.id).count()
+                        if doc_count == 0:
+                            todas_con_comprobante = False
+                            break
+                    
+                    if todas_con_comprobante:
+                        db.query(Credito).filter(Credito.id == credito.id).update({"estado": EstadoCredito.ACTIVO.name})
+            
+            db.commit()
+            procesados.append({"archivo": filename, "credito_id": credito.id, "transferencia_id": transferencia.id if transferencia else None})
+            
+        except Exception as e:
+            db.rollback()
+            errores.append({"archivo": filename, "error": str(e)})
+
+    for file in files:
+        if file.filename.lower().endswith(".zip"):
+            try:
+                content = await file.read()
+                with zipfile.ZipFile(BytesIO(content)) as zf:
+                    for zip_info in zf.infolist():
+                        if not zip_info.is_dir() and not zip_info.filename.startswith("__MACOSX/") and not zip_info.filename.startswith("."):
+                            extracted_bytes = zf.read(zip_info.filename)
+                            base_name = os.path.basename(zip_info.filename)
+                            if base_name:
+                                process_file_logic(base_name, extracted_bytes)
+            except zipfile.BadZipFile:
+                errores.append({"archivo": file.filename, "error": "El archivo ZIP es inválido o está corrupto"})
+            except Exception as e:
+                errores.append({"archivo": file.filename, "error": f"Error extrayendo ZIP: {str(e)}"})
+        else:
+            file_bytes = await file.read()
+            process_file_logic(file.filename, file_bytes, file.content_type)
+
+    return {"procesados": procesados, "errores": errores}
