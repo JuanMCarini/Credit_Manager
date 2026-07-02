@@ -95,6 +95,25 @@ const AuxiliaryTablesPage = () => {
     }
   };
 
+  const openDuplicateModal = (record) => {
+    setIsCreating(true);
+    setEditingRecord(null);
+    
+    const duplicateData = { ...record };
+    delete duplicateData.id; // Remove ID to create a new record
+    if (currentTableConfig.schema.includes('fecha')) {
+      duplicateData.fecha = new Date().toISOString().split('T')[0]; // Set date to today
+    }
+    
+    percentFields.forEach(f => {
+      if (duplicateData[f] !== null && duplicateData[f] !== undefined) {
+        duplicateData[f] = parseFloat((duplicateData[f] * 100).toFixed(4));
+      }
+    });
+    setEditFormData(duplicateData);
+  };
+
+
   const closeEditModal = () => {
     setIsCreating(false);
     setEditingRecord(null);
@@ -252,6 +271,11 @@ const AuxiliaryTablesPage = () => {
                         {activeTable === 'socios' && (
                           <button className="btn-secondary" style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--success-color)' }} onClick={() => {setAdjustingAdvance(row); setAdvanceAmount(''); setAdvanceDate('');}} title="Ajustar Anticipo">
                             💲
+                          </button>
+                        )}
+                        {activeTable === 'tasasYComisiones' && (
+                          <button className="btn-secondary" style={{ padding: '4px 8px', fontSize: '14px', color: '#3b82f6' }} onClick={() => openDuplicateModal(row)} title="Duplicar">
+                            📑
                           </button>
                         )}
                         <button className="btn-secondary" style={{ padding: '4px 8px', fontSize: '14px' }} onClick={() => openEditModal(row)} title="Editar">
