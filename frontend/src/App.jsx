@@ -17,6 +17,7 @@ import PortfolioOriginationPage from './pages/PortfolioOriginationPage';
 import PortfolioLiquidationsPage from './pages/PortfolioLiquidationsPage';
 import PortfolioLiquidationsProcessingPage from './pages/PortfolioLiquidationsProcessingPage';
 import UsersListPage from './pages/UsersListPage';
+import CreditProcessesPage from './pages/CreditProcessesPage';
 
 function App() {
   return (
@@ -34,6 +35,7 @@ function App() {
             <Route path="creditos" element={<CreditListPage />} />
             <Route path="alta-cliente" element={<ClientRegistrationPage />} />
             <Route path="alta-credito" element={<CreditOriginationPage />} />
+            <Route path="creditos-procesos" element={<CreditProcessesPage />} />
             <Route path="cobranzas" element={<CollectionsListPage />} />
             <Route path="procesamiento-cobranzas" element={<CollectionsProcessingPage />} />
             <Route path="operaciones-cartera" element={<PortfolioOperationsPage />} />

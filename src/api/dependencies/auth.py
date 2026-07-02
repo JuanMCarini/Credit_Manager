@@ -160,15 +160,16 @@ async def enforce_rbac(request: Request, db: Session = Depends(get_db)):
         
         # Si es POST, el ID no está en la URL, intentamos sacarlo del cuerpo de la petición (ej. CUIL al crear cliente)
         if request.method == "POST" and not id_registro:
-            try:
-                body = await request.json()
-                if isinstance(body, dict):
-                    if "cuil" in body:
-                        id_registro = f" (ID: {body['cuil']})"
-                    elif "id" in body:
-                        id_registro = f" (ID: {body['id']})"
-            except Exception:
-                pass # Si no hay body o no es JSON, lo ignoramos
+            if "application/json" in request.headers.get("content-type", ""):
+                try:
+                    body = await request.json()
+                    if isinstance(body, dict):
+                        if "cuil" in body:
+                            id_registro = f" (ID: {body['cuil']})"
+                        elif "id" in body:
+                            id_registro = f" (ID: {body['id']})"
+                except Exception:
+                    pass # Si no hay body o no es JSON, lo ignoramos
 
         # Para cobranzas masivas o individuales, posponemos el log al endpoint para poder incluir el ID del proceso
         if request.method == "POST" and path in ["/api/v1/cobranzas/masiva", "/api/v1/cobranzas/individual"]:
