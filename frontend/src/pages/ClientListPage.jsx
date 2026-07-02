@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axiosClient from '../api/axiosClient';
 import ClientEditModal from '../components/ClientEditModal';
 import ClientCCModal from '../components/ClientCCModal';
+import ClientViewModal from '../components/ClientViewModal';
 import ExportExcelButton from '../components/ExportExcelButton';
 import { CreditCard, Eye, Edit, Trash2 } from 'lucide-react';
 
@@ -17,6 +18,7 @@ const ClientListPage = () => {
 
   const [editCuil, setEditCuil] = useState(null);
   const [ccCuil, setCcCuil] = useState(null);
+  const [viewClient, setViewClient] = useState(null);
   const navigate = useNavigate();
 
   const fetchClients = async () => {
@@ -207,6 +209,9 @@ const ClientListPage = () => {
                     <td>{c["Teléfono"]}</td>
                     <td>
                       <div style={{ display: 'flex', gap: '8px', flexWrap: 'nowrap', alignItems: 'center' }}>
+                        <button className="btn-secondary" onClick={() => setViewClient(c)} style={{ padding: '4px 8px', fontSize: '14px' }} title="Ver Detalles">
+                          ℹ️
+                        </button>
                         <button className="btn-secondary" onClick={() => navigate(`/creditos?cuil=${c.CUIL}`)} style={{ padding: '4px 8px', fontSize: '14px' }} title="Créditos">
                           💳
                         </button>
@@ -231,6 +236,7 @@ const ClientListPage = () => {
       
       {editCuil && <ClientEditModal cuil={editCuil} onClose={() => setEditCuil(null)} onSuccess={fetchClients} />}
       {ccCuil && <ClientCCModal cuil={ccCuil} clientName={clients.find(c => c.CUIL === ccCuil)?.["Apellido y Nombre"]} onClose={() => setCcCuil(null)} />}
+      {viewClient && <ClientViewModal client={viewClient} onClose={() => setViewClient(null)} />}
     </section>
   );
 };
