@@ -72,6 +72,7 @@ class LoanOriginator:
         cutoff_day: int,
         type: TipoCredito,
         comision_id: int | None = None,
+        id_externo: str | None = None,
     ) -> None:
         """
         =============================================================================
@@ -90,6 +91,7 @@ class LoanOriginator:
             estado=EstadoCredito.APROBADO,
             dia_vencimiento=due_day,
             tipo_credito=type,
+            id_externo=id_externo,
         )
 
         self.db.add(self.credit)
@@ -123,6 +125,7 @@ class LoanOriginator:
         due_day: int = 28,
         type: TipoCredito = TipoCredito.FRANCES,
         comision_id: int | None = None,
+        id_externo: str | None = None,
         transferencias_data: list = None,
     ) -> Credito:
         """
@@ -138,7 +141,7 @@ class LoanOriginator:
             self._validate_client(client_cuil)
             cutoff_day = self._get_partner_cutoff_day(partner_id)
             self._generate_credit_and_schedule(
-                capital, tna_c_iva, term, partner_id, issuance_date, due_day, cutoff_day, type, comision_id
+                capital, tna_c_iva, term, partner_id, issuance_date, due_day, cutoff_day, type, comision_id, id_externo
             )
 
             if transferencias_data:
@@ -172,6 +175,7 @@ class LoanOriginator:
         due_day: int = 28,
         type: TipoCredito = TipoCredito.FRANCES,
         comision_id: int | None = None,
+        id_externo: str | None = None,
         transferencias_data: list = None,
     ) -> Credito:
         """
@@ -209,6 +213,7 @@ class LoanOriginator:
                 cutoff_day,
                 type,
                 comision_id,
+                id_externo,
             )
 
             if transferencias_data:

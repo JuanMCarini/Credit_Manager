@@ -19,7 +19,7 @@ const CreditListPage = () => {
   const [loading, setLoading] = useState(false);
   const location = useLocation();
   
-  const [filter, setFilter] = useState({ ID: '', CUIL: '', Capital: {}, Plazo: '', TNA: '', Estado: [], Fecha: [], TipoCredito: [], SaldoMora: {}, DiasMora: {} });
+  const [filter, setFilter] = useState({ ID: '', IdExterno: '', Originador: '', CUIL: '', Capital: {}, Plazo: '', TNA: '', Estado: [], Fecha: [], TipoCredito: [], SaldoMora: {}, DiasMora: {} });
   const [sortConfig, setSortConfig] = useState({ key: 'ID', direction: 'desc' });
   const [showEstadoFilter, setShowEstadoFilter] = useState(false);
   const [showTipoCreditoFilter, setShowTipoCreditoFilter] = useState(false);
@@ -88,6 +88,8 @@ const CreditListPage = () => {
   const getFilteredData = (excludeKey = null) => {
     let result = [...creditos];
     if (filter.ID) result = result.filter(c => c.ID === parseInt(filter.ID, 10));
+    if (filter.IdExterno) result = result.filter(c => c["ID Externo"] && String(c["ID Externo"]).toLowerCase().includes(filter.IdExterno.toLowerCase()));
+    if (filter.Originador) result = result.filter(c => c["Socio Originador"] && String(c["Socio Originador"]).toLowerCase().includes(filter.Originador.toLowerCase()));
     if (filter.CUIL) result = result.filter(c => c["Cliente CUIL"] && c["Cliente CUIL"].includes(filter.CUIL));
     if (filter.Plazo) result = result.filter(c => String(c.Plazo).includes(filter.Plazo));
     if (filter.TNA) result = result.filter(c => String(c["TNA con IVA"]).includes(filter.TNA));
@@ -96,7 +98,7 @@ const CreditListPage = () => {
       result = result.filter(c => filter.TipoCredito.includes(c["Tipo Crédito"]));
     }
     
-    if (filter.Capital && typeof filter.Capital === 'object') {
+    if (filter.Capital && typeof filter.Capital === 'object' && Object.keys(filter.Capital).length > 0) {
       result = result.filter(c => {
         if (c.Capital === null || c.Capital === undefined) return false;
         const numVal = Number(c.Capital);
@@ -107,7 +109,7 @@ const CreditListPage = () => {
       });
     }
 
-    if (filter.SaldoMora && typeof filter.SaldoMora === 'object') {
+    if (filter.SaldoMora && typeof filter.SaldoMora === 'object' && Object.keys(filter.SaldoMora).length > 0) {
       result = result.filter(c => {
         if (c["Saldo en Mora"] === null || c["Saldo en Mora"] === undefined) return false;
         const numVal = Number(c["Saldo en Mora"]);
@@ -118,7 +120,7 @@ const CreditListPage = () => {
       });
     }
 
-    if (filter.DiasMora && typeof filter.DiasMora === 'object') {
+    if (filter.DiasMora && typeof filter.DiasMora === 'object' && Object.keys(filter.DiasMora).length > 0) {
       result = result.filter(c => {
         if (c["Días de Mora"] === null || c["Días de Mora"] === undefined) return false;
         const numVal = Number(c["Días de Mora"]);
@@ -218,6 +220,14 @@ const CreditListPage = () => {
                   ID <SortIcon columnKey="ID" />
                   <input type="number" placeholder="Filtrar..." value={filter.ID} onChange={e => setFilter({ ...filter, ID: e.target.value })} onClick={e => e.stopPropagation()} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
                 </th>
+                <th onClick={() => handleSort('ID Externo')} style={{ cursor: 'pointer' }}>
+                  ID Externo <SortIcon columnKey="ID Externo" />
+                  <input type="text" placeholder="Filtrar..." value={filter.IdExterno} onChange={e => setFilter({ ...filter, IdExterno: e.target.value })} onClick={e => e.stopPropagation()} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                </th>
+                <th onClick={() => handleSort('Socio Originador')} style={{ cursor: 'pointer' }}>
+                  Originador <SortIcon columnKey="Socio Originador" />
+                  <input type="text" placeholder="Filtrar..." value={filter.Originador} onChange={e => setFilter({ ...filter, Originador: e.target.value })} onClick={e => e.stopPropagation()} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                </th>
                 <th onClick={() => handleSort('Cliente CUIL')} style={{ cursor: 'pointer' }}>
                   Cliente CUIL <SortIcon columnKey="Cliente CUIL" />
                   <input type="text" placeholder="Filtrar CUIL..." value={filter.CUIL} onChange={e => setFilter({ ...filter, CUIL: e.target.value })} onClick={e => e.stopPropagation()} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
@@ -305,7 +315,7 @@ const CreditListPage = () => {
             <tbody>
               {filteredAndSortedCreditos.length === 0 ? (
                 <tr>
-                  <td colSpan="11" className="text-center empty-state" style={{ padding: '40px' }}>
+                  <td colSpan="13" className="text-center empty-state" style={{ padding: '40px' }}>
                     {loading ? "Cargando..." : "No hay créditos para mostrar con los filtros actuales."}
                   </td>
                 </tr>
@@ -313,6 +323,8 @@ const CreditListPage = () => {
                 filteredAndSortedCreditos.map(c => (
                   <tr key={c.ID}>
                     <td>{c.ID}</td>
+                    <td>{c["ID Externo"]}</td>
+                    <td>{c["Socio Originador"]}</td>
                     <td>{c["Cliente CUIL"]}</td>
                     <td>{formatCurrency(c.Capital)}</td>
                     <td>{c.Plazo}</td>
@@ -351,7 +363,7 @@ const CreditListPage = () => {
             </tbody>
             <tfoot style={{ background: 'rgba(255, 255, 255, 0.05)', fontWeight: 'bold' }}>
               <tr>
-                <td colSpan="2" style={{ textAlign: 'right' }}>TOTAL:</td>
+                <td colSpan="4" style={{ textAlign: 'right' }}>TOTAL:</td>
                 <td>{formatCurrency(totalCapital)}</td>
                 <td colSpan="4"></td>
                 <td>{formatCurrency(totalMora)}</td>
