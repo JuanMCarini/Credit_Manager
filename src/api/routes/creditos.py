@@ -79,6 +79,7 @@ def create_credito(
             due_day=credito_data.dia_vencimiento,
             type=credito_data.tipo_credito,
             comision_id=credito_data.comision_id,
+            id_externo=credito_data.id_externo,
             transferencias_data=credito_data.transferencias
         )
         return {

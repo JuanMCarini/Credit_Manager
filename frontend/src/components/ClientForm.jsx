@@ -4,7 +4,7 @@ import CurrencyInput from './CurrencyInput';
 
 const ClientForm = ({ initialData, onSubmit, loading, feedback, buttonText = "Guardar Cliente" }) => {
   const { provincias, empleadores } = useAppStore();
-  
+
   const [form, setForm] = useState({
     cuil: '',
     documento: '',
@@ -42,14 +42,26 @@ const ClientForm = ({ initialData, onSubmit, loading, feedback, buttonText = "Gu
   const handleChange = (e) => {
     const { name, value } = e.target;
     if (name === 'mail') {
-        setForm({ ...form, [name]: value.toLowerCase() });
+      setForm({ ...form, [name]: value.toLowerCase() });
     } else {
-        setForm({ ...form, [name]: value.toUpperCase() });
+      setForm({ ...form, [name]: value.toUpperCase() });
     }
   };
 
+  const [localError, setLocalError] = useState('');
+
   const handleSubmit = (e) => {
     e.preventDefault();
+    setLocalError('');
+
+    const docClean = form.documento.replace(/\D/g, '');
+    const cuilClean = form.cuil.replace(/\D/g, '');
+
+    if (docClean && cuilClean && !cuilClean.includes(docClean)) {
+      setLocalError('El Documento (DNI) no coincide con el CUIL.');
+      return;
+    }
+
     onSubmit(form);
   };
 
@@ -122,9 +134,9 @@ const ClientForm = ({ initialData, onSubmit, loading, feedback, buttonText = "Gu
         <div className="form-group"><label>Fecha Ingreso</label><input type="date" name="fecha_ingreso" value={form.fecha_ingreso || ''} onChange={handleChange} /></div>
         <div className="form-group">
           <label>Remuneración Declarada ($)</label>
-          <CurrencyInput 
-            value={form.remuneracion} 
-            onChange={(val) => setForm({ ...form, remuneracion: val })} 
+          <CurrencyInput
+            value={form.remuneracion}
+            onChange={(val) => setForm({ ...form, remuneracion: val })}
           />
         </div>
         <div className="form-group"><label>Nro. Legajo Laboral</label><input type="text" name="legajo" value={form.legajo || ''} onChange={handleChange} /></div>
@@ -136,9 +148,9 @@ const ClientForm = ({ initialData, onSubmit, loading, feedback, buttonText = "Gu
           </select>
         </div>
         <div className="form-group"><label>CBU / CVU Bancario</label><input type="text" name="cbu" value={form.cbu || ''} onChange={handleChange} maxLength="22" /></div>
-        
+
         {initialData && (
-           <div className="form-group">
+          <div className="form-group">
             <label>Estado</label>
             <select name="estado" value={form.estado || 'ACTIVO'} onChange={handleChange}>
               <option value="ACTIVO">ACTIVO</option>
@@ -151,8 +163,8 @@ const ClientForm = ({ initialData, onSubmit, loading, feedback, buttonText = "Gu
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '24px' }}>
-        <div style={{ fontSize: '14px', fontWeight: 500, color: feedback?.type === 'error' ? 'var(--error)' : 'var(--accent-secondary)' }}>
-          {feedback?.message || ''}
+        <div style={{ fontSize: '14px', fontWeight: 500, color: (localError || feedback?.type === 'error') ? 'var(--error)' : 'var(--accent-secondary)' }}>
+          {localError || feedback?.message || ''}
         </div>
         <div>
           <button type="submit" className="btn-primary" disabled={loading} style={{ minWidth: '200px' }}>

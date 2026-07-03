@@ -35,7 +35,8 @@ const CreditOriginationPage = () => {
     tasa_id: '',
     tipo: 'SISTEMA FRANCES',
     socio_id: '',
-    fecha_emision: new Date().toISOString().split('T')[0]
+    fecha_emision: new Date().toISOString().split('T')[0],
+    id_externo: ''
   });
 
   const handleSearch = async (e) => {
@@ -198,6 +199,7 @@ const CreditOriginationPage = () => {
         socio_originador_id: creditoForm.socio_id ? parseInt(creditoForm.socio_id) : null,
         comision_id: selectedTasa.comision_id || null,
         fecha_emision: creditoForm.fecha_emision,
+        id_externo: creditoForm.id_externo || null,
         transferencias: transfers
       };
 
@@ -209,7 +211,7 @@ const CreditOriginationPage = () => {
       setStep(1);
       setCliente(null);
       setSearchCuil('');
-      setCreditoForm({ capital_neto: '', tasa_id: '', tipo: 'SISTEMA FRANCES', socio_id: '', fecha_emision: new Date().toISOString().split('T')[0] });
+      setCreditoForm({ capital_neto: '', tasa_id: '', tipo: 'SISTEMA FRANCES', socio_id: '', fecha_emision: new Date().toISOString().split('T')[0], id_externo: '' });
       setComputedCapitalBruto(0);
       setSimulation(null);
       setTransfers([]);
@@ -320,6 +322,10 @@ const CreditOriginationPage = () => {
                 <div className="form-group">
                   <label>Fecha de Emisión</label>
                   <input type="date" value={creditoForm.fecha_emision} onChange={(e) => setCreditoForm({...creditoForm, fecha_emision: e.target.value})} required />
+                </div>
+                <div className="form-group">
+                  <label>ID Externo</label>
+                  <input type="text" value={creditoForm.id_externo} onChange={(e) => setCreditoForm({...creditoForm, id_externo: e.target.value})} placeholder="Opcional" />
                 </div>
               </div>
               <div className="form-actions" style={{ marginTop: '24px' }}>

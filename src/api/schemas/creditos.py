@@ -19,6 +19,7 @@ class CreditoCreate(BaseModel):
     fecha_emision: Optional[date] = None
     dia_vencimiento: int = 28
     tipo_credito: TipoCredito = TipoCredito.FRANCES
+    id_externo: Optional[str] = None
     transferencias: Optional[List[TransferenciaCreate]] = []
 
 class CreditoEstadoUpdate(BaseModel):
