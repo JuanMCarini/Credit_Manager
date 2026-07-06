@@ -7,6 +7,7 @@ import TransfersModal from '../components/TransfersModal';
 import LegajoModal from '../components/LegajoModal';
 import ExcelDateFilter from '../components/ExcelDateFilter';
 import ExcelNumberRangeFilter from '../components/ExcelNumberRangeFilter';
+import ExcelListFilter from '../components/ExcelListFilter';
 import ExportExcelButton from '../components/ExportExcelButton';
 import { Eye, Edit, Trash2 } from 'lucide-react';
 
@@ -19,7 +20,7 @@ const CreditListPage = () => {
   const [loading, setLoading] = useState(false);
   const location = useLocation();
   
-  const [filter, setFilter] = useState({ ID: '', IdExterno: '', Originador: '', CUIL: '', Capital: {}, Plazo: '', TNA: '', Estado: [], Fecha: [], TipoCredito: [], SaldoMora: {}, DiasMora: {} });
+  const [filter, setFilter] = useState({ ID: [], IdExterno: '', Originador: '', CUIL: '', Capital: {}, Plazo: '', TNA: '', Estado: [], Fecha: [], TipoCredito: [], SaldoMora: {}, DiasMora: {} });
   const [sortConfig, setSortConfig] = useState({ key: 'ID', direction: 'desc' });
   const [showEstadoFilter, setShowEstadoFilter] = useState(false);
   const [showTipoCreditoFilter, setShowTipoCreditoFilter] = useState(false);
@@ -87,7 +88,9 @@ const CreditListPage = () => {
 
   const getFilteredData = (excludeKey = null) => {
     let result = [...creditos];
-    if (filter.ID) result = result.filter(c => c.ID === parseInt(filter.ID, 10));
+    if (excludeKey !== 'ID' && filter.ID && filter.ID.length > 0) {
+      result = result.filter(c => filter.ID.includes(String(c.ID)));
+    }
     if (filter.IdExterno) result = result.filter(c => c["ID Externo"] && String(c["ID Externo"]).toLowerCase().includes(filter.IdExterno.toLowerCase()));
     if (filter.Originador) result = result.filter(c => c["Socio Originador"] && String(c["Socio Originador"]).toLowerCase().includes(filter.Originador.toLowerCase()));
     if (filter.CUIL) result = result.filter(c => c["Cliente CUIL"] && c["Cliente CUIL"].includes(filter.CUIL));
@@ -159,8 +162,14 @@ const CreditListPage = () => {
   }, [creditos, filter, sortConfig]);
 
   const ESTADOS_DISPONIBLES = useMemo(() => {
-    return [...new Set(filteredAndSortedCreditos.map(c => c.Estado).filter(Boolean))].sort();
-  }, [filteredAndSortedCreditos]);
+    const dataForFilter = getFilteredData('Estado');
+    return [...new Set(dataForFilter.map(c => c.Estado).filter(Boolean))].sort();
+  }, [creditos, filter]);
+
+  const AVAILABLE_CREDIT_IDS = useMemo(() => {
+    const dataForFilter = getFilteredData('ID');
+    return [...new Set(dataForFilter.map(c => c.ID).filter(Boolean))].sort((a,b)=>a-b).map(String);
+  }, [creditos, filter]);
 
   const AVAILABLE_TIPOS_CREDITO = useMemo(() => {
     return [...new Set(filteredAndSortedCreditos.map(c => c["Tipo Crédito"]).filter(Boolean))].sort();
@@ -218,7 +227,14 @@ const CreditListPage = () => {
               <tr>
                 <th onClick={() => handleSort('ID')} style={{ cursor: 'pointer', minWidth: '70px' }}>
                   ID <SortIcon columnKey="ID" />
-                  <input type="number" placeholder="Filtrar..." value={filter.ID} onChange={e => setFilter({ ...filter, ID: e.target.value })} onClick={e => e.stopPropagation()} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                  <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
+                    <ExcelListFilter 
+                      availableOptions={AVAILABLE_CREDIT_IDS} 
+                      selectedOptions={filter.ID} 
+                      onChange={val => setFilter({ ...filter, ID: val })} 
+                      title="Filtrar IDs..." 
+                    />
+                  </div>
                 </th>
                 <th onClick={() => handleSort('ID Externo')} style={{ cursor: 'pointer' }}>
                   ID Externo <SortIcon columnKey="ID Externo" />

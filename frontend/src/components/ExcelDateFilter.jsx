@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronRight, ChevronDown, Filter, Check, Minus } from 'lucide-react';
 
 const ExcelDateFilter = ({ availableDates, selectedDates, onChange }) => {
@@ -9,6 +10,33 @@ const ExcelDateFilter = ({ availableDates, selectedDates, onChange }) => {
   const [localSet, setLocalSet] = useState(new Set());
   
   const dropdownRef = useRef(null);
+  const popupRef = useRef(null);
+  const [coords, setCoords] = useState(null);
+
+  // Update position for portal
+  useEffect(() => {
+    const updatePosition = () => {
+      if (isOpen && dropdownRef.current) {
+        const rect = dropdownRef.current.getBoundingClientRect();
+        setCoords({
+          left: rect.left,
+          top: rect.bottom + 4,
+          width: Math.max(220, rect.width)
+        });
+      }
+    };
+
+    if (isOpen) {
+      updatePosition();
+      window.addEventListener('scroll', updatePosition, true);
+      window.addEventListener('resize', updatePosition);
+    }
+    
+    return () => {
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [isOpen]);
 
   // Initialize local set when opening
   useEffect(() => {
@@ -26,7 +54,10 @@ const ExcelDateFilter = ({ availableDates, selectedDates, onChange }) => {
   // Click outside to close
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+      if (
+        dropdownRef.current && !dropdownRef.current.contains(e.target) &&
+        (!popupRef.current || !popupRef.current.contains(e.target))
+      ) {
         setIsOpen(false);
       }
     };
@@ -140,15 +171,18 @@ const ExcelDateFilter = ({ availableDates, selectedDates, onChange }) => {
         <Filter size={12} color={isFilterActive ? '#4caf50' : 'currentColor'} />
       </div>
 
-      {isOpen && (
-        <div style={{
-          position: 'absolute', top: '100%', left: 0, zIndex: 1000,
-          background: 'var(--surface-color)', border: '1px solid var(--border-color)',
-          borderRadius: '6px', padding: '8px', width: '220px',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.5)', marginTop: '4px',
-          display: 'flex', flexDirection: 'column', gap: '8px',
-          color: 'var(--text-color)', textAlign: 'left', fontWeight: 'normal'
-        }} onClick={e => e.stopPropagation()}>
+      {isOpen && coords && createPortal(
+        <div 
+          ref={popupRef}
+          style={{
+            position: 'fixed', top: coords.top, left: coords.left, zIndex: 9999,
+            background: 'var(--surface-color)', border: '1px solid var(--border-color)',
+            borderRadius: '6px', padding: '8px', width: `${coords.width}px`,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+            display: 'flex', flexDirection: 'column', gap: '8px',
+            color: 'var(--text-color)', textAlign: 'left', fontWeight: 'normal'
+          }} onClick={e => e.stopPropagation()}
+        >
           
           <input 
             type="text" 
@@ -224,7 +258,8 @@ const ExcelDateFilter = ({ availableDates, selectedDates, onChange }) => {
               style={{ padding: '4px 8px', fontSize: '12px', background: 'var(--primary-color)', border: 'none', color: 'white', borderRadius: '4px', cursor: 'pointer' }}
             >Aceptar</button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

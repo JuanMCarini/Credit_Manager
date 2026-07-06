@@ -3,6 +3,7 @@ import axiosClient, { downloadFile } from '../api/axiosClient';
 import ExportExcelButton from '../components/ExportExcelButton';
 import ExcelDateFilter from '../components/ExcelDateFilter';
 import ExcelNumberRangeFilter from '../components/ExcelNumberRangeFilter';
+import ExcelListFilter from '../components/ExcelListFilter';
 
 const formatCurrency = (num) => {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(num);
@@ -204,6 +205,14 @@ const BalancesPage = () => {
     return Array.from(dates).sort();
   }, [results]);
 
+  const availableCreditIds = useMemo(() => {
+    const ids = new Set();
+    results.forEach(r => {
+      if (r['ID Credito']) ids.add(String(r['ID Credito']));
+    });
+    return Array.from(ids).sort((a,b)=>Number(a)-Number(b));
+  }, [results]);
+
   const handleSort = (key) => {
     let direction = 'asc';
     if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
@@ -316,6 +325,15 @@ const BalancesPage = () => {
                               availableDates={availableFechas}
                               selectedDates={tableFilters[col.key] || []}
                               onChange={dates => setTableFilters({ ...tableFilters, [col.key]: dates })}
+                            />
+                          </div>
+                        ) : col.key === 'ID Credito' ? (
+                          <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
+                            <ExcelListFilter 
+                              availableOptions={availableCreditIds}
+                              selectedOptions={tableFilters[col.key] || []}
+                              onChange={ids => setTableFilters({ ...tableFilters, [col.key]: ids })}
+                              title="Filtrar IDs..."
                             />
                           </div>
                         ) : isCurrency ? (

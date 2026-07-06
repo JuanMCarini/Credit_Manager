@@ -1,10 +1,38 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 
 const ExcelNumberRangeFilter = ({ selectedRange, onChange }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [minVal, setMinVal] = useState('');
   const [maxVal, setMaxVal] = useState('');
   const dropdownRef = useRef(null);
+  const popupRef = useRef(null);
+  const [coords, setCoords] = useState(null);
+
+  // Update position for portal
+  useEffect(() => {
+    const updatePosition = () => {
+      if (isOpen && dropdownRef.current) {
+        const rect = dropdownRef.current.getBoundingClientRect();
+        setCoords({
+          left: rect.left,
+          top: rect.bottom + 4,
+          width: Math.max(200, rect.width)
+        });
+      }
+    };
+
+    if (isOpen) {
+      updatePosition();
+      window.addEventListener('scroll', updatePosition, true);
+      window.addEventListener('resize', updatePosition);
+    }
+    
+    return () => {
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [isOpen]);
 
   useEffect(() => {
     if (isOpen) {
@@ -15,7 +43,10 @@ const ExcelNumberRangeFilter = ({ selectedRange, onChange }) => {
 
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+      if (
+        dropdownRef.current && !dropdownRef.current.contains(e.target) &&
+        (!popupRef.current || !popupRef.current.contains(e.target))
+      ) {
         setIsOpen(false);
       }
     };
@@ -68,18 +99,17 @@ const ExcelNumberRangeFilter = ({ selectedRange, onChange }) => {
         <span style={{ opacity: 0.7, fontSize: '10px' }}>▼</span>
       </button>
 
-      {isOpen && (
-        <div className="excel-filter-dropdown" onClick={e => e.stopPropagation()} style={{
-          position: 'absolute',
-          top: '100%',
-          left: 0,
-          marginTop: '4px',
+      {isOpen && coords && createPortal(
+        <div className="excel-filter-dropdown" ref={popupRef} onClick={e => e.stopPropagation()} style={{
+          position: 'fixed',
+          top: coords.top,
+          left: coords.left,
           background: 'var(--surface-color)',
           border: '1px solid var(--border-color)',
           borderRadius: '6px',
           boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-          zIndex: 100,
-          minWidth: '200px',
+          zIndex: 9999,
+          width: `${coords.width}px`,
           padding: '12px',
           display: 'flex',
           flexDirection: 'column',
@@ -122,7 +152,8 @@ const ExcelNumberRangeFilter = ({ selectedRange, onChange }) => {
               Aplicar
             </button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

@@ -449,7 +449,9 @@ def get_cobranzas(
     if has_cuota_filters:
         base_query = base_query.outerjoin(Cuota)
         if credito_id:
-            base_query = base_query.filter(Cuota.credito_id == int(credito_id))
+            credito_id_list = [int(c.strip()) for c in credito_id.split(",") if c.strip().isdigit()]
+            if credito_id_list:
+                base_query = base_query.filter(Cuota.credito_id.in_(credito_id_list))
         if cuil:
             base_query = base_query.outerjoin(Credito, Cuota.credito_id == Credito.id).filter(Credito.cliente_cuil.like(f"%{cuil}%"))
             

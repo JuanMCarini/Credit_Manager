@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import axiosClient from '../api/axiosClient';
 import { Trash2, DollarSign } from 'lucide-react';
 import ExcelDateFilter from '../components/ExcelDateFilter';
+import ExcelListFilter from '../components/ExcelListFilter';
 import ExportExcelButton from '../components/ExportExcelButton';
 
 const PortfolioLiquidationsPage = () => {
@@ -20,7 +21,7 @@ const PortfolioLiquidationsPage = () => {
   });
   const [filter, setFilter] = useState({
     id: '', proceso_id: '', cartera_id: '', cuota_id: '', cobranza_id: '',
-    tipo_liquidacion: [], credito_id: '', nro_cuota: '', fecha_vencimiento: [],
+    tipo_liquidacion: [], credito_id: [], nro_cuota: '', fecha_vencimiento: [],
     capital: '', interes: '', iva: '', importe_total: '', fecha_pago: [], cancelada: ''
   });
 
@@ -28,6 +29,7 @@ const PortfolioLiquidationsPage = () => {
   const TIPOS_DISPONIBLES = useMemo(() => [...new Set(liquidaciones.map(l => l.tipo_liquidacion).filter(Boolean))], [liquidaciones]);
   const AVAILABLE_FECHAS_VENCIMIENTO = useMemo(() => [...new Set(liquidaciones.map(l => l.fecha_vencimiento).filter(Boolean))], [liquidaciones]);
   const AVAILABLE_FECHAS_PAGO = useMemo(() => [...new Set(liquidaciones.map(l => l.fecha_pago).filter(Boolean))], [liquidaciones]);
+  const AVAILABLE_CREDIT_IDS = useMemo(() => [...new Set(liquidaciones.map(l => l.credito_id).filter(Boolean))].sort((a,b)=>a-b).map(String), [liquidaciones]);
 
   const handleTipoToggle = (tipo) => {
     setFilter(prev => {
@@ -48,7 +50,7 @@ const PortfolioLiquidationsPage = () => {
     if (filter.cuota_id) result = result.filter(l => String(l.cuota_id || '').includes(filter.cuota_id));
     if (filter.cobranza_id) result = result.filter(l => String(l.cobranza_id || '').includes(filter.cobranza_id));
     if (filter.tipo_liquidacion.length > 0) result = result.filter(l => filter.tipo_liquidacion.includes(l.tipo_liquidacion));
-    if (filter.credito_id) result = result.filter(l => String(l.credito_id || '').includes(filter.credito_id));
+    if (filter.credito_id && filter.credito_id.length > 0) result = result.filter(l => filter.credito_id.includes(String(l.credito_id)));
     if (filter.nro_cuota) result = result.filter(l => String(l.nro_cuota || '').includes(filter.nro_cuota));
     if (filter.fecha_vencimiento && filter.fecha_vencimiento.length > 0) result = result.filter(l => filter.fecha_vencimiento.includes(l.fecha_vencimiento));
     if (filter.capital) result = result.filter(l => String(l.capital || '').includes(filter.capital));
@@ -234,7 +236,17 @@ const PortfolioLiquidationsPage = () => {
                     </div>
                   )}
                 </th>
-                <th style={{minWidth: '90px'}}>ID Crédito <br/>{renderInput('credito_id', '...')}</th>
+                <th style={{minWidth: '90px'}}>
+                  ID Crédito <br/>
+                  <div style={{ marginTop: '5px' }}>
+                    <ExcelListFilter 
+                      availableOptions={AVAILABLE_CREDIT_IDS}
+                      selectedOptions={filter.credito_id}
+                      onChange={val => handleFilterChange('credito_id', val)}
+                      title="Filtrar IDs..."
+                    />
+                  </div>
+                </th>
                 <th style={{minWidth: '90px'}}>Nro. Cuota <br/>{renderInput('nro_cuota', '...')}</th>
                 <th style={{minWidth: '110px'}}>
                   Vencimiento <br/>
