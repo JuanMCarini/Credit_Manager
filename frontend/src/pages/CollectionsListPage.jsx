@@ -5,6 +5,7 @@ import axiosClient from '../api/axiosClient';
 import { useDebounce } from '../hooks/useDebounce';
 import ExcelDateFilter from '../components/ExcelDateFilter';
 import ExcelNumberRangeFilter from '../components/ExcelNumberRangeFilter';
+import ExcelListFilter from '../components/ExcelListFilter';
 import ExportExcelButton from '../components/ExportExcelButton';
 
 const formatCurrency = (num) => {
@@ -29,7 +30,7 @@ const CollectionsListPage = () => {
     ID: '', 
     ProcesoID: initialProcesoId, 
     CUIL: '', 
-    CreditoID: '', 
+    CreditoID: [], 
     Tipo: '',
     FechaVto: [],
     Capital: {},
@@ -68,7 +69,7 @@ const CollectionsListPage = () => {
         ...(f.ID && { id_cobranza: f.ID }),
         ...(f.ProcesoID && { proceso_id: f.ProcesoID }),
         ...(f.CUIL && { cuil: f.CUIL }),
-        ...(f.CreditoID && { credito_id: f.CreditoID }),
+        ...(f.CreditoID && f.CreditoID.length > 0 && { credito_id: f.CreditoID.join(',') }),
         ...(f.Tipo && { tipo: f.Tipo }),
         ...(f.Capital?.min !== undefined && { capital_min: f.Capital.min }),
         ...(f.Capital?.max !== undefined && { capital_max: f.Capital.max }),
@@ -97,6 +98,11 @@ const CollectionsListPage = () => {
       return res.data;
     }
   });
+
+  const AVAILABLE_CREDIT_IDS = useMemo(() => {
+    if (!data || !data.items) return [];
+    return [...new Set(data.items.map(c => c["Credito ID"]).filter(Boolean))].sort((a,b)=>a-b).map(String);
+  }, [data]);
 
   const cobranzas = data?.items || [];
   const totalItems = data?.total || 0;
@@ -334,7 +340,14 @@ const CollectionsListPage = () => {
                     </th>
                     <th>
                       Crédito
-                      <input type="text" placeholder="Crédito..." value={filter.CreditoID} onChange={e => handleFilterChange('CreditoID', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                      <div style={{ marginTop: '5px' }}>
+                        <ExcelListFilter 
+                          availableOptions={AVAILABLE_CREDIT_IDS}
+                          selectedOptions={filter.CreditoID}
+                          onChange={val => handleFilterChange('CreditoID', val)}
+                          title="Filtrar IDs..."
+                        />
+                      </div>
                     </th>
                     <th>Cuota</th>
                     <th>

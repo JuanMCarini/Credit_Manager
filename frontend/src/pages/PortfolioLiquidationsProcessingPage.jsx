@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import axiosClient from '../api/axiosClient';
 import ExcelDateFilter from '../components/ExcelDateFilter';
+import ExcelListFilter from '../components/ExcelListFilter';
 import ExportExcelButton from '../components/ExportExcelButton';
 
 const PortfolioLiquidationsProcessingPage = () => {
@@ -18,7 +19,7 @@ const PortfolioLiquidationsProcessingPage = () => {
   const [processing, setProcessing] = useState(false);
   const [compradores, setCompradores] = useState([]);
   const [filters, setFilters] = useState({
-    credito_id: '',
+    credito_id: [],
     nro_cuota: '',
     fecha_vencimiento: [],
     cartera_id: '',
@@ -110,6 +111,7 @@ const PortfolioLiquidationsProcessingPage = () => {
   };
 
   const uniqueTipos = previewData ? [...new Set(previewData.map(item => item.tipo_liquidacion))] : [];
+  const uniqueCreditos = previewData ? [...new Set(previewData.map(item => item.credito_id))].sort((a,b)=>a-b).map(String) : [];
 
   const uniqueVencimientos = useMemo(() => {
     if (!previewData) return [];
@@ -118,7 +120,7 @@ const PortfolioLiquidationsProcessingPage = () => {
 
   const filteredData = previewData ? previewData.filter(item => {
     return (
-      (filters.credito_id === '' || String(item.credito_id).includes(filters.credito_id)) &&
+      (filters.credito_id.length === 0 || filters.credito_id.includes(String(item.credito_id))) &&
       (filters.nro_cuota === '' || String(item.nro_cuota).includes(filters.nro_cuota)) &&
       (filters.fecha_vencimiento.length === 0 || filters.fecha_vencimiento.includes(item.fecha_vencimiento)) &&
       (filters.cartera_id === '' || String(item.cartera_id).includes(filters.cartera_id)) &&
@@ -273,7 +275,16 @@ const PortfolioLiquidationsProcessingPage = () => {
                   </th>
                   <th>
                     Crédito ID
-                    <input type="text" placeholder="Filtrar..." value={filters.credito_id} onChange={(e) => handleFilterChange(e, 'credito_id')} style={{ display: 'block', width: '100%', marginTop: '4px', padding: '4px', fontSize: '0.8rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-primary)', borderRadius: '4px' }} />
+                    {uniqueCreditos.length > 0 && (
+                      <div style={{ marginTop: '5px' }}>
+                        <ExcelListFilter 
+                          availableOptions={uniqueCreditos}
+                          selectedOptions={filters.credito_id}
+                          onChange={(newIds) => setFilters(prev => ({ ...prev, credito_id: newIds }))}
+                          title="Filtrar IDs..."
+                        />
+                      </div>
+                    )}
                   </th>
                   <th>
                     Nro Cuota

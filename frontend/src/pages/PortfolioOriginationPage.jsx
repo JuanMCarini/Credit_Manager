@@ -3,6 +3,7 @@ import axiosClient from '../api/axiosClient';
 import useAppStore from '../store/useAppStore';
 import ExportExcelButton from '../components/ExportExcelButton';
 import ExcelNumberRangeFilter from '../components/ExcelNumberRangeFilter';
+import ExcelListFilter from '../components/ExcelListFilter';
 
 const PortfolioOriginationPage = () => {
   const { editingCompra, setEditingCompra } = useAppStore();
@@ -663,7 +664,14 @@ const PortfolioOriginationPage = () => {
                           <tr>
                             <th style={{textAlign: 'left', padding: '12px', verticalAlign: 'top'}}>
                               ID
-                              <input type="text" placeholder="Filtrar..." value={filterCreditos.id || ''} onChange={e => handleFilterChange('id', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
+                                <ExcelListFilter 
+                                  availableOptions={Array.from(new Set(previewData.creditos.map(c => c.id))).map(String)}
+                                  selectedOptions={filterCreditos.id || []}
+                                  onChange={val => handleFilterChange('id', val)}
+                                  title="Filtrar IDs..."
+                                />
+                              </div>
                             </th>
                             <th style={{textAlign: 'left', padding: '12px', verticalAlign: 'top'}}>
                               Cliente
@@ -709,7 +717,14 @@ const PortfolioOriginationPage = () => {
                           <tr>
                             <th style={{textAlign: 'left', padding: '12px', verticalAlign: 'top'}}>
                               ID Externo
-                              <input type="text" placeholder="Filtrar..." value={filterCreditos.id_externo || ''} onChange={e => handleFilterChange('id_externo', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
+                                <ExcelListFilter 
+                                  availableOptions={Array.from(new Set(previewData.creditos.map(c => c.id_externo).filter(Boolean))).map(String)}
+                                  selectedOptions={filterCreditos.id_externo || []}
+                                  onChange={val => handleFilterChange('id_externo', val)}
+                                  title="Filtrar IDs..."
+                                />
+                              </div>
                             </th>
                             <th style={{textAlign: 'left', padding: '12px', verticalAlign: 'top'}}>
                               Cliente
@@ -835,7 +850,14 @@ const PortfolioOriginationPage = () => {
                           <tr>
                             <th style={{textAlign: 'left', padding: '12px', verticalAlign: 'top'}}>
                               Crédito ID
-                              <input type="text" placeholder="Filtrar..." value={filterCuotas.credito_id || ''} onChange={e => handleFilterChange('credito_id', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
+                                <ExcelListFilter 
+                                  availableOptions={Array.from(new Set(previewData.cuotas.map(c => c.credito_id))).map(String)}
+                                  selectedOptions={filterCuotas.credito_id || []}
+                                  onChange={val => handleFilterChange('credito_id', val)}
+                                  title="Filtrar IDs..."
+                                />
+                              </div>
                             </th>
                             <th style={{textAlign: 'center', padding: '12px', verticalAlign: 'top'}}>
                               Nro Cuota
@@ -889,7 +911,14 @@ const PortfolioOriginationPage = () => {
                           <tr>
                             <th style={{textAlign: 'left', padding: '12px', verticalAlign: 'top'}}>
                               ID Ext.
-                              <input type="text" placeholder="Filtrar..." value={filterCuotas.credito_id_externo || ''} onChange={e => handleFilterChange('credito_id_externo', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
+                                <ExcelListFilter 
+                                  availableOptions={Array.from(new Set(previewData.cuotas.map(c => c.credito_id_externo).filter(Boolean))).map(String)}
+                                  selectedOptions={filterCuotas.credito_id_externo || []}
+                                  onChange={val => handleFilterChange('credito_id_externo', val)}
+                                  title="Filtrar IDs..."
+                                />
+                              </div>
                             </th>
                             <th style={{textAlign: 'center', padding: '12px', verticalAlign: 'top'}}>
                               Cuota
