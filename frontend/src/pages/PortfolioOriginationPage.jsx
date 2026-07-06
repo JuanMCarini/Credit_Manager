@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { FilterX } from 'lucide-react';
 import axiosClient from '../api/axiosClient';
 import useAppStore from '../store/useAppStore';
 import ExportExcelButton from '../components/ExportExcelButton';
@@ -654,7 +655,15 @@ const PortfolioOriginationPage = () => {
 
                 return (
                 <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+                    <button 
+                      className="btn-secondary" 
+                      onClick={() => setFilterCreditos({})}
+                      title="Limpiar todos los filtros"
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '100%', padding: '0 12px' }}
+                    >
+                      <FilterX size={16} /> Limpiar Filtros
+                    </button>
                     <ExportExcelButton data={previewData.creditos} filteredData={filtered} filename="preview_creditos" />
                   </div>
                   <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', overflowY: 'auto', flex: 1 }}>
@@ -840,7 +849,15 @@ const PortfolioOriginationPage = () => {
 
                 return (
                 <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+                    <button 
+                      className="btn-secondary" 
+                      onClick={() => setFilterCuotas({})}
+                      title="Limpiar todos los filtros"
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '100%', padding: '0 12px' }}
+                    >
+                      <FilterX size={16} /> Limpiar Filtros
+                    </button>
                     <ExportExcelButton data={previewData.cuotas} filteredData={filtered} filename="preview_cuotas" />
                   </div>
                   <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', overflowY: 'auto', flex: 1 }}>
@@ -1039,7 +1056,15 @@ const PortfolioOriginationPage = () => {
 
                 return (
                 <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+                    <button 
+                      className="btn-secondary" 
+                      onClick={() => setFilterResumen({})}
+                      title="Limpiar todos los filtros"
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '100%', padding: '0 12px' }}
+                    >
+                      <FilterX size={16} /> Limpiar Filtros
+                    </button>
                     <ExportExcelButton data={previewData.resumen} filteredData={filtered} filename="preview_vencimientos" />
                   </div>
                   <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', overflowY: 'auto', flex: 1 }}>

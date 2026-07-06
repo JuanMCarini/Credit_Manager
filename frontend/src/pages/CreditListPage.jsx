@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { FilterX } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import axiosClient from '../api/axiosClient';
 import ClientCCModal from '../components/ClientCCModal';
@@ -211,6 +212,14 @@ const CreditListPage = () => {
           </div>
           <button className="btn-primary" onClick={fetchCreditos} disabled={loading} style={{ width: 'auto' }}>
             {loading ? "Actualizando..." : "Actualizar Datos"}
+          </button>
+          <button 
+            className="btn-secondary" 
+            onClick={() => setFilter({ ID: [], IdExterno: '', Originador: '', CUIL: '', Capital: {}, Plazo: '', TNA: '', Estado: [], Fecha: [], TipoCredito: [], SaldoMora: {}, DiasMora: {} })}
+            title="Limpiar todos los filtros"
+            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            <FilterX size={16} /> Limpiar Filtros
           </button>
           <ExportExcelButton 
             data={creditos} 
