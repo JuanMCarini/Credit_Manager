@@ -49,8 +49,7 @@ def procesar_cobranza_individual(
         
         if not datos.anticipada and proceso_id and tipo_cob_solicitado in ["COMUN", "AJUSTE"]:
             from src.database.models.cobranzas import Cobranza, TipoCobranzaEnum
-            from src.database.models.creditos import Credito
-            from src.database.models.cuotas import Cuota
+            from src.database.models.creditos import Credito, Cuota
             
             cobranzas = db.query(Cobranza).filter(Cobranza.proceso_id == proceso_id).all()
             for cob in cobranzas:
@@ -65,7 +64,7 @@ def procesar_cobranza_individual(
                     if credito and credito.cartera and credito.cartera.recurso:
                         cob.tipo_cobranza = TipoCobranzaEnum.RECURSO.value
                     else:
-                        if cob.cuota and cob.cuota.fecha_vencimiento and cob.cuota.fecha_vencimiento >= fecha_pago_dt.date():
+                        if cob.cuota and cob.cuota.fecha_vencimiento and cob.cuota.fecha_vencimiento > fecha_pago_dt.date():
                             cob.tipo_cobranza = TipoCobranzaEnum.ANTICIPO.value
                         else:
                             cob.tipo_cobranza = TipoCobranzaEnum.COMUN.value
