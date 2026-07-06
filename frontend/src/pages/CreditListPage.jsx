@@ -216,7 +216,7 @@ const CreditListPage = () => {
           <table className="data-table">
             <thead>
               <tr>
-                <th onClick={() => handleSort('ID')} style={{ cursor: 'pointer' }}>
+                <th onClick={() => handleSort('ID')} style={{ cursor: 'pointer', minWidth: '70px' }}>
                   ID <SortIcon columnKey="ID" />
                   <input type="number" placeholder="Filtrar..." value={filter.ID} onChange={e => setFilter({ ...filter, ID: e.target.value })} onClick={e => e.stopPropagation()} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
                 </th>

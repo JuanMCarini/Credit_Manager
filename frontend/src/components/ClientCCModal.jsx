@@ -18,6 +18,8 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
   const [showEstadoFilter, setShowEstadoFilter] = useState(false);
   const [anticipadaMode, setAnticipadaMode] = useState(false);
   const [fechaCorte, setFechaCorte] = useState(new Date().toISOString().split('T')[0]);
+  const [fechaPago, setFechaPago] = useState(new Date().toISOString().split('T')[0]);
+  const [tipoCobranza, setTipoCobranza] = useState('COMUN');
 
   const ESTADOS_DISPONIBLES = ['PENDIENTE', 'CANCELADA', 'MOROSA', 'NO COMPRADA'];
   const AVAILABLE_FECHAS_VTO = React.useMemo(() => [...new Set(data.map(c => c.vencimiento).filter(Boolean))], [data]);
@@ -48,9 +50,10 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
         identificador: "CREDITO_ID",
         id_val: String(cuota.credito_id),
         monto: cuota.saldo_pendiente,
-        fecha_pago: anticipadaMode ? fechaCorte : new Date().toISOString().split('T')[0],
+        fecha_pago: anticipadaMode ? fechaCorte : fechaPago,
         fecha_corte: anticipadaMode ? fechaCorte : null,
-        anticipada: anticipadaMode
+        anticipada: anticipadaMode,
+        tipo_cobranza: !anticipadaMode ? tipoCobranza : undefined
       };
       
       await axiosClient.post('/api/v1/cobranzas/individual', payload);
@@ -260,7 +263,7 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
               <span style={{ fontSize: '13px', fontWeight: 'bold' }}>Cancelación Anticipada</span>
             </label>
             
-            {anticipadaMode && (
+            {anticipadaMode ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderLeft: '1px solid rgba(255,255,255,0.1)', paddingLeft: '16px' }}>
                 <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Fecha Corte:</span>
                 <input 
@@ -269,6 +272,25 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
                   onChange={(e) => setFechaCorte(e.target.value)}
                   style={{ padding: '4px 8px', fontSize: '12px', width: 'auto' }}
                 />
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderLeft: '1px solid rgba(255,255,255,0.1)', paddingLeft: '16px' }}>
+                <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Fecha Pago:</span>
+                <input 
+                  type="date" 
+                  value={fechaPago} 
+                  onChange={(e) => setFechaPago(e.target.value)}
+                  style={{ padding: '4px 8px', fontSize: '12px', width: 'auto' }}
+                />
+                <span style={{ fontSize: '12px', color: 'var(--text-secondary)', marginLeft: '8px' }}>Tipo:</span>
+                <select 
+                  value={tipoCobranza} 
+                  onChange={(e) => setTipoCobranza(e.target.value)}
+                  style={{ padding: '4px 8px', fontSize: '12px', width: 'auto' }}
+                >
+                  <option value="COMUN">COMUN</option>
+                  <option value="AJUSTE">AJUSTE</option>
+                </select>
               </div>
             )}
           </div>
