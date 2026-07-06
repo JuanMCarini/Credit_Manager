@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { FilterX } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import axiosClient from '../api/axiosClient';
 import ClientEditModal from '../components/ClientEditModal';
@@ -107,9 +108,17 @@ const ClientListPage = () => {
           <h2>Listado de Clientes</h2>
           <p>Visualización de la cartera completa de clientes.</p>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <button className="btn-primary" onClick={fetchClients} disabled={loading} style={{ width: 'auto' }}>
             {loading ? "Actualizando..." : "Actualizar Datos"}
+          </button>
+          <button 
+            className="btn-secondary" 
+            onClick={() => setFilter({ CUIL: '', Documento: '', Apellido: '', Nombre: '', Estado: [], Mail: '', Teléfono: '' })}
+            title="Limpiar todos los filtros"
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '100%', padding: '0 12px' }}
+          >
+            <FilterX size={16} /> Limpiar Filtros
           </button>
           <ExportExcelButton 
             data={clients} 

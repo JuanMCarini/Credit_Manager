@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { FilterX } from 'lucide-react';
 import axiosClient, { downloadFile } from '../api/axiosClient';
 import ExportExcelButton from '../components/ExportExcelButton';
 import ExcelDateFilter from '../components/ExcelDateFilter';
@@ -307,7 +308,17 @@ const BalancesPage = () => {
         <div className="table-container glass-panel fade-in" style={{ padding: '24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
             <h3 style={{ margin: 0, fontFamily: 'var(--font-heading)' }}>Resultados del Reporte</h3>
-            <ExportExcelButton data={results} filteredData={filteredAndSortedResults} filename="balances_export" />
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <button 
+                className="btn-secondary" 
+                onClick={() => setTableFilters({})}
+                title="Limpiar todos los filtros de la tabla"
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '100%', padding: '0 12px' }}
+              >
+                <FilterX size={16} /> Limpiar Filtros
+              </button>
+              <ExportExcelButton data={results} filteredData={filteredAndSortedResults} filename="balances_export" />
+            </div>
           </div>
           <div className="table-responsive" style={{ maxHeight: '500px', overflowY: 'auto' }}>
             <table className="data-table">

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import axiosClient from '../api/axiosClient';
-import { Trash2, DollarSign } from 'lucide-react';
+import { Trash2, DollarSign, FilterX } from 'lucide-react';
 import ExcelDateFilter from '../components/ExcelDateFilter';
 import ExcelListFilter from '../components/ExcelListFilter';
 import ExportExcelButton from '../components/ExportExcelButton';
@@ -169,11 +169,21 @@ const PortfolioLiquidationsPage = () => {
             {loading ? 'Actualizando...' : 'Actualizar Datos'}
           </button>
           {activeTab === 'liquidaciones' && (
-            <ExportExcelButton 
-              data={liquidaciones} 
-              filteredData={filteredLiquidaciones} 
-              filename="liquidaciones_cartera_export" 
-            />
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <button 
+                className="btn-secondary" 
+                onClick={() => setFilter({ id: '', proceso_id: '', cartera_id: '', credito_id: [], cuota_id: '', capital: '', interes: '', iva: '', total: '', estado: '' })}
+                title="Limpiar todos los filtros"
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '100%' }}
+              >
+                <FilterX size={16} /> Limpiar Filtros
+              </button>
+              <ExportExcelButton 
+                data={liquidaciones} 
+                filteredData={filteredLiquidaciones} 
+                filename="liquidaciones_cartera_export" 
+              />
+            </div>
           )}
           {activeTab === 'procesos' && (
             <ExportExcelButton 

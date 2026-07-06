@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { FilterX } from 'lucide-react';
 import axiosClient from '../api/axiosClient';
 import ExcelDateFilter from '../components/ExcelDateFilter';
 import ExcelListFilter from '../components/ExcelListFilter';
@@ -216,6 +217,14 @@ const PortfolioLiquidationsProcessingPage = () => {
             <h3 style={{ margin: 0, color: 'var(--text-primary)', flexShrink: 0 }}>Resultado de la Previsualización</h3>
             
             <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+              <button 
+                className="btn-secondary" 
+                onClick={() => setFilters({ credito_id: [], nro_cuota: '', fecha_vencimiento: [], cartera_id: '', tipo_liquidacion: '' })}
+                title="Limpiar todos los filtros"
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '100%', padding: '0 12px' }}
+              >
+                <FilterX size={16} /> Limpiar Filtros
+              </button>
               <ExportExcelButton 
                 data={previewData} 
                 filteredData={filteredData} 

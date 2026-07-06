@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { FilterX } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import axiosClient from '../api/axiosClient';
@@ -261,20 +262,40 @@ const CollectionsListPage = () => {
           <h2>Listado Global de Cobranzas y Procesos</h2>
           <p>Vista general de las últimas cobranzas, ajustes aplicados y procesos de ingesta.</p>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           {activeTab === 'cobranzas' && (
-            <ExportExcelButton 
-              data={cobranzas} 
-              filteredData={cobranzas} 
-              filename="cobranzas_export" 
-            />
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <button 
+                className="btn-secondary" 
+                onClick={() => setFilter({ ProcesoID: '', CreditoID: [], ID: '', Tipo: [], MediosPago: [], Fecha: { start: '', end: '' }, Estado: [] })}
+                title="Limpiar todos los filtros"
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '100%', padding: '0 12px' }}
+              >
+                <FilterX size={16} /> Limpiar Filtros
+              </button>
+              <ExportExcelButton 
+                data={cobranzas} 
+                filteredData={cobranzas} 
+                filename="cobranzas_export" 
+              />
+            </div>
           )}
           {activeTab === 'procesos' && (
-            <ExportExcelButton 
-              data={procesos} 
-              filteredData={filteredAndSortedProcesos} 
-              filename="procesos_ingesta_export" 
-            />
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <button 
+                className="btn-secondary" 
+                onClick={() => setFilterProcesos({ ID: '', Tipo: [], Estado: [], Fecha: [] })}
+                title="Limpiar todos los filtros"
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '100%', padding: '0 12px' }}
+              >
+                <FilterX size={16} /> Limpiar Filtros
+              </button>
+              <ExportExcelButton 
+                data={procesos} 
+                filteredData={filteredAndSortedProcesos} 
+                filename="procesos_ingesta_export" 
+              />
+            </div>
           )}
         </div>
       </header>
