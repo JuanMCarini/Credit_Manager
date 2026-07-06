@@ -154,5 +154,34 @@ class Cliente(Base):
                     )
         return value
 
+    def actualizar_estado(self) -> str:
+        from src.database.models.creditos import EstadoCredito
+        
+        creditos_cli = self.creditos
+        if not creditos_cli:
+            self.estado = EstadoClienteEnum.INACTIVO
+            return self.estado.value
+        
+        estados_str = []
+        for cred in creditos_cli:
+            e = cred.estado
+            if isinstance(e, EstadoCredito):
+                estados_str.append(e.value)
+            else:
+                estados_str.append(str(e))
+
+        if "JUDICIAL" in estados_str:
+            self.estado = EstadoClienteEnum.INCOBRABLE
+        elif "MOROSO" in estados_str:
+            self.estado = EstadoClienteEnum.MOROSO
+        else:
+            all_cancelado = all(e == "CANCELADO" for e in estados_str)
+            if all_cancelado:
+                self.estado = EstadoClienteEnum.INACTIVO
+            else:
+                self.estado = EstadoClienteEnum.ACTIVO
+
+        return self.estado.value if isinstance(self.estado, EstadoClienteEnum) else self.estado
+
     def __repr__(self):
         return f"<Cliente(cuil='{self.cuil}', apellido='{self.apellido}', nombre='{self.nombre}')>"

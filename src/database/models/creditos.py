@@ -108,9 +108,9 @@ class Credito(Base):
     def actualizar_estado(self) -> str:
         estados_manuales = [EstadoCredito.RECHAZADO, EstadoCredito.JUDICIAL]
         estado_actual = (
-            self.estado
+            self.estado.value
             if isinstance(self.estado, EstadoCredito)
-            else EstadoCredito(self.estado)
+            else self.estado
         )
 
         if estado_actual in estados_manuales:
@@ -119,18 +119,20 @@ class Credito(Base):
             logging.warning(mensaje_alerta)
             return estado_actual.value
 
-        cuotas_activas = [c for c in self.cuotas if c.estado != EstadoCuota.NO_COMPRADA]
+        cuotas_activas = [c for c in self.cuotas if (c.estado.value if isinstance(c.estado, EstadoCuota) else c.estado) != EstadoCuota.NO_COMPRADA.value]
 
         if not cuotas_activas:
-            self.estado = EstadoCredito.CANCELADO
-            return self.estado.value
+            self.estado = EstadoCredito.CANCELADO.value
+            return self.estado
 
-        if any(c.estado == EstadoCuota.MOROSA for c in cuotas_activas):
-            self.estado = EstadoCredito.MOROSO
-        elif all(c.estado == EstadoCuota.CANCELADA for c in cuotas_activas):
-            self.estado = EstadoCredito.CANCELADO
+        estados_cuotas = [(c.estado.value if isinstance(c.estado, EstadoCuota) else c.estado) for c in cuotas_activas]
+
+        if any(e == EstadoCuota.MOROSA.value for e in estados_cuotas):
+            self.estado = EstadoCredito.MOROSO.value
+        elif all(e == EstadoCuota.CANCELADA.value for e in estados_cuotas):
+            self.estado = EstadoCredito.CANCELADO.value
         else:
-            self.estado = EstadoCredito.ACTIVO
+            self.estado = EstadoCredito.ACTIVO.value
 
         return (
             self.estado.value if isinstance(self.estado, EstadoCredito) else self.estado
@@ -282,25 +284,31 @@ class Cuota(Base):
     liquidaciones = relationship("LiquidacionCuotaCedida", back_populates="cuota")
 
     def actualizar_estado(self, fecha_evaluacion: str | datetime) -> str:
+        from sqlalchemy.orm import object_session
+        session = object_session(self)
+        
         fecha_evaluacion = normalize_date(fecha_evaluacion)
         if self.estado == EstadoCuota.NO_COMPRADA:
             return self.estado.value
 
         total_esperado = round(self.capital + self.interes + self.iva, 2)
         total_cobrado = round(sum(
-            round(c.capital + c.interes + c.iva, 2) for c in self.cobranzas
+            round(c.capital + c.interes + c.iva, 2) for c in self.cobranzas if not session or c not in session.deleted
         ), 2)
 
         if total_cobrado >= total_esperado:
-            self.estado = EstadoCuota.CANCELADA
+            self.estado = EstadoCuota.CANCELADA.value
         elif fecha_evaluacion > normalize_date(self.fecha_vencimiento):
-            self.estado = EstadoCuota.MOROSA
+            self.estado = EstadoCuota.MOROSA.value
         else:
-            self.estado = EstadoCuota.PENDIENTE
+            self.estado = EstadoCuota.PENDIENTE.value
 
-        return self.estado.value
+        return self.estado.value if isinstance(self.estado, EstadoCuota) else self.estado
 
     def actualizar_estado_cedido(self, fecha_evaluacion: str | datetime) -> str:
+        from sqlalchemy.orm import object_session
+        session = object_session(self)
+        
         fecha_evaluacion = normalize_date(fecha_evaluacion)
         if self.estado_cesion in [
             EstadoCuotaCedida.NO_COMPRADA,
@@ -310,17 +318,17 @@ class Cuota(Base):
 
         total_esperado = round(self.capital + self.interes + self.iva, 2)
         total_cobrado = round(sum(
-            round(c.capital + c.interes + c.iva, 2) for c in self.liquidaciones
+            round(c.capital + c.interes + c.iva, 2) for c in self.liquidaciones if not session or c not in session.deleted
         ), 2)
 
         if total_cobrado >= total_esperado:
-            self.estado_cesion = EstadoCuotaCedida.CANCELADA
+            self.estado_cesion = EstadoCuotaCedida.CANCELADA.value
         elif fecha_evaluacion > normalize_date(self.fecha_vencimiento):
-            self.estado_cesion = EstadoCuotaCedida.MOROSA
+            self.estado_cesion = EstadoCuotaCedida.MOROSA.value
         else:
-            self.estado_cesion = EstadoCuotaCedida.PENDIENTE
+            self.estado_cesion = EstadoCuotaCedida.PENDIENTE.value
 
-        return self.estado_cesion.value
+        return self.estado_cesion.value if isinstance(self.estado_cesion, EstadoCuotaCedida) else self.estado_cesion
 
     def __repr__(self):
         return f"<Cuota(credito_id={self.credito_id}, nro={self.nro_cuota}, estado={self.estado}, estado_cesion={self.estado_cesion})>"

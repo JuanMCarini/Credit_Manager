@@ -9,6 +9,7 @@ class CobranzaIndividual(BaseModel):
     fecha_pago: Optional[date] = None
     fecha_corte: Optional[date] = None
     anticipada: bool = False
+    tipo_cobranza: Optional[str] = None
 
 class CobranzaRecurso(BaseModel):
     identificador: str

@@ -45,6 +45,32 @@ def procesar_cobranza_individual(
             
         proceso_id = df.attrs.get("proceso_id") if hasattr(df, "attrs") else None
         
+        tipo_cob_solicitado = datos.tipo_cobranza or "COMUN"
+        
+        if not datos.anticipada and proceso_id and tipo_cob_solicitado in ["COMUN", "AJUSTE"]:
+            from src.database.models.cobranzas import Cobranza, TipoCobranzaEnum
+            from src.database.models.creditos import Credito
+            from src.database.models.cuotas import Cuota
+            
+            cobranzas = db.query(Cobranza).filter(Cobranza.proceso_id == proceso_id).all()
+            for cob in cobranzas:
+                tipo_actual = cob.tipo_cobranza.value if hasattr(cob.tipo_cobranza, 'value') else cob.tipo_cobranza
+                if tipo_actual not in (TipoCobranzaEnum.COMUN.value, TipoCobranzaEnum.ANTICIPO.value):
+                    continue
+                
+                if tipo_cob_solicitado == "AJUSTE":
+                    cob.tipo_cobranza = TipoCobranzaEnum.AJUSTE.value
+                elif tipo_cob_solicitado == "COMUN":
+                    credito = cob.cuota.credito if cob.cuota else None
+                    if credito and credito.cartera and credito.cartera.recurso:
+                        cob.tipo_cobranza = TipoCobranzaEnum.RECURSO.value
+                    else:
+                        if cob.cuota and cob.cuota.fecha_vencimiento and cob.cuota.fecha_vencimiento >= fecha_pago_dt.date():
+                            cob.tipo_cobranza = TipoCobranzaEnum.ANTICIPO.value
+                        else:
+                            cob.tipo_cobranza = TipoCobranzaEnum.COMUN.value
+            db.commit()
+
         accion_text = f"Crear Proceso Individual (ID: {proceso_id}) - {datos.identificador}: {datos.id_val}" if proceso_id else f"Crear Cobranza Individual - {datos.identificador}: {datos.id_val}"
 
         log = RegistroAuditoria(
@@ -361,7 +387,10 @@ def delete_proceso(proceso_id: int, db: Session = Depends(get_db)):
             db.delete(proceso)
         else:
             penalty_credits = []
+            affected_cuotas = set()
             for c in proceso.cobranzas:
+                if c.cuota:
+                    affected_cuotas.add(c.cuota)
                 if c.tipo_cobranza == TipoCobranzaEnum.PENALTY:
                     if c.cuota and c.cuota.credito and c.cuota.credito.tipo_credito == TipoCredito.PENALTY:
                         penalty_credits.append(c.cuota.credito)
@@ -369,6 +398,18 @@ def delete_proceso(proceso_id: int, db: Session = Depends(get_db)):
             db.delete(proceso)
             for pc in penalty_credits:
                 db.delete(pc)
+            
+            db.flush()
+            
+            from datetime import date
+            hoy = date.today()
+            for cuota in affected_cuotas:
+                db.expire(cuota, ['cobranzas', 'liquidaciones'])
+                cuota.actualizar_estado(hoy)
+                if cuota.credito:
+                    cuota.credito.actualizar_estado()
+                    if cuota.credito.cliente:
+                        cuota.credito.cliente.actualizar_estado()
                 
         db.commit()
         return {"status": "success", "message": "Proceso eliminado exitosamente."}
@@ -527,9 +568,12 @@ def delete_cobranza(cobranza_id: int, db: Session = Depends(get_db)):
         from datetime import date
         hoy = date.today()
         if cuota:
+            db.expire(cuota, ['cobranzas', 'liquidaciones'])
             cuota.actualizar_estado(hoy)
         if credito:
             credito.actualizar_estado()
+            if credito.cliente:
+                credito.cliente.actualizar_estado()
             
         db.commit()
         return {"status": "success", "message": "Cobranza eliminada exitosamente."}
@@ -560,9 +604,12 @@ def modificar_cobranza(cobranza_id: int, datos: CobranzaIndividual, db: Session 
         from datetime import date
         hoy = date.today()
         if cuota:
+            db.expire(cuota, ['cobranzas', 'liquidaciones'])
             cuota.actualizar_estado(hoy)
         if credito:
             credito.actualizar_estado()
+            if credito.cliente:
+                credito.cliente.actualizar_estado()
             
         db.commit()
     except Exception as e:
