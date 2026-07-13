@@ -5,7 +5,7 @@ const formatCurrency = (num) => {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(num);
 };
 
-const LegajoModal = ({ creditoId, onClose }) => {
+const LegajoModal = ({ creditoId, creditoEstado, onClose }) => {
   const [documentos, setDocumentos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -186,15 +186,17 @@ const LegajoModal = ({ creditoId, onClose }) => {
           </button>
         </div>
 
-        <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '12px', borderRadius: '8px' }}>
-          <div>
-            <h4 style={{ margin: '0 0 4px 0', fontSize: '14px' }}>Generador de Papelería</h4>
-            <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-color-muted)' }}>Autocompleta los documentos Word configurados para este crédito.</p>
+        {creditoEstado === 'APROBADO' && (
+          <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '12px', borderRadius: '8px' }}>
+            <div>
+              <h4 style={{ margin: '0 0 4px 0', fontSize: '14px' }}>Generador de Papelería</h4>
+              <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-color-muted)' }}>Autocompleta los documentos Word configurados para este crédito.</p>
+            </div>
+            <button className="btn-primary" onClick={handleGeneratePapeleria} disabled={loading} style={{ background: 'var(--success-color)' }}>
+              🖨️ Generar y Descargar Papelería
+            </button>
           </div>
-          <button className="btn-primary" onClick={handleGeneratePapeleria} disabled={loading} style={{ background: 'var(--success-color)' }}>
-            🖨️ Generar y Descargar Papelería
-          </button>
-        </div>
+        )}
 
         {documentos.length > 0 && (
           <div style={{ marginBottom: '16px', textAlign: 'right' }}>
