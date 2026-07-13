@@ -73,9 +73,8 @@ def replace_placeholders_in_doc(doc: Document, data: Dict[str, Any]) -> None:
     """
     Reemplaza los marcadores de posición {{ variable }} en un documento Word.
 
-    Itera sobre los párrafos principales y el contenido de todas las tablas,
-    delegando el reemplazo a nivel de 'run' para intentar mantener 
-    la tipografía y formato original.
+    Itera sobre los párrafos principales, el contenido de todas las tablas,
+    y también sobre los encabezados y pies de página.
 
     Args:
         doc (Document): Objeto Document de python-docx ya instanciado.
@@ -84,14 +83,29 @@ def replace_placeholders_in_doc(doc: Document, data: Dict[str, Any]) -> None:
     Raises:
         TypeError: Si los tipos de datos en el diccionario no son convertibles a string.
     """
-    # 1. Reemplazo en párrafos del cuerpo principal
-    _replace_in_paragraphs(doc.paragraphs, data)
+    def _process_blocks(blocks):
+        if hasattr(blocks, 'paragraphs'):
+            _replace_in_paragraphs(blocks.paragraphs, data)
+        if hasattr(blocks, 'tables'):
+            for table in blocks.tables:
+                for row in table.rows:
+                    for cell in row.cells:
+                        _replace_in_paragraphs(cell.paragraphs, data)
 
-    # 2. Reemplazo recursivo en celdas de todas las tablas
-    for table in doc.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                _replace_in_paragraphs(cell.paragraphs, data)
+    # 1. Reemplazo en cuerpo principal y tablas del cuerpo
+    _process_blocks(doc)
+
+    # 2. Reemplazo en encabezados y pies de página
+    for section in doc.sections:
+        for header_type in ['header', 'first_page_header', 'even_page_header']:
+            header = getattr(section, header_type, None)
+            if header:
+                _process_blocks(header)
+                
+        for footer_type in ['footer', 'first_page_footer', 'even_page_footer']:
+            footer = getattr(section, footer_type, None)
+            if footer:
+                _process_blocks(footer)
 
 def process_document(template_path: str, output_pdf: str, data: Dict[str, Any]) -> None:
     """
