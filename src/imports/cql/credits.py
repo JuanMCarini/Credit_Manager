@@ -78,6 +78,7 @@ def import_credits(data: CQLData):
         if "ACTIVO" in s: return EstadoCredito.ACTIVO
         if "MOROSO" in s or "MORA" in s: return EstadoCredito.MOROSO
         if "CANCELADO" in s or "CANCEL" in s: return EstadoCredito.CANCELADO
+        if "FIRMADO" in s: return EstadoCredito.FIRMADO
         return EstadoCredito.APROBADO
 
     df_creditos['Estado_enum'] = df_creditos['Estado'].apply(map_estado_cred)

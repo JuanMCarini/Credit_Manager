@@ -68,7 +68,7 @@ class PortfolioSell:
         try:
             # 1. Admit states
             cuotas_admitidas = [EstadoCuota.PENDIENTE]
-            creditos_admitidos = [EstadoCredito.ACTIVO, EstadoCredito.APROBADO]
+            creditos_admitidos = [EstadoCredito.ACTIVO, EstadoCredito.APROBADO, EstadoCredito.FIRMADO]
 
             if mora:
                 actualizar_estados()

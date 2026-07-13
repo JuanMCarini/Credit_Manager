@@ -6,7 +6,7 @@ const CreditEditEstadoModal = ({ creditoId, currentEstado, onClose, onSuccess })
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState(null);
 
-  const ESTADOS = ['APROBADO', 'ACTIVO', 'CANCELADO', 'MOROSO', 'RECHAZADO', 'JUDICIAL'];
+  const ESTADOS = ['APROBADO', 'FIRMADO', 'ACTIVO', 'CANCELADO', 'MOROSO', 'RECHAZADO', 'JUDICIAL'];
 
   const handleSubmit = async (e) => {
     e.preventDefault();

@@ -245,7 +245,7 @@ def importar_documentos_masivamente(cql_data):
             # ----------------------------------------------------
             # LOGICA DE LA APP: Cambiar estado a ACTIVO si cumple
             # ----------------------------------------------------
-            if credito.estado in (EstadoCredito.APROBADO, "APROBADO", "EstadoCredito.APROBADO"):
+            if credito.estado in (EstadoCredito.APROBADO, EstadoCredito.FIRMADO, "APROBADO", "FIRMADO", "EstadoCredito.APROBADO", "EstadoCredito.FIRMADO"):
                 transf_todas = db.query(Transferencia).filter(Transferencia.credito_id == credito.id).all()
                 if transf_todas:
                     todas_con_comprobante = True

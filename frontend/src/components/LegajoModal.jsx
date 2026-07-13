@@ -12,6 +12,7 @@ const LegajoModal = ({ creditoId, onClose }) => {
   const [file, setFile] = useState(null);
   const [transferencias, setTransferencias] = useState([]);
   const [selectedTransferencia, setSelectedTransferencia] = useState('');
+  const [isLegajoFirmado, setIsLegajoFirmado] = useState(false);
 
   const fetchDocumentos = async () => {
     setLoading(true);
@@ -55,6 +56,7 @@ const LegajoModal = ({ creditoId, onClose }) => {
     if (selectedTransferencia) {
       formData.append('transferencia_id', selectedTransferencia);
     }
+    formData.append('es_legajo_firmado', isLegajoFirmado);
 
     try {
       await axiosClient.post(`/api/v1/creditos/${creditoId}/documentos`, formData, {
@@ -64,10 +66,11 @@ const LegajoModal = ({ creditoId, onClose }) => {
       });
       setFile(null);
       setSelectedTransferencia('');
+      setIsLegajoFirmado(false);
       document.getElementById('legajoFileInput').value = '';
       fetchDocumentos();
     } catch (error) {
-      alert("Error subiendo el archivo: " + error.message);
+      alert("Error subiendo el archivo:\n" + (error.response?.data?.detail || error.message));
     } finally {
       setUploading(false);
     }
@@ -111,6 +114,28 @@ const LegajoModal = ({ creditoId, onClose }) => {
       .catch((error) => alert("Error al generar el PDF combinado: " + error.message));
   };
 
+  const handleGeneratePapeleria = async () => {
+    setLoading(true);
+    try {
+      const response = await axiosClient.post(`/api/v1/papeleria/generar_por_credito/${creditoId}`, {}, {
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Papeleria_Credito_${creditoId}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (error) {
+      console.error(error);
+      const backendError = error.response?.data?.detail || error.message;
+      alert("Error al generar la papelería:\n" + backendError);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="modal-overlay" onClick={onClose} style={{
       position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -134,20 +159,40 @@ const LegajoModal = ({ creditoId, onClose }) => {
             onChange={handleFileChange}
             style={{ flex: 1, padding: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px' }}
           />
-          <select 
-            value={selectedTransferencia}
-            onChange={(e) => setSelectedTransferencia(e.target.value)}
-            style={{ padding: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', color: 'white' }}
-          >
-            <option value="">Vincular a Transf. (Opcional)</option>
-            {transferencias.map(t => (
-              <option key={t.id} value={t.id}>
-                #{t.id} - {formatCurrency(t.monto)} - {t.banco || t.razon_social}
-              </option>
-            ))}
-          </select>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <select 
+              value={selectedTransferencia}
+              onChange={(e) => setSelectedTransferencia(e.target.value)}
+              style={{ padding: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', color: 'white' }}
+            >
+              <option value="">Vincular a Transf. (Opcional)</option>
+              {transferencias.map(t => (
+                <option key={t.id} value={t.id}>
+                  #{t.id} - {formatCurrency(t.monto)} - {t.banco || t.razon_social}
+                </option>
+              ))}
+            </select>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer' }}>
+              <input 
+                type="checkbox" 
+                checked={isLegajoFirmado} 
+                onChange={(e) => setIsLegajoFirmado(e.target.checked)} 
+              />
+              Marcar como Legajo Firmado
+            </label>
+          </div>
           <button className="btn-primary" onClick={handleUpload} disabled={!file || uploading} style={{ width: 'auto' }}>
             {uploading ? "Subiendo..." : "Subir Archivo"}
+          </button>
+        </div>
+
+        <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '12px', borderRadius: '8px' }}>
+          <div>
+            <h4 style={{ margin: '0 0 4px 0', fontSize: '14px' }}>Generador de Papelería</h4>
+            <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-color-muted)' }}>Autocompleta los documentos Word configurados para este crédito.</p>
+          </div>
+          <button className="btn-primary" onClick={handleGeneratePapeleria} disabled={loading} style={{ background: 'var(--success-color)' }}>
+            🖨️ Generar y Descargar Papelería
           </button>
         </div>
 

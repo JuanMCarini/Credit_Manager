@@ -54,12 +54,16 @@ def sync_system_states(db: Session = Depends(get_db)):
                 cli.estado = EstadoClienteEnum.INCOBRABLE
             elif EstadoCredito.MOROSO.value in estados_str or "MOROSO" in estados_str:
                 cli.estado = EstadoClienteEnum.MOROSO
-            else:
+            elif EstadoCredito.CANCELADO.value in estados_str or "CANCELADO" in estados_str:
                 all_cancelado = all(e == EstadoCredito.CANCELADO.value or e == "CANCELADO" for e in estados_str)
                 if all_cancelado:
                     cli.estado = EstadoClienteEnum.INACTIVO
                 else:
                     cli.estado = EstadoClienteEnum.ACTIVO
+            elif EstadoCredito.FIRMADO.value in estados_str or "FIRMADO" in estados_str:
+                cli.estado = EstadoClienteEnum.ACTIVO
+            else:
+                cli.estado = EstadoClienteEnum.ACTIVO
 
         db.commit()
         
