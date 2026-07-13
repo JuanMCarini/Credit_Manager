@@ -340,6 +340,15 @@ def generar_papeleria_credito(credito_id: int, db: Session = Depends(get_db)):
     if not credito:
         raise HTTPException(status_code=404, detail="Crédito no encontrado.")
     
+    final_pdf_path = _generar_pdf_for_credito(credito, db)
+
+    return FileResponse(
+        path=final_pdf_path,
+        filename=f"Legajo_Credito_{credito_id}.pdf",
+        media_type='application/pdf'
+    )
+
+def _generar_pdf_for_credito(credito: Credito, db: Session) -> str:
     socio_ids = [None]
     
     # Extraer socios de la tasa y comisión
@@ -372,7 +381,7 @@ def generar_papeleria_credito(credito_id: int, db: Session = Depends(get_db)):
     ).all()
 
     if not docs:
-        raise HTTPException(status_code=400, detail="No hay documentos de papelería configurados.")
+        raise HTTPException(status_code=400, detail="No hay documentos de papelería configurados para esta operación.")
 
     import tempfile
     from pypdf import PdfWriter
@@ -382,10 +391,12 @@ def generar_papeleria_credito(credito_id: int, db: Session = Depends(get_db)):
     temp_files = []
     output_dir = "data/legajos"
     os.makedirs(output_dir, exist_ok=True)
-    final_pdf_path = os.path.join(output_dir, f"credito_{credito_id}.pdf")
+    
+    # Si el crédito no tiene id aún (simulación) le ponemos un prefijo random
+    credito_ident = credito.id if credito.id else f"simulacion_{credito.cliente_cuil}"
+    final_pdf_path = os.path.join(output_dir, f"credito_{credito_ident}.pdf")
 
     import pythoncom
-
     try:
         try:
             pythoncom.CoInitialize()
@@ -417,9 +428,5 @@ def generar_papeleria_credito(credito_id: int, db: Session = Depends(get_db)):
         import traceback
         error_msg = f"Error interno: {str(e)}\n\n{traceback.format_exc()}"
         raise HTTPException(status_code=500, detail=error_msg)
-
-    return FileResponse(
-        path=final_pdf_path,
-        filename=f"Legajo_Credito_{credito_id}.pdf",
-        media_type='application/pdf'
-    )
+        
+    return final_pdf_path

@@ -109,6 +109,25 @@ def get_cliente(cuil: str, db: Session = Depends(get_db)):
         "empleador_id": cliente.empleador_id
     }
 
+@router.get("/{cuil}/bcra")
+def get_cliente_bcra(cuil: str, db: Session = Depends(get_db)):
+    """
+    Consulta la situación actual del cliente en la Central de Deudores del BCRA.
+    """
+    from src.services.bcra import consultar_cuit_api
+    import re
+    
+    # Limpiamos el CUIL para que sean solo números
+    cuil_clean = re.sub(r"\D", "", cuil)
+    
+    respuesta = consultar_cuit_api(cuil_clean)
+    
+    if "Error" in respuesta and respuesta["Error"]:
+        raise HTTPException(status_code=500, detail=f"Error consultando BCRA: {respuesta['Estado']}")
+        
+    return respuesta
+
+
 @router.get("/{cuil}/cuenta_corriente")
 def get_cliente_cuenta_corriente(cuil: str, db: Session = Depends(get_db)):
     import traceback

@@ -25,6 +25,10 @@ const CreditOriginationPage = () => {
   const [simulation, setSimulation] = useState(null);
   const [transfers, setTransfers] = useState([]);
   const [loadingCredit, setLoadingCredit] = useState(false);
+  const [loadingPreview, setLoadingPreview] = useState(false);
+  
+  const [bcraData, setBcraData] = useState(null);
+  const [loadingBcra, setLoadingBcra] = useState(false);
 
   const [ccModalData, setCcModalData] = useState(null);
   
@@ -38,6 +42,20 @@ const CreditOriginationPage = () => {
     fecha_emision: new Date().toISOString().split('T')[0],
     id_externo: ''
   });
+
+  const fetchBcraData = async (cuil) => {
+    setLoadingBcra(true);
+    setBcraData(null);
+    try {
+      const res = await axiosClient.get(`/api/v1/clientes/${cuil}/bcra`);
+      setBcraData(res.data);
+    } catch (error) {
+      console.error("Error fetching BCRA data", error);
+      setBcraData({ Estado: "Error de Conexión", Error: error.message });
+    } finally {
+      setLoadingBcra(false);
+    }
+  };
 
   const handleSearch = async (e) => {
     e.preventDefault();
@@ -98,6 +116,7 @@ const CreditOriginationPage = () => {
         tasa_id: '' // reset selected tasa
       }));
       
+      fetchBcraData(cleanData.cuil || cleanData.documento);
       setStep(3);
     } catch (error) {
       setClientFeedback({ type: 'error', message: error.response?.data?.detail || "Error al guardar el cliente." });
@@ -174,6 +193,40 @@ const CreditOriginationPage = () => {
       alert("Error al simular crédito: " + (error.response?.data?.detail || error.message));
     } finally {
       setLoadingSimulation(false);
+    }
+  };
+
+  const handlePreviewLegajo = async () => {
+    const selectedTasa = tasasYComisiones.find(t => t.id == creditoForm.tasa_id);
+    if (!selectedTasa) return;
+
+    setLoadingPreview(true);
+    try {
+      const payload = {
+        cliente_cuil: cliente.cuil,
+        capital: computedCapitalBruto,
+        tna_c_iva: parseFloat(selectedTasa.tna_c_iva),
+        plazo: selectedTasa.plazo,
+        tipo_credito: creditoForm.tipo,
+        socio_originador_id: creditoForm.socio_id ? parseInt(creditoForm.socio_id) : null,
+        comision_id: selectedTasa.comision_id || null,
+        fecha_emision: creditoForm.fecha_emision,
+        id_externo: creditoForm.id_externo || null,
+        transferencias: transfers
+      };
+
+      const res = await axiosClient.post('/api/v1/creditos/originacion/preview_legajo', payload, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Preview_Legajo_${cliente.cuil}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      alert("Error al generar previsualización.");
+    } finally {
+      setLoadingPreview(false);
     }
   };
 
@@ -283,6 +336,72 @@ const CreditOriginationPage = () => {
               <button className="btn-secondary" onClick={() => setStep(2)}>Volver a los datos</button>
             </div>
             
+            {/* BCRA Block */}
+            <div style={{ marginBottom: '24px', padding: '16px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+              <h4 style={{ margin: '0 0 12px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                🏦 Situación BCRA (Central de Deudores)
+              </h4>
+              {loadingBcra ? (
+                <div style={{ fontSize: '14px', color: 'var(--text-color)' }}>Consultando situación crediticia... ⏳</div>
+              ) : bcraData ? (
+                <div>
+                  <div style={{ display: 'flex', gap: '12px', marginBottom: '12px', flexWrap: 'wrap' }}>
+                    <span style={{ 
+                      padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold',
+                      background: bcraData.Estado === 'Sin Deudas' || bcraData.Estado === 'Sin Deudas / Vacio' ? 'rgba(0, 200, 83, 0.2)' : 'rgba(255, 61, 0, 0.2)',
+                      color: bcraData.Estado === 'Sin Deudas' || bcraData.Estado === 'Sin Deudas / Vacio' ? '#00e676' : '#ff5252' 
+                    }}>
+                      {bcraData.Estado}
+                    </span>
+                    {bcraData.Datos_API?.results?.denominacion && (
+                      <span style={{ fontSize: '13px', alignSelf: 'center' }}>
+                        Titular: <strong>{bcraData.Datos_API.results.denominacion}</strong>
+                      </span>
+                    )}
+                  </div>
+                  
+                  {bcraData.Datos_API?.results?.periodos && bcraData.Datos_API.results.periodos.length > 0 && (
+                    <div className="table-responsive" style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                      <table className="data-table" style={{ fontSize: '12px' }}>
+                        <thead>
+                          <tr>
+                            <th>Período</th>
+                            <th>Entidad</th>
+                            <th>Situación</th>
+                            <th>Monto</th>
+                            <th>Días Atraso</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {bcraData.Datos_API.results.periodos.flatMap(p => 
+                            p.entidades.map((ent, idx) => (
+                              <tr key={`${p.periodo}-${idx}`}>
+                                <td>{p.periodo}</td>
+                                <td>{ent.entidad}</td>
+                                <td>
+                                  <span style={{
+                                    padding: '2px 6px', borderRadius: '4px',
+                                    background: ent.situacion === 1 ? 'rgba(0, 200, 83, 0.2)' : 'rgba(255, 61, 0, 0.2)',
+                                    color: ent.situacion === 1 ? '#00e676' : '#ff5252'
+                                  }}>
+                                    {ent.situacion}
+                                  </span>
+                                </td>
+                                <td>{formatCurrency(ent.monto * 1000)}</td>
+                                <td>{ent.diasAtrasoPago}</td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ fontSize: '14px', color: 'var(--text-color)' }}>No se pudo obtener información del BCRA.</div>
+              )}
+            </div>
+
             <form onSubmit={handleSimulateCredit}>
               <div className="form-row">
                 <div className="form-group">
@@ -382,13 +501,22 @@ const CreditOriginationPage = () => {
               totalRequired={computedCapitalBruto}
             />
 
-            <div className="form-actions" style={{ marginTop: '32px' }}>
+            <div className="form-actions" style={{ marginTop: '32px', display: 'flex', gap: '15px' }}>
+              <button 
+                type="button" 
+                className="btn-secondary" 
+                onClick={handlePreviewLegajo}
+                disabled={loadingPreview || loadingCredit || Math.abs(computedCapitalBruto - transfers.reduce((sum, t) => sum + parseFloat(t.monto || 0), 0)) > 0.05} 
+                style={{ flex: 1, fontSize: '16px', padding: '14px', backgroundColor: 'var(--border-color)', color: 'var(--text-color)' }}
+              >
+                {loadingPreview ? "Generando..." : "Descargar Legajo (Borrador)"}
+              </button>
               <button 
                 type="button" 
                 className="btn-primary" 
                 onClick={handleConfirmCredit}
-                disabled={loadingCredit || Math.abs(computedCapitalBruto - transfers.reduce((sum, t) => sum + parseFloat(t.monto || 0), 0)) > 0.05} 
-                style={{ width: '100%', fontSize: '16px', padding: '14px' }}
+                disabled={loadingCredit || loadingPreview || Math.abs(computedCapitalBruto - transfers.reduce((sum, t) => sum + parseFloat(t.monto || 0), 0)) > 0.05} 
+                style={{ flex: 1, fontSize: '16px', padding: '14px' }}
               >
                 {loadingCredit ? "Procesando Originación..." : "Confirmar y Originar"}
               </button>

@@ -127,6 +127,7 @@ class LoanOriginator:
         comision_id: int | None = None,
         id_externo: str | None = None,
         transferencias_data: list = None,
+        commit: bool = True,
     ) -> Credito:
         """
         =============================================================================
@@ -157,11 +158,15 @@ class LoanOriginator:
                     )
                     self.db.add(transferencia)
 
-            self.db.commit()
+            if commit:
+                self.db.commit()
+            else:
+                self.db.flush()
             return self.credit
 
         except Exception as e:
-            self.db.rollback()
+            if commit:
+                self.db.rollback()
             raise RuntimeError(f"Failed to originate credit: {e}")
 
     def originate_with_new_client(
@@ -177,6 +182,7 @@ class LoanOriginator:
         comision_id: int | None = None,
         id_externo: str | None = None,
         transferencias_data: list = None,
+        commit: bool = True,
     ) -> Credito:
         """
         =============================================================================
@@ -228,9 +234,13 @@ class LoanOriginator:
                     )
                     self.db.add(transferencia)
 
-            self.db.commit()
+            if commit:
+                self.db.commit()
+            else:
+                self.db.flush()
             return self.credit
 
         except Exception as e:
-            self.db.rollback()
+            if commit:
+                self.db.rollback()
             raise RuntimeError(f"Failed to originate credit with new client: {e}")
