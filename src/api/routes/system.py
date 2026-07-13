@@ -70,3 +70,14 @@ def sync_system_states(db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/company")
+def get_company_info():
+    from src.config import COMPANY_DATA
+    return {
+        "razon_social": COMPANY_DATA.razon_social,
+        "cuit": COMPANY_DATA.cuit,
+        "domicilio": COMPANY_DATA.domicilio,
+        "email_contacto": COMPANY_DATA.email_contacto,
+        "telefono": COMPANY_DATA.telefono
+    }
