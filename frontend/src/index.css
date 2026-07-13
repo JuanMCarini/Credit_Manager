@@ -438,6 +438,7 @@ input:focus, select:focus {
     text-transform: uppercase;
 }
 .status-aprobado { background-color: rgba(51, 154, 240, 0.15); color: #339af0; border: 1px solid rgba(51, 154, 240, 0.3); } /* Azul */
+.status-firmado { background-color: rgba(132, 94, 247, 0.15); color: #845ef7; border: 1px solid rgba(132, 94, 247, 0.3); } /* Morado */
 .status-rechazado { background-color: rgba(255, 146, 43, 0.15); color: #ff922b; border: 1px solid rgba(255, 146, 43, 0.3); } /* Naranja */
 .status-activo { background-color: rgba(81, 207, 102, 0.15); color: #51cf66; border: 1px solid rgba(81, 207, 102, 0.3); } /* Verde */
 .status-inactivo { background-color: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.3); } /* Gris */

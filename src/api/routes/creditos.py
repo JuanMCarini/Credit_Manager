@@ -266,44 +266,53 @@ def delete_credito(credito_id: int, db: Session = Depends(get_db)):
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 UPLOAD_DIR = os.path.join(project_root, "data", "uploads", "legajos")
 @router.post("/api/v1/creditos/{credito_id}/documentos", response_model=DocumentoLegajoOut)
-async def upload_documento(credito_id: int, file: UploadFile = File(...), transferencia_id: Optional[int] = Form(None), db: Session = Depends(get_db)):
-    credito = db.query(Credito).filter(Credito.id == credito_id).first()
-    if not credito:
-        raise HTTPException(status_code=404, detail="Crédito no encontrado")
-        
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
-    file_path = os.path.join(UPLOAD_DIR, f"{credito_id}_{file.filename}")
-    
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-        
-    nuevo_doc = DocumentoLegajo(
-        credito_id=credito_id,
-        nombre_archivo=file.filename,
-        ruta_archivo=file_path,
-        tipo_archivo=file.content_type,
-        transferencia_id=transferencia_id
-    )
-    db.add(nuevo_doc)
-    db.commit()
-    db.refresh(nuevo_doc)
-
-    if credito.estado in (EstadoCredito.APROBADO, "APROBADO", "EstadoCredito.APROBADO"):
-        transferencias = db.query(Transferencia).filter(Transferencia.credito_id == credito_id).all()
-        if transferencias:
-            todas_con_comprobante = True
-            for t in transferencias:
-                doc_count = db.query(DocumentoLegajo).filter(DocumentoLegajo.transferencia_id == t.id).count()
-                if doc_count == 0:
-                    todas_con_comprobante = False
-                    break
+async def upload_documento(credito_id: int, file: UploadFile = File(...), transferencia_id: Optional[int] = Form(None), es_legajo_firmado: bool = Form(False), db: Session = Depends(get_db)):
+    try:
+        credito = db.query(Credito).filter(Credito.id == credito_id).first()
+        if not credito:
+            raise HTTPException(status_code=404, detail="Crédito no encontrado")
             
-            if todas_con_comprobante:
-                db.query(Credito).filter(Credito.id == credito_id).update({"estado": EstadoCredito.ACTIVO.name})
-                db.commit()
-                db.refresh(credito)
+        os.makedirs(UPLOAD_DIR, exist_ok=True)
+        file_path = os.path.join(UPLOAD_DIR, f"{credito_id}_{file.filename}")
+        
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        nuevo_doc = DocumentoLegajo(
+            credito_id=credito_id,
+            nombre_archivo=file.filename,
+            ruta_archivo=file_path,
+            tipo_archivo=file.content_type,
+            transferencia_id=transferencia_id
+        )
+        db.add(nuevo_doc)
+        
+        if es_legajo_firmado and credito.estado in (EstadoCredito.APROBADO, "APROBADO", "EstadoCredito.APROBADO"):
+            credito.estado = EstadoCredito.FIRMADO.value
 
-    return nuevo_doc
+        db.commit()
+        db.refresh(nuevo_doc)
+
+        if credito.estado in (EstadoCredito.APROBADO, EstadoCredito.FIRMADO, "APROBADO", "FIRMADO", "EstadoCredito.APROBADO", "EstadoCredito.FIRMADO"):
+            transferencias = db.query(Transferencia).filter(Transferencia.credito_id == credito_id).all()
+            if transferencias:
+                todas_con_comprobante = True
+                for t in transferencias:
+                    doc_count = db.query(DocumentoLegajo).filter(DocumentoLegajo.transferencia_id == t.id).count()
+                    if doc_count == 0:
+                        todas_con_comprobante = False
+                        break
+                
+                if todas_con_comprobante:
+                    db.query(Credito).filter(Credito.id == credito_id).update({"estado": EstadoCredito.ACTIVO.name})
+                    db.commit()
+                    db.refresh(credito)
+
+        return nuevo_doc
+    except Exception as e:
+        import traceback
+        error_msg = f"Error interno: {str(e)}\n\n{traceback.format_exc()}"
+        raise HTTPException(status_code=500, detail=error_msg)
 
 @router.get("/api/v1/creditos/{credito_id}/documentos", response_model=List[DocumentoLegajoOut])
 def get_documentos(credito_id: int, db: Session = Depends(get_db)):
@@ -463,7 +472,7 @@ async def upload_batch_documentos(files: List[UploadFile] = File(...), db: Sessi
             db.add(nuevo_doc)
             
             # Check state transition to ACTIVO
-            if credito.estado in (EstadoCredito.APROBADO, "APROBADO", "EstadoCredito.APROBADO"):
+            if credito.estado in (EstadoCredito.APROBADO, EstadoCredito.FIRMADO, "APROBADO", "FIRMADO", "EstadoCredito.APROBADO", "EstadoCredito.FIRMADO"):
                 transf_todas = db.query(Transferencia).filter(Transferencia.credito_id == credito.id).all()
                 if transf_todas:
                     todas_con_comprobante = True

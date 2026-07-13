@@ -4,8 +4,44 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
-from src.database import get_db, SocioComercial
-from src.database.models.papeleria import DocumentoPapeleria
+from pydantic import BaseModel
+from src.database import get_db, SocioComercial, Credito, Cliente
+from src.database.models.papeleria import DocumentoPapeleria, DocumentoVariable
+from src.config import COMPANY_DATA
+
+class VariableItem(BaseModel):
+    placeholder: str
+    system_field: str
+
+class VariablesRequest(BaseModel):
+    variables: List[VariableItem]
+
+class ReorderItem(BaseModel):
+    id: int
+    orden: int
+
+class ReorderRequest(BaseModel):
+    documentos: List[ReorderItem]
+
+SYSTEM_FIELDS = [
+    {"value": "cliente.nombre", "label": "Cliente - Nombre Completo"},
+    {"value": "cliente.dni", "label": "Cliente - DNI"},
+    {"value": "cliente.cuil", "label": "Cliente - CUIL"},
+    {"value": "cliente.domicilio", "label": "Cliente - Domicilio"},
+    {"value": "cliente.cbu", "label": "Cliente - CBU"},
+    {"value": "cliente.localidad", "label": "Cliente - Localidad"},
+    {"value": "cliente.provincia", "label": "Cliente - Provincia"},
+    {"value": "cliente.nacionalidad", "label": "Cliente - País / Nacionalidad"},
+    {"value": "credito.monto_otorgado", "label": "Crédito - Monto Otorgado"},
+    {"value": "credito.fecha_alta", "label": "Crédito - Fecha Alta"},
+    {"value": "credito.fecha_emision_dia", "label": "Crédito - Fecha Emisión (Día)"},
+    {"value": "credito.fecha_emision_mes_letras", "label": "Crédito - Fecha Emisión (Mes Letras)"},
+    {"value": "credito.fecha_emision_anio", "label": "Crédito - Fecha Emisión (Año)"},
+    {"value": "credito.cuotas", "label": "Crédito - Cantidad Cuotas"},
+    {"value": "empresa.razon_social", "label": "Empresa - Razón Social"},
+    {"value": "empresa.cuit", "label": "Empresa - CUIT"},
+    {"value": "socio.razon_social", "label": "Socio Comercial - Razón Social"},
+]
 
 router = APIRouter(prefix="/api/v1/papeleria", tags=["Papeleria"])
 
@@ -98,7 +134,7 @@ def list_documents(socio_id: int = None, db: Session = Depends(get_db)):
         else:
             query = query.filter(DocumentoPapeleria.socio_id == socio_id)
     
-    docs = query.order_by(DocumentoPapeleria.fecha_subida.desc()).all()
+    docs = query.order_by(DocumentoPapeleria.orden.asc(), DocumentoPapeleria.fecha_subida.desc()).all()
     
     from src.config import COMPANY_DATA
     
@@ -110,6 +146,7 @@ def list_documents(socio_id: int = None, db: Session = Depends(get_db)):
             "socio_nombre": doc.socio.razon_social if doc.socio else COMPANY_DATA.razon_social,
             "nombre_archivo": doc.nombre_archivo,
             "tipo_archivo": doc.tipo_archivo,
+            "orden": doc.orden,
             "fecha_subida": doc.fecha_subida.isoformat() if doc.fecha_subida else None
         })
     return result
@@ -129,6 +166,48 @@ def download_document(doc_id: int, db: Session = Depends(get_db)):
         media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
     )
 
+@router.put("/{doc_id}/file")
+def replace_document_file(
+    doc_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    doc = db.query(DocumentoPapeleria).filter(DocumentoPapeleria.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento no encontrado.")
+    
+    filename = file.filename
+    if not filename:
+        raise HTTPException(status_code=400, detail="Nombre de archivo inválido.")
+    
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in [".doc", ".docx"]:
+        raise HTTPException(status_code=400, detail="Solo se permiten documentos Word (.doc, .docx).")
+
+    _ensure_dir()
+    db_socio_id = doc.socio_id if doc.socio_id else 0
+    safe_filename = f"{db_socio_id}_{filename}"
+    file_path = os.path.join(DATA_DIR, safe_filename)
+
+    try:
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al guardar el archivo: {str(e)}")
+        
+    if doc.ruta_archivo != file_path and os.path.exists(doc.ruta_archivo):
+        try:
+            os.remove(doc.ruta_archivo)
+        except:
+            pass
+
+    doc.ruta_archivo = file_path
+    doc.nombre_archivo = filename
+    doc.tipo_archivo = ext
+    
+    db.commit()
+    return {"status": "success", "message": "Archivo reemplazado correctamente"}
+
 @router.delete("/{doc_id}")
 def delete_document(doc_id: int, db: Session = Depends(get_db)):
     doc = db.query(DocumentoPapeleria).filter(DocumentoPapeleria.id == doc_id).first()
@@ -146,3 +225,177 @@ def delete_document(doc_id: int, db: Session = Depends(get_db)):
     db.commit()
     
     return {"status": "success", "message": "Documento eliminado correctamente"}
+
+@router.get("/system_fields")
+def get_system_fields():
+    return SYSTEM_FIELDS
+
+@router.get("/{doc_id}/variables")
+def get_document_variables(doc_id: int, db: Session = Depends(get_db)):
+    doc = db.query(DocumentoPapeleria).filter(DocumentoPapeleria.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento no encontrado.")
+    
+    return [{"id": v.id, "placeholder": v.placeholder, "system_field": v.system_field} for v in doc.variables]
+
+@router.post("/{doc_id}/variables")
+def save_document_variables(doc_id: int, request: VariablesRequest, db: Session = Depends(get_db)):
+    doc = db.query(DocumentoPapeleria).filter(DocumentoPapeleria.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento no encontrado.")
+    
+    # Delete existing
+    db.query(DocumentoVariable).filter(DocumentoVariable.documento_id == doc_id).delete()
+    
+    # Add new
+    for var_req in request.variables:
+        new_var = DocumentoVariable(
+            documento_id=doc_id,
+            placeholder=var_req.placeholder,
+            system_field=var_req.system_field
+        )
+        db.add(new_var)
+    
+    db.commit()
+    return {"status": "success", "message": "Variables guardadas correctamente"}
+
+@router.post("/reorder")
+def reorder_documents(request: ReorderRequest, db: Session = Depends(get_db)):
+    for item in request.documentos:
+        doc = db.query(DocumentoPapeleria).filter(DocumentoPapeleria.id == item.id).first()
+        if doc:
+            doc.orden = item.orden
+    
+    db.commit()
+    return {"status": "success", "message": "Orden actualizado correctamente"}
+
+MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+
+def resolve_system_field(credito: Credito, field: str):
+    if field == "cliente.nombre":
+        return f"{credito.cliente.nombre} {credito.cliente.apellido}"
+    elif field == "cliente.dni":
+        return credito.cliente.documento
+    elif field == "cliente.cuil":
+        return credito.cliente.cuil
+    elif field == "cliente.domicilio":
+        return f"{credito.cliente.calle or ''} {credito.cliente.calle_nro or ''} {credito.cliente.localidad or ''}".strip()
+    elif field == "cliente.cbu":
+        return credito.cliente.cbu or ""
+    elif field == "cliente.localidad":
+        return credito.cliente.localidad or ""
+    elif field == "cliente.provincia":
+        return credito.cliente.provincia.nombre if credito.cliente.provincia else ""
+    elif field == "cliente.nacionalidad":
+        return credito.cliente.nacionalidad or ""
+    elif field == "credito.monto_otorgado":
+        return str(credito.capital)
+    elif field == "credito.fecha_alta":
+        return credito.fecha_emision.strftime("%d/%m/%Y") if credito.fecha_emision else ""
+    elif field == "credito.fecha_emision_dia":
+        return str(credito.fecha_emision.day) if credito.fecha_emision else ""
+    elif field == "credito.fecha_emision_mes_letras":
+        if credito.fecha_emision:
+            return MESES[credito.fecha_emision.month - 1]
+        return ""
+    elif field == "credito.fecha_emision_anio":
+        return str(credito.fecha_emision.year) if credito.fecha_emision else ""
+    elif field == "credito.cuotas":
+        return str(len(credito.cuotas))
+    elif field == "empresa.razon_social":
+        return COMPANY_DATA.razon_social
+    elif field == "empresa.cuit":
+        return COMPANY_DATA.cuit
+    elif field == "socio.razon_social":
+        return credito.socio_originador.razon_social if credito.socio_originador else ""
+    return ""
+
+@router.post("/generar_por_credito/{credito_id}")
+def generar_papeleria_credito(credito_id: int, db: Session = Depends(get_db)):
+    credito = db.query(Credito).filter(Credito.id == credito_id).first()
+    if not credito:
+        raise HTTPException(status_code=404, detail="Crédito no encontrado.")
+    
+    socio_ids = [None]
+    
+    # Extraer socios de la tasa y comisión
+    if credito.comision:
+        if credito.comision.socio_originador_id:
+            socio_ids.append(credito.comision.socio_originador_id)
+        if credito.comision.socio_intermediario_id:
+            socio_ids.append(credito.comision.socio_intermediario_id)
+        if credito.comision.gasto_1_socio_id:
+            socio_ids.append(credito.comision.gasto_1_socio_id)
+        if credito.comision.gasto_2_socio_id:
+            socio_ids.append(credito.comision.gasto_2_socio_id)
+
+    # Si por alguna razón tiene originador directo pero no está en la lista (caso legado)
+    if credito.socio_originador_id and credito.socio_originador_id not in socio_ids:
+        socio_ids.append(credito.socio_originador_id)
+
+    # Filtro combinado porque in_() con SQL no funciona para NULL
+    from sqlalchemy import or_
+    valid_ids = [s for s in socio_ids if s is not None]
+    
+    docs = db.query(DocumentoPapeleria).filter(
+        or_(
+            DocumentoPapeleria.socio_id.is_(None),
+            DocumentoPapeleria.socio_id.in_(valid_ids) if valid_ids else False
+        )
+    ).order_by(
+        DocumentoPapeleria.socio_id.isnot(None),
+        DocumentoPapeleria.orden.asc()
+    ).all()
+
+    if not docs:
+        raise HTTPException(status_code=400, detail="No hay documentos de papelería configurados.")
+
+    import tempfile
+    from pypdf import PdfWriter
+    from src.logic.legajos import process_document
+
+    merger = PdfWriter()
+    temp_files = []
+    output_dir = "data/legajos"
+    os.makedirs(output_dir, exist_ok=True)
+    final_pdf_path = os.path.join(output_dir, f"credito_{credito_id}.pdf")
+
+    import pythoncom
+
+    try:
+        try:
+            pythoncom.CoInitialize()
+            for doc in docs:
+                data = {}
+                for var in doc.variables:
+                    data[var.placeholder] = resolve_system_field(credito, var.system_field)
+
+                fd, temp_pdf = tempfile.mkstemp(suffix=".pdf")
+                os.close(fd)
+                os.remove(temp_pdf)
+                temp_files.append(temp_pdf)
+                
+                process_document(doc.ruta_archivo, temp_pdf, data)
+                merger.append(temp_pdf)
+
+            merger.write(final_pdf_path)
+            merger.close()
+
+        finally:
+            pythoncom.CoUninitialize()
+            for f in temp_files:
+                if os.path.exists(f):
+                    try:
+                        os.remove(f)
+                    except:
+                        pass
+    except Exception as e:
+        import traceback
+        error_msg = f"Error interno: {str(e)}\n\n{traceback.format_exc()}"
+        raise HTTPException(status_code=500, detail=error_msg)
+
+    return FileResponse(
+        path=final_pdf_path,
+        filename=f"Legajo_Credito_{credito_id}.pdf",
+        media_type='application/pdf'
+    )

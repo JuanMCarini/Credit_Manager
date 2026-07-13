@@ -28,6 +28,7 @@ class OrigenCredito(enum.Enum):
 
 class EstadoCredito(enum.Enum):
     APROBADO = "APROBADO"
+    FIRMADO = "FIRMADO"
     RECHAZADO = "RECHAZADO"
     ACTIVO = "ACTIVO"
     CANCELADO = "CANCELADO"
