@@ -341,6 +341,9 @@ def download_merged_pdf(credito_id: int, db: Session = Depends(get_db)):
     if not docs:
         raise HTTPException(status_code=404, detail="No hay documentos para este crédito")
 
+    # Ordenar: Documentos generales primero (transferencia_id is None), transferencias al final
+    docs = sorted(docs, key=lambda d: 1 if d.transferencia_id is not None else 0)
+
     merger = PdfWriter()
     
     for doc in docs:

@@ -371,7 +371,7 @@ const CreditListPage = () => {
                         <button className="btn-secondary" onClick={() => setViewTransfersCredito(c.ID)} style={{ padding: '4px 8px', fontSize: '14px' }} title="Ver Transferencias">
                           💸
                         </button>
-                        <button className="btn-secondary" onClick={() => setViewLegajoCredito(c.ID)} style={{ padding: '4px 8px', fontSize: '14px' }} title="Ver Legajo">
+                        <button className="btn-secondary" onClick={() => setViewLegajoCredito({id: c.ID, estado: c.Estado})} style={{ padding: '4px 8px', fontSize: '14px' }} title="Ver Legajo">
                           📁
                         </button>
                         <button className="btn-secondary" onClick={() => setEditCredito({ id: c.ID, estado: c.Estado })} style={{ padding: '4px 8px', fontSize: '14px' }} title="Editar Estado">
@@ -402,7 +402,7 @@ const CreditListPage = () => {
       {ccCuil && <ClientCCModal cuil={ccCuil} onClose={() => setCcCuil(null)} />}
       {editCredito && <CreditEditEstadoModal creditoId={editCredito.id} currentEstado={editCredito.estado} onClose={() => setEditCredito(null)} onSuccess={fetchCreditos} />}
       {viewTransfersCredito && <TransfersModal creditoId={viewTransfersCredito} onClose={() => setViewTransfersCredito(null)} />}
-      {viewLegajoCredito && <LegajoModal creditoId={viewLegajoCredito} onClose={() => { setViewLegajoCredito(null); fetchCreditos(); }} />}
+      {viewLegajoCredito && <LegajoModal creditoId={viewLegajoCredito.id} creditoEstado={viewLegajoCredito.estado} onClose={() => { setViewLegajoCredito(null); fetchCreditos(); }} />}
     </section>
   );
 };
