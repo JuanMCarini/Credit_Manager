@@ -151,6 +151,30 @@ def list_documents(socio_id: int = None, db: Session = Depends(get_db)):
         })
     return result
 
+from pydantic import BaseModel
+class UpdateSocioPayload(BaseModel):
+    socio_id: str | int | None
+
+@router.patch("/{doc_id}/socio")
+def update_document_socio(doc_id: int, payload: UpdateSocioPayload, db: Session = Depends(get_db)):
+    doc = db.query(DocumentoPapeleria).filter(DocumentoPapeleria.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento no encontrado")
+        
+    socio_id_val = None
+    if str(payload.socio_id).strip() != "" and str(payload.socio_id) != "0":
+        socio_id_val = int(payload.socio_id)
+        
+    if socio_id_val is not None:
+        from src.database.models import Socio
+        socio_exist = db.query(Socio).filter(Socio.id == socio_id_val).first()
+        if not socio_exist:
+            raise HTTPException(status_code=400, detail="El socio especificado no existe")
+
+    doc.socio_id = socio_id_val
+    db.commit()
+    return {"status": "success", "message": "Socio actualizado correctamente"}
+
 @router.get("/download/{doc_id}")
 def download_document(doc_id: int, db: Session = Depends(get_db)):
     doc = db.query(DocumentoPapeleria).filter(DocumentoPapeleria.id == doc_id).first()

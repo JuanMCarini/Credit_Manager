@@ -20,6 +20,9 @@ const PapeleriaPage = () => {
   const fileInputRef = useRef(null);
   const [replacingDocId, setReplacingDocId] = useState(null);
 
+  // Edit socio state
+  const [editingSocioDocId, setEditingSocioDocId] = useState(null);
+
   useEffect(() => {
     fetchCompanyInfo();
     fetchSocios();
@@ -104,7 +107,19 @@ const PapeleriaPage = () => {
 
   const triggerReplace = (docId) => {
     setReplacingDocId(docId);
-    fileInputRef.current.click();
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleSocioChange = async (docId, newSocioId) => {
+    try {
+      await axiosClient.patch(`/api/v1/papeleria/${docId}/socio`, { socio_id: newSocioId });
+      setEditingSocioDocId(null);
+      fetchDocumentos();
+    } catch (error) {
+      alert("Error al actualizar socio: " + (error.response?.data?.detail || error.message));
+    }
   };
 
   const handleReplaceFileChange = async (e) => {
@@ -336,7 +351,36 @@ const PapeleriaPage = () => {
                           >▼</button>
                         </div>
                       </td>
-                      <td>{doc.socio_nombre}</td>
+                      <td>
+                        {editingSocioDocId === doc.id ? (
+                          <select 
+                            defaultValue={doc.socio_id}
+                            onChange={(e) => handleSocioChange(doc.id, e.target.value)}
+                            onBlur={() => setEditingSocioDocId(null)}
+                            autoFocus
+                            style={{ padding: '4px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-color)' }}
+                          >
+                            <option value="0" style={{ fontWeight: 'bold' }}>
+                              {companyInfo ? companyInfo.razon_social : 'Empresa Dueña del Sistema'}
+                            </option>
+                            {socios.map(s => (
+                              <option key={s.id} value={s.id}>{s.razon_social}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            {doc.socio_nombre}
+                            <button 
+                              onClick={() => setEditingSocioDocId(doc.id)} 
+                              className="btn-secondary" 
+                              style={{ padding: '2px 6px', fontSize: '10px' }}
+                              title="Editar Socio"
+                            >
+                              ✏️
+                            </button>
+                          </div>
+                        )}
+                      </td>
                       <td>{doc.nombre_archivo}</td>
                       <td>{new Date(doc.fecha_subida).toLocaleString('es-AR')}</td>
                       <td>
