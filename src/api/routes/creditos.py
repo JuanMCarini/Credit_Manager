@@ -62,6 +62,56 @@ def simular_cuotas(
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
 
+@router.post("/api/v1/creditos/originacion/preview_legajo")
+def preview_legajo(
+    credito_data: CreditoCreate,
+    db: Session = Depends(get_db)
+):
+    try:
+        # Savepoint
+        db.begin_nested()
+        
+        originator = LoanOriginator(db_session=db)
+        nuevo_credito = originator.originate(
+            client_cuil=credito_data.cliente_cuil,
+            capital=credito_data.capital,
+            tna_c_iva=credito_data.tna_c_iva,
+            term=credito_data.plazo,
+            partner_id=credito_data.socio_originador_id,
+            issuance_date=credito_data.fecha_emision,
+            due_day=credito_data.dia_vencimiento,
+            type=credito_data.tipo_credito,
+            comision_id=credito_data.comision_id,
+            id_externo=credito_data.id_externo,
+            transferencias_data=credito_data.transferencias,
+            commit=False  # Do not commit inside originate
+        )
+        
+        # Generar PDF en disco usando el helper
+        from src.api.routes.papeleria import _generar_pdf_for_credito
+        from fastapi.responses import FileResponse
+        
+        pdf_path = _generar_pdf_for_credito(nuevo_credito, db)
+        
+        # Rollback all db changes (the credit vanishes from db)
+        db.rollback()
+        
+        return FileResponse(
+            path=pdf_path,
+            filename=f"Preview_Legajo_{credito_data.cliente_cuil}.pdf",
+            media_type='application/pdf'
+        )
+        
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        db.rollback()
+        import traceback
+        error_msg = f"Error generando previsualización: {str(e)}\n\n{traceback.format_exc()}"
+        raise HTTPException(status_code=500, detail=error_msg)
+
+
 @router.post("/api/v1/creditos/originacion")
 def create_credito(
     credito_data: CreditoCreate,
