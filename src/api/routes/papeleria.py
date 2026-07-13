@@ -25,14 +25,37 @@ class ReorderRequest(BaseModel):
 
 SYSTEM_FIELDS = [
     {"value": "cliente.nombre", "label": "Cliente - Nombre Completo"},
+    {"value": "cliente.apellido", "label": "Cliente - Apellido"},
     {"value": "cliente.dni", "label": "Cliente - DNI"},
     {"value": "cliente.cuil", "label": "Cliente - CUIL"},
+    {"value": "cliente.id", "label": "Cliente - ID"},
     {"value": "cliente.domicilio", "label": "Cliente - Domicilio"},
+    {"value": "cliente.calle", "label": "Cliente - Calle"},
+    {"value": "cliente.calle_nro", "label": "Cliente - Número de Calle"},
+    {"value": "cliente.piso", "label": "Cliente - Piso"},
+    {"value": "cliente.depto", "label": "Cliente - Departamento"},
+    {"value": "cliente.cp", "label": "Cliente - Código Postal"},
     {"value": "cliente.cbu", "label": "Cliente - CBU"},
     {"value": "cliente.localidad", "label": "Cliente - Localidad"},
     {"value": "cliente.provincia", "label": "Cliente - Provincia"},
     {"value": "cliente.nacionalidad", "label": "Cliente - País / Nacionalidad"},
+    {"value": "cliente.estado_civil", "label": "Cliente - Estado Civil"},
+    {"value": "cliente.telefono", "label": "Cliente - Teléfono"},
+    {"value": "cliente.telefono_2", "label": "Cliente - Teléfono 2"},
+    {"value": "cliente.mail", "label": "Cliente - Email"},
+    {"value": "cliente.sexo", "label": "Cliente - Sexo"},
+    {"value": "cliente.fecha_nacimiento", "label": "Cliente - Fecha Nacimiento"},
+    {"value": "empleador.razon_social", "label": "Empleador - Nombre / Razón Social"},
+    {"value": "empleador.fecha_ingreso", "label": "Empleador - Fecha de Ingreso"},
+    {"value": "empleador.ingreso_mensual", "label": "Empleador - Ingreso Mensual"},
+    {"value": "empleador.legajo", "label": "Empleador - Legajo"},
     {"value": "credito.monto_otorgado", "label": "Crédito - Monto Otorgado"},
+    {"value": "credito.id", "label": "Crédito - ID Interno"},
+    {"value": "credito.id_externo", "label": "Crédito - ID Externo"},
+    {"value": "credito.plazo", "label": "Crédito - Plazo"},
+    {"value": "credito.valor_cuota", "label": "Crédito - Valor Cuota"},
+    {"value": "credito.monto_total", "label": "Crédito - Monto Total a Pagar"},
+    {"value": "credito.tna_c_iva", "label": "Crédito - TNA con IVA"},
     {"value": "credito.fecha_alta", "label": "Crédito - Fecha Alta"},
     {"value": "credito.fecha_emision_dia", "label": "Crédito - Fecha Emisión (Día)"},
     {"value": "credito.fecha_emision_mes_letras", "label": "Crédito - Fecha Emisión (Mes Letras)"},
@@ -298,6 +321,8 @@ MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto
 def resolve_system_field(credito: Credito, field: str):
     if field == "cliente.nombre":
         return f"{credito.cliente.nombre} {credito.cliente.apellido}"
+    elif field == "cliente.id":
+        return credito.cliente.cuil or ""
     elif field == "cliente.dni":
         return credito.cliente.documento
     elif field == "cliente.cuil":
@@ -326,6 +351,54 @@ def resolve_system_field(credito: Credito, field: str):
         return str(credito.fecha_emision.year) if credito.fecha_emision else ""
     elif field == "credito.cuotas":
         return str(len(credito.cuotas))
+    elif field == "credito.id":
+        return str(credito.id) if credito.id else ""
+    elif field == "credito.id_externo":
+        return str(credito.id_externo) if credito.id_externo else ""
+    elif field == "cliente.apellido":
+        return credito.cliente.apellido
+    elif field == "cliente.estado_civil":
+        return credito.cliente.estado_civil or ""
+    elif field == "cliente.calle":
+        return credito.cliente.calle or ""
+    elif field == "cliente.calle_nro":
+        return str(credito.cliente.calle_nro) if credito.cliente.calle_nro else ""
+    elif field == "cliente.piso":
+        return credito.cliente.piso or ""
+    elif field == "cliente.depto":
+        return credito.cliente.depto or ""
+    elif field == "cliente.cp":
+        return str(credito.cliente.id_codigo_postal) if credito.cliente.id_codigo_postal else ""
+    elif field == "cliente.telefono":
+        return credito.cliente.telefono or ""
+    elif field == "cliente.telefono_2":
+        return credito.cliente.telefono_2 or ""
+    elif field == "cliente.mail":
+        return credito.cliente.mail or ""
+    elif field == "cliente.sexo":
+        return credito.cliente.sexo.value if credito.cliente.sexo else ""
+    elif field == "cliente.fecha_nacimiento":
+        return credito.cliente.fecha_nacimiento.strftime("%d/%m/%Y") if credito.cliente.fecha_nacimiento else ""
+    elif field == "empleador.razon_social":
+        return credito.cliente.empleador.razon_social if credito.cliente.empleador else ""
+    elif field == "empleador.fecha_ingreso":
+        return credito.cliente.fecha_ingreso.strftime("%d/%m/%Y") if credito.cliente.fecha_ingreso else ""
+    elif field == "empleador.ingreso_mensual":
+        return str(credito.cliente.remuneracion) if credito.cliente.remuneracion else "0.00"
+    elif field == "empleador.legajo":
+        return credito.cliente.legajo or ""
+    elif field == "credito.plazo":
+        return str(credito.plazo)
+    elif field == "credito.valor_cuota":
+        if credito.cuotas:
+            return str(round(credito.cuotas[0].capital + credito.cuotas[0].interes + credito.cuotas[0].iva, 2))
+        return "0.00"
+    elif field == "credito.monto_total":
+        if credito.cuotas:
+            return str(round(sum(c.capital + c.interes + c.iva for c in credito.cuotas), 2))
+        return "0.00"
+    elif field == "credito.tna_c_iva":
+        return str(credito.tna_c_iva)
     elif field == "empresa.razon_social":
         return COMPANY_DATA.razon_social
     elif field == "empresa.cuit":
