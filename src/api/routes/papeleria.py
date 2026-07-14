@@ -94,6 +94,9 @@ SYSTEM_FIELDS = [
     {"value": "cliente.cargo", "label": "Cliente - Cargo"},
     {"value": "cliente.pep", "label": "Cliente - Es PEP"},
     {"value": "cliente.repet", "label": "Cliente - En REPET"},
+    {"value": "cliente.repet_id", "label": "Cliente - ID RePET"},
+    {"value": "cliente.repet_fecha_consulta", "label": "Cliente - Fecha y Hora Consulta RePET"},
+    {"value": "cliente.repet_estado", "label": "Cliente - Estado RePET"},
     {"value": "referido_1.nombre", "label": "Referido 1 - Nombre"},
     {"value": "referido_1.apellido", "label": "Referido 1 - Apellido"},
     {"value": "referido_1.telefono", "label": "Referido 1 - Teléfono"},
@@ -570,6 +573,38 @@ def resolve_system_field(credito: Credito, field: str):
         return "SÍ" if credito.cliente.pep else "NO"
     elif field == "cliente.repet":
         return "SÍ" if credito.cliente.repet else "NO"
+    elif field in ["cliente.repet_id", "cliente.repet_fecha_consulta", "cliente.repet_estado"]:
+        from src.database.models.repet import RepetAuditLog
+        from sqlalchemy.orm import object_session
+        db = object_session(credito)
+        if not db:
+            return ""
+        full_name = f"{credito.cliente.nombre} {credito.cliente.apellido}".strip()
+        last_log = db.query(RepetAuditLog).filter(
+            RepetAuditLog.searched_name == full_name
+        ).order_by(RepetAuditLog.timestamp.desc()).first()
+        
+        if not last_log:
+            if field == "cliente.repet_estado":
+                return "SIN CONSULTA"
+            return ""
+            
+        if field == "cliente.repet_id":
+            return str(last_log.id)
+        elif field == "cliente.repet_fecha_consulta":
+            if not last_log.timestamp:
+                return ""
+            try:
+                import pytz
+                local_tz = pytz.timezone('America/Argentina/Buenos_Aires')
+                ts = last_log.timestamp
+                if ts.tzinfo is None:
+                    ts = pytz.utc.localize(ts)
+                return ts.astimezone(local_tz).strftime("%d/%m/%Y %H:%M:%S")
+            except Exception:
+                return last_log.timestamp.strftime("%d/%m/%Y %H:%M:%S")
+        elif field == "cliente.repet_estado":
+            return "POSITIVO" if getattr(last_log, 'is_match', False) else "NEGATIVO"
     elif field == "empleador.razon_social":
         return credito.cliente.empleador.razon_social if credito.cliente.empleador else ""
     elif field == "empleador.fecha_ingreso":

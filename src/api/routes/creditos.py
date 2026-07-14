@@ -109,6 +109,8 @@ def preview_legajo(
         db.rollback()
         import traceback
         error_msg = f"Error generando previsualización: {str(e)}\n\n{traceback.format_exc()}"
+        with open("error_preview.txt", "w") as f:
+            f.write(error_msg)
         raise HTTPException(status_code=500, detail=error_msg)
 
 

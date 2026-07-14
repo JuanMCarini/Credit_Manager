@@ -21,11 +21,13 @@ def create_cliente(
         nuevo_cliente = Cliente(**data)
         
         # Screening RePET automatizado
-        from src.services.repet import screen_person
+        from src.services.repet import screen_person, sync_repet_data
+        import asyncio
         import logging
         logger = logging.getLogger(__name__)
         full_name = f"{nuevo_cliente.nombre} {nuevo_cliente.apellido}"
         try:
+            asyncio.run(sync_repet_data(db))
             repet_result = screen_person(db, full_name=full_name)
             if repet_result.get("status") == "ALERT":
                 nuevo_cliente.repet = True
@@ -105,6 +107,19 @@ def get_cliente(cuil: str, db: Session = Depends(get_db)):
     cliente = db.query(Cliente).filter(or_(Cliente.cuil == cuil, Cliente.documento == cuil)).first()
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
+        
+    import asyncio
+    from src.services.repet import screen_person, sync_repet_data
+    try:
+        asyncio.run(sync_repet_data(db))
+        full_name = f"{cliente.nombre} {cliente.apellido}"
+        repet_result = screen_person(db, full_name=full_name)
+        if repet_result.get("status") == "ALERT" and not cliente.repet:
+            cliente.repet = True
+            db.commit()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Error sincronizando RePET en get_cliente: {str(e)}")
     
     return {
         "cuil": cliente.cuil,
@@ -247,6 +262,22 @@ def update_cliente(
         
         for key, value in update_data.items():
             setattr(cliente, key, value)
+            
+        import asyncio
+        from src.services.repet import screen_person, sync_repet_data
+        try:
+            asyncio.run(sync_repet_data(db))
+            full_name = f"{cliente.nombre} {cliente.apellido}"
+            repet_result = screen_person(db, full_name=full_name)
+            if repet_result.get("status") == "ALERT":
+                cliente.repet = True
+            else:
+                # Si queremos permitir limpiar la bandera si no sale más en el listado
+                # cliente.repet = False
+                pass
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Error sincronizando RePET en update_cliente: {str(e)}")
             
         if referidos_data is not None:
             cliente.referidos = [Referido(**ref) for ref in referidos_data]
