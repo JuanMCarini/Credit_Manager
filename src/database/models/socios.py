@@ -249,6 +249,8 @@ class TasaYComision(Base):
     gasto_2_porcentaje = Column(Numeric(15, 6), nullable=True, default=0.0)
     gasto_2_socio_id = Column(Integer, ForeignKey("socios_comerciales.id"), nullable=True)
 
+    porcentaje_sellado = Column(Numeric(15, 6), nullable=True, default=0.0)
+
     socio_originador = relationship("SocioComercial", foreign_keys=[socio_originador_id], back_populates="comisiones_originadas")
     socio_intermediario = relationship("SocioComercial", foreign_keys=[socio_intermediario_id], back_populates="comisiones_intermediarias")
     socio_gasto_1 = relationship("SocioComercial", foreign_keys=[gasto_1_socio_id], back_populates="gastos_1")

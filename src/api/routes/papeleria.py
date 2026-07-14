@@ -34,7 +34,8 @@ def calcular_gastos_credito(credito) -> float:
     if getattr(credito, 'comision', None):
         gasto_1 = float(credito.comision.gasto_1_porcentaje or 0.0)
         gasto_2 = float(credito.comision.gasto_2_porcentaje or 0.0)
-        gastos = float(credito.capital) * (gasto_1 + gasto_2) / 100.0
+        sellado = float(getattr(credito.comision, 'porcentaje_sellado', 0) or 0.0)
+        gastos = float(credito.capital) * (gasto_1 + gasto_2 + sellado) / 100.0
     else:
         # Fallback para creditos originados antes del parche de comision_id
         if getattr(credito, 'transferencias', None):
@@ -112,6 +113,8 @@ SYSTEM_FIELDS = [
     {"value": "credito.monto_neto_letras", "label": "Crédito - Monto Neto (En Letras)"},
     {"value": "credito.gastos_otorgamiento", "label": "Crédito - Gastos de Otorgamiento"},
     {"value": "credito.gastos_otorgamiento_letras", "label": "Crédito - Gastos de Otorgamiento (En Letras)"},
+    {"value": "credito.sellado", "label": "Crédito - Sellado"},
+    {"value": "credito.sellado_letras", "label": "Crédito - Sellado (En Letras)"},
     {"value": "credito.interes", "label": "Crédito - Interés Total"},
     {"value": "credito.interes_letras", "label": "Crédito - Interés Total (En Letras)"},
     {"value": "credito.iva", "label": "Crédito - IVA Total"},
@@ -490,6 +493,16 @@ def resolve_system_field(credito: Credito, field: str):
         return format_currency(calcular_gastos_credito(credito))
     elif field == "credito.gastos_otorgamiento_letras":
         return monto_a_letras(calcular_gastos_credito(credito))
+    elif field == "credito.sellado":
+        if getattr(credito, 'comision', None) and getattr(credito.comision, 'porcentaje_sellado', 0):
+            sellado = float(credito.capital) * float(credito.comision.porcentaje_sellado) / 100.0
+            return format_currency(sellado)
+        return "$ 0,00"
+    elif field == "credito.sellado_letras":
+        if getattr(credito, 'comision', None) and getattr(credito.comision, 'porcentaje_sellado', 0):
+            sellado = float(credito.capital) * float(credito.comision.porcentaje_sellado) / 100.0
+            return monto_a_letras(sellado)
+        return ""
     elif field == "credito.interes":
         return format_currency(sum(float(c.interes) for c in credito.cuotas)) if credito.cuotas else "$ 0,00"
     elif field == "credito.interes_letras":
