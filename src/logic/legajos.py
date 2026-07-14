@@ -9,7 +9,7 @@ from docx2pdf import convert
 # Configuración básica de logging para monitoreo de batch processing
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
-def _replace_in_paragraphs(paragraphs: List[Any], data: Dict[str, Any]) -> None:
+def _replace_in_paragraphs(paragraphs: List[Any], data: Dict[str, Any], doc: Document = None) -> None:
     """
     Función auxiliar para reemplazar texto a nivel de párrafo.
     Resuelve el problema de los marcadores divididos en múltiples 'runs'
@@ -25,12 +25,32 @@ def _replace_in_paragraphs(paragraphs: List[Any], data: Dict[str, Any]) -> None:
         run_chars = [list(run.text) for run in paragraph.runs]
         
         for key, value in data.items():
+            is_table = isinstance(value, dict) and value.get("__type__") == "table"
+            
             for placeholder in (f"{{{{ {key} }}}}", f"{{{{{key}}}}}"):
                 while True:
                     current_text = "".join("".join(chars) for chars in run_chars)
                     start_idx = current_text.find(placeholder)
                     if start_idx == -1:
                         break
+                        
+                    if is_table and doc is not None:
+                        # Crear e insertar tabla
+                        table = doc.add_table(rows=1, cols=len(value["headers"]))
+                        table.style = 'Table Grid'
+                        hdr_cells = table.rows[0].cells
+                        for i, hdr in enumerate(value["headers"]):
+                            hdr_cells[i].text = hdr
+                        for r_data in value["rows"]:
+                            row_cells = table.add_row().cells
+                            for i, hdr in enumerate(value["headers"]):
+                                row_cells[i].text = str(r_data.get(hdr, ""))
+                        
+                        # Mover la tabla justo después del párrafo actual
+                        paragraph._p.addnext(table._tbl)
+                        replace_val = ""
+                    else:
+                        replace_val = str(value)
                         
                     # Encontrar en qué run empieza el marcador
                     curr_len = 0
@@ -48,10 +68,10 @@ def _replace_in_paragraphs(paragraphs: List[Any], data: Dict[str, Any]) -> None:
                     
                     if chars_to_remove <= removable_in_start:
                         # El marcador completo está en este run
-                        run_chars[run_start][char_start:char_start+chars_to_remove] = list(str(value))
+                        run_chars[run_start][char_start:char_start+chars_to_remove] = list(replace_val)
                     else:
                         # El marcador abarca varios runs
-                        run_chars[run_start] = run_chars[run_start][:char_start] + list(str(value))
+                        run_chars[run_start] = run_chars[run_start][:char_start] + list(replace_val)
                         chars_to_remove -= removable_in_start
                         
                         r_idx = run_start + 1
@@ -67,7 +87,9 @@ def _replace_in_paragraphs(paragraphs: List[Any], data: Dict[str, Any]) -> None:
 
         # Volcar los caracteres de nuevo a los runs
         for run, chars in zip(paragraph.runs, run_chars):
-            run.text = "".join(chars)
+            new_text = "".join(chars)
+            if run.text != new_text:
+                run.text = new_text
 
 def replace_placeholders_in_doc(doc: Document, data: Dict[str, Any]) -> None:
     """
@@ -85,12 +107,12 @@ def replace_placeholders_in_doc(doc: Document, data: Dict[str, Any]) -> None:
     """
     def _process_blocks(blocks):
         if hasattr(blocks, 'paragraphs'):
-            _replace_in_paragraphs(blocks.paragraphs, data)
+            _replace_in_paragraphs(blocks.paragraphs, data, doc)
         if hasattr(blocks, 'tables'):
             for table in blocks.tables:
                 for row in table.rows:
                     for cell in row.cells:
-                        _replace_in_paragraphs(cell.paragraphs, data)
+                        _replace_in_paragraphs(cell.paragraphs, data, doc)
 
     # 1. Reemplazo en cuerpo principal y tablas del cuerpo
     _process_blocks(doc)
