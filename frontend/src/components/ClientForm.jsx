@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import useAppStore from '../store/useAppStore';
 import CurrencyInput from './CurrencyInput';
 
-const ClientForm = ({ initialData, isEditMode = false, onSubmit, loading, feedback, buttonText = "Guardar Cliente" }) => {
+const ClientForm = ({ initialData, isEditMode = false, allowRepetEdit = false, onSubmit, loading, feedback, buttonText = "Guardar Cliente" }) => {
   const { provincias, empleadores } = useAppStore();
 
   const [form, setForm] = useState({
@@ -184,7 +184,7 @@ const ClientForm = ({ initialData, isEditMode = false, onSubmit, loading, feedba
             </strong>
           </label>
         </div>
-        {isEditMode && (
+        {isEditMode && allowRepetEdit && (
           <div className="form-group">
             <label htmlFor="repet" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginBottom: 0, width: 'fit-content' }}>
               <div className="toggle-switch">
