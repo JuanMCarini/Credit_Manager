@@ -5,17 +5,24 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
+import numpy_financial as npf
 
 def monto_a_letras(monto: float) -> str:
     try:
         from num2words import num2words
         if monto is None:
             return ""
-        entero = int(monto)
-        decimal = int(round((monto - entero) * 100))
-        letras_entero = num2words(entero, lang='es')
-        return f"{letras_entero} con {decimal:02d}/100"
-    except Exception:
+        monto_redondeado = round(float(monto), 2)
+        entero = int(monto_redondeado)
+        decimal = int(round((monto_redondeado - entero) * 100))
+        letras_entero = num2words(entero, lang='es').upper()
+        return f"{letras_entero} PESOS CON {decimal:02d}/100"
+    except Exception as e:
+        import traceback
+        error_msg = f"Error en monto_a_letras con valor {monto}: {e}\n{traceback.format_exc()}"
+        with open("error_monto.txt", "a") as f:
+            f.write(error_msg + "\n")
+        print(error_msg)
         return ""
 
 def format_currency(monto: float) -> str:
@@ -132,6 +139,12 @@ SYSTEM_FIELDS = [
     {"value": "credito.fecha_emision_anio", "label": "Crédito - Fecha Emisión (Año)"},
     {"value": "credito.cuotas", "label": "Crédito - Cantidad Cuotas"},
     {"value": "credito.tabla_transferencias", "label": "Crédito - Tabla de Transferencias"},
+    {"value": "credito.tna_s_iva", "label": "Crédito - TNA (sin IVA)"},
+    {"value": "credito.tea_s_iva", "label": "Crédito - TEA (sin IVA)"},
+    {"value": "credito.tem_s_iva", "label": "Crédito - TEM (sin IVA)"},
+    {"value": "credito.cft", "label": "Crédito - CFT Efectivo Anual"},
+    {"value": "credito.fecha_emision", "label": "Crédito - Fecha Emisión"},
+    {"value": "credito.primer_vto", "label": "Crédito - Primer Vencimiento"},
     {"value": "empresa.razon_social", "label": "Empresa - Razón Social"},
     {"value": "empresa.cuit", "label": "Empresa - CUIT"},
     {"value": "socio.razon_social", "label": "Socio Comercial - Razón Social"},
@@ -476,7 +489,7 @@ def resolve_system_field(credito: Credito, field: str):
     elif field == "credito.monto_otorgado":
         return format_currency(credito.capital)
     elif field == "credito.monto_otorgado_letras":
-        return monto_a_letras(float(credito.capital)) if credito.capital else ""
+        return monto_a_letras(float(credito.capital)) if credito.capital else monto_a_letras(0)
     elif field == "credito.monto_neto":
         if credito.capital:
             gastos = calcular_gastos_credito(credito)
@@ -488,7 +501,7 @@ def resolve_system_field(credito: Credito, field: str):
             gastos = calcular_gastos_credito(credito)
             neto = float(credito.capital) - gastos
             return monto_a_letras(neto)
-        return ""
+        return monto_a_letras(0)
     elif field == "credito.gastos_otorgamiento":
         return format_currency(calcular_gastos_credito(credito))
     elif field == "credito.gastos_otorgamiento_letras":
@@ -502,15 +515,15 @@ def resolve_system_field(credito: Credito, field: str):
         if getattr(credito, 'comision', None) and getattr(credito.comision, 'porcentaje_sellado', 0):
             sellado = float(credito.capital) * float(credito.comision.porcentaje_sellado) / 100.0
             return monto_a_letras(sellado)
-        return ""
+        return monto_a_letras(0)
     elif field == "credito.interes":
-        return format_currency(sum(float(c.interes) for c in credito.cuotas)) if credito.cuotas else "$ 0,00"
+        return format_currency(sum(float(c.interes or 0) for c in credito.cuotas)) if credito.cuotas else "$ 0,00"
     elif field == "credito.interes_letras":
-        return monto_a_letras(sum(float(c.interes) for c in credito.cuotas)) if credito.cuotas else ""
+        return monto_a_letras(sum(float(c.interes or 0) for c in credito.cuotas)) if credito.cuotas else monto_a_letras(0)
     elif field == "credito.iva":
-        return format_currency(sum(float(c.iva) for c in credito.cuotas)) if credito.cuotas else "$ 0,00"
+        return format_currency(sum(float(c.iva or 0) for c in credito.cuotas)) if credito.cuotas else "$ 0,00"
     elif field == "credito.iva_letras":
-        return monto_a_letras(sum(float(c.iva) for c in credito.cuotas)) if credito.cuotas else ""
+        return monto_a_letras(sum(float(c.iva or 0) for c in credito.cuotas)) if credito.cuotas else monto_a_letras(0)
     elif field == "credito.fecha_alta":
         return credito.fecha_emision.strftime("%d/%m/%Y") if credito.fecha_emision else ""
     elif field == "credito.fecha_emision_dia":
@@ -596,18 +609,55 @@ def resolve_system_field(credito: Credito, field: str):
         return str(credito.plazo)
     elif field == "credito.valor_cuota":
         if credito.cuotas:
-            return format_currency(credito.cuotas[0].capital + credito.cuotas[0].interes + credito.cuotas[0].iva)
+            return format_currency(float(credito.cuotas[0].capital or 0) + float(credito.cuotas[0].interes or 0) + float(credito.cuotas[0].iva or 0))
         return "$ 0,00"
     elif field == "credito.monto_total":
         if credito.cuotas:
-            return format_currency(sum(float(c.capital) + float(c.interes) + float(c.iva) for c in credito.cuotas))
+            return format_currency(sum(float(c.capital or 0) + float(c.interes or 0) + float(c.iva or 0) for c in credito.cuotas))
         return "$ 0,00"
     elif field == "credito.monto_total_letras":
         if credito.cuotas:
-            return monto_a_letras(sum(float(c.capital) + float(c.interes) + float(c.iva) for c in credito.cuotas))
-        return ""
+            return monto_a_letras(sum(float(c.capital or 0) + float(c.interes or 0) + float(c.iva or 0) for c in credito.cuotas))
+        return monto_a_letras(0)
     elif field == "credito.tna_c_iva":
         return str(credito.tna_c_iva)
+    elif field == "credito.tna_s_iva":
+        if credito.tna_c_iva is not None:
+            tna_s_iva = float(credito.tna_c_iva) / 1.21
+            return f"{(tna_s_iva * 100):.2f} %"
+        return "N/A"
+    elif field == "credito.tea_s_iva":
+        if credito.tna_c_iva is not None:
+            tna_s_iva = float(credito.tna_c_iva) / 1.21
+            tea_s_iva = (1 + tna_s_iva * 30 / 365) ** (365 / 30) - 1
+            return f"{(tea_s_iva * 100):.2f} %"
+        return "N/A"
+    elif field == "credito.tem_s_iva":
+        if credito.tna_c_iva is not None:
+            tna_s_iva = float(credito.tna_c_iva) / 1.21
+            tea_s_iva = (1 + tna_s_iva * 30 / 365) ** (365 / 30) - 1
+            tem_s_iva = (1 + tea_s_iva) ** (30 / 365) - 1
+            return f"{(tem_s_iva * 100):.2f} %"
+        return "N/A"
+    elif field == "credito.cft":
+        if credito.capital and credito.cuotas:
+            gastos = calcular_gastos_credito(credito)
+            cf_0 = - (float(credito.capital) - gastos)
+            flujos = [cf_0]
+            for c in credito.cuotas:
+                flujos.append(float(c.capital or 0) + float(c.interes or 0) + float(c.iva or 0))
+            tir = npf.irr(flujos)
+            if not isinstance(tir, float) or tir is None:
+                return "N/A"
+            cft_tea = (1 + tir) ** (365 / 30) - 1
+            return f"{(cft_tea * 100):.2f} %"
+        return "N/A"
+    elif field == "credito.fecha_emision":
+        return credito.fecha_emision.strftime("%d/%m/%Y") if credito.fecha_emision else ""
+    elif field == "credito.primer_vto":
+        if credito.cuotas and len(credito.cuotas) > 0:
+            return credito.cuotas[0].fecha_vencimiento.strftime("%d/%m/%Y") if credito.cuotas[0].fecha_vencimiento else ""
+        return ""
     elif field == "empresa.razon_social":
         return COMPANY_DATA.razon_social
     elif field == "empresa.cuit":

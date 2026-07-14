@@ -1,0 +1,18 @@
+Error en monto_a_letras con valor 3011627.91: No module named 'num2words'
+Traceback (most recent call last):
+  File "D:\Repositorios\Credit_Manager\src\api\routes\papeleria.py", line 12, in monto_a_letras
+    from num2words import num2words
+ModuleNotFoundError: No module named 'num2words'
+
+Error en monto_a_letras con valor 3011627.91: No module named 'num2words'
+Traceback (most recent call last):
+  File "D:\Repositorios\Credit_Manager\src\api\routes\papeleria.py", line 12, in monto_a_letras
+    from num2words import num2words
+ModuleNotFoundError: No module named 'num2words'
+
+Error en monto_a_letras con valor 6937895.7: No module named 'num2words'
+Traceback (most recent call last):
+  File "D:\Repositorios\Credit_Manager\src\api\routes\papeleria.py", line 12, in monto_a_letras
+    from num2words import num2words
+ModuleNotFoundError: No module named 'num2words'
+
