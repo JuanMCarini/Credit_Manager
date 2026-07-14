@@ -61,6 +61,7 @@ SYSTEM_FIELDS = [
     {"value": "credito.fecha_emision_mes_letras", "label": "Crédito - Fecha Emisión (Mes Letras)"},
     {"value": "credito.fecha_emision_anio", "label": "Crédito - Fecha Emisión (Año)"},
     {"value": "credito.cuotas", "label": "Crédito - Cantidad Cuotas"},
+    {"value": "credito.tabla_transferencias", "label": "Crédito - Tabla de Transferencias"},
     {"value": "empresa.razon_social", "label": "Empresa - Razón Social"},
     {"value": "empresa.cuit", "label": "Empresa - CUIT"},
     {"value": "socio.razon_social", "label": "Socio Comercial - Razón Social"},
@@ -405,6 +406,16 @@ def resolve_system_field(credito: Credito, field: str):
         return COMPANY_DATA.cuit
     elif field == "socio.razon_social":
         return credito.socio_originador.razon_social if credito.socio_originador else ""
+    elif field == "credito.tabla_transferencias":
+        transferencias_data = []
+        for t in credito.transferencias:
+            transferencias_data.append({
+                "CUIL/CUIT": t.cuit,
+                "CBU": t.cbu,
+                "Razón Social": t.razon_social,
+                "Monto": f"${t.monto:,.2f}"
+            })
+        return {"__type__": "table", "headers": ["CUIL/CUIT", "CBU", "Razón Social", "Monto"], "rows": transferencias_data}
     return ""
 
 @router.post("/generar_por_credito/{credito_id}")
