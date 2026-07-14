@@ -219,7 +219,14 @@ const PapeleriaPage = () => {
     setDocVariables([]);
     try {
       const res = await axiosClient.get(`/api/v1/papeleria/${doc.id}/variables`);
-      setDocVariables(res.data);
+      const sortedVars = [...res.data].sort((a, b) => {
+        const aEmpty = !a.system_field || String(a.system_field).trim() === '' || !systemFields.some(sf => sf.value === a.system_field);
+        const bEmpty = !b.system_field || String(b.system_field).trim() === '' || !systemFields.some(sf => sf.value === b.system_field);
+        if (aEmpty && !bEmpty) return -1;
+        if (!aEmpty && bEmpty) return 1;
+        return 0;
+      });
+      setDocVariables(sortedVars);
     } catch (error) {
       console.error("Error fetching variables", error);
     }
@@ -249,8 +256,8 @@ const PapeleriaPage = () => {
 
   const saveVariables = async () => {
     // Validate
-    if (docVariables.some(v => !v.placeholder.trim() || !v.system_field)) {
-      alert("Por favor complete todos los campos de las variables.");
+    if (docVariables.some(v => !v.placeholder || !v.placeholder.trim())) {
+      alert("Por favor asegúrese de que todos los marcadores tengan un nombre válido.");
       return;
     }
     setSavingVariables(true);

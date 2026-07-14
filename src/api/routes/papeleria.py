@@ -5,6 +5,42 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
+
+def monto_a_letras(monto: float) -> str:
+    try:
+        from num2words import num2words
+        if monto is None:
+            return ""
+        entero = int(monto)
+        decimal = int(round((monto - entero) * 100))
+        letras_entero = num2words(entero, lang='es')
+        return f"{letras_entero} con {decimal:02d}/100"
+    except Exception:
+        return ""
+
+def format_currency(monto: float) -> str:
+    if monto is None:
+        return "$ 0,00"
+    try:
+        formatted = f"{float(monto):,.2f}"
+        # Swap commas and periods for Spanish locale
+        formatted = formatted.replace(",", "X").replace(".", ",").replace("X", ".")
+        return f"$ {formatted}"
+    except Exception:
+        return "$ 0,00"
+
+def calcular_gastos_credito(credito) -> float:
+    gastos = 0.0
+    if getattr(credito, 'comision', None):
+        gasto_1 = float(credito.comision.gasto_1_porcentaje or 0.0)
+        gasto_2 = float(credito.comision.gasto_2_porcentaje or 0.0)
+        gastos = float(credito.capital) * (gasto_1 + gasto_2) / 100.0
+    else:
+        # Fallback para creditos originados antes del parche de comision_id
+        if getattr(credito, 'transferencias', None):
+            gastos = sum(float(t.monto) for t in credito.transferencias if t.razon_social in ["AMUF", "DALVI CULTURAL SRL"])
+    return gastos
+
 from src.database import get_db, SocioComercial, Credito, Cliente
 from src.database.models.papeleria import DocumentoPapeleria, DocumentoVariable
 from src.config import COMPANY_DATA
@@ -36,6 +72,8 @@ SYSTEM_FIELDS = [
     {"value": "cliente.depto", "label": "Cliente - Departamento"},
     {"value": "cliente.cp", "label": "Cliente - Código Postal"},
     {"value": "cliente.cbu", "label": "Cliente - CBU"},
+    {"value": "cliente.cuenta_bancaria", "label": "Cliente - Cuenta Bancaria"},
+    {"value": "cliente.banco", "label": "Cliente - Banco"},
     {"value": "cliente.localidad", "label": "Cliente - Localidad"},
     {"value": "cliente.provincia", "label": "Cliente - Provincia"},
     {"value": "cliente.nacionalidad", "label": "Cliente - País / Nacionalidad"},
@@ -45,16 +83,45 @@ SYSTEM_FIELDS = [
     {"value": "cliente.mail", "label": "Cliente - Email"},
     {"value": "cliente.sexo", "label": "Cliente - Sexo"},
     {"value": "cliente.fecha_nacimiento", "label": "Cliente - Fecha Nacimiento"},
+    {"value": "cliente.cargo", "label": "Cliente - Cargo"},
+    {"value": "cliente.pep", "label": "Cliente - Es PEP"},
+    {"value": "cliente.repet", "label": "Cliente - En REPET"},
+    {"value": "referido_1.nombre", "label": "Referido 1 - Nombre"},
+    {"value": "referido_1.apellido", "label": "Referido 1 - Apellido"},
+    {"value": "referido_1.telefono", "label": "Referido 1 - Teléfono"},
+    {"value": "referido_1.email", "label": "Referido 1 - Email"},
+    {"value": "referido_2.nombre", "label": "Referido 2 - Nombre"},
+    {"value": "referido_2.apellido", "label": "Referido 2 - Apellido"},
+    {"value": "referido_2.telefono", "label": "Referido 2 - Teléfono"},
+    {"value": "referido_2.email", "label": "Referido 2 - Email"},
     {"value": "empleador.razon_social", "label": "Empleador - Nombre / Razón Social"},
     {"value": "empleador.fecha_ingreso", "label": "Empleador - Fecha de Ingreso"},
     {"value": "empleador.ingreso_mensual", "label": "Empleador - Ingreso Mensual"},
     {"value": "empleador.legajo", "label": "Empleador - Legajo"},
+    {"value": "empleador.domicilio_calle", "label": "Empleador - Domicilio Calle"},
+    {"value": "empleador.domicilio_nro", "label": "Empleador - Domicilio Nro"},
+    {"value": "empleador.domicilio_piso", "label": "Empleador - Domicilio Piso"},
+    {"value": "empleador.domicilio_depto", "label": "Empleador - Domicilio Depto"},
+    {"value": "empleador.localidad", "label": "Empleador - Localidad"},
+    {"value": "empleador.provincia", "label": "Empleador - Provincia"},
+    {"value": "empleador.codigo_postal", "label": "Empleador - Código Postal"},
+    {"value": "empleador.telefono", "label": "Empleador - Teléfono"},
     {"value": "credito.monto_otorgado", "label": "Crédito - Monto Otorgado"},
+    {"value": "credito.monto_otorgado_letras", "label": "Crédito - Monto Otorgado (En Letras)"},
+    {"value": "credito.monto_neto", "label": "Crédito - Monto Neto (Otorgado - Transferencias)"},
+    {"value": "credito.monto_neto_letras", "label": "Crédito - Monto Neto (En Letras)"},
+    {"value": "credito.gastos_otorgamiento", "label": "Crédito - Gastos de Otorgamiento"},
+    {"value": "credito.gastos_otorgamiento_letras", "label": "Crédito - Gastos de Otorgamiento (En Letras)"},
+    {"value": "credito.interes", "label": "Crédito - Interés Total"},
+    {"value": "credito.interes_letras", "label": "Crédito - Interés Total (En Letras)"},
+    {"value": "credito.iva", "label": "Crédito - IVA Total"},
+    {"value": "credito.iva_letras", "label": "Crédito - IVA Total (En Letras)"},
     {"value": "credito.id", "label": "Crédito - ID Interno"},
     {"value": "credito.id_externo", "label": "Crédito - ID Externo"},
     {"value": "credito.plazo", "label": "Crédito - Plazo"},
     {"value": "credito.valor_cuota", "label": "Crédito - Valor Cuota"},
     {"value": "credito.monto_total", "label": "Crédito - Monto Total a Pagar"},
+    {"value": "credito.monto_total_letras", "label": "Crédito - Monto Total a Pagar (En Letras)"},
     {"value": "credito.tna_c_iva", "label": "Crédito - TNA con IVA"},
     {"value": "credito.fecha_alta", "label": "Crédito - Fecha Alta"},
     {"value": "credito.fecha_emision_dia", "label": "Crédito - Fecha Emisión (Día)"},
@@ -74,6 +141,60 @@ DATA_DIR = "data/papeleria"
 def _ensure_dir():
     if not os.path.exists(DATA_DIR):
         os.makedirs(DATA_DIR, exist_ok=True)
+
+def _auto_map_variables(docx_path: str, doc_id: int, db: Session):
+    try:
+        from docx import Document
+        import re
+        doc = Document(docx_path)
+    except Exception:
+        return
+        
+    placeholders = set()
+    pattern = re.compile(r'\{\{\s*(.*?)\s*\}\}')
+    
+    def _search_blocks(blocks):
+        if hasattr(blocks, 'paragraphs'):
+            for p in blocks.paragraphs:
+                for match in pattern.findall(p.text):
+                    placeholders.add(match.strip())
+        if hasattr(blocks, 'tables'):
+            for table in blocks.tables:
+                for row in table.rows:
+                    for cell in row.cells:
+                        if hasattr(cell, 'paragraphs'):
+                            for p in cell.paragraphs:
+                                for match in pattern.findall(p.text):
+                                    placeholders.add(match.strip())
+                                    
+    _search_blocks(doc)
+    
+    for section in doc.sections:
+        for header_type in ['header', 'first_page_header', 'even_page_header']:
+            header = getattr(section, header_type, None)
+            if header:
+                _search_blocks(header)
+                
+        for footer_type in ['footer', 'first_page_footer', 'even_page_footer']:
+            footer = getattr(section, footer_type, None)
+            if footer:
+                _search_blocks(footer)
+                
+    if not placeholders:
+        return
+        
+    from src.database.models.papeleria import DocumentoVariable
+    existing = db.query(DocumentoVariable).filter(DocumentoVariable.documento_id == doc_id).all()
+    existing_placeholders = {v.placeholder for v in existing}
+    
+    new_vars = []
+    for ph in placeholders:
+        if ph not in existing_placeholders:
+            new_vars.append(DocumentoVariable(documento_id=doc_id, placeholder=ph, system_field=""))
+            
+    if new_vars:
+        db.add_all(new_vars)
+        db.commit()
 
 @router.post("/upload")
 def upload_document(
@@ -139,6 +260,9 @@ def upload_document(
 
     db.commit()
     db.refresh(doc)
+
+    if ext == ".docx":
+        _auto_map_variables(file_path, doc.id, db)
 
     return {
         "status": "success",
@@ -254,6 +378,10 @@ def replace_document_file(
     doc.tipo_archivo = ext
     
     db.commit()
+    
+    if ext == ".docx":
+        _auto_map_variables(file_path, doc.id, db)
+        
     return {"status": "success", "message": "Archivo reemplazado correctamente"}
 
 @router.delete("/{doc_id}")
@@ -332,6 +460,10 @@ def resolve_system_field(credito: Credito, field: str):
         return f"{credito.cliente.calle or ''} {credito.cliente.calle_nro or ''} {credito.cliente.localidad or ''}".strip()
     elif field == "cliente.cbu":
         return credito.cliente.cbu or ""
+    elif field == "cliente.cuenta_bancaria":
+        return credito.cliente.cuenta_bancaria or ""
+    elif field == "cliente.banco":
+        return credito.cliente.banco or ""
     elif field == "cliente.localidad":
         return credito.cliente.localidad or ""
     elif field == "cliente.provincia":
@@ -339,7 +471,33 @@ def resolve_system_field(credito: Credito, field: str):
     elif field == "cliente.nacionalidad":
         return credito.cliente.nacionalidad or ""
     elif field == "credito.monto_otorgado":
-        return str(credito.capital)
+        return format_currency(credito.capital)
+    elif field == "credito.monto_otorgado_letras":
+        return monto_a_letras(float(credito.capital)) if credito.capital else ""
+    elif field == "credito.monto_neto":
+        if credito.capital:
+            gastos = calcular_gastos_credito(credito)
+            neto = float(credito.capital) - gastos
+            return format_currency(neto)
+        return "$ 0,00"
+    elif field == "credito.monto_neto_letras":
+        if credito.capital:
+            gastos = calcular_gastos_credito(credito)
+            neto = float(credito.capital) - gastos
+            return monto_a_letras(neto)
+        return ""
+    elif field == "credito.gastos_otorgamiento":
+        return format_currency(calcular_gastos_credito(credito))
+    elif field == "credito.gastos_otorgamiento_letras":
+        return monto_a_letras(calcular_gastos_credito(credito))
+    elif field == "credito.interes":
+        return format_currency(sum(float(c.interes) for c in credito.cuotas)) if credito.cuotas else "$ 0,00"
+    elif field == "credito.interes_letras":
+        return monto_a_letras(sum(float(c.interes) for c in credito.cuotas)) if credito.cuotas else ""
+    elif field == "credito.iva":
+        return format_currency(sum(float(c.iva) for c in credito.cuotas)) if credito.cuotas else "$ 0,00"
+    elif field == "credito.iva_letras":
+        return monto_a_letras(sum(float(c.iva) for c in credito.cuotas)) if credito.cuotas else ""
     elif field == "credito.fecha_alta":
         return credito.fecha_emision.strftime("%d/%m/%Y") if credito.fecha_emision else ""
     elif field == "credito.fecha_emision_dia":
@@ -380,24 +538,61 @@ def resolve_system_field(credito: Credito, field: str):
         return credito.cliente.sexo.value if credito.cliente.sexo else ""
     elif field == "cliente.fecha_nacimiento":
         return credito.cliente.fecha_nacimiento.strftime("%d/%m/%Y") if credito.cliente.fecha_nacimiento else ""
+    elif field == "cliente.cargo":
+        return credito.cliente.cargo or ""
+    elif field == "cliente.pep":
+        return "SÍ" if credito.cliente.pep else "NO"
+    elif field == "cliente.repet":
+        return "SÍ" if credito.cliente.repet else "NO"
     elif field == "empleador.razon_social":
         return credito.cliente.empleador.razon_social if credito.cliente.empleador else ""
     elif field == "empleador.fecha_ingreso":
         return credito.cliente.fecha_ingreso.strftime("%d/%m/%Y") if credito.cliente.fecha_ingreso else ""
     elif field == "empleador.ingreso_mensual":
-        return str(credito.cliente.remuneracion) if credito.cliente.remuneracion else "0.00"
+        return format_currency(credito.cliente.remuneracion) if credito.cliente.remuneracion else "$ 0,00"
     elif field == "empleador.legajo":
         return credito.cliente.legajo or ""
+    elif field == "empleador.domicilio_calle":
+        return credito.cliente.empleador.domicilio_calle if credito.cliente.empleador else ""
+    elif field == "empleador.domicilio_nro":
+        return str(credito.cliente.empleador.domicilio_nro) if credito.cliente.empleador and credito.cliente.empleador.domicilio_nro else ""
+    elif field == "empleador.domicilio_piso":
+        return credito.cliente.empleador.domicilio_piso if credito.cliente.empleador else ""
+    elif field == "empleador.domicilio_depto":
+        return credito.cliente.empleador.domicilio_depto if credito.cliente.empleador else ""
+    elif field == "empleador.localidad":
+        return credito.cliente.empleador.localidad if credito.cliente.empleador else ""
+    elif field == "empleador.provincia":
+        return credito.cliente.empleador.provincia.nombre if credito.cliente.empleador and credito.cliente.empleador.provincia else ""
+    elif field == "empleador.codigo_postal":
+        return str(credito.cliente.empleador.id_codigo_postal) if credito.cliente.empleador and credito.cliente.empleador.id_codigo_postal else ""
+    elif field == "empleador.telefono":
+        return credito.cliente.empleador.telefono if credito.cliente.empleador else ""
+    elif field.startswith("referido_"):
+        parts = field.split(".")
+        if len(parts) == 2:
+            try:
+                idx = int(parts[0].split("_")[1]) - 1
+                if 0 <= idx < len(credito.cliente.referidos):
+                    ref = credito.cliente.referidos[idx]
+                    return getattr(ref, parts[1], "") or ""
+            except:
+                pass
+        return ""
     elif field == "credito.plazo":
         return str(credito.plazo)
     elif field == "credito.valor_cuota":
         if credito.cuotas:
-            return str(round(credito.cuotas[0].capital + credito.cuotas[0].interes + credito.cuotas[0].iva, 2))
-        return "0.00"
+            return format_currency(credito.cuotas[0].capital + credito.cuotas[0].interes + credito.cuotas[0].iva)
+        return "$ 0,00"
     elif field == "credito.monto_total":
         if credito.cuotas:
-            return str(round(sum(c.capital + c.interes + c.iva for c in credito.cuotas), 2))
-        return "0.00"
+            return format_currency(sum(float(c.capital) + float(c.interes) + float(c.iva) for c in credito.cuotas))
+        return "$ 0,00"
+    elif field == "credito.monto_total_letras":
+        if credito.cuotas:
+            return monto_a_letras(sum(float(c.capital) + float(c.interes) + float(c.iva) for c in credito.cuotas))
+        return ""
     elif field == "credito.tna_c_iva":
         return str(credito.tna_c_iva)
     elif field == "empresa.razon_social":
@@ -413,7 +608,7 @@ def resolve_system_field(credito: Credito, field: str):
                 "CUIL/CUIT": t.cuit,
                 "CBU": t.cbu,
                 "Razón Social": t.razon_social,
-                "Monto": f"${t.monto:,.2f}"
+                "Monto": format_currency(t.monto)
             })
         return {"__type__": "table", "headers": ["CUIL/CUIT", "CBU", "Razón Social", "Monto"], "rows": transferencias_data}
     return ""

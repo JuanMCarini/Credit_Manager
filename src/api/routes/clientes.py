@@ -5,6 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy import or_
 
 from src.database import get_db, Cliente, Credito, Cuota
+from src.database.models.clientes import Referido
 from src.api.schemas.clientes import ClienteCreate
 
 router = APIRouter(prefix="/api/v1/clientes", tags=["Clientes"])
@@ -15,7 +16,13 @@ def create_cliente(
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     try:
-        nuevo_cliente = Cliente(**cliente_data.dict(exclude_unset=True))
+        data = cliente_data.dict(exclude_unset=True)
+        referidos_data = data.pop("referidos", [])
+        nuevo_cliente = Cliente(**data)
+        
+        for ref in referidos_data:
+            nuevo_cliente.referidos.append(Referido(**ref))
+            
         db.add(nuevo_cliente)
         db.commit()
         db.refresh(nuevo_cliente)
@@ -52,6 +59,10 @@ def get_clientes_list(db: Session = Depends(get_db)):
             "Apellido y Nombre": f"{c.apellido}, {c.nombre}" if c.apellido and c.nombre else (c.apellido or c.nombre),
             "Apellido": c.apellido or "-",
             "Nombre": c.nombre or "-",
+            "Provincia": prov,
+            "Empleador": emp,
+            "PEP": "Sí" if c.pep else "No",
+            "REPET": "Sí" if c.repet else "No",
             "Fecha Nacimiento": c.fecha_nacimiento.strftime("%Y-%m-%d") if c.fecha_nacimiento else "-",
             "Sexo": c.sexo.value if hasattr(c.sexo, "value") else (str(c.sexo) if c.sexo else "-"),
             "Estado Civil": c.estado_civil or "-",
@@ -106,7 +117,18 @@ def get_cliente(cuil: str, db: Session = Depends(get_db)):
         "mail": cliente.mail,
         "fecha_ingreso": cliente.fecha_ingreso.strftime("%Y-%m-%d") if cliente.fecha_ingreso else None,
         "remuneracion": float(cliente.remuneracion or 0.0),
-        "empleador_id": cliente.empleador_id
+        "empleador_id": cliente.empleador_id,
+        "cargo": cliente.cargo,
+        "pep": cliente.pep,
+        "repet": cliente.repet,
+        "referidos": [
+            {
+                "nombre": r.nombre,
+                "apellido": r.apellido,
+                "telefono": r.telefono,
+                "email": r.email
+            } for r in cliente.referidos
+        ]
     }
 
 @router.get("/{cuil}/bcra")
@@ -208,8 +230,13 @@ def update_cliente(
             raise HTTPException(status_code=404, detail="Cliente no encontrado")
             
         update_data = cliente_data.dict(exclude_unset=True)
+        referidos_data = update_data.pop("referidos", None)
+        
         for key, value in update_data.items():
             setattr(cliente, key, value)
+            
+        if referidos_data is not None:
+            cliente.referidos = [Referido(**ref) for ref in referidos_data]
             
         db.commit()
         db.refresh(cliente)

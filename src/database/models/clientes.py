@@ -41,6 +41,15 @@ class Empleador(Base):
     cuit = Column(String(11), unique=True, nullable=True)
     razon_social = Column(String(150), nullable=False)
     es_pasivo = Column(Boolean, default=False)  # True para Jubilados/Pensionados
+    domicilio_calle = Column(String(150), nullable=True)
+    domicilio_nro = Column(Integer, nullable=True)
+    domicilio_piso = Column(String(10), nullable=True)
+    domicilio_depto = Column(String(10), nullable=True)
+    id_provincia = Column(Integer, ForeignKey("provincias.id"), nullable=True)
+    provincia = relationship("Provincia")
+    id_codigo_postal = Column(String(10), nullable=True)
+    localidad = Column(String(100), nullable=True)
+    telefono = Column(String(50), nullable=True)
 
     # Relationships
     empleados = relationship("Cliente", back_populates="empleador")
@@ -101,6 +110,8 @@ class Cliente(Base):
 
     # Banking details
     cbu = Column(String(22), nullable=True)
+    cuenta_bancaria = Column(String(50), nullable=True)
+    banco = Column(String(100), nullable=True)
 
     # Address details
     calle = Column(String(150), nullable=True)
@@ -120,16 +131,21 @@ class Cliente(Base):
 
     # New ForeignKey linking to Empleador
     empleador_id = Column(Integer, ForeignKey("empleadores.id"), nullable=True)
+    cargo = Column(String(100), nullable=True)
 
     # Employment details / Status
     fecha_ingreso = Column(Date, nullable=True)
     remuneracion = Column(Numeric(15, 2), default=0.0)  # Monthly income for credit scoring
 
+    # Compliance columns
+    pep = Column(Boolean, default=False)
+    repet = Column(Boolean, default=False)
     
     # Relationships
     creditos = relationship("Credito", back_populates="cliente")
     provincia = relationship("Provincia", back_populates="clientes")
     empleador = relationship("Empleador", back_populates="empleados")
+    referidos = relationship("Referido", back_populates="cliente", cascade="all, delete-orphan")
 
     @validates("cuil", "documento")
     def validate_cuil_dni(self, key, value):
@@ -185,3 +201,26 @@ class Cliente(Base):
 
     def __repr__(self):
         return f"<Cliente(cuil='{self.cuil}', apellido='{self.apellido}', nombre='{self.nombre}')>"
+
+
+class Referido(Base):
+    """
+    Represents a referral made by a client.
+    """
+
+    __tablename__ = "referidos"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    cliente_cuil = Column(String(11), ForeignKey("clientes.cuil"), nullable=False)
+    
+    nombre = Column(String(100), nullable=False)
+    apellido = Column(String(100), nullable=False)
+    telefono = Column(String(50), nullable=True)
+    email = Column(String(150), nullable=True)
+
+    # Relationships
+    cliente = relationship("Cliente", back_populates="referidos")
+
+    def __repr__(self):
+        return f"<Referido(nombre='{self.nombre}', apellido='{self.apellido}', cliente_cuil='{self.cliente_cuil}')>"
+
