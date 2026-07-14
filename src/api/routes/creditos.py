@@ -117,6 +117,33 @@ def create_credito(
     credito_data: CreditoCreate,
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
+    # 1. Validación RePET antes de la originación
+    from src.database.models import Cliente
+    cliente = db.query(Cliente).filter(Cliente.cuil == credito_data.cliente_cuil).first()
+    if not cliente:
+        raise HTTPException(status_code=404, detail="El cliente especificado no existe.")
+        
+    from src.services.repet import screen_person
+    import logging
+    logger = logging.getLogger(__name__)
+    full_name = f"{cliente.nombre} {cliente.apellido}"
+    
+    try:
+        repet_result = screen_person(db, full_name=full_name)
+        if repet_result.get("status") == "ALERT":
+            cliente.repet = True
+            db.commit()
+    except Exception as e:
+        logger.error(f"Error interno en screening RePET (alta crédito): {str(e)}")
+        # Si la API falla, permitimos continuar y completar manualmente, según requerimiento.
+        
+    if getattr(cliente, 'repet', False):
+        raise HTTPException(
+            status_code=403, 
+            detail="Operación denegada: El cliente se encuentra registrado en el RePET."
+        )
+
+    # 2. Originación del Crédito
     try:
         originator = LoanOriginator(db_session=db)
         nuevo_credito = originator.originate(

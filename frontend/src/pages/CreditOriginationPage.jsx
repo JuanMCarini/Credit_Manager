@@ -94,12 +94,19 @@ const CreditOriginationPage = () => {
       });
       if (cleanData.remuneracion === '') cleanData.remuneracion = 0;
 
+      let res;
       if (isClientNew) {
-        await axiosClient.post('/api/v1/clientes', cleanData);
+        res = await axiosClient.post('/api/v1/clientes', cleanData);
       } else {
-        await axiosClient.put(`/api/v1/clientes/${cliente.cuil}`, cleanData);
+        res = await axiosClient.put(`/api/v1/clientes/${cliente.cuil}`, cleanData);
       }
+      
+      cleanData.repet = res.data.repet;
       setCliente(cleanData); 
+      
+      if (res.data.repet) {
+        throw new Error("Operación denegada: El cliente se encuentra registrado en el RePET.");
+      }
       
       // Auto-select Socio Originador if Empleador has one
       let defaultSocioId = '';
@@ -119,7 +126,8 @@ const CreditOriginationPage = () => {
       fetchBcraData(cleanData.cuil || cleanData.documento);
       setStep(3);
     } catch (error) {
-      setClientFeedback({ type: 'error', message: error.response?.data?.detail || "Error al guardar el cliente." });
+      const errorMsg = error.response?.data?.detail || error.message || "Error al guardar el cliente.";
+      setClientFeedback({ type: 'error', message: errorMsg });
     } finally {
       setLoadingClient(false);
     }
@@ -329,6 +337,7 @@ const CreditOriginationPage = () => {
             )}
             <ClientForm 
               initialData={cliente} 
+              isEditMode={!isClientNew}
               onSubmit={handleClientSubmit} 
               loading={loadingClient} 
               feedback={clientFeedback}

@@ -7,6 +7,7 @@ Description: Main entry point for the Credit Manager API.
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 from typing import Dict
 
 # Import routers
@@ -33,13 +34,23 @@ Base.metadata.create_all(bind=engine)
 # Inicialización de la Aplicación
 # -------------------------------------------------------------------
 from src.api.dependencies.auth import enforce_rbac
+from src.api.scheduler import start_scheduler, stop_scheduler
 from fastapi import Depends
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    start_scheduler()
+    yield
+    # Shutdown
+    stop_scheduler()
 
 app = FastAPI(
     title="Credit Manager Core Engine API",
     description="API RESTful para interactuar con el motor financiero de gestión de cartera de créditos.",
     version="1.0.0",
     dependencies=[Depends(enforce_rbac)],
+    lifespan=lifespan
 )
 
 app.add_middleware(

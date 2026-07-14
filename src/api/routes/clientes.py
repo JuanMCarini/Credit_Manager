@@ -20,13 +20,26 @@ def create_cliente(
         referidos_data = data.pop("referidos", [])
         nuevo_cliente = Cliente(**data)
         
+        # Screening RePET automatizado
+        from src.services.repet import screen_person
+        import logging
+        logger = logging.getLogger(__name__)
+        full_name = f"{nuevo_cliente.nombre} {nuevo_cliente.apellido}"
+        try:
+            repet_result = screen_person(db, full_name=full_name)
+            if repet_result.get("status") == "ALERT":
+                nuevo_cliente.repet = True
+        except Exception as e:
+            logger.error(f"Error interno en screening RePET (alta cliente): {str(e)}")
+            # Permitimos que continúe y se complete manualmente si hubo falla del servicio
+        
         for ref in referidos_data:
             nuevo_cliente.referidos.append(Referido(**ref))
             
         db.add(nuevo_cliente)
         db.commit()
         db.refresh(nuevo_cliente)
-        return {"status": "success", "message": "Cliente creado exitosamente", "cuil": nuevo_cliente.cuil}
+        return {"status": "success", "message": "Cliente creado exitosamente", "cuil": nuevo_cliente.cuil, "repet": nuevo_cliente.repet}
     except IntegrityError as e:
         db.rollback()
         error_msg = str(e.orig).lower()
@@ -240,7 +253,7 @@ def update_cliente(
             
         db.commit()
         db.refresh(cliente)
-        return {"status": "success", "message": "Cliente actualizado exitosamente", "cuil": cliente.cuil}
+        return {"status": "success", "message": "Cliente actualizado exitosamente", "cuil": cliente.cuil, "repet": cliente.repet}
     except IntegrityError as e:
         db.rollback()
         error_msg = str(e.orig).lower()
