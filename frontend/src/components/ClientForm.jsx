@@ -29,7 +29,13 @@ const ClientForm = ({ initialData, onSubmit, loading, feedback, buttonText = "Gu
     legajo: '',
     empleador_id: '',
     cbu: '',
+    cuenta_bancaria: '',
+    banco: '',
     estado: 'ACTIVO',
+    cargo: '',
+    pep: false,
+    repet: false,
+    referidos: [],
     ...initialData
   });
 
@@ -140,6 +146,7 @@ const ClientForm = ({ initialData, onSubmit, loading, feedback, buttonText = "Gu
           />
         </div>
         <div className="form-group"><label>Nro. Legajo Laboral</label><input type="text" name="legajo" value={form.legajo || ''} onChange={handleChange} /></div>
+        <div className="form-group"><label>Cargo</label><input type="text" name="cargo" value={form.cargo || ''} onChange={handleChange} /></div>
         <div className="form-group">
           <label>Empleador</label>
           <select name="empleador_id" value={form.empleador_id || ''} onChange={handleChange}>
@@ -148,6 +155,8 @@ const ClientForm = ({ initialData, onSubmit, loading, feedback, buttonText = "Gu
           </select>
         </div>
         <div className="form-group"><label>CBU / CVU Bancario</label><input type="text" name="cbu" value={form.cbu || ''} onChange={handleChange} maxLength="22" /></div>
+        <div className="form-group"><label>Nro. de Cuenta Bancaria</label><input type="text" name="cuenta_bancaria" value={form.cuenta_bancaria || ''} onChange={handleChange} maxLength="50" /></div>
+        <div className="form-group"><label>Banco</label><input type="text" name="banco" value={form.banco || ''} onChange={handleChange} maxLength="100" /></div>
 
         {initialData && (
           <div className="form-group">
@@ -161,6 +170,53 @@ const ClientForm = ({ initialData, onSubmit, loading, feedback, buttonText = "Gu
           </div>
         )}
       </div>
+
+      <div className="form-row" style={{ marginTop: '16px' }}>
+        <div className="form-group">
+          <label htmlFor="pep" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginBottom: 0, width: 'fit-content' }}>
+            <div className="toggle-switch">
+              <input type="checkbox" name="pep" checked={!!form.pep} onChange={(e) => setForm({ ...form, pep: e.target.checked })} id="pep" />
+              <span className="slider"></span>
+            </div>
+            ¿Es Persona Expuesta Políticamente (PEP)?
+            <strong style={{ color: form.pep ? 'var(--accent-primary)' : 'var(--text-secondary)' }}>
+              {form.pep ? 'SÍ' : 'NO'}
+            </strong>
+          </label>
+        </div>
+        <div className="form-group">
+          <label htmlFor="repet" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginBottom: 0, width: 'fit-content' }}>
+            <div className="toggle-switch">
+              <input type="checkbox" name="repet" checked={!!form.repet} onChange={(e) => setForm({ ...form, repet: e.target.checked })} id="repet" />
+              <span className="slider"></span>
+            </div>
+            ¿Aparece en registro REPET?
+            <strong style={{ color: form.repet ? 'var(--error)' : 'var(--text-secondary)' }}>
+              {form.repet ? 'SÍ' : 'NO'}
+            </strong>
+          </label>
+        </div>
+      </div>
+
+      <h3 style={{ marginTop: '24px', marginBottom: '12px', fontFamily: 'var(--font-heading)', fontSize: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
+        Referidos
+      </h3>
+      {form.referidos && form.referidos.map((ref, idx) => (
+        <div key={idx} className="form-row" style={{ alignItems: 'flex-end', marginBottom: '8px' }}>
+          <div className="form-group"><label>Nombre *</label><input type="text" value={ref.nombre} onChange={(e) => { const r = [...form.referidos]; r[idx].nombre = e.target.value.toUpperCase(); setForm({...form, referidos: r}); }} required /></div>
+          <div className="form-group"><label>Apellido *</label><input type="text" value={ref.apellido} onChange={(e) => { const r = [...form.referidos]; r[idx].apellido = e.target.value.toUpperCase(); setForm({...form, referidos: r}); }} required /></div>
+          <div className="form-group"><label>Teléfono</label><input type="text" value={ref.telefono || ''} onChange={(e) => { const r = [...form.referidos]; r[idx].telefono = e.target.value; setForm({...form, referidos: r}); }} /></div>
+          <div className="form-group"><label>Email</label><input type="email" value={ref.email || ''} onChange={(e) => { const r = [...form.referidos]; r[idx].email = e.target.value.toLowerCase(); setForm({...form, referidos: r}); }} /></div>
+          <div className="form-group" style={{ flex: '0 0 auto' }}>
+            <button type="button" className="btn-secondary" onClick={() => { const r = form.referidos.filter((_, i) => i !== idx); setForm({...form, referidos: r}); }} style={{ padding: '8px', minWidth: '40px', backgroundColor: 'var(--error)', color: 'white', borderColor: 'var(--error)' }}>
+              X
+            </button>
+          </div>
+        </div>
+      ))}
+      <button type="button" className="btn-secondary" onClick={() => setForm({...form, referidos: [...(form.referidos || []), { nombre: '', apellido: '', telefono: '', email: '' }]})} style={{ marginBottom: '16px', marginTop: '8px' }}>
+        + Agregar Referido
+      </button>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '24px' }}>
         <div style={{ fontSize: '14px', fontWeight: 500, color: (localError || feedback?.type === 'error') ? 'var(--error)' : 'var(--accent-secondary)' }}>

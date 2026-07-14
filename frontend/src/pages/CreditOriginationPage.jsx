@@ -209,7 +209,7 @@ const CreditOriginationPage = () => {
         plazo: selectedTasa.plazo,
         tipo_credito: creditoForm.tipo,
         socio_originador_id: creditoForm.socio_id ? parseInt(creditoForm.socio_id) : null,
-        comision_id: selectedTasa.comision_id || null,
+        comision_id: selectedTasa.id,
         fecha_emision: creditoForm.fecha_emision,
         id_externo: creditoForm.id_externo || null,
         transferencias: transfers
@@ -250,7 +250,7 @@ const CreditOriginationPage = () => {
         plazo: selectedTasa.plazo,
         tipo_credito: creditoForm.tipo,
         socio_originador_id: creditoForm.socio_id ? parseInt(creditoForm.socio_id) : null,
-        comision_id: selectedTasa.comision_id || null,
+        comision_id: selectedTasa.id,
         fecha_emision: creditoForm.fecha_emision,
         id_externo: creditoForm.id_externo || null,
         transferencias: transfers
