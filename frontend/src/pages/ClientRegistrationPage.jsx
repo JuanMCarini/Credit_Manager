@@ -23,8 +23,12 @@ const ClientRegistrationPage = () => {
     });
 
     try {
-      await axiosClient.post('/api/v1/clientes', payload);
-      setFeedback({ type: 'success', message: '¡Cliente registrado con éxito!' });
+      const res = await axiosClient.post('/api/v1/clientes', payload);
+      if (res.data.repet) {
+        setFeedback({ type: 'warning', message: '¡Cliente registrado con éxito! 🚩 ATENCIÓN: El sistema detectó que este cliente figura en el RePET.' });
+      } else {
+        setFeedback({ type: 'success', message: '¡Cliente registrado con éxito!' });
+      }
     } catch (error) {
       setFeedback({ type: 'error', message: error.message });
     } finally {

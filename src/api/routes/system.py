@@ -85,3 +85,16 @@ def get_company_info():
         "email_contacto": COMPANY_DATA.email_contacto,
         "telefono": COMPANY_DATA.telefono
     }
+
+@router.post("/repet/sync")
+async def sync_repet(db: Session = Depends(get_db)):
+    """
+    Fuerza la sincronización manual de los listados del RePET.
+    """
+    from src.services.repet import sync_repet_data
+    try:
+        await sync_repet_data(db)
+        return {"status": "success", "message": "Listados del RePET sincronizados correctamente."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

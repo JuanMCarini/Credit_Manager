@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import useAppStore from '../store/useAppStore';
 import CurrencyInput from './CurrencyInput';
 
-const ClientForm = ({ initialData, onSubmit, loading, feedback, buttonText = "Guardar Cliente" }) => {
+const ClientForm = ({ initialData, isEditMode = false, onSubmit, loading, feedback, buttonText = "Guardar Cliente" }) => {
   const { provincias, empleadores } = useAppStore();
 
   const [form, setForm] = useState({
@@ -184,18 +184,23 @@ const ClientForm = ({ initialData, onSubmit, loading, feedback, buttonText = "Gu
             </strong>
           </label>
         </div>
-        <div className="form-group">
-          <label htmlFor="repet" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginBottom: 0, width: 'fit-content' }}>
-            <div className="toggle-switch">
-              <input type="checkbox" name="repet" checked={!!form.repet} onChange={(e) => setForm({ ...form, repet: e.target.checked })} id="repet" />
-              <span className="slider"></span>
-            </div>
-            ¿Aparece en registro REPET?
-            <strong style={{ color: form.repet ? 'var(--error)' : 'var(--text-secondary)' }}>
-              {form.repet ? 'SÍ' : 'NO'}
-            </strong>
-          </label>
-        </div>
+        {isEditMode && (
+          <div className="form-group">
+            <label htmlFor="repet" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginBottom: 0, width: 'fit-content' }}>
+              <div className="toggle-switch">
+                <input type="checkbox" name="repet" checked={!!form.repet} onChange={(e) => setForm({ ...form, repet: e.target.checked })} id="repet" />
+                <span className="slider"></span>
+              </div>
+              ¿Aparece en registro REPET?
+              <strong style={{ color: form.repet ? 'var(--error)' : 'var(--text-secondary)' }}>
+                {form.repet ? 'SÍ' : 'NO'}
+              </strong>
+            </label>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+              Calculado automáticamente. Modifique solo para forzar revisión o falso positivo.
+            </p>
+          </div>
+        )}
       </div>
 
       <h3 style={{ marginTop: '24px', marginBottom: '12px', fontFamily: 'var(--font-heading)', fontSize: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
@@ -219,7 +224,7 @@ const ClientForm = ({ initialData, onSubmit, loading, feedback, buttonText = "Gu
       </button>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '24px' }}>
-        <div style={{ fontSize: '14px', fontWeight: 500, color: (localError || feedback?.type === 'error') ? 'var(--error)' : 'var(--accent-secondary)' }}>
+        <div style={{ fontSize: '14px', fontWeight: 500, color: (localError || feedback?.type === 'error' || feedback?.type === 'warning') ? 'var(--error)' : 'var(--accent-secondary)' }}>
           {localError || feedback?.message || ''}
         </div>
         <div>

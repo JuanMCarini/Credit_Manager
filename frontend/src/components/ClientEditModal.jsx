@@ -69,7 +69,7 @@ const ClientEditModal = ({ cuil, onClose, onSuccess }) => {
         {loading ? (
           <div style={{ textAlign: 'center', padding: '40px' }}>Cargando datos...</div>
         ) : clientData ? (
-          <ClientForm initialData={clientData} onSubmit={handleSubmit} loading={saving} feedback={feedback} buttonText="Actualizar Cliente" />
+          <ClientForm initialData={clientData} isEditMode={true} onSubmit={handleSubmit} loading={saving} feedback={feedback} buttonText="Actualizar Cliente" />
         ) : (
           <div style={{ color: 'var(--error)' }}>No se pudo cargar el cliente.</div>
         )}
