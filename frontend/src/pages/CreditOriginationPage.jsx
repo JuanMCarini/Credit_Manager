@@ -136,13 +136,14 @@ const CreditOriginationPage = () => {
     try {
       const g1 = parseFloat(selectedTasa.gasto_1_porcentaje || 0);
       const g2 = parseFloat(selectedTasa.gasto_2_porcentaje || 0);
+      const ps = parseFloat(selectedTasa.porcentaje_sellado || 0);
       const capitalNeto = parseFloat(creditoForm.capital_neto);
       
-      if (1 - g1 - g2 <= 0) {
+      if (1 - g1 - g2 - ps <= 0) {
         throw new Error("Los gastos superan o igualan el 100% del capital. Ajuste la tasa seleccionada.");
       }
       
-      const capitalBruto = capitalNeto / (1 - g1 - g2);
+      const capitalBruto = capitalNeto / (1 - g1 - g2 - ps);
       setComputedCapitalBruto(capitalBruto);
 
       const params = new URLSearchParams({
@@ -185,6 +186,15 @@ const CreditOriginationPage = () => {
             monto: capitalBruto * g2
           });
         }
+      }
+
+      if (ps > 0) {
+        newTransfers.push({
+          cbu: '',
+          cuit: '',
+          razon_social: 'Sellado',
+          monto: capitalBruto * ps
+        });
       }
       
       setTransfers(newTransfers);

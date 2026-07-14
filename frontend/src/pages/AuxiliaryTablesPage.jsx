@@ -11,6 +11,7 @@ const AuxiliaryTablesPage = () => {
   const [editingRecord, setEditingRecord] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [feedback, setFeedback] = useState(null);
+  const [columnFilters, setColumnFilters] = useState({});
   
   // Advance Adjustment State
   const [adjustingAdvance, setAdjustingAdvance] = useState(null);
@@ -32,14 +33,14 @@ const AuxiliaryTablesPage = () => {
     'colocacion_originador', 'colocacion_intermediario', 
     'cobranza_originador', 'cobranza_intermediario', 
     'colocacion_propia', 'tna_c_iva', 'tna_s_iva', 'alicuota_iva',
-    'gasto_1_porcentaje', 'gasto_2_porcentaje'
+    'gasto_1_porcentaje', 'gasto_2_porcentaje', 'porcentaje_sellado'
   ];
   
   const tablesMap = {
     provincias: { name: 'Provincias', data: provincias, endpoint: 'provincias', schema: ['id', 'nombre'] },
-    empleadores: { name: 'Empleadores', data: empleadores, endpoint: 'empleadores', schema: ['id', 'cuit', 'razon_social', 'es_pasivo', 'socio_comercial_id'] },
+    empleadores: { name: 'Empleadores', data: empleadores, endpoint: 'empleadores', schema: ['id', 'cuit', 'razon_social', 'es_pasivo', 'domicilio_calle', 'domicilio_nro', 'domicilio_piso', 'domicilio_depto', 'id_provincia', 'id_codigo_postal', 'localidad', 'telefono', 'socio_comercial_id'] },
     socios: { name: 'Socios Comerciales', data: socios, endpoint: 'socios', schema: ['id', 'razon_social', 'cuit', 'domicilio_legal', 'contacto_nombre', 'mail', 'telefono', 'dia_corte', 'cbu', 'anticipo_vigente'] },
-    tasasYComisiones: { name: 'Tasas y Comisiones', data: tasasYComisiones, endpoint: 'tasas_y_comisiones', schema: ['id', 'fecha', 'estado', 'socio_originador_id', 'socio_intermediario_id', 'colocacion_originador', 'colocacion_intermediario', 'cobranza_originador', 'cobranza_intermediario', 'colocacion_propia', 'gasto_1_porcentaje', 'gasto_1_socio_id', 'gasto_2_porcentaje', 'gasto_2_socio_id', 'plazo', 'tna_c_iva'] },
+    tasasYComisiones: { name: 'Tasas y Comisiones', data: tasasYComisiones, endpoint: 'tasas_y_comisiones', schema: ['id', 'fecha', 'estado', 'socio_originador_id', 'socio_intermediario_id', 'colocacion_originador', 'colocacion_intermediario', 'cobranza_originador', 'cobranza_intermediario', 'colocacion_propia', 'gasto_1_porcentaje', 'gasto_1_socio_id', 'gasto_2_porcentaje', 'gasto_2_socio_id', 'porcentaje_sellado', 'plazo', 'tna_c_iva'] },
     relaciones: { name: 'Relaciones Mapeadas', data: relaciones, endpoint: 'relaciones', schema: ['id', 'socio_id', 'tabla', 'id_local', 'id_foraneo'] }
   };
 
@@ -178,9 +179,13 @@ const AuxiliaryTablesPage = () => {
 
   const formatCellValue = (col, value) => {
     if (value === null || value === undefined) return '-';
-    if (col === 'socio_comercial_id') {
+    if (['socio_comercial_id', 'socio_originador_id', 'socio_intermediario_id', 'gasto_1_socio_id', 'gasto_2_socio_id'].includes(col)) {
       const socio = socios.find(s => s.id === value);
       return socio ? socio.razon_social : value;
+    }
+    if (col === 'id_provincia' || col === 'provincia_id') {
+      const prov = provincias.find(p => p.id === value);
+      return prov ? prov.nombre : value;
     }
     if (col === 'es_pasivo') {
       return value ? 'Sí' : 'No';
@@ -193,6 +198,15 @@ const AuxiliaryTablesPage = () => {
     }
     return String(value);
   };
+
+  const filteredData = tableData.filter(row => {
+    return columns.every(col => {
+      const filterValue = columnFilters[col];
+      if (!filterValue) return true;
+      const val = formatCellValue(col, row[col]);
+      return String(val).toLowerCase().includes(filterValue.toLowerCase());
+    });
+  });
 
   return (
     <section className="tab-content active" style={{ animation: 'fadeIn 0.4s ease' }}>
@@ -216,7 +230,7 @@ const AuxiliaryTablesPage = () => {
           <label style={{ fontWeight: '600', color: 'var(--text-secondary)' }}>Seleccionar Tabla:</label>
           <select 
             value={activeTable} 
-            onChange={(e) => { setActiveTable(e.target.value); setFeedback(null); }}
+            onChange={(e) => { setActiveTable(e.target.value); setFeedback(null); setColumnFilters({}); }}
             className="input-field"
             style={{ minWidth: '250px' }}
           >
@@ -247,21 +261,37 @@ const AuxiliaryTablesPage = () => {
                 {columns.map(col => {
                   let headerText = col.toUpperCase().replace(/_/g, ' ');
                   if (col === 'socio_comercial_id') headerText = 'SOCIO ORIGINADOR ASOCIADO';
-                  if (col === 'es_pasivo') headerText = 'ES PASIVO';
-                  return <th key={col}>{headerText}</th>;
+                  else if (col === 'socio_originador_id') headerText = 'SOCIO ORIGINADOR';
+                  else if (col === 'socio_intermediario_id') headerText = 'SOCIO INTERMEDIARIO';
+                  else if (col === 'gasto_1_socio_id') headerText = 'GASTO 1 SOCIO';
+                  else if (col === 'gasto_2_socio_id') headerText = 'GASTO 2 SOCIO';
+                  else if (col === 'id_provincia' || col === 'provincia_id') headerText = 'PROVINCIA';
+                  else if (col === 'es_pasivo') headerText = 'ES PASIVO';
+                  return (
+                    <th key={col}>
+                      {headerText}
+                      <input 
+                        type="text" 
+                        placeholder="Filtrar..." 
+                        value={columnFilters[col] || ''} 
+                        onChange={(e) => setColumnFilters(prev => ({ ...prev, [col]: e.target.value }))}
+                        style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', boxSizing: 'border-box' }}
+                      />
+                    </th>
+                  );
                 })}
-                <th style={{textAlign: 'center'}}>ACCIONES</th>
+                <th style={{textAlign: 'center', verticalAlign: 'top'}}>ACCIONES</th>
               </tr>
             </thead>
             <tbody>
-              {tableData.length === 0 ? (
+              {filteredData.length === 0 ? (
                 <tr>
                   <td colSpan={columns.length + 1} className="text-center empty-state">
-                    No hay registros en esta tabla.
+                    No hay registros que coincidan con la búsqueda.
                   </td>
                 </tr>
               ) : (
-                tableData.map((row) => (
+                filteredData.map((row) => (
                   <tr key={row.id}>
                     {columns.map(col => (
                       <td key={col}>{formatCellValue(col, row[col])}</td>
