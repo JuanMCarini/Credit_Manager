@@ -122,10 +122,62 @@ class Cobranza(Base):
     iva = Column(Numeric(15, 2), nullable=False)
     fecha = Column(Date, nullable=False)
 
+    def default_facturada(context):
+        tipo = context.current_parameters.get("tipo_cobranza")
+        if tipo is None:
+            return False
+            
+        import enum
+        if isinstance(tipo, enum.Enum):
+            tipo_val = tipo.value
+        else:
+            tipo_val = tipo
+            
+        tipos_no_facturados = [
+            TipoCobranzaEnum.COMUN.value,
+            TipoCobranzaEnum.ANTICIPO.value,
+            TipoCobranzaEnum.CA.value,
+            TipoCobranzaEnum.PENALTY.value,
+            TipoCobranzaEnum.RECURSO.value
+        ]
+        
+        if tipo_val in tipos_no_facturados:
+            cuota_id = context.current_parameters.get("cuota_id")
+            if cuota_id is not None and context.connection is not None:
+                from sqlalchemy.orm import Session
+                from src.database.models.carteras import Cartera, OperacionCartera
+
+                db = Session(bind=context.connection)
+
+                iva = db.query(Cartera.iva).join(
+                    OperacionCartera, Cartera.id == OperacionCartera.cartera_id
+                ).filter(
+                    OperacionCartera.cuota_id == cuota_id
+                ).order_by(
+                    OperacionCartera.id.desc()
+                ).limit(1).scalar()
+                
+                if iva is not None:
+                    # Cuota vendida/cedida a un socio
+                    if iva is True:
+                        return False # Fue comprada con IVA -> Se factura
+                    else:
+                        return True  # Fue comprada sin IVA -> No se factura
+                else:
+                    # Cuota propia (no cedida)
+                    if tipo_val == TipoCobranzaEnum.RECURSO.value:
+                        return True # Un recurso sin cesión no tiene sentido, por defecto no se factura
+                    else:
+                        return False # COMUN, ANTICIPO, CA, PENALTY propios -> Se facturan
+
+        return True
+
+    facturada = Column(Boolean, nullable=False, default=default_facturada)
     # Relationships
     cuota = relationship("Cuota", back_populates="cobranzas")
     proceso = relationship("Proceso", back_populates="cobranzas")
     liquidaciones = relationship("LiquidacionCuotaCedida", back_populates="cobranza")
+    
 
     @property
     def importe_total(self) -> float:
