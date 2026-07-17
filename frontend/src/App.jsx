@@ -19,6 +19,7 @@ import PortfolioLiquidationsProcessingPage from './pages/PortfolioLiquidationsPr
 import UsersListPage from './pages/UsersListPage';
 import CreditProcessesPage from './pages/CreditProcessesPage';
 import PapeleriaPage from './pages/PapeleriaPage';
+import FacturacionPage from './pages/FacturacionPage';
 
 function App() {
   return (
@@ -46,6 +47,7 @@ function App() {
             <Route path="auxiliares" element={<AuxiliaryTablesPage />} />
             <Route path="acciones" element={<SystemActionsPage />} />
             <Route path="papeleria" element={<PapeleriaPage />} />
+            <Route path="facturacion" element={<FacturacionPage />} />
             
             {/* Rutas exclusivas Administrador */}
             <Route element={<ProtectedRoute allowedRoles={[]} />}>
