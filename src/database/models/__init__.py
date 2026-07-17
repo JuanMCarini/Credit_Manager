@@ -7,6 +7,7 @@ from .auth import TipoRolEnum, Rol, Usuario, RegistroAuditoria
 from .creditos import Transferencia, DocumentoLegajo
 from .papeleria import DocumentoPapeleria, DocumentoVariable
 from .repet import RepetPerson, RepetEntity, RepetAuditLog
+from .facturacion import Factura
 
 __all__ = [
     "SexoEnum", "EstadoClienteEnum", "Empleador", "Provincia", "Cliente",
@@ -15,5 +16,5 @@ __all__ = [
     "TipoOperacionCartera", "EstadoCartera", "Cartera", "OperacionCartera",
     "TipoProcesoEnum", "EstadoProcesoEnum", "Proceso", "TipoCobranzaEnum", "Cobranza", "TipoLiquidacionEnum", "LiquidacionCuotaCedida",
     "TipoRolEnum", "Rol", "Usuario", "RegistroAuditoria", "Transferencia", "DocumentoLegajo",
-    "DocumentoPapeleria", "DocumentoVariable", "RepetPerson", "RepetEntity", "RepetAuditLog"
+    "DocumentoPapeleria", "DocumentoVariable", "RepetPerson", "RepetEntity", "RepetAuditLog", "Factura"
 ]

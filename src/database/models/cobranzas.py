@@ -177,6 +177,7 @@ class Cobranza(Base):
     cuota = relationship("Cuota", back_populates="cobranzas")
     proceso = relationship("Proceso", back_populates="cobranzas")
     liquidaciones = relationship("LiquidacionCuotaCedida", back_populates="cobranza")
+    factura = relationship("Factura", back_populates="cobranza", uselist=False)
     
 
     @property
