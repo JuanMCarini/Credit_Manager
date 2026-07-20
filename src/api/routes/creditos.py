@@ -301,12 +301,12 @@ def get_creditos_list(fecha_corte: Optional[date] = Query(None, description="Fec
             "Cliente Nombre": nombre_cliente,
             "Origen": origen,
             "Socio Originador": socio,
-            "Capital": float(c.capital),
-            "TNA con IVA": float(c.tna_c_iva),
-            "Plazo": c.plazo,
-            "Fecha Emisión": c.fecha_emision.strftime("%Y-%m-%d"),
-            "Estado": c.estado.value if c.estado else "-",
-            "Tipo Crédito": c.tipo_credito.value if c.tipo_credito else "-",
+            "Capital": float(c.capital) if c.capital is not None else 0.0,
+            "TNA con IVA": float(c.tna_c_iva) if c.tna_c_iva is not None else 0.0,
+            "Plazo": c.plazo if c.plazo is not None else 0,
+            "Fecha Emisión": c.fecha_emision.strftime("%Y-%m-%d") if hasattr(c.fecha_emision, 'strftime') else str(c.fecha_emision),
+            "Estado": c.estado.value if hasattr(c.estado, 'value') else str(c.estado) if c.estado else "-",
+            "Tipo Crédito": c.tipo_credito.value if hasattr(c.tipo_credito, 'value') else str(c.tipo_credito) if c.tipo_credito else "-",
             "Día Vto": c.dia_vencimiento,
             "Saldo en Mora": float(round(saldo_mora, 2)),
             "Días de Mora": dias_mora
@@ -597,3 +597,127 @@ async def upload_batch_documentos(files: List[UploadFile] = File(...), db: Sessi
             process_file_logic(file.filename, file_bytes, file.content_type)
 
     return {"procesados": procesados, "errores": errores}
+
+
+import pandas as pd
+import base64
+import tempfile
+import importlib
+import traceback
+from src.logic.import_data import quota
+
+@router.post("/api/v1/creditos/importacion-masiva")
+async def importacion_masiva_creditos(
+    proveedor: str = Form("QUOTA_CFL"),
+    clientes_file: UploadFile = File(...),
+    creditos_file: UploadFile = File(...),
+    transferencias_file: UploadFile = File(...),
+    archivos: List[UploadFile] = File(default=[]),
+    db: Session = Depends(get_db)
+):
+    if proveedor != "QUOTA_CFL":
+        raise HTTPException(status_code=400, detail="Proveedor no soportado actualmente.")
+
+    try:
+        # 1. Leer Archivos en Memoria
+        clts_bytes = await clientes_file.read()
+        df_clts = pd.read_excel(BytesIO(clts_bytes))
+        
+        crts_bytes = await creditos_file.read()
+        df_crts = pd.read_excel(BytesIO(crts_bytes), usecols=['Crédito', 'Emisión', 'DNI', 'CBU', 'Organismo', 'Capital', 'Neto', 'Plazo', 'Imp. Cuota', 'Tasa', 'ID Externo'])
+        
+        transf_bytes = await transferencias_file.read()
+        df_transf = pd.read_csv(BytesIO(transf_bytes), sep=";", header=0, names=["CBU/CVU", "Fecha", "Monto", "CUIT/CUIL", "ID Quota", "Razon Social"])
+
+        # 2. Pipeline de Importación Quota
+        errores_globales = []
+        
+        res_clts = quota.import_clients_from_dataframe(df_clts, db)
+        if res_clts.get('errores'):
+            errores_globales.extend([{"Etapa": "Clientes", "Error": err} for err in res_clts['errores']])
+            
+        res_crts_upd = quota.update_clients_from_crts_dataframe(df_crts, db)
+        if res_crts_upd.get('errores'):
+            errores_globales.extend([{"Etapa": "Actualización Clientes", "Error": err} for err in res_crts_upd['errores']])
+            
+        res_crts = quota.import_credits_from_dataframe(df_crts, db)
+        if res_crts.get('errores'):
+            errores_globales.extend([{"Etapa": "Créditos", "Error": err} for err in res_crts['errores']])
+            
+        nuevos_ids = res_crts.get('nuevos_ids_externos', set())
+        
+        res_transf = quota.import_transfers_from_dataframe(df_transf, df_crts, db, nuevos_ids_externos=nuevos_ids)
+        if res_transf.get('errores'):
+            errores_globales.extend([{"Etapa": "Transferencias", "Error": err} for err in res_transf['errores']])
+
+        # 3. Procesar Archivos (Legajos)
+        archivos_procesados = 0
+        if archivos:
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                extracted_files = []
+                for file in archivos:
+                    if file.filename.lower().endswith(".zip"):
+                        content = await file.read()
+                        with zipfile.ZipFile(BytesIO(content)) as zf:
+                            for zip_info in zf.infolist():
+                                if not zip_info.is_dir() and not zip_info.filename.startswith("__MACOSX/") and not zip_info.filename.startswith("."):
+                                    extracted_bytes = zf.read(zip_info.filename)
+                                    base_name = os.path.basename(zip_info.filename)
+                                    if base_name:
+                                        file_path = os.path.join(tmpdirname, base_name)
+                                        with open(file_path, "wb") as f:
+                                            f.write(extracted_bytes)
+                                        extracted_files.append(file_path)
+                    else:
+                        file_bytes = await file.read()
+                        file_path = os.path.join(tmpdirname, file.filename)
+                        with open(file_path, "wb") as f:
+                            f.write(file_bytes)
+                        extracted_files.append(file_path)
+
+                if extracted_files:
+                    res_docs = quota.process_quota_documents(
+                        file_paths=extracted_files,
+                        df_crts=df_crts,
+                        session=db,
+                        upload_dir=UPLOAD_DIR,
+                        nuevos_ids_externos=nuevos_ids
+                    )
+                    archivos_procesados = len(res_docs.get('procesados', []))
+                    if res_docs.get('errores'):
+                        errores_globales.extend([{"Etapa": "Documentos", "Error": str(err)} for err in res_docs['errores']])
+
+        # 4. Verificar estados
+        res_estados = quota.verify_and_update_credit_states(df_crts, db)
+        if res_estados.get('errores'):
+            errores_globales.extend([{"Etapa": "Verificación Estados", "Error": err} for err in res_estados['errores']])
+
+        # 5. Generar reporte de errores si los hay
+        excel_base64 = None
+        if errores_globales:
+            df_err = pd.DataFrame(errores_globales)
+            out_stream = BytesIO()
+            with pd.ExcelWriter(out_stream, engine='openpyxl') as writer:
+                df_err.to_excel(writer, index=False, sheet_name='Errores')
+            excel_base64 = base64.b64encode(out_stream.getvalue()).decode('utf-8')
+
+        return {
+            "status": "success",
+            "message": "Importación procesada",
+            "resumen": {
+                "nuevos_clientes": res_clts.get('nuevos', 0),
+                "clientes_actualizados": res_clts.get('actualizados', 0) + res_crts_upd.get('actualizados', 0),
+                "nuevos_creditos": res_crts.get('nuevos_creditos', 0),
+                "creditos_existentes": res_crts.get('creditos_existentes', 0),
+                "transferencias_importadas": res_transf.get('importadas', 0),
+                "archivos_procesados": archivos_procesados,
+                "pasados_a_firmado": res_estados.get('pasados_a_firmado', 0),
+                "pasados_a_activo": res_estados.get('pasados_a_activo', 0)
+            },
+            "errores_count": len(errores_globales),
+            "excel_base64": excel_base64
+        }
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error durante importación masiva: {str(e)}\n{traceback.format_exc()}")
