@@ -304,19 +304,47 @@ class CollectionManager:
         for col in ["capital", "interes", "iva"]:
             df_cobr[col] = df_cobr[col].round(2)
 
+        from src.database.models.carteras import Cartera, OperacionCartera
+        cuotas_ids = df_cobr.index.tolist()
+        ops = self.db.query(OperacionCartera.cuota_id, Cartera.iva).join(
+            Cartera, Cartera.id == OperacionCartera.cartera_id
+        ).filter(OperacionCartera.cuota_id.in_(cuotas_ids)).order_by(OperacionCartera.id.asc()).all()
+        cuota_iva_map = {cuota_id: iva for cuota_id, iva in ops}
+
+        tipos_no_facturados = [
+            TipoCobranzaEnum.COMUN.value,
+            TipoCobranzaEnum.ANTICIPO.value,
+            TipoCobranzaEnum.CA.value,
+            TipoCobranzaEnum.PENALTY.value,
+            TipoCobranzaEnum.RECURSO.value
+        ]
+
         records = []
         for row in df_cobr.itertuples():
+            cuota_id = row.Index
+            tipo_val = row.tipo_cobranza
+            
+            facturada = True
+            if tipo_val in tipos_no_facturados:
+                iva = cuota_iva_map.get(cuota_id)
+                if iva is not None:
+                    facturada = False if iva is True else True
+                else:
+                    facturada = True if tipo_val == TipoCobranzaEnum.RECURSO.value else False
+
             records.append({
-                "cuota_id": row.Index,
+                "cuota_id": cuota_id,
                 "proceso_id": proceso_id,
-                "tipo_cobranza": row.tipo_cobranza,
+                "tipo_cobranza": tipo_val,
                 "capital": row.capital,
                 "interes": row.interes,
                 "iva": row.iva,
                 "fecha": payment_date,
+                "facturada": facturada,
             })
 
-        self.db.bulk_insert_mappings(Cobranza, records)
+        from sqlalchemy import insert
+        self.db.execute(insert(Cobranza), records)
         self.db.flush()
 
         # 2. Identify and update all affected credits dynamically
