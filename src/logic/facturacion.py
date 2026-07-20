@@ -6,13 +6,22 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def procesar_facturacion_pendiente(db: Session, punto_venta: int = 1, tipo_comprobante: int = 6):
+from datetime import date
+
+def procesar_facturacion_pendiente(db: Session, cobranza_ids: list[int] = None, fecha_emision: date = None, punto_venta: int = 1, tipo_comprobante: int = 6):
     """
     Busca todas las cobranzas que tienen facturada=False y emite la 
     factura correspondiente en ARCA (modo simulador activo).
+    Si se pasa cobranza_ids, solo factura esas cobranzas específicas.
     tipo_comprobante=6 suele ser Factura B.
     """
-    cobranzas_pendientes = db.query(Cobranza).filter(Cobranza.facturada == False).all()
+    query = db.query(Cobranza).filter(Cobranza.facturada == False)
+    if cobranza_ids is not None:
+        if not cobranza_ids:
+            return 0  # Lista vacía = nada que procesar
+        query = query.filter(Cobranza.id.in_(cobranza_ids))
+        
+    cobranzas_pendientes = query.all()
     
     if not cobranzas_pendientes:
         logger.info("No hay cobranzas pendientes de facturar.")
@@ -33,7 +42,8 @@ def procesar_facturacion_pendiente(db: Session, punto_venta: int = 1, tipo_compr
                 punto_venta=punto_venta,
                 tipo_comprobante=tipo_comprobante,
                 importe_total=float(cobranza.importe_total),
-                cuit_cliente=cuit_cliente
+                cuit_cliente=cuit_cliente,
+                fecha_emision=fecha_emision
             )
             
             # Crear y guardar la factura en DB

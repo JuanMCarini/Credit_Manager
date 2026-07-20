@@ -385,14 +385,14 @@ def delete_proceso(proceso_id: int, db: Session = Depends(get_db)):
             db.query(LiquidacionCuotaCedida).filter(LiquidacionCuotaCedida.proceso_id == proceso_id).delete(synchronize_session=False)
             db.delete(proceso)
         else:
-            penalty_credits = []
+            penalty_credits = set()
             affected_cuotas = set()
             for c in proceso.cobranzas:
                 if c.cuota:
                     affected_cuotas.add(c.cuota)
                 if c.tipo_cobranza == TipoCobranzaEnum.PENALTY:
                     if c.cuota and c.cuota.credito and c.cuota.credito.tipo_credito == TipoCredito.PENALTY:
-                        penalty_credits.append(c.cuota.credito)
+                        penalty_credits.add(c.cuota.credito)
                         
             db.delete(proceso)
             for pc in penalty_credits:
@@ -403,6 +403,8 @@ def delete_proceso(proceso_id: int, db: Session = Depends(get_db)):
             from datetime import date
             hoy = date.today()
             for cuota in affected_cuotas:
+                if cuota.credito in penalty_credits:
+                    continue
                 db.expire(cuota, ['cobranzas', 'liquidaciones'])
                 cuota.actualizar_estado(hoy)
                 if cuota.credito:

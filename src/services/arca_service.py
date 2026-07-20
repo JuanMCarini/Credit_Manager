@@ -16,7 +16,7 @@ class ArcaService:
         # from afip import Afip
         # self.afip = Afip({'CUIT': 30000000000, 'cert': 'cert.crt', 'key': 'key.key', 'production': False})
         
-    def emitir_factura(self, punto_venta: int, tipo_comprobante: int, importe_total: float, cuit_cliente: str = None) -> dict:
+    def emitir_factura(self, punto_venta: int, tipo_comprobante: int, importe_total: float, cuit_cliente: str = None, fecha_emision: datetime.date = None) -> dict:
         """
         Emite una factura electrónica en ARCA.
         """
@@ -34,7 +34,7 @@ class ArcaService:
                 "nro_comprobante": nro_comprobante,
                 "cae": cae,
                 "vencimiento_cae": vencimiento_cae,
-                "fecha_emision": datetime.now().date(),
+                "fecha_emision": fecha_emision or datetime.now().date(),
                 "importe_total": importe_total,
                 "punto_venta": punto_venta,
                 "tipo_comprobante": tipo_comprobante,
