@@ -20,8 +20,8 @@ const PortfolioOperationsPage = () => {
   const [editingCartera, setEditingCartera] = useState(null);
   const [isReadOnly, setIsReadOnly] = useState(false);
   
-  // Loading state for legajos download
-  const [loadingLegajos, setLoadingLegajos] = useState({});
+  // Loading state for actions
+  const [loadingActions, setLoadingActions] = useState({});
 
   const fetchCarteras = async () => {
     setLoading(true);
@@ -49,21 +49,27 @@ const PortfolioOperationsPage = () => {
 
   const handleChangeEstado = async (id, nuevoEstado) => {
     if (!window.confirm(`¿Seguro que desea cambiar el estado a ${nuevoEstado}?`)) return;
+    setLoadingActions(prev => ({ ...prev, [`estado-${id}`]: true }));
     try {
       await axiosClient.patch(`/api/v1/carteras/${id}`, { estado: nuevoEstado });
       fetchCarteras();
     } catch (error) {
       alert("Error al cambiar estado: " + error.message);
+    } finally {
+      setLoadingActions(prev => ({ ...prev, [`estado-${id}`]: false }));
     }
   };
 
   const handleDelete = async (id) => {
     if (!window.confirm("¿Seguro que desea eliminar esta cartera permanentemente?")) return;
+    setLoadingActions(prev => ({ ...prev, [`delete-${id}`]: true }));
     try {
       await axiosClient.delete(`/api/v1/carteras/${id}`);
       fetchCarteras();
     } catch (error) {
       alert("Error al eliminar cartera: " + error.message);
+    } finally {
+      setLoadingActions(prev => ({ ...prev, [`delete-${id}`]: false }));
     }
   };
 
@@ -92,6 +98,7 @@ const PortfolioOperationsPage = () => {
   };
 
   const handleDownloadExcel = async (cartera) => {
+    setLoadingActions(prev => ({ ...prev, [`excel-${cartera.id}`]: true }));
     try {
       let res;
       if (cartera.tipo_operacion === 'COMPRA') {
@@ -154,10 +161,13 @@ const PortfolioOperationsPage = () => {
       XLSX.writeFile(wb, `Operacion_${cartera.id}_${cartera.nombre}.xlsx`);
     } catch (error) {
       alert("Error al descargar Excel: " + (error.response?.data?.detail || error.message));
+    } finally {
+      setLoadingActions(prev => ({ ...prev, [`excel-${cartera.id}`]: false }));
     }
   };
 
   const handleDownloadCsvs = async (cartera) => {
+    setLoadingActions(prev => ({ ...prev, [`csvs-${cartera.id}`]: true }));
     try {
       const response = await axiosClient.get(`/api/v1/carteras/${cartera.id}/export`, {
         responseType: 'blob'
@@ -182,11 +192,13 @@ const PortfolioOperationsPage = () => {
       } else {
         alert("Error al descargar CSVs: " + (error.message || 'Error desconocido'));
       }
+    } finally {
+      setLoadingActions(prev => ({ ...prev, [`csvs-${cartera.id}`]: false }));
     }
   };
 
   const handleDownloadLegajos = async (cartera) => {
-    setLoadingLegajos(prev => ({ ...prev, [cartera.id]: true }));
+    setLoadingActions(prev => ({ ...prev, [`legajos-${cartera.id}`]: true }));
     try {
       const response = await axiosClient.get(`/api/v1/carteras/${cartera.id}/legajos/export`, {
         responseType: 'blob'
@@ -212,7 +224,7 @@ const PortfolioOperationsPage = () => {
         alert("Error al descargar Legajos: " + (error.message || 'Error desconocido'));
       }
     } finally {
-      setLoadingLegajos(prev => ({ ...prev, [cartera.id]: false }));
+      setLoadingActions(prev => ({ ...prev, [`legajos-${cartera.id}`]: false }));
     }
   };
 
@@ -282,15 +294,15 @@ const PortfolioOperationsPage = () => {
                       <div style={{ display: 'grid', gridTemplateColumns: 'auto auto', gap: '8px', alignItems: 'stretch' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                           <div style={{ display: 'flex', gap: '4px' }}>
-                            <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadExcel(c)} title="Descargar Excel de la Operación">
-                              📊
+                            <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadExcel(c)} title="Descargar Excel de la Operación" disabled={loadingActions[`excel-${c.id}`]}>
+                              {loadingActions[`excel-${c.id}`] ? '⏳' : '📊'}
                             </button>
-                            <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadLegajos(c)} title="Descargar Legajos (PDF)" disabled={loadingLegajos[c.id]}>
-                              {loadingLegajos[c.id] ? '⏳' : '📑'}
+                            <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadLegajos(c)} title="Descargar Legajos (PDF)" disabled={loadingActions[`legajos-${c.id}`]}>
+                              {loadingActions[`legajos-${c.id}`] ? '⏳' : '📑'}
                             </button>
                             {c.tipo_operacion === 'VENTA' && (
-                              <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadCsvs(c)} title="Descargar CSVs Generados">
-                                📁
+                              <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadCsvs(c)} title="Descargar CSVs Generados" disabled={loadingActions[`csvs-${c.id}`]}>
+                                {loadingActions[`csvs-${c.id}`] ? '⏳' : '📁'}
                               </button>
                             )}
                           </div>
@@ -301,8 +313,8 @@ const PortfolioOperationsPage = () => {
                             <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleEditClick(c)} title="Editar">
                               ✏️
                             </button>
-                            <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px', color: 'var(--danger-color)' }} onClick={() => handleDelete(c.id)} title="Eliminar">
-                              🗑️
+                            <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px', color: 'var(--danger-color)' }} onClick={() => handleDelete(c.id)} title="Eliminar" disabled={loadingActions[`delete-${c.id}`]}>
+                              {loadingActions[`delete-${c.id}`] ? '⏳' : '🗑️'}
                             </button>
                           </div>
                         </div>
@@ -311,21 +323,22 @@ const PortfolioOperationsPage = () => {
                           style={{ padding: '4px', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} 
                           onClick={() => handleChangeEstado(c.id, c.tipo_operacion === 'VENTA' ? 'VENDIDA' : 'COMPRADA')} 
                           title="Confirmar"
+                          disabled={loadingActions[`estado-${c.id}`]}
                         >
-                          ✅
+                          {loadingActions[`estado-${c.id}`] ? '⏳' : '✅'}
                         </button>
                       </div>
                     ) : (
                       <div style={{ display: 'flex', gap: '8px' }}>
-                        <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadExcel(c)} title="Descargar Excel de la Operación">
-                          📊
+                        <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadExcel(c)} title="Descargar Excel de la Operación" disabled={loadingActions[`excel-${c.id}`]}>
+                          {loadingActions[`excel-${c.id}`] ? '⏳' : '📊'}
                         </button>
-                        <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadLegajos(c)} title="Descargar Legajos (PDF)" disabled={loadingLegajos[c.id]}>
-                          {loadingLegajos[c.id] ? '⏳' : '📑'}
+                        <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadLegajos(c)} title="Descargar Legajos (PDF)" disabled={loadingActions[`legajos-${c.id}`]}>
+                          {loadingActions[`legajos-${c.id}`] ? '⏳' : '📑'}
                         </button>
                         {c.tipo_operacion === 'VENTA' && (
-                          <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadCsvs(c)} title="Descargar CSVs Generados">
-                            📁
+                          <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadCsvs(c)} title="Descargar CSVs Generados" disabled={loadingActions[`csvs-${c.id}`]}>
+                            {loadingActions[`csvs-${c.id}`] ? '⏳' : '📁'}
                           </button>
                         )}
                         {(c.estado === 'VENDIDA' || c.estado === 'COMPRADA') && (
