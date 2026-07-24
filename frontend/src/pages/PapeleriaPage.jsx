@@ -91,9 +91,7 @@ const PapeleriaPage = () => {
 
     setLoading(true);
     try {
-      await axiosClient.post('/api/v1/papeleria/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      await axiosClient.post('/api/v1/papeleria/upload', formData);
       alert("Documento subido correctamente.");
       setFile(null);
       document.getElementById('fileInput').value = '';
@@ -139,9 +137,7 @@ const PapeleriaPage = () => {
 
     setLoading(true);
     try {
-      await axiosClient.put(`/api/v1/papeleria/${replacingDocId}/file`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      await axiosClient.put(`/api/v1/papeleria/${replacingDocId}/file`, formData);
       alert("Documento reemplazado correctamente.");
       fetchDocumentos();
     } catch (error) {

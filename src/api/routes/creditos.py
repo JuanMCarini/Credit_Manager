@@ -171,7 +171,7 @@ def create_credito(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error originando el crédito: {str(e)}")
 
-@router.patch("/api/v1/creditos/{credito_id}/estado")
+@router.patch("/api/v1/creditos/{credito_id:int}/estado")
 def update_credito_estado(credito_id: int, data: CreditoEstadoUpdate, db: Session = Depends(get_db)):
     credito = db.query(Credito).filter(Credito.id == credito_id).first()
     if not credito:
@@ -186,7 +186,7 @@ def update_credito_estado(credito_id: int, data: CreditoEstadoUpdate, db: Sessio
     db.commit()
     return {"status": "success", "message": "Estado actualizado"}
 
-@router.get("/api/v1/creditos/{credito_id}/cuotas")
+@router.get("/api/v1/creditos/{credito_id:int}/cuotas")
 def get_credito_cuotas(credito_id: int, db: Session = Depends(get_db)):
     cuotas = db.query(Cuota).options(joinedload(Cuota.cobranzas)).filter(Cuota.credito_id == credito_id).order_by(Cuota.nro_cuota).all()
     
@@ -228,7 +228,7 @@ def get_credito_cuotas(credito_id: int, db: Session = Depends(get_db)):
         
     return result
 
-@router.get("/api/v1/creditos/{credito_id}/transferencias")
+@router.get("/api/v1/creditos/{credito_id:int}/transferencias")
 def get_credito_transferencias(credito_id: int, db: Session = Depends(get_db)):
     credito = db.query(Credito).filter(Credito.id == credito_id).first()
     if not credito:
@@ -313,7 +313,7 @@ def get_creditos_list(fecha_corte: Optional[date] = Query(None, description="Fec
         })
     return result
 
-@router.delete("/api/v1/creditos/{credito_id}")
+@router.delete("/api/v1/creditos/{credito_id:int}")
 def delete_credito(credito_id: int, db: Session = Depends(get_db)):
     credito = db.query(Credito).options(joinedload(Credito.cuotas).joinedload(Cuota.cobranzas)).filter(Credito.id == credito_id).first()
     if not credito:
@@ -344,7 +344,7 @@ def delete_credito(credito_id: int, db: Session = Depends(get_db)):
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 UPLOAD_DIR = os.path.join(project_root, "data", "uploads", "legajos")
-@router.post("/api/v1/creditos/{credito_id}/documentos", response_model=DocumentoLegajoOut)
+@router.post("/api/v1/creditos/{credito_id:int}/documentos", response_model=DocumentoLegajoOut)
 async def upload_documento(credito_id: int, file: UploadFile = File(...), transferencia_id: Optional[int] = Form(None), es_legajo_firmado: bool = Form(False), db: Session = Depends(get_db)):
     try:
         credito = db.query(Credito).filter(Credito.id == credito_id).first()
@@ -393,12 +393,12 @@ async def upload_documento(credito_id: int, file: UploadFile = File(...), transf
         error_msg = f"Error interno: {str(e)}\n\n{traceback.format_exc()}"
         raise HTTPException(status_code=500, detail=error_msg)
 
-@router.get("/api/v1/creditos/{credito_id}/documentos", response_model=List[DocumentoLegajoOut])
+@router.get("/api/v1/creditos/{credito_id:int}/documentos", response_model=List[DocumentoLegajoOut])
 def get_documentos(credito_id: int, db: Session = Depends(get_db)):
     docs = db.query(DocumentoLegajo).filter(DocumentoLegajo.credito_id == credito_id).all()
     return docs
 
-@router.delete("/api/v1/creditos/{credito_id}/documentos/{doc_id}")
+@router.delete("/api/v1/creditos/{credito_id:int}/documentos/{doc_id:int}")
 def delete_documento(credito_id: int, doc_id: int, db: Session = Depends(get_db)):
     doc = db.query(DocumentoLegajo).filter(DocumentoLegajo.id == doc_id, DocumentoLegajo.credito_id == credito_id).first()
     if not doc:
@@ -414,7 +414,7 @@ def delete_documento(credito_id: int, doc_id: int, db: Session = Depends(get_db)
     db.commit()
     return {"status": "success", "message": "Documento eliminado"}
 
-@router.get("/api/v1/creditos/{credito_id}/documentos/merged/download")
+@router.get("/api/v1/creditos/{credito_id:int}/documentos/merged/download")
 def download_merged_pdf(credito_id: int, db: Session = Depends(get_db)):
     docs = db.query(DocumentoLegajo).filter(DocumentoLegajo.credito_id == credito_id).all()
     if not docs:
@@ -461,7 +461,7 @@ def download_merged_pdf(credito_id: int, db: Session = Depends(get_db)):
         headers={"Content-Disposition": f"attachment; filename=legajo_credito_{credito_id}.pdf"}
     )
 
-@router.get("/api/v1/creditos/{credito_id}/documentos/{doc_id}/download")
+@router.get("/api/v1/creditos/{credito_id:int}/documentos/{doc_id:int}/download")
 def download_documento(credito_id: int, doc_id: int, db: Session = Depends(get_db)):
     doc = db.query(DocumentoLegajo).filter(DocumentoLegajo.id == doc_id, DocumentoLegajo.credito_id == credito_id).first()
     if not doc:
@@ -622,12 +622,29 @@ async def importacion_masiva_creditos(
         # 1. Leer Archivos en Memoria
         clts_bytes = await clientes_file.read()
         df_clts = pd.read_excel(BytesIO(clts_bytes))
+        df_clts.columns = [str(c).strip() for c in df_clts.columns]
         
         crts_bytes = await creditos_file.read()
-        df_crts = pd.read_excel(BytesIO(crts_bytes), usecols=['Crédito', 'Emisión', 'DNI', 'CBU', 'Organismo', 'Capital', 'Neto', 'Plazo', 'Imp. Cuota', 'Tasa', 'ID Externo'])
+        df_crts = pd.read_excel(BytesIO(crts_bytes))
+        df_crts.columns = [str(c).strip() for c in df_crts.columns]
+
+        # Normalizar variaciones de nombres de columnas frecuentes
+        col_mappings = {
+            'Credito': 'Crédito',
+            'id externo': 'ID Externo',
+            'id_externo': 'ID Externo',
+            'ID EXTERNO': 'ID Externo',
+            'Imp.Cuota': 'Imp. Cuota',
+            'Imp Cuota': 'Imp. Cuota',
+            'Emision': 'Emisión',
+        }
+        df_crts.rename(columns=col_mappings, inplace=True)
         
         transf_bytes = await transferencias_file.read()
-        df_transf = pd.read_csv(BytesIO(transf_bytes), sep=";", header=0, names=["CBU/CVU", "Fecha", "Monto", "CUIT/CUIL", "ID Quota", "Razon Social"])
+        try:
+            df_transf = pd.read_csv(BytesIO(transf_bytes), sep=";", header=None, names=["CBU/CVU", "Fecha", "Monto", "CUIT/CUIL", "ID Quota", "Razon Social"], encoding="utf-8")
+        except Exception:
+            df_transf = pd.read_csv(BytesIO(transf_bytes), sep=";", header=None, names=["CBU/CVU", "Fecha", "Monto", "CUIT/CUIL", "ID Quota", "Razon Social"], encoding="latin-1", on_bad_lines='skip')
 
         # 2. Pipeline de Importación Quota
         errores_globales = []

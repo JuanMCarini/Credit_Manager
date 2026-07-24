@@ -1,5 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { FilterX } from 'lucide-react';
 import axiosClient from '../api/axiosClient';
+import ExportExcelButton from './ExportExcelButton';
+import ExcelNumberRangeFilter from './ExcelNumberRangeFilter';
+import ExcelListFilter from './ExcelListFilter';
+import ExcelDateFilter from './ExcelDateFilter';
 
 const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }) => {
   const [loading, setLoading] = useState(false);
@@ -26,6 +31,22 @@ const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }
   const [showPreviewEstadoFilter, setShowPreviewEstadoFilter] = useState(false);
   const [showPreviewIncluidaFilter, setShowPreviewIncluidaFilter] = useState(false);
   const [showPreviewCompradaFilter, setShowPreviewCompradaFilter] = useState(false);
+
+  const availableFechasEmision = useMemo(() => {
+    if (!previewData?.creditos) return [];
+    return Array.from(new Set(previewData.creditos.map(c => c.fecha_emision).filter(Boolean))).sort();
+  }, [previewData?.creditos]);
+
+  const availableVencimientosCuotas = useMemo(() => {
+    if (!previewData?.cuotas) return [];
+    return Array.from(new Set(previewData.cuotas.map(c => c.fecha_vencimiento).filter(Boolean))).sort();
+  }, [previewData?.cuotas]);
+
+  const availableMesesResumen = useMemo(() => {
+    if (!previewData?.resumen) return [];
+    const key = cartera?.tipo_operacion === 'VENTA' ? 'fecha_vencimiento' : 'mes';
+    return Array.from(new Set(previewData.resumen.map(r => r[key]).filter(Boolean))).sort();
+  }, [previewData?.resumen, cartera?.tipo_operacion]);
 
   const fetchPreview = async (usar_guardadas, overrides = {}) => {
     setLoading(true);
@@ -263,6 +284,12 @@ const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }
                   return Object.keys(filterCreditos).every(key => {
                     const filterVal = filterCreditos[key];
                     if (filterVal === undefined || filterVal === null || filterVal === '' || (Array.isArray(filterVal) && filterVal.length === 0)) return true;
+                    if (typeof filterVal === 'object' && !Array.isArray(filterVal) && ('min' in filterVal || 'max' in filterVal)) {
+                      const val = Number(c[key] || 0);
+                      if (filterVal.min !== undefined && filterVal.min !== null && filterVal.min !== '' && val < Number(filterVal.min)) return false;
+                      if (filterVal.max !== undefined && filterVal.max !== null && filterVal.max !== '' && val > Number(filterVal.max)) return false;
+                      return true;
+                    }
                     if (Array.isArray(filterVal)) {
                       return filterVal.includes(String(c[key] || ''));
                     }
@@ -280,6 +307,17 @@ const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }
 
                 return (
                 <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+                    <button 
+                      className="btn-secondary" 
+                      onClick={() => setFilterCreditos({})}
+                      title="Limpiar todos los filtros"
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '100%', padding: '0 12px' }}
+                    >
+                      <FilterX size={16} /> Limpiar Filtros
+                    </button>
+                    <ExportExcelButton data={previewData.creditos} filteredData={filtered} filename="preview_creditos" />
+                  </div>
                   <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', overflowY: 'auto', flex: 1 }}>
                     <table className="data-table" style={{ width: '100%', fontSize: '13px' }}>
                       <thead style={{position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-panel)', boxShadow: '0 2px 4px rgba(0,0,0,0.2)'}}>
@@ -287,11 +325,28 @@ const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }
                           <tr>
                             <th style={{textAlign: 'left', padding: '12px', verticalAlign: 'top'}}>
                               ID
-                              <input type="text" placeholder="Filtrar..." value={filterCreditos.id || ''} onChange={e => handleFilterChange('id', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
+                                <ExcelListFilter 
+                                  availableOptions={Array.from(new Set(previewData.creditos.map(c => c.id))).map(String)}
+                                  selectedOptions={filterCreditos.id || []}
+                                  onChange={val => handleFilterChange('id', val)}
+                                  title="Filtrar IDs..."
+                                />
+                              </div>
                             </th>
                             <th style={{textAlign: 'left', padding: '12px', verticalAlign: 'top'}}>
                               Cliente
                               <input type="text" placeholder="Filtrar..." value={filterCreditos.cliente || ''} onChange={e => handleFilterChange('cliente', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                            </th>
+                            <th style={{textAlign: 'center', padding: '12px', verticalAlign: 'top'}}>
+                              F. Emisión
+                              <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
+                                <ExcelDateFilter 
+                                  availableDates={availableFechasEmision}
+                                  selectedDates={filterCreditos.fecha_emision || []}
+                                  onChange={dates => handleFilterChange('fecha_emision', dates)}
+                                />
+                              </div>
                             </th>
                             <th style={{textAlign: 'left', padding: '12px', verticalAlign: 'top'}}>
                               Estado
@@ -314,19 +369,19 @@ const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }
                             </th>
                             <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                               Monto Orig.
-                              <input type="text" placeholder="Filtrar..." value={filterCreditos.monto_otorgado || ''} onChange={e => handleFilterChange('monto_otorgado', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <ExcelNumberRangeFilter selectedRange={filterCreditos.monto_otorgado || {}} onChange={r => handleFilterChange('monto_otorgado', r)} />
                             </th>
                             <th style={{textAlign: 'center', padding: '12px', verticalAlign: 'top'}}>
                               Cuotas
-                              <input type="text" placeholder="Filtrar..." value={filterCreditos.total_cuotas || ''} onChange={e => handleFilterChange('total_cuotas', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <ExcelNumberRangeFilter selectedRange={filterCreditos.total_cuotas || {}} onChange={r => handleFilterChange('total_cuotas', r)} />
                             </th>
                             <th style={{textAlign: 'center', padding: '12px', verticalAlign: 'top'}}>
                               A Ceder
-                              <input type="text" placeholder="Filtrar..." value={filterCreditos.cuotas_a_ceder || ''} onChange={e => handleFilterChange('cuotas_a_ceder', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <ExcelNumberRangeFilter selectedRange={filterCreditos.cuotas_a_ceder || {}} onChange={r => handleFilterChange('cuotas_a_ceder', r)} />
                             </th>
                             <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                               Valor Actual
-                              <input type="text" placeholder="Filtrar..." value={filterCreditos.valor_actual || ''} onChange={e => handleFilterChange('valor_actual', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <ExcelNumberRangeFilter selectedRange={filterCreditos.valor_actual || {}} onChange={r => handleFilterChange('valor_actual', r)} />
                             </th>
                             <th style={{textAlign: 'center', padding: '12px', verticalAlign: 'top'}}>
                               Acciones
@@ -336,40 +391,58 @@ const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }
                           <tr>
                             <th style={{textAlign: 'left', padding: '12px', verticalAlign: 'top'}}>
                               ID Externo
-                              <input type="text" placeholder="Filtrar..." value={filterCreditos.id_externo || ''} onChange={e => handleFilterChange('id_externo', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
+                                <ExcelListFilter 
+                                  availableOptions={Array.from(new Set(previewData.creditos.map(c => c.id_externo).filter(Boolean))).map(String)}
+                                  selectedOptions={filterCreditos.id_externo || []}
+                                  onChange={val => handleFilterChange('id_externo', val)}
+                                  title="Filtrar IDs..."
+                                />
+                              </div>
                             </th>
                             <th style={{textAlign: 'left', padding: '12px', verticalAlign: 'top'}}>
                               Cliente
                               <input type="text" placeholder="Filtrar..." value={filterCreditos.cliente_nombre || ''} onChange={e => handleFilterChange('cliente_nombre', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
                             </th>
+                            <th style={{textAlign: 'center', padding: '12px', verticalAlign: 'top'}}>
+                              F. Emisión
+                              <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
+                                <ExcelDateFilter 
+                                  availableDates={availableFechasEmision}
+                                  selectedDates={filterCreditos.fecha_emision || []}
+                                  onChange={dates => handleFilterChange('fecha_emision', dates)}
+                                />
+                              </div>
+                            </th>
                             <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                               Cap. Vendido
-                              <input type="text" placeholder="Filtrar..." value={filterCreditos.capital_vendido || ''} onChange={e => handleFilterChange('capital_vendido', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <ExcelNumberRangeFilter selectedRange={filterCreditos.capital_vendido || {}} onChange={r => handleFilterChange('capital_vendido', r)} />
                             </th>
                             <th style={{textAlign: 'center', padding: '12px', verticalAlign: 'top'}}>
                               Plazo
-                              <input type="text" placeholder="Filtrar..." value={filterCreditos.plazo || ''} onChange={e => handleFilterChange('plazo', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <ExcelNumberRangeFilter selectedRange={filterCreditos.plazo || {}} onChange={r => handleFilterChange('plazo', r)} />
                             </th>
                             <th style={{textAlign: 'center', padding: '12px', verticalAlign: 'top'}}>
                               Adquiridas
-                              <input type="text" placeholder="Filtrar..." value={filterCreditos.cuotas_compradas || ''} onChange={e => handleFilterChange('cuotas_compradas', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <ExcelNumberRangeFilter selectedRange={filterCreditos.cuotas_compradas || {}} onChange={r => handleFilterChange('cuotas_compradas', r)} />
                             </th>
                             <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                               Valor Actual
-                              <input type="text" placeholder="Filtrar..." value={filterCreditos.valor_actual || ''} onChange={e => handleFilterChange('valor_actual', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <ExcelNumberRangeFilter selectedRange={filterCreditos.valor_actual || {}} onChange={r => handleFilterChange('valor_actual', r)} />
                             </th>
                           </tr>
                         )}
                       </thead>
                       <tbody>
                         {filtered.length === 0 && (
-                          <tr><td colSpan="7" style={{ textAlign: 'center', padding: '16px' }}>No hay créditos que coincidan.</td></tr>
+                          <tr><td colSpan={tipoOperacion === 'VENTA' ? 9 : 7} style={{ textAlign: 'center', padding: '16px' }}>No hay créditos que coincidan.</td></tr>
                         )}
                         {filtered.map((c, i) => (
                           tipoOperacion === 'VENTA' ? (
                             <tr key={i} style={{ opacity: creditosExcluidos.includes(c.id) ? 0.5 : 1 }}>
                               <td style={{ textAlign: 'left', padding: '12px' }}>{c.id}</td>
                               <td style={{ textAlign: 'left', padding: '12px' }}>{c.cliente}</td>
+                              <td style={{ textAlign: 'center', padding: '12px' }}>{c.fecha_emision || '-'}</td>
                               <td style={{ textAlign: 'left', padding: '12px' }}>{c.estado}</td>
                               <td style={{ textAlign: 'right', padding: '12px' }}>${(c.monto_otorgado||0).toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
                               <td style={{ textAlign: 'center', padding: '12px' }}>{c.total_cuotas}</td>
@@ -405,6 +478,7 @@ const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }
                             <tr key={i}>
                               <td style={{ textAlign: 'left', padding: '12px' }}>{c.id_externo}</td>
                               <td style={{ textAlign: 'left', padding: '12px' }}>{c.cliente_nombre}</td>
+                              <td style={{ textAlign: 'center', padding: '12px' }}>{c.fecha_emision || '-'}</td>
                               <td style={{ textAlign: 'right', padding: '12px' }}>${(c.capital_vendido||0).toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
                               <td style={{ textAlign: 'center', padding: '12px' }}>{c.plazo}</td>
                               <td style={{ textAlign: 'center', padding: '12px' }}>{c.cuotas_compradas}</td>
@@ -415,7 +489,7 @@ const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }
                       </tbody>
                       <tfoot style={{ position: 'sticky', bottom: 0, zIndex: 10, background: 'var(--bg-panel)', boxShadow: '0 -2px 4px rgba(0,0,0,0.2)' }}>
                         <tr>
-                          <td colSpan={tipoOperacion === 'VENTA' ? 3 : 2} style={{ textAlign: 'right', padding: '12px', fontWeight: 'bold' }}>Totales:</td>
+                          <td colSpan={tipoOperacion === 'VENTA' ? 4 : 3} style={{ textAlign: 'right', padding: '12px', fontWeight: 'bold' }}>Totales:</td>
                           <td style={{ textAlign: 'right', padding: '12px', fontWeight: 'bold' }}>${totalMonto.toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
                           <td style={{ textAlign: 'center', padding: '12px', fontWeight: 'bold' }}>{totalCuotas}</td>
                           <td style={{ textAlign: 'center', padding: '12px', fontWeight: 'bold' }}>{totalCeder}</td>
@@ -434,6 +508,12 @@ const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }
                   return Object.keys(filterCuotas).every(key => {
                     const filterVal = filterCuotas[key];
                     if (filterVal === undefined || filterVal === null || filterVal === '' || (Array.isArray(filterVal) && filterVal.length === 0)) return true;
+                    if (typeof filterVal === 'object' && !Array.isArray(filterVal) && ('min' in filterVal || 'max' in filterVal)) {
+                      const val = Number(c[key] || 0);
+                      if (filterVal.min !== undefined && filterVal.min !== null && filterVal.min !== '' && val < Number(filterVal.min)) return false;
+                      if (filterVal.max !== undefined && filterVal.max !== null && filterVal.max !== '' && val > Number(filterVal.max)) return false;
+                      return true;
+                    }
                     if (Array.isArray(filterVal)) {
                       if (key === 'incluida' || key === 'comprada') return filterVal.includes(c[key] ? 'Sí' : 'No');
                       return filterVal.includes(String(c[key] || ''));
@@ -453,6 +533,17 @@ const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }
 
                 return (
                 <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+                    <button 
+                      className="btn-secondary" 
+                      onClick={() => setFilterCuotas({})}
+                      title="Limpiar todos los filtros"
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '100%', padding: '0 12px' }}
+                    >
+                      <FilterX size={16} /> Limpiar Filtros
+                    </button>
+                    <ExportExcelButton data={previewData.cuotas} filteredData={filtered} filename="preview_cuotas" />
+                  </div>
                   <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', overflowY: 'auto', flex: 1 }}>
                     <table className="data-table" style={{ width: '100%', fontSize: '13px' }}>
                       <thead style={{position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-panel)', boxShadow: '0 2px 4px rgba(0,0,0,0.2)'}}>
@@ -460,35 +551,48 @@ const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }
                           <tr>
                             <th style={{textAlign: 'left', padding: '12px', verticalAlign: 'top'}}>
                               Crédito ID
-                              <input type="text" placeholder="Filtrar..." value={filterCuotas.credito_id || ''} onChange={e => handleFilterChange('credito_id', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
+                                <ExcelListFilter 
+                                  availableOptions={Array.from(new Set(previewData.cuotas.map(c => c.credito_id))).map(String)}
+                                  selectedOptions={filterCuotas.credito_id || []}
+                                  onChange={val => handleFilterChange('credito_id', val)}
+                                  title="Filtrar IDs..."
+                                />
+                              </div>
                             </th>
                             <th style={{textAlign: 'center', padding: '12px', verticalAlign: 'top'}}>
                               Nro Cuota
-                              <input type="text" placeholder="Filtrar..." value={filterCuotas.nro_cuota || ''} onChange={e => handleFilterChange('nro_cuota', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <ExcelNumberRangeFilter selectedRange={filterCuotas.nro_cuota || {}} onChange={r => handleFilterChange('nro_cuota', r)} />
                             </th>
                             <th style={{textAlign: 'left', padding: '12px', verticalAlign: 'top'}}>
                               Vencimiento
-                              <input type="text" placeholder="Filtrar..." value={filterCuotas.fecha_vencimiento || ''} onChange={e => handleFilterChange('fecha_vencimiento', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
+                                <ExcelDateFilter 
+                                  availableDates={availableVencimientosCuotas}
+                                  selectedDates={filterCuotas.fecha_vencimiento || []}
+                                  onChange={dates => handleFilterChange('fecha_vencimiento', dates)}
+                                />
+                              </div>
                             </th>
                             <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                               Capital
-                              <input type="text" placeholder="Filtrar..." value={filterCuotas.capital || ''} onChange={e => handleFilterChange('capital', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <ExcelNumberRangeFilter selectedRange={filterCuotas.capital || {}} onChange={r => handleFilterChange('capital', r)} />
                             </th>
                             <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                               Interés
-                              <input type="text" placeholder="Filtrar..." value={filterCuotas.interes || ''} onChange={e => handleFilterChange('interes', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <ExcelNumberRangeFilter selectedRange={filterCuotas.interes || {}} onChange={r => handleFilterChange('interes', r)} />
                             </th>
                             <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                               IVA
-                              <input type="text" placeholder="Filtrar..." value={filterCuotas.iva || ''} onChange={e => handleFilterChange('iva', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <ExcelNumberRangeFilter selectedRange={filterCuotas.iva || {}} onChange={r => handleFilterChange('iva', r)} />
                             </th>
                             <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                               Total Cuota
-                              <input type="text" placeholder="Filtrar..." value={filterCuotas.total_cuota || ''} onChange={e => handleFilterChange('total_cuota', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <ExcelNumberRangeFilter selectedRange={filterCuotas.total_cuota || {}} onChange={r => handleFilterChange('total_cuota', r)} />
                             </th>
                             <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                               Valor Actual
-                              <input type="text" placeholder="Filtrar..." value={filterCuotas.valor_actual || ''} onChange={e => handleFilterChange('valor_actual', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <ExcelNumberRangeFilter selectedRange={filterCuotas.valor_actual || {}} onChange={r => handleFilterChange('valor_actual', r)} />
                             </th>
                             <th style={{textAlign: 'center', padding: '12px', verticalAlign: 'top'}}>
                               Incluida
@@ -514,35 +618,48 @@ const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }
                           <tr>
                             <th style={{textAlign: 'left', padding: '12px', verticalAlign: 'top'}}>
                               ID Ext.
-                              <input type="text" placeholder="Filtrar..." value={filterCuotas.credito_id_externo || ''} onChange={e => handleFilterChange('credito_id_externo', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
+                                <ExcelListFilter 
+                                  availableOptions={Array.from(new Set(previewData.cuotas.map(c => c.credito_id_externo).filter(Boolean))).map(String)}
+                                  selectedOptions={filterCuotas.credito_id_externo || []}
+                                  onChange={val => handleFilterChange('credito_id_externo', val)}
+                                  title="Filtrar IDs..."
+                                />
+                              </div>
                             </th>
                             <th style={{textAlign: 'center', padding: '12px', verticalAlign: 'top'}}>
                               Cuota
-                              <input type="text" placeholder="Filtrar..." value={filterCuotas.nro_cuota || ''} onChange={e => handleFilterChange('nro_cuota', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <ExcelNumberRangeFilter selectedRange={filterCuotas.nro_cuota || {}} onChange={r => handleFilterChange('nro_cuota', r)} />
                             </th>
                             <th style={{textAlign: 'left', padding: '12px', verticalAlign: 'top'}}>
                               Vencimiento
-                              <input type="text" placeholder="Filtrar..." value={filterCuotas.fecha_vencimiento || ''} onChange={e => handleFilterChange('fecha_vencimiento', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
+                                <ExcelDateFilter 
+                                  availableDates={availableVencimientosCuotas}
+                                  selectedDates={filterCuotas.fecha_vencimiento || []}
+                                  onChange={dates => handleFilterChange('fecha_vencimiento', dates)}
+                                />
+                              </div>
                             </th>
                             <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                               Capital
-                              <input type="text" placeholder="Filtrar..." value={filterCuotas.capital || ''} onChange={e => handleFilterChange('capital', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <ExcelNumberRangeFilter selectedRange={filterCuotas.capital || {}} onChange={r => handleFilterChange('capital', r)} />
                             </th>
                             <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                               Interés
-                              <input type="text" placeholder="Filtrar..." value={filterCuotas.interes || ''} onChange={e => handleFilterChange('interes', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <ExcelNumberRangeFilter selectedRange={filterCuotas.interes || {}} onChange={r => handleFilterChange('interes', r)} />
                             </th>
                             <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                               IVA
-                              <input type="text" placeholder="Filtrar..." value={filterCuotas.iva || ''} onChange={e => handleFilterChange('iva', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <ExcelNumberRangeFilter selectedRange={filterCuotas.iva || {}} onChange={r => handleFilterChange('iva', r)} />
                             </th>
                             <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                               Total
-                              <input type="text" placeholder="Filtrar..." value={filterCuotas.total || ''} onChange={e => handleFilterChange('total', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <ExcelNumberRangeFilter selectedRange={filterCuotas.total || {}} onChange={r => handleFilterChange('total', r)} />
                             </th>
                             <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                               V. Actual
-                              <input type="text" placeholder="Filtrar..." value={filterCuotas.valor_actual || ''} onChange={e => handleFilterChange('valor_actual', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                              <ExcelNumberRangeFilter selectedRange={filterCuotas.valor_actual || {}} onChange={r => handleFilterChange('valor_actual', r)} />
                             </th>
                             <th style={{textAlign: 'center', padding: '12px', verticalAlign: 'top'}}>
                               Comprada
@@ -618,8 +735,18 @@ const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }
               {previewTab === 'resumen' && (() => {
                 const filtered = previewData.resumen.filter(c => {
                   return Object.keys(filterResumen).every(key => {
-                    if (!filterResumen[key]) return true;
-                    return String(c[key] || '').toLowerCase().includes(filterResumen[key].toLowerCase());
+                    const filterVal = filterResumen[key];
+                    if (filterVal === undefined || filterVal === null || filterVal === '' || (Array.isArray(filterVal) && filterVal.length === 0)) return true;
+                    if (typeof filterVal === 'object' && !Array.isArray(filterVal) && ('min' in filterVal || 'max' in filterVal)) {
+                      const val = Number(c[key] || 0);
+                      if (filterVal.min !== undefined && filterVal.min !== null && filterVal.min !== '' && val < Number(filterVal.min)) return false;
+                      if (filterVal.max !== undefined && filterVal.max !== null && filterVal.max !== '' && val > Number(filterVal.max)) return false;
+                      return true;
+                    }
+                    if (Array.isArray(filterVal)) {
+                      return filterVal.includes(String(c[key] || ''));
+                    }
+                    return String(c[key] || '').toLowerCase().includes(String(filterVal).toLowerCase());
                   });
                 });
                 const totalCuotas = filtered.reduce((acc, r) => acc + (tipoOperacion === 'VENTA' ? r.cantidad : r.cantidad_cuotas) || 0, 0);
@@ -635,37 +762,54 @@ const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }
 
                 return (
                 <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+                    <button 
+                      className="btn-secondary" 
+                      onClick={() => setFilterResumen({})}
+                      title="Limpiar todos los filtros"
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '100%', padding: '0 12px' }}
+                    >
+                      <FilterX size={16} /> Limpiar Filtros
+                    </button>
+                    <ExportExcelButton data={previewData.resumen} filteredData={filtered} filename="preview_vencimientos" />
+                  </div>
                   <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', overflowY: 'auto', flex: 1 }}>
                     <table className="data-table" style={{ width: '100%', fontSize: '13px' }}>
                       <thead style={{position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-panel)', boxShadow: '0 2px 4px rgba(0,0,0,0.2)'}}>
                         <tr>
                           <th style={{textAlign: 'left', padding: '12px', verticalAlign: 'top'}}>
                             {tipoOperacion === 'VENTA' ? 'Mes Vto.' : 'Mes'}
-                            <input type="text" placeholder="Filtrar..." value={tipoOperacion === 'VENTA' ? (filterResumen.fecha_vencimiento || '') : (filterResumen.mes || '')} onChange={e => handleFilterChange(tipoOperacion === 'VENTA' ? 'fecha_vencimiento' : 'mes', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                            <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
+                              <ExcelDateFilter 
+                                availableDates={availableMesesResumen}
+                                selectedDates={tipoOperacion === 'VENTA' ? (filterResumen.fecha_vencimiento || []) : (filterResumen.mes || [])}
+                                onChange={dates => handleFilterChange(tipoOperacion === 'VENTA' ? 'fecha_vencimiento' : 'mes', dates)}
+                              />
+                            </div>
                           </th>
                           <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                             Cuotas
-                            <input type="text" placeholder="Filtrar..." value={tipoOperacion === 'VENTA' ? (filterResumen.cantidad || '') : (filterResumen.cantidad_cuotas || '')} onChange={e => handleFilterChange(tipoOperacion === 'VENTA' ? 'cantidad' : 'cantidad_cuotas', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                            <ExcelNumberRangeFilter selectedRange={tipoOperacion === 'VENTA' ? (filterResumen.cantidad || {}) : (filterResumen.cantidad_cuotas || {})} onChange={r => handleFilterChange(tipoOperacion === 'VENTA' ? 'cantidad' : 'cantidad_cuotas', r)} />
                           </th>
                           <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                             Capital Total
-                            <input type="text" placeholder="Filtrar..." value={tipoOperacion === 'VENTA' ? (filterResumen.capital || '') : (filterResumen.capital_total || '')} onChange={e => handleFilterChange(tipoOperacion === 'VENTA' ? 'capital' : 'capital_total', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                            <ExcelNumberRangeFilter selectedRange={tipoOperacion === 'VENTA' ? (filterResumen.capital || {}) : (filterResumen.capital_total || {})} onChange={r => handleFilterChange(tipoOperacion === 'VENTA' ? 'capital' : 'capital_total', r)} />
                           </th>
                           <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                             Interés Total
-                            <input type="text" placeholder="Filtrar..." value={tipoOperacion === 'VENTA' ? (filterResumen.interes || '') : (filterResumen.interes_total || '')} onChange={e => handleFilterChange(tipoOperacion === 'VENTA' ? 'interes' : 'interes_total', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                            <ExcelNumberRangeFilter selectedRange={tipoOperacion === 'VENTA' ? (filterResumen.interes || {}) : (filterResumen.interes_total || {})} onChange={r => handleFilterChange(tipoOperacion === 'VENTA' ? 'interes' : 'interes_total', r)} />
                           </th>
                           <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                             IVA Total
-                            <input type="text" placeholder="Filtrar..." value={tipoOperacion === 'VENTA' ? (filterResumen.iva || '') : (filterResumen.iva_total || '')} onChange={e => handleFilterChange(tipoOperacion === 'VENTA' ? 'iva' : 'iva_total', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                            <ExcelNumberRangeFilter selectedRange={tipoOperacion === 'VENTA' ? (filterResumen.iva || {}) : (filterResumen.iva_total || {})} onChange={r => handleFilterChange(tipoOperacion === 'VENTA' ? 'iva' : 'iva_total', r)} />
                           </th>
                           <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                             Monto Total
-                            <input type="text" placeholder="Filtrar..." value={tipoOperacion === 'VENTA' ? (filterResumen.total_cuota || '') : (filterResumen.monto_total || '')} onChange={e => handleFilterChange(tipoOperacion === 'VENTA' ? 'total_cuota' : 'monto_total', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                            <ExcelNumberRangeFilter selectedRange={tipoOperacion === 'VENTA' ? (filterResumen.total_cuota || {}) : (filterResumen.monto_total || {})} onChange={r => handleFilterChange(tipoOperacion === 'VENTA' ? 'total_cuota' : 'monto_total', r)} />
                           </th>
                           <th style={{textAlign: 'right', padding: '12px', verticalAlign: 'top'}}>
                             Valor Actual
-                            <input type="text" placeholder="Filtrar..." value={filterResumen.valor_actual || ''} onChange={e => handleFilterChange('valor_actual', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                            <ExcelNumberRangeFilter selectedRange={filterResumen.valor_actual || {}} onChange={r => handleFilterChange('valor_actual', r)} />
                           </th>
                         </tr>
                       </thead>
