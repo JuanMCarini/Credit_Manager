@@ -6,6 +6,7 @@ import ExportExcelButton from '../components/ExportExcelButton';
 const ProcesosListPage = () => {
   const [procesos, setProcesos] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [loadingActions, setLoadingActions] = useState({});
   const navigate = useNavigate();
   
   const [filter, setFilter] = useState({ ID: '', Tipo: [], Estado: [], Fecha: { start: '', end: '' } });
@@ -19,6 +20,7 @@ const ProcesosListPage = () => {
   const [editingRecord, setEditingRecord] = useState(null);
   const [editFormData, setEditFormData] = useState({ estado: '', descripcion: '' });
   const [feedback, setFeedback] = useState(null);
+  const [editSubmitLoading, setEditSubmitLoading] = useState(false);
 
   const TIPOS_DISPONIBLES = ['INDIVIDUAL', 'MASIVO_CSV'];
   const ESTADOS_DISPONIBLES = ['COMPLETADO', 'REVERTIDO', 'PROCESANDO', 'FALLIDO'];
@@ -41,12 +43,15 @@ const ProcesosListPage = () => {
 
   const handleDelete = async (id) => {
     if (!window.confirm(`¿Está seguro que desea eliminar el proceso de ingesta #${id} junto con todas sus cobranzas asociadas?`)) return;
+    setLoadingActions(prev => ({ ...prev, [`delete-${id}`]: true }));
     try {
       await axiosClient.delete(`/api/v1/procesos/${id}`);
       alert('Proceso eliminado con éxito.');
       fetchProcesos();
     } catch (error) {
       alert("Error eliminando proceso: " + (error.response?.data?.detail || error.message));
+    } finally {
+      setLoadingActions(prev => ({ ...prev, [`delete-${id}`]: false }));
     }
   };
 
@@ -69,6 +74,7 @@ const ProcesosListPage = () => {
   const handleEditSubmit = async (e) => {
     e.preventDefault();
     setFeedback(null);
+    setEditSubmitLoading(true);
     try {
       await axiosClient.put(`/api/v1/procesos/${editingRecord.ID}`, {
         estado: editFormData.estado,
@@ -79,6 +85,8 @@ const ProcesosListPage = () => {
       setTimeout(() => handleEditClose(), 1500);
     } catch (error) {
       setFeedback({ type: 'error', message: error.response?.data?.detail || "Error al actualizar el proceso." });
+    } finally {
+      setEditSubmitLoading(false);
     }
   };
 
@@ -241,8 +249,8 @@ const ProcesosListPage = () => {
                         <button className="btn-secondary" onClick={() => handleEditOpen(p)} style={{ padding: '4px 8px', fontSize: '14px' }} title="Editar Proceso">
                           ✏️
                         </button>
-                        <button className="btn-secondary" onClick={() => handleDelete(p.ID)} style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--danger-color)' }} title="Eliminar Proceso">
-                          🗑️
+                        <button className="btn-secondary" onClick={() => handleDelete(p.ID)} style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--danger-color)' }} title="Eliminar Proceso" disabled={loadingActions[`delete-${p.ID}`]}>
+                          {loadingActions[`delete-${p.ID}`] ? '⏳' : '🗑️'}
                         </button>
                       </div>
                     </td>
@@ -308,11 +316,11 @@ const ProcesosListPage = () => {
               </div>
 
               <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-                <button type="button" onClick={handleEditClose} className="btn-secondary">
+                <button type="button" onClick={handleEditClose} className="btn-secondary" disabled={editSubmitLoading}>
                   Cancelar
                 </button>
-                <button type="submit" className="btn-primary">
-                  Guardar Cambios
+                <button type="submit" className="btn-primary" disabled={editSubmitLoading}>
+                  {editSubmitLoading ? '⏳ Guardando...' : 'Guardar Cambios'}
                 </button>
               </div>
             </form>

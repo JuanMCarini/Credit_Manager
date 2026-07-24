@@ -10,6 +10,7 @@ const UsersListPage = () => {
   const [users, setUsers] = useState([]);
   const [roles, setRoles] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingActions, setLoadingActions] = useState({});
   const [error, setError] = useState(null);
   
   const [showFormModal, setShowFormModal] = useState(false);
@@ -60,11 +61,14 @@ const UsersListPage = () => {
 
   const handleDeleteClick = async (user) => {
     if (window.confirm(`¿Estás seguro de que deseas eliminar al usuario ${user.nombre_completo}?`)) {
+      setLoadingActions(prev => ({ ...prev, [`delete-${user.id}`]: true }));
       try {
         await axiosClient.delete(`/api/usuarios/${user.id}`);
         fetchData();
       } catch (err) {
         alert(err.response?.data?.detail || 'Error al eliminar el usuario');
+      } finally {
+        setLoadingActions(prev => ({ ...prev, [`delete-${user.id}`]: false }));
       }
     }
   };
@@ -138,8 +142,8 @@ const UsersListPage = () => {
                       <button className="btn btn-sm btn-secondary" style={{ fontSize: '14px' }} title="Ver Auditoría" onClick={() => handleAuditClick(user)}>
                         📄
                       </button>
-                      <button className="btn btn-sm btn-secondary" style={{ fontSize: '14px', color: 'var(--error)' }} title="Borrar Usuario" onClick={() => handleDeleteClick(user)}>
-                        🗑️
+                      <button className="btn btn-sm btn-secondary" style={{ fontSize: '14px', color: 'var(--error)' }} title="Borrar Usuario" onClick={() => handleDeleteClick(user)} disabled={loadingActions[`delete-${user.id}`]}>
+                        {loadingActions[`delete-${user.id}`] ? '⏳' : '🗑️'}
                       </button>
                     </td>
                   </tr>

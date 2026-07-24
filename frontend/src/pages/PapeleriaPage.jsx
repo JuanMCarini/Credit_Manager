@@ -8,6 +8,7 @@ const PapeleriaPage = () => {
   const [selectedSocio, setSelectedSocio] = useState('');
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [loadingActions, setLoadingActions] = useState({});
 
   // Variables modal state
   const [systemFields, setSystemFields] = useState([]);
@@ -135,7 +136,7 @@ const PapeleriaPage = () => {
     const formData = new FormData();
     formData.append('file', replaceFile);
 
-    setLoading(true);
+    setLoadingActions(prev => ({ ...prev, [`replace-${replacingDocId}`]: true }));
     try {
       await axiosClient.put(`/api/v1/papeleria/${replacingDocId}/file`, formData);
       alert("Documento reemplazado correctamente.");
@@ -143,13 +144,14 @@ const PapeleriaPage = () => {
     } catch (error) {
       alert("Error al reemplazar el documento: " + (error.response?.data?.detail || error.message));
     } finally {
-      setLoading(false);
+      setLoadingActions(prev => ({ ...prev, [`replace-${replacingDocId}`]: false }));
       setReplacingDocId(null);
       e.target.value = '';
     }
   };
 
   const handleDownload = async (docId, fileName) => {
+    setLoadingActions(prev => ({ ...prev, [`download-${docId}`]: true }));
     try {
       const response = await axiosClient.get(`/api/v1/papeleria/download/${docId}`, {
         responseType: 'blob',
@@ -163,17 +165,22 @@ const PapeleriaPage = () => {
       link.parentNode.removeChild(link);
     } catch (error) {
       alert("Error al descargar el documento.");
+    } finally {
+      setLoadingActions(prev => ({ ...prev, [`download-${docId}`]: false }));
     }
   };
 
   const handleDelete = async (docId) => {
     if (!window.confirm("¿Está seguro de eliminar este documento?")) return;
+    setLoadingActions(prev => ({ ...prev, [`delete-${docId}`]: true }));
     try {
       await axiosClient.delete(`/api/v1/papeleria/${docId}`);
       alert("Documento eliminado.");
       fetchDocumentos();
     } catch (error) {
       alert("Error al eliminar el documento.");
+    } finally {
+      setLoadingActions(prev => ({ ...prev, [`delete-${docId}`]: false }));
     }
   };
 
@@ -210,8 +217,7 @@ const PapeleriaPage = () => {
 
   // Variables Modal Logic
   const openVariablesModal = async (doc) => {
-    setSelectedDocForVariables(doc);
-    setVariablesModalOpen(true);
+    setLoadingActions(prev => ({ ...prev, [`vars-${doc.id}`]: true }));
     setDocVariables([]);
     try {
       const res = await axiosClient.get(`/api/v1/papeleria/${doc.id}/variables`);
@@ -223,8 +229,12 @@ const PapeleriaPage = () => {
         return 0;
       });
       setDocVariables(sortedVars);
+      setSelectedDocForVariables(doc);
+      setVariablesModalOpen(true);
     } catch (error) {
       console.error("Error fetching variables", error);
+    } finally {
+      setLoadingActions(prev => ({ ...prev, [`vars-${doc.id}`]: false }));
     }
   };
 
@@ -393,51 +403,63 @@ const PapeleriaPage = () => {
                             className="btn-primary" 
                             title="Mapear Variables"
                             style={{ padding: '6px 10px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                            disabled={loadingActions[`vars-${doc.id}`]}
                           >
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                              <polyline points="14 2 14 8 20 8"></polyline>
-                              <line x1="16" y1="13" x2="8" y2="13"></line>
-                              <line x1="16" y1="17" x2="8" y2="17"></line>
-                              <polyline points="10 9 9 9 8 9"></polyline>
-                            </svg>
+                            {loadingActions[`vars-${doc.id}`] ? '⏳' : (
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                <polyline points="14 2 14 8 20 8"></polyline>
+                                <line x1="16" y1="13" x2="8" y2="13"></line>
+                                <line x1="16" y1="17" x2="8" y2="17"></line>
+                                <polyline points="10 9 9 9 8 9"></polyline>
+                              </svg>
+                            )}
                           </button>
                           <button 
                             onClick={() => handleDownload(doc.id, doc.nombre_archivo)}
                             className="btn-secondary" 
                             title="Descargar documento"
                             style={{ padding: '6px 10px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                            disabled={loadingActions[`download-${doc.id}`]}
                           >
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                              <polyline points="7 10 12 15 17 10"></polyline>
-                              <line x1="12" y1="15" x2="12" y2="3"></line>
-                            </svg>
+                            {loadingActions[`download-${doc.id}`] ? '⏳' : (
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7 10 12 15 17 10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                              </svg>
+                            )}
                           </button>
                           <button 
                             onClick={() => triggerReplace(doc.id)}
                             className="btn-secondary" 
                             title="Reemplazar archivo"
                             style={{ padding: '6px 10px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                            disabled={loadingActions[`replace-${doc.id}`]}
                           >
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                              <polyline points="17 8 12 3 7 8"></polyline>
-                              <line x1="12" y1="3" x2="12" y2="15"></line>
-                            </svg>
+                            {loadingActions[`replace-${doc.id}`] ? '⏳' : (
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="17 8 12 3 7 8"></polyline>
+                                <line x1="12" y1="3" x2="12" y2="15"></line>
+                              </svg>
+                            )}
                           </button>
                           <button 
                             onClick={() => handleDelete(doc.id)}
                             className="btn-danger" 
                             title="Eliminar documento"
                             style={{ padding: '6px 10px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                            disabled={loadingActions[`delete-${doc.id}`]}
                           >
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <polyline points="3 6 5 6 21 6"></polyline>
-                              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                              <line x1="10" y1="11" x2="10" y2="17"></line>
-                              <line x1="14" y1="11" x2="14" y2="17"></line>
-                            </svg>
+                            {loadingActions[`delete-${doc.id}`] ? '⏳' : (
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                <line x1="10" y1="11" x2="10" y2="17"></line>
+                                <line x1="14" y1="11" x2="14" y2="17"></line>
+                              </svg>
+                            )}
                           </button>
                         </div>
                       </td>
