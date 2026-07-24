@@ -773,10 +773,17 @@ def _generar_pdf_for_credito(credito: Credito, db: Session) -> str:
     credito_ident = credito.id if credito.id else f"simulacion_{credito.cliente_cuil}"
     final_pdf_path = os.path.join(output_dir, f"credito_{credito_ident}.pdf")
 
-    import pythoncom
+    has_pythoncom = False
+    try:
+        import pythoncom
+        has_pythoncom = True
+    except ImportError:
+        pass
+
     try:
         try:
-            pythoncom.CoInitialize()
+            if has_pythoncom:
+                pythoncom.CoInitialize()
             for doc in docs:
                 data = {}
                 for var in doc.variables:
@@ -794,7 +801,8 @@ def _generar_pdf_for_credito(credito: Credito, db: Session) -> str:
             merger.close()
 
         finally:
-            pythoncom.CoUninitialize()
+            if has_pythoncom:
+                pythoncom.CoUninitialize()
             for f in temp_files:
                 if os.path.exists(f):
                     try:

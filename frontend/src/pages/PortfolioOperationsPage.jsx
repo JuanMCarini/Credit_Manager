@@ -19,6 +19,9 @@ const PortfolioOperationsPage = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingCartera, setEditingCartera] = useState(null);
   const [isReadOnly, setIsReadOnly] = useState(false);
+  
+  // Loading state for legajos download
+  const [loadingLegajos, setLoadingLegajos] = useState({});
 
   const fetchCarteras = async () => {
     setLoading(true);
@@ -182,6 +185,7 @@ const PortfolioOperationsPage = () => {
   };
 
   const handleDownloadLegajos = async (cartera) => {
+    setLoadingLegajos(prev => ({ ...prev, [cartera.id]: true }));
     try {
       const response = await axiosClient.get(`/api/v1/carteras/${cartera.id}/legajos/export`, {
         responseType: 'blob'
@@ -206,6 +210,8 @@ const PortfolioOperationsPage = () => {
       } else {
         alert("Error al descargar Legajos: " + (error.message || 'Error desconocido'));
       }
+    } finally {
+      setLoadingLegajos(prev => ({ ...prev, [cartera.id]: false }));
     }
   };
 
@@ -275,8 +281,8 @@ const PortfolioOperationsPage = () => {
                       <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadExcel(c)} title="Descargar Excel de la Operación">
                         📊
                       </button>
-                      <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadLegajos(c)} title="Descargar Legajos (PDF)">
-                        📑
+                      <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadLegajos(c)} title="Descargar Legajos (PDF)" disabled={loadingLegajos[c.id]}>
+                        {loadingLegajos[c.id] ? '⏳' : '📑'}
                       </button>
                       {c.tipo_operacion === 'VENTA' && (
                         <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadCsvs(c)} title="Descargar CSVs Generados">
