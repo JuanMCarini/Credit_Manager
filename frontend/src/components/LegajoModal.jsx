@@ -59,11 +59,7 @@ const LegajoModal = ({ creditoId, creditoEstado, onClose }) => {
     formData.append('es_legajo_firmado', isLegajoFirmado);
 
     try {
-      await axiosClient.post(`/api/v1/creditos/${creditoId}/documentos`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+      await axiosClient.post(`/api/v1/creditos/${creditoId}/documentos`, formData);
       setFile(null);
       setSelectedTransferencia('');
       setIsLegajoFirmado(false);

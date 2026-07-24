@@ -326,6 +326,14 @@ def preview_compra_cartera(
                 if remuneracion > 0:
                     relacion_cuota_sueldo = round((valor_cuota / remuneracion) * 100, 0)
                 
+                f_emision = row.get("Fecha Emisión", row.get("Fecha Emision", row.get("fecha_emision", None)))
+                f_emision_str = None
+                if f_emision is not None and not pd.isna(f_emision):
+                    if hasattr(f_emision, 'strftime'):
+                        f_emision_str = f_emision.strftime("%Y-%m-%d")
+                    else:
+                        f_emision_str = str(f_emision).split("T")[0].split(" ")[0]
+
                 creditos_res.append({
                     "id_externo": str(id_op),
                     "cliente_nombre": str(row.get("Cliente", "")).strip() or str(row.get("CUIL", "")),
@@ -336,7 +344,8 @@ def preview_compra_cartera(
                     "valor_actual_csv": val_act_csv,
                     "plazo": plazo,
                     "cuotas_compradas": cuotas_compradas,
-                    "relacion_cuota_sueldo": relacion_cuota_sueldo
+                    "relacion_cuota_sueldo": relacion_cuota_sueldo,
+                    "fecha_emision": f_emision_str
                 })
                 
             cuotas_res = []
@@ -585,7 +594,8 @@ def get_compra_preview(cartera_id: int, db: Session = Depends(get_db)):
             "valor_actual_csv": round(va_por_credito[cred.id], 2),
             "plazo": cred.plazo,
             "cuotas_compradas": cuotas_compradas_por_cred[cred.id],
-            "relacion_cuota_sueldo": 0.0
+            "relacion_cuota_sueldo": 0.0,
+            "fecha_emision": cred.fecha_emision.isoformat() if cred.fecha_emision else None
         })
         
     resumen_res = []

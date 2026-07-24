@@ -37,11 +37,7 @@ const CreditProcessesPage = () => {
     files.forEach((f) => formData.append('files', f));
 
     try {
-      const response = await axiosClient.post('/api/v1/creditos/procesos/upload-batch', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+      const response = await axiosClient.post('/api/v1/creditos/procesos/upload-batch', formData);
       
       setResultsFiles(response.data);
       alert("Proceso finalizado.");
@@ -73,11 +69,7 @@ const CreditProcessesPage = () => {
     archivosImport.forEach((f) => formData.append('archivos', f));
 
     try {
-      const response = await axiosClient.post('/api/v1/creditos/importacion-masiva', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+      const response = await axiosClient.post('/api/v1/creditos/importacion-masiva', formData);
       
       setResultsImport(response.data);
       alert("Importación procesada. " + (response.data.errores_count > 0 ? "Se encontraron algunos errores." : "Todo exitoso."));

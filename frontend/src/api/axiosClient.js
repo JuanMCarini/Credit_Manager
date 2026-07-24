@@ -9,12 +9,18 @@ const axiosClient = axios.create({
   },
 });
 
-// Request interceptor to attach the auth token
+// Request interceptor to attach the auth token and handle FormData properly
 axiosClient.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
     if (token) {
       config.headers['Authorization'] = `Bearer ${token}`;
+    }
+    if (config.data instanceof FormData) {
+      delete config.headers['Content-Type'];
+      if (typeof config.headers.delete === 'function') {
+        config.headers.delete('Content-Type');
+      }
     }
     return config;
   },
