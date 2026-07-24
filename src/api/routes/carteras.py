@@ -1,5 +1,6 @@
 import os
 import tempfile
+import zipfile
 import pandas as pd
 from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Form, UploadFile, File
@@ -12,6 +13,7 @@ from src.api.schemas.carteras import VentaCarteraRequest, UpdateCarteraRequest
 from src.portfolio.sell import PortfolioSell
 from src.portfolio.purchase import PortfolioPurchase
 from src.api.routes.system import sync_system_states
+from src.api.routes.papeleria import _generar_pdf_for_credito
 
 router = APIRouter(prefix="/api/v1/carteras", tags=["Carteras"])
 
@@ -767,3 +769,55 @@ def delete_cartera(cartera_id: int, db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=f"No se puede eliminar la cartera (puede estar referenciada). Error: {str(e)}")
+
+@router.get("/{cartera_id}/legajos/export")
+def export_cartera_legajos(cartera_id: int, db: Session = Depends(get_db)):
+    cartera = db.query(Cartera).filter(Cartera.id == cartera_id).first()
+    if not cartera:
+        raise HTTPException(status_code=404, detail="Cartera no encontrada")
+        
+    creditos_ids = set()
+    if cartera.tipo_operacion == TipoOperacionCartera.COMPRA:
+        creditos = db.query(Credito).filter(Credito.cartera_id == cartera_id).all()
+        for c in creditos:
+            creditos_ids.add(c.id)
+    else:
+        operaciones = db.query(OperacionCartera).filter(OperacionCartera.cartera_id == cartera_id).all()
+        if operaciones:
+            cuotas_ids = [op.cuota_id for op in operaciones]
+            cuotas = db.query(Cuota).filter(Cuota.id.in_(cuotas_ids)).all()
+            for c in cuotas:
+                creditos_ids.add(c.credito_id)
+
+    if not creditos_ids:
+        raise HTTPException(status_code=400, detail="La cartera no tiene créditos asociados.")
+        
+    creditos = db.query(Credito).filter(Credito.id.in_(creditos_ids)).all()
+    
+    temp_dir = tempfile.mkdtemp()
+    tna = float(cartera.tna_descuento) if cartera.tna_descuento is not None else 0.0
+    socio_nombre = cartera.socio.razon_social if cartera.socio else "SinSocio"
+    default_name = f"Legajos - Cartera Nro. {str(cartera.id).zfill(2)} - {socio_nombre} - {cartera.fecha_compra} - {tna:.2%}.zip"
+    zip_path = os.path.join(temp_dir, default_name.replace("/", "-").replace(":", "-"))
+    
+    errores = []
+    
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+        for credito in creditos:
+            try:
+                pdf_path = _generar_pdf_for_credito(credito, db)
+                identificador = credito.id_externo or credito.id
+                nombre_pdf = f"Legajo_{identificador}_{credito.cliente_cuil}.pdf"
+                zipf.write(pdf_path, nombre_pdf)
+            except Exception as e:
+                errores.append(f"Credito ID {credito.id} (CUIL: {credito.cliente_cuil}): {str(e)}")
+                
+        if errores:
+            errors_path = os.path.join(temp_dir, "errores.txt")
+            with open(errors_path, "w") as f:
+                f.write("Errores durante la generacion de legajos:\n")
+                for err in errores:
+                    f.write(f"- {err}\n")
+            zipf.write(errors_path, "errores.txt")
+            
+    return FileResponse(zip_path, media_type="application/zip", filename=os.path.basename(zip_path))

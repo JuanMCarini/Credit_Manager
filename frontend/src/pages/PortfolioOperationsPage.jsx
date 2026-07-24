@@ -181,6 +181,34 @@ const PortfolioOperationsPage = () => {
     }
   };
 
+  const handleDownloadLegajos = async (cartera) => {
+    try {
+      const response = await axiosClient.get(`/api/v1/carteras/${cartera.id}/legajos/export`, {
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Legajos_${cartera.id}_${cartera.nombre}.zip`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode.removeChild(link);
+    } catch (error) {
+      if (error.response && error.response.data instanceof Blob) {
+        // Parse error blob
+        const text = await error.response.data.text();
+        try {
+          const json = JSON.parse(text);
+          alert("Error al descargar Legajos: " + (json.detail || "Error desconocido"));
+        } catch {
+          alert("Error al descargar Legajos.");
+        }
+      } else {
+        alert("Error al descargar Legajos: " + (error.message || 'Error desconocido'));
+      }
+    }
+  };
+
   return (
     <section className="tab-content active" style={{ animation: 'fadeIn 0.4s ease' }}>
       <header className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
@@ -246,6 +274,9 @@ const PortfolioOperationsPage = () => {
                     <div style={{ display: 'flex', gap: '8px' }}>
                       <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadExcel(c)} title="Descargar Excel de la Operación">
                         📊
+                      </button>
+                      <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadLegajos(c)} title="Descargar Legajos (PDF)">
+                        📑
                       </button>
                       {c.tipo_operacion === 'VENTA' && (
                         <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadCsvs(c)} title="Descargar CSVs Generados">
