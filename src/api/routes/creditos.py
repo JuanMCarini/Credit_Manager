@@ -414,11 +414,10 @@ def delete_documento(credito_id: int, doc_id: int, db: Session = Depends(get_db)
     db.commit()
     return {"status": "success", "message": "Documento eliminado"}
 
-@router.get("/api/v1/creditos/{credito_id:int}/documentos/merged/download")
-def download_merged_pdf(credito_id: int, db: Session = Depends(get_db)):
+def _merge_uploaded_docs_for_credito(credito_id: int, db: Session) -> BytesIO:
     docs = db.query(DocumentoLegajo).filter(DocumentoLegajo.credito_id == credito_id).all()
     if not docs:
-        raise HTTPException(status_code=404, detail="No hay documentos para este crédito")
+        raise ValueError("No hay documentos para este crédito")
 
     # Ordenar: Documentos generales primero (transferencia_id is None), transferencias al final
     docs = sorted(docs, key=lambda d: 1 if d.transferencia_id is not None else 0)
@@ -454,6 +453,17 @@ def download_merged_pdf(credito_id: int, db: Session = Depends(get_db)):
                 
     output_pdf = BytesIO()
     merger.write(output_pdf)
+    output_pdf.seek(0)
+    return output_pdf
+
+@router.get("/api/v1/creditos/{credito_id:int}/documentos/merged/download")
+def download_merged_pdf(credito_id: int, db: Session = Depends(get_db)):
+    try:
+        output_pdf = _merge_uploaded_docs_for_credito(credito_id, db)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
     
     return Response(
         content=output_pdf.getvalue(), 

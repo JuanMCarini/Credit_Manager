@@ -160,14 +160,31 @@ def process_document(template_path: str, output_pdf: str, data: Dict[str, Any]) 
     except Exception as e:
         raise RuntimeError(f"Error interno modificando el documento .docx: {e}")
 
-    # Fase 2: Conversión a PDF mediante COM/Word nativo (Windows)
+    # Fase 2: Conversión a PDF mediante COM/Word nativo (Windows) o LibreOffice (Linux)
     try:
-        # docx2pdf opera de manera óptima con rutas absolutas
         abs_docx = os.path.abspath(temp_docx_path)
         abs_pdf = os.path.abspath(output_pdf)
-        convert(abs_docx, abs_pdf)
+        
+        import sys
+        if sys.platform == "win32":
+            convert(abs_docx, abs_pdf)
+        else:
+            import subprocess
+            import shutil
+            out_dir = os.path.dirname(abs_pdf)
+            subprocess.run([
+                "libreoffice", "--headless", "--convert-to", "pdf", 
+                "--outdir", out_dir, abs_docx
+            ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            
+            base_name = os.path.splitext(os.path.basename(abs_docx))[0]
+            generated_pdf = os.path.join(out_dir, f"{base_name}.pdf")
+            if os.path.exists(generated_pdf):
+                shutil.move(generated_pdf, abs_pdf)
+            else:
+                raise RuntimeError("LibreOffice no generó el archivo PDF esperado.")
     except Exception as e:
-        raise RuntimeError(f"Error durante la conversión COM a PDF: {e}")
+        raise RuntimeError(f"Error durante la conversión a PDF: {e}")
     finally:
         # Limpiar el archivo temporal
         if os.path.exists(temp_docx_path):

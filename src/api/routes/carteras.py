@@ -13,7 +13,7 @@ from src.api.schemas.carteras import VentaCarteraRequest, UpdateCarteraRequest
 from src.portfolio.sell import PortfolioSell
 from src.portfolio.purchase import PortfolioPurchase
 from src.api.routes.system import sync_system_states
-from src.api.routes.papeleria import _generar_pdf_for_credito
+from src.api.routes.creditos import _merge_uploaded_docs_for_credito
 
 router = APIRouter(prefix="/api/v1/carteras", tags=["Carteras"])
 
@@ -805,10 +805,17 @@ def export_cartera_legajos(cartera_id: int, db: Session = Depends(get_db)):
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
         for credito in creditos:
             try:
-                pdf_path = _generar_pdf_for_credito(credito, db)
-                identificador = credito.id_externo or credito.id
-                nombre_pdf = f"Legajo_{identificador}_{credito.cliente_cuil}.pdf"
-                zipf.write(pdf_path, nombre_pdf)
+                pdf_io = _merge_uploaded_docs_for_credito(credito.id, db)
+                id_ext = f"{credito.id_externo} - " if credito.id_externo else ""
+                nombre_pdf = f"Legajo Nro. {credito.id} - {id_ext}{credito.cliente_cuil}.pdf"
+                
+                # Create a temporary file to save the BytesIO content before adding to zip
+                temp_pdf_path = os.path.join(temp_dir, nombre_pdf)
+                with open(temp_pdf_path, "wb") as f:
+                    f.write(pdf_io.getvalue())
+                    
+                zipf.write(temp_pdf_path, nombre_pdf)
+                os.remove(temp_pdf_path)
             except Exception as e:
                 errores.append(f"Credito ID {credito.id} (CUIL: {credito.cliente_cuil}): {str(e)}")
                 
