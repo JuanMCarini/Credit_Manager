@@ -120,12 +120,13 @@ const PortfolioOperationsPage = () => {
           const newItem = { ...item };
           for (const field of dateFields) {
             if (newItem[field]) {
-              let dateStr = newItem[field];
+              let dateStr = String(newItem[field]).split('T')[0];
               if (dateStr.length === 7) dateStr += "-01";
               
-              const d = new Date(dateStr + "T00:00:00");
-              if (!isNaN(d)) {
-                newItem[field] = d;
+              const parts = dateStr.split('-');
+              if (parts.length === 3) {
+                // Formatting directly as DD/MM/YYYY string to avoid SheetJS timezone shift bugs
+                newItem[field] = `${parts[2]}/${parts[1]}/${parts[0]}`;
               }
             }
           }
@@ -139,7 +140,7 @@ const PortfolioOperationsPage = () => {
 
       const wb = XLSX.utils.book_new();
       
-      const sheetOptions = { cellDates: true, dateNF: 'dd/mm/yyyy' };
+      const sheetOptions = {};
       
       const wsCreditos = XLSX.utils.json_to_sheet(formattedCreditos, sheetOptions);
       XLSX.utils.book_append_sheet(wb, wsCreditos, "Créditos");
@@ -277,45 +278,68 @@ const PortfolioOperationsPage = () => {
                   <td>{c.recurso ? 'Sí' : 'No'}</td>
                   <td>{c.iva ? 'Sí' : 'No'}</td>
                   <td>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadExcel(c)} title="Descargar Excel de la Operación">
-                        📊
-                      </button>
-                      <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadLegajos(c)} title="Descargar Legajos (PDF)" disabled={loadingLegajos[c.id]}>
-                        {loadingLegajos[c.id] ? '⏳' : '📑'}
-                      </button>
-                      {c.tipo_operacion === 'VENTA' && (
-                        <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadCsvs(c)} title="Descargar CSVs Generados">
-                          📁
+                    {c.estado === 'PENDIENTE' ? (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'auto auto', gap: '8px', alignItems: 'stretch' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadExcel(c)} title="Descargar Excel de la Operación">
+                              📊
+                            </button>
+                            <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadLegajos(c)} title="Descargar Legajos (PDF)" disabled={loadingLegajos[c.id]}>
+                              {loadingLegajos[c.id] ? '⏳' : '📑'}
+                            </button>
+                            {c.tipo_operacion === 'VENTA' && (
+                              <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadCsvs(c)} title="Descargar CSVs Generados">
+                                📁
+                              </button>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleEditClick(c, true)} title="Ver Detalles">
+                              👁️
+                            </button>
+                            <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleEditClick(c)} title="Editar">
+                              ✏️
+                            </button>
+                            <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px', color: 'var(--danger-color)' }} onClick={() => handleDelete(c.id)} title="Eliminar">
+                              🗑️
+                            </button>
+                          </div>
+                        </div>
+                        <button 
+                          className="btn-secondary" 
+                          style={{ padding: '4px', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} 
+                          onClick={() => handleChangeEstado(c.id, c.tipo_operacion === 'VENTA' ? 'VENDIDA' : 'COMPRADA')} 
+                          title="Confirmar"
+                        >
+                          ✅
                         </button>
-                      )}
-                      {c.estado === 'PENDIENTE' && (
-                        <>
-                          <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleChangeEstado(c.id, c.tipo_operacion === 'VENTA' ? 'VENDIDA' : 'COMPRADA')} title="Confirmar">
-                            ✅
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadExcel(c)} title="Descargar Excel de la Operación">
+                          📊
+                        </button>
+                        <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadLegajos(c)} title="Descargar Legajos (PDF)" disabled={loadingLegajos[c.id]}>
+                          {loadingLegajos[c.id] ? '⏳' : '📑'}
+                        </button>
+                        {c.tipo_operacion === 'VENTA' && (
+                          <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadCsvs(c)} title="Descargar CSVs Generados">
+                            📁
                           </button>
-                          <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleEditClick(c, true)} title="Ver Detalles">
-                            👁️
-                          </button>
-                          <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleEditClick(c)} title="Editar">
-                            ✏️
-                          </button>
-                          <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px', color: 'var(--danger-color)' }} onClick={() => handleDelete(c.id)} title="Eliminar">
-                            🗑️
-                          </button>
-                        </>
-                      )}
-                      {(c.estado === 'VENDIDA' || c.estado === 'COMPRADA') && (
-                        <>
-                          <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleEditClick(c, true)} title="Ver Detalles">
-                            👁️
-                          </button>
-                          <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px', color: 'var(--danger-color)' }} onClick={() => alert('No se puede anular una cartera ya confirmada directamente.')} title="Anular (No Permitido)">
-                            ❌
-                          </button>
-                        </>
-                      )}
-                    </div>
+                        )}
+                        {(c.estado === 'VENDIDA' || c.estado === 'COMPRADA') && (
+                          <>
+                            <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleEditClick(c, true)} title="Ver Detalles">
+                              👁️
+                            </button>
+                            <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px', color: 'var(--danger-color)' }} onClick={() => alert('No se puede anular una cartera ya confirmada directamente.')} title="Anular (No Permitido)">
+                              ❌
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))
