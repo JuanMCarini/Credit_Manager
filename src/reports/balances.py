@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 from sqlalchemy import text
 
-from src.config import COMPANY_DATA
+from src.config import get_company_data
 from src.database import engine
 
 
@@ -114,6 +114,7 @@ def saldos(
     df["Partner_Name"] = (
         df["Dueño_id_tmp"].map(df_cart["socio_id"]).map(df_socios["razon_social"])
     )
+    company_data = get_company_data()
 
     conditions = [
         (df["tipo_op"].isin(["COMPRA", "RECOMPRA"])) & (df["comercializada"] == True),  # noqa: E712
@@ -122,12 +123,12 @@ def saldos(
         (df["tipo_op"] == "VENTA") & (df["comercializada"] == False),  # noqa: E712
     ]
     choices = [
-        COMPANY_DATA.razon_social,
+        company_data.razon_social,
         df["Partner_Name"],
         df["Partner_Name"],
-        COMPANY_DATA.razon_social,
+        company_data.razon_social,
     ]
-    df["Dueño"] = np.select(conditions, choices, default=COMPANY_DATA.razon_social)
+    df["Dueño"] = np.select(conditions, choices, default=company_data.razon_social)
 
     df.drop(
         columns=["Dueño_id_tmp", "Partner_Name", "tipo_op", "comercializada"],
@@ -138,9 +139,9 @@ def saldos(
     if propias is None:
         pass
     elif propias:
-        df = df[df["Dueño"] == COMPANY_DATA.razon_social]
+        df = df[df["Dueño"] == company_data.razon_social]
     else:
-        df = df[df["Dueño"] != COMPANY_DATA.razon_social]
+        df = df[df["Dueño"] != company_data.razon_social]
 
     if agrupar and agrupadores:
         mapper = {

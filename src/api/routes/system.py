@@ -76,17 +76,18 @@ def sync_system_states(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/company")
-def get_company_info():
-    from src.config import COMPANY_DATA
+def get_company_info(db: Session = Depends(get_db)):
+    from src.config import get_company_data
+    company = get_company_data(db)
     return {
-        "razon_social": COMPANY_DATA.razon_social,
-        "cuit": COMPANY_DATA.cuit,
-        "domicilio": COMPANY_DATA.domicilio,
-        "email_contacto": COMPANY_DATA.email_contacto,
-        "telefono": COMPANY_DATA.telefono,
-        "nro_cuenta_bancaria": COMPANY_DATA.bank_account,
-        "nombre_banco": COMPANY_DATA.bank_name,
-        "cbu": COMPANY_DATA.cbu
+        "razon_social": company.razon_social,
+        "cuit": company.cuit,
+        "domicilio": company.domicilio,
+        "email_contacto": company.email_contacto,
+        "telefono": company.telefono,
+        "nro_cuenta_bancaria": company.bank_account,
+        "nombre_banco": company.bank_name,
+        "cbu": company.cbu
     }
 
 @router.post("/repet/sync")
