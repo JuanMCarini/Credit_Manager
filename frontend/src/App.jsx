@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
 import MainLayout from './components/MainLayout';
+import DashboardCarteraPage from './pages/DashboardCarteraPage';
 import SimulationPage from './pages/SimulationPage';
 import BalancesPage from './pages/BalancesPage';
 import ClientRegistrationPage from './pages/ClientRegistrationPage';
@@ -29,7 +30,8 @@ function App() {
         {/* Rutas protegidas genéricas (cualquier rol) */}
         <Route element={<ProtectedRoute allowedRoles={['Auditor / Solo Lectura', 'Operador de Cobranzas', 'Oficial de Crédito']} />}>
           <Route path="/" element={<MainLayout />}>
-            <Route index element={<Navigate to="/simulation" replace />} />
+            <Route index element={<Navigate to="/dashboard-cartera" replace />} />
+            <Route path="dashboard-cartera" element={<DashboardCarteraPage />} />
             <Route path="simulation" element={<SimulationPage />} />
             <Route path="balances" element={<BalancesPage />} />
             <Route path="clientes" element={<ClientListPage />} />
