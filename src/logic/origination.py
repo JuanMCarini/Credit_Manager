@@ -71,6 +71,7 @@ class LoanOriginator:
         due_day: int,
         cutoff_day: int,
         type: TipoCredito,
+        comercializador_id: int | None = None,
         comision_id: int | None = None,
         id_externo: str | None = None,
     ) -> None:
@@ -83,6 +84,7 @@ class LoanOriginator:
         self.credit = Credito(
             cliente_cuil=self.client.cuil,
             socio_originador_id=partner_id,
+            comercializador_id=comercializador_id,
             comision_id=comision_id,
             capital=capital,
             tna_c_iva=tna_c_iva,
@@ -124,6 +126,7 @@ class LoanOriginator:
         issuance_date: date | None = None,
         due_day: int = 28,
         type: TipoCredito = TipoCredito.FRANCES,
+        comercializador_id: int | None = None,
         comision_id: int | None = None,
         id_externo: str | None = None,
         transferencias_data: list = None,
@@ -142,7 +145,7 @@ class LoanOriginator:
             self._validate_client(client_cuil)
             cutoff_day = self._get_partner_cutoff_day(partner_id)
             self._generate_credit_and_schedule(
-                capital, tna_c_iva, term, partner_id, issuance_date, due_day, cutoff_day, type, comision_id, id_externo
+                capital, tna_c_iva, term, partner_id, issuance_date, due_day, cutoff_day, type, comercializador_id, comision_id, id_externo
             )
 
             from src.config import COMPANY_DATA

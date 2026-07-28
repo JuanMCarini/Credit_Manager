@@ -18,6 +18,15 @@ from sqlalchemy.orm import Session, relationship
 from src.database import Base, SessionLocal
 
 
+class Comercializador(Base):
+    __tablename__ = "comercializadores"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    nombre = Column(String(150), unique=True, nullable=False)
+
+    creditos = relationship("Credito", back_populates="comercializador")
+
+
 class SocioComercial(Base):
     """
     =============================================================================

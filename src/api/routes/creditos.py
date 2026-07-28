@@ -614,112 +614,172 @@ import base64
 import tempfile
 import importlib
 import traceback
+import tempfile
+import zipfile
 from src.logic.import_data import quota
+from src.logic.import_data.web_carga import importar_datos_web_carga, ImportValidationError
 
 @router.post("/api/v1/creditos/importacion-masiva")
 async def importacion_masiva_creditos(
     proveedor: str = Form("QUOTA_CFL"),
-    clientes_file: UploadFile = File(...),
-    creditos_file: UploadFile = File(...),
-    transferencias_file: UploadFile = File(...),
+    clientes_file: UploadFile = File(default=None),
+    creditos_file: UploadFile = File(default=None),
+    transferencias_file: UploadFile = File(default=None),
+    archivo_web_carga: UploadFile = File(default=None),
     archivos: List[UploadFile] = File(default=[]),
     db: Session = Depends(get_db)
 ):
-    if proveedor != "QUOTA_CFL":
+    if proveedor not in ["QUOTA_CFL", "WEB_CARGA_CFL"]:
         raise HTTPException(status_code=400, detail="Proveedor no soportado actualmente.")
 
     try:
-        # 1. Leer Archivos en Memoria
-        clts_bytes = await clientes_file.read()
-        df_clts = pd.read_excel(BytesIO(clts_bytes))
-        df_clts.columns = [str(c).strip() for c in df_clts.columns]
-        
-        crts_bytes = await creditos_file.read()
-        df_crts = pd.read_excel(BytesIO(crts_bytes))
-        df_crts.columns = [str(c).strip() for c in df_crts.columns]
-
-        # Normalizar variaciones de nombres de columnas frecuentes
-        col_mappings = {
-            'Credito': 'Crédito',
-            'id externo': 'ID Externo',
-            'id_externo': 'ID Externo',
-            'ID EXTERNO': 'ID Externo',
-            'Imp.Cuota': 'Imp. Cuota',
-            'Imp Cuota': 'Imp. Cuota',
-            'Emision': 'Emisión',
-        }
-        df_crts.rename(columns=col_mappings, inplace=True)
-        
-        transf_bytes = await transferencias_file.read()
-        try:
-            df_transf = pd.read_csv(BytesIO(transf_bytes), sep=";", header=None, names=["CBU/CVU", "Fecha", "Monto", "CUIT/CUIL", "ID Quota", "Razon Social"], encoding="utf-8")
-        except Exception:
-            df_transf = pd.read_csv(BytesIO(transf_bytes), sep=";", header=None, names=["CBU/CVU", "Fecha", "Monto", "CUIT/CUIL", "ID Quota", "Razon Social"], encoding="latin-1", on_bad_lines='skip')
-
-        # 2. Pipeline de Importación Quota
         errores_globales = []
-        
-        res_clts = quota.import_clients_from_dataframe(df_clts, db)
-        if res_clts.get('errores'):
-            errores_globales.extend([{"Etapa": "Clientes", "Error": err} for err in res_clts['errores']])
-            
-        res_crts_upd = quota.update_clients_from_crts_dataframe(df_crts, db)
-        if res_crts_upd.get('errores'):
-            errores_globales.extend([{"Etapa": "Actualización Clientes", "Error": err} for err in res_crts_upd['errores']])
-            
-        res_crts = quota.import_credits_from_dataframe(df_crts, db)
-        if res_crts.get('errores'):
-            errores_globales.extend([{"Etapa": "Créditos", "Error": err} for err in res_crts['errores']])
-            
-        nuevos_ids = res_crts.get('nuevos_ids_externos', set())
-        
-        res_transf = quota.import_transfers_from_dataframe(df_transf, df_crts, db, nuevos_ids_externos=nuevos_ids)
-        if res_transf.get('errores'):
-            errores_globales.extend([{"Etapa": "Transferencias", "Error": err} for err in res_transf['errores']])
-
-        # 3. Procesar Archivos (Legajos)
         archivos_procesados = 0
+        resumen = {}
+        
+        # Procesar extracción de archivos adjuntos (legajos)
+        extracted_files = []
+        tmpdirname = None
         if archivos:
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                extracted_files = []
-                for file in archivos:
-                    if file.filename.lower().endswith(".zip"):
-                        content = await file.read()
-                        with zipfile.ZipFile(BytesIO(content)) as zf:
-                            for zip_info in zf.infolist():
-                                if not zip_info.is_dir() and not zip_info.filename.startswith("__MACOSX/") and not zip_info.filename.startswith("."):
-                                    extracted_bytes = zf.read(zip_info.filename)
-                                    base_name = os.path.basename(zip_info.filename)
-                                    if base_name:
-                                        file_path = os.path.join(tmpdirname, base_name)
-                                        with open(file_path, "wb") as f:
-                                            f.write(extracted_bytes)
-                                        extracted_files.append(file_path)
-                    else:
-                        file_bytes = await file.read()
-                        file_path = os.path.join(tmpdirname, file.filename)
-                        with open(file_path, "wb") as f:
-                            f.write(file_bytes)
-                        extracted_files.append(file_path)
+            tmpdirname = tempfile.mkdtemp()
+            for file in archivos:
+                if file.filename.lower().endswith(".zip"):
+                    content = await file.read()
+                    with zipfile.ZipFile(BytesIO(content)) as zf:
+                        for zip_info in zf.infolist():
+                            if not zip_info.is_dir() and not zip_info.filename.startswith("__MACOSX/") and not zip_info.filename.startswith("."):
+                                extracted_bytes = zf.read(zip_info.filename)
+                                base_name = os.path.basename(zip_info.filename)
+                                if base_name:
+                                    file_path = os.path.join(tmpdirname, base_name)
+                                    with open(file_path, "wb") as f:
+                                        f.write(extracted_bytes)
+                                    extracted_files.append(file_path)
+                else:
+                    file_bytes = await file.read()
+                    file_path = os.path.join(tmpdirname, file.filename)
+                    with open(file_path, "wb") as f:
+                        f.write(file_bytes)
+                    extracted_files.append(file_path)
 
-                if extracted_files:
-                    res_docs = quota.process_quota_documents(
-                        file_paths=extracted_files,
-                        df_crts=df_crts,
-                        session=db,
-                        upload_dir=UPLOAD_DIR,
-                        nuevos_ids_externos=nuevos_ids
-                    )
-                    archivos_procesados = len(res_docs.get('procesados', []))
-                    if res_docs.get('errores'):
-                        errores_globales.extend([{"Etapa": "Documentos", "Error": str(err)} for err in res_docs['errores']])
+        if proveedor == "QUOTA_CFL":
+            if not clientes_file or not creditos_file or not transferencias_file:
+                raise HTTPException(status_code=400, detail="Faltan archivos requeridos para Quota.")
+                
+            clts_bytes = await clientes_file.read()
+            df_clts = pd.read_excel(BytesIO(clts_bytes))
+            df_clts.columns = [str(c).strip() for c in df_clts.columns]
+            
+            crts_bytes = await creditos_file.read()
+            df_crts = pd.read_excel(BytesIO(crts_bytes))
+            df_crts.columns = [str(c).strip() for c in df_crts.columns]
 
-        # 4. Verificar estados
-        res_estados = quota.verify_and_update_credit_states(df_crts, db)
-        if res_estados.get('errores'):
-            errores_globales.extend([{"Etapa": "Verificación Estados", "Error": err} for err in res_estados['errores']])
+            col_mappings = {
+                'Credito': 'Crédito',
+                'id externo': 'ID Externo',
+                'id_externo': 'ID Externo',
+                'ID EXTERNO': 'ID Externo',
+                'Imp.Cuota': 'Imp. Cuota',
+                'Imp Cuota': 'Imp. Cuota',
+                'Emision': 'Emisión',
+            }
+            df_crts.rename(columns=col_mappings, inplace=True)
+            
+            transf_bytes = await transferencias_file.read()
+            try:
+                df_transf = pd.read_csv(BytesIO(transf_bytes), sep=";", header=None, names=["CBU/CVU", "Fecha", "Monto", "CUIT/CUIL", "ID Quota", "Razon Social"], encoding="utf-8")
+            except Exception:
+                df_transf = pd.read_csv(BytesIO(transf_bytes), sep=";", header=None, names=["CBU/CVU", "Fecha", "Monto", "CUIT/CUIL", "ID Quota", "Razon Social"], encoding="latin-1", on_bad_lines='skip')
 
-        # 5. Generar reporte de errores si los hay
+            res_clts = quota.import_clients_from_dataframe(df_clts, db)
+            if res_clts.get('errores'):
+                errores_globales.extend([{"Etapa": "Clientes", "Error": err} for err in res_clts['errores']])
+                
+            res_crts_upd = quota.update_clients_from_crts_dataframe(df_crts, db)
+            if res_crts_upd.get('errores'):
+                errores_globales.extend([{"Etapa": "Actualización Clientes", "Error": err} for err in res_crts_upd['errores']])
+                
+            res_crts = quota.import_credits_from_dataframe(df_crts, db)
+            if res_crts.get('errores'):
+                errores_globales.extend([{"Etapa": "Créditos", "Error": err} for err in res_crts['errores']])
+                
+            nuevos_ids = res_crts.get('nuevos_ids_externos', set())
+            
+            res_transf = quota.import_transfers_from_dataframe(df_transf, df_crts, db, nuevos_ids_externos=nuevos_ids)
+            if res_transf.get('errores'):
+                errores_globales.extend([{"Etapa": "Transferencias", "Error": err} for err in res_transf['errores']])
+
+            if extracted_files:
+                res_docs = quota.process_quota_documents(
+                    file_paths=extracted_files,
+                    df_crts=df_crts,
+                    session=db,
+                    upload_dir=UPLOAD_DIR,
+                    nuevos_ids_externos=nuevos_ids
+                )
+                archivos_procesados = len(res_docs.get('procesados', []))
+                if res_docs.get('errores'):
+                    errores_globales.extend([{"Etapa": "Documentos", "Error": str(err)} for err in res_docs['errores']])
+
+            res_estados = quota.verify_and_update_credit_states(df_crts, db)
+            if res_estados.get('errores'):
+                errores_globales.extend([{"Etapa": "Verificación Estados", "Error": err} for err in res_estados['errores']])
+
+            resumen = {
+                "nuevos_clientes": res_clts.get('nuevos', 0),
+                "clientes_actualizados": res_clts.get('actualizados', 0) + res_crts_upd.get('actualizados', 0),
+                "nuevos_creditos": res_crts.get('nuevos_creditos', 0),
+                "creditos_existentes": res_crts.get('creditos_existentes', 0),
+                "transferencias_importadas": res_transf.get('importadas', 0),
+                "archivos_procesados": archivos_procesados,
+                "pasados_a_firmado": res_estados.get('pasados_a_firmado', 0),
+                "pasados_a_activo": res_estados.get('pasados_a_activo', 0)
+            }
+
+        elif proveedor == "WEB_CARGA_CFL":
+            if not archivo_web_carga:
+                raise HTTPException(status_code=400, detail="Falta el archivo TXT para Web Carga.")
+                
+            if not tmpdirname:
+                tmpdirname = tempfile.mkdtemp()
+                
+            txt_path = os.path.join(tmpdirname, archivo_web_carga.filename)
+            txt_content = await archivo_web_carga.read()
+            with open(txt_path, "wb") as f:
+                f.write(txt_content)
+                
+            try:
+                res_wc = importar_datos_web_carga(
+                    filepath=txt_path,
+                    db_session=db,
+                    socio_id_web_carga=7,  # ID hardcodeado a pedido del usuario (Socio = SISTEMA WEB CARGA)
+                    file_paths_docs=extracted_files,
+                    upload_dir=UPLOAD_DIR
+                )
+                db.commit()
+                
+                archivos_procesados = len(res_wc.get("documentos", {}).get("procesados", []))
+                if res_wc.get("documentos", {}).get("errores"):
+                    errores_globales.extend([{"Etapa": "Documentos Web Carga", "Error": err} for err in res_wc["documentos"]["errores"]])
+                    
+                resumen = {
+                    "nuevos_clientes": res_wc.get('clientes', {}).get('nuevos', 0),
+                    "clientes_actualizados": res_wc.get('clientes', {}).get('actualizados', 0),
+                    "nuevos_creditos": res_wc.get('creditos', {}).get('nuevos', 0),
+                    "creditos_existentes": res_wc.get('creditos', {}).get('existentes', 0),
+                    "transferencias_importadas": res_wc.get('creditos', {}).get('nuevos', 0), 
+                    "archivos_procesados": archivos_procesados,
+                    "pasados_a_firmado": "N/A",
+                    "pasados_a_activo": "N/A"
+                }
+            except ImportValidationError as e:
+                db.rollback()
+                errores_globales.append({"Etapa": "Validación Fase Cero", "Error": str(e)})
+
+        if tmpdirname and os.path.exists(tmpdirname):
+            import shutil
+            shutil.rmtree(tmpdirname)
+
         excel_base64 = None
         if errores_globales:
             df_err = pd.DataFrame(errores_globales)
@@ -731,16 +791,7 @@ async def importacion_masiva_creditos(
         return {
             "status": "success",
             "message": "Importación procesada",
-            "resumen": {
-                "nuevos_clientes": res_clts.get('nuevos', 0),
-                "clientes_actualizados": res_clts.get('actualizados', 0) + res_crts_upd.get('actualizados', 0),
-                "nuevos_creditos": res_crts.get('nuevos_creditos', 0),
-                "creditos_existentes": res_crts.get('creditos_existentes', 0),
-                "transferencias_importadas": res_transf.get('importadas', 0),
-                "archivos_procesados": archivos_procesados,
-                "pasados_a_firmado": res_estados.get('pasados_a_firmado', 0),
-                "pasados_a_activo": res_estados.get('pasados_a_activo', 0)
-            },
+            "resumen": resumen,
             "errores_count": len(errores_globales),
             "excel_base64": excel_base64
         }

@@ -4,7 +4,7 @@ import axiosClient from '../api/axiosClient';
 import ExportExcelButton from '../components/ExportExcelButton';
 
 const AuxiliaryTablesPage = () => {
-  const { provincias, empleadores, socios, tasasYComisiones, relaciones, fetchAuxiliares } = useAppStore();
+  const { provincias, empleadores, socios, tasasYComisiones, relaciones, comercializadores, fetchAuxiliares } = useAppStore();
   
   const [activeTable, setActiveTable] = useState('socios');
   const [isCreating, setIsCreating] = useState(false);
@@ -41,7 +41,8 @@ const AuxiliaryTablesPage = () => {
     empleadores: { name: 'Empleadores', data: empleadores, endpoint: 'empleadores', schema: ['id', 'cuit', 'razon_social', 'es_pasivo', 'domicilio_calle', 'domicilio_nro', 'domicilio_piso', 'domicilio_depto', 'id_provincia', 'id_codigo_postal', 'localidad', 'telefono', 'socio_comercial_id'] },
     socios: { name: 'Socios Comerciales', data: socios, endpoint: 'socios', schema: ['id', 'razon_social', 'cuit', 'domicilio_legal', 'contacto_nombre', 'mail', 'telefono', 'dia_corte', 'cbu', 'anticipo_vigente'] },
     tasasYComisiones: { name: 'Tasas y Comisiones', data: tasasYComisiones, endpoint: 'tasas_y_comisiones', schema: ['id', 'fecha', 'estado', 'socio_originador_id', 'socio_intermediario_id', 'colocacion_originador', 'colocacion_intermediario', 'cobranza_originador', 'cobranza_intermediario', 'colocacion_propia', 'gasto_1_porcentaje', 'gasto_1_socio_id', 'gasto_2_porcentaje', 'gasto_2_socio_id', 'porcentaje_sellado', 'plazo', 'tna_c_iva'] },
-    relaciones: { name: 'Relaciones Mapeadas', data: relaciones, endpoint: 'relaciones', schema: ['id', 'socio_id', 'tabla', 'id_local', 'id_foraneo'] }
+    relaciones: { name: 'Relaciones Mapeadas', data: relaciones, endpoint: 'relaciones', schema: ['id', 'socio_id', 'tabla', 'id_local', 'id_foraneo'] },
+    comercializadores: { name: 'Comercializadores', data: comercializadores, endpoint: 'comercializadores', schema: ['id', 'nombre'] }
   };
 
   const currentTableConfig = tablesMap[activeTable];
@@ -364,7 +365,7 @@ const AuxiliaryTablesPage = () => {
                   if (currentTableConfig.endpoint === 'relaciones' && col === 'tabla') {
                     const tableOptions = [
                       'codigos_postales', 'empleadores', 'provincias', 
-                      'socios_comerciales', 'tasas_y_comisiones'
+                      'socios_comerciales', 'tasas_y_comisiones', 'comercializadores'
                     ];
                     inputElement = (
                       <select
@@ -395,6 +396,9 @@ const AuxiliaryTablesPage = () => {
                     } else if (selectedTabla === 'socios_comerciales') {
                       localOptions = socios;
                       localLabel = 'razon_social';
+                    } else if (selectedTabla === 'comercializadores') {
+                      localOptions = comercializadores;
+                      localLabel = 'nombre';
                     }
                     
                     if (!selectedTabla) {
