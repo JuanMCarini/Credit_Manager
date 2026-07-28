@@ -9,7 +9,7 @@ WORKDIR /app
 
 # Install system dependencies needed for postgres/pg8000 and libreoffice for PDF generation
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends gcc libreoffice-core libreoffice-writer default-jre-headless && \
+    apt-get install -y --no-install-recommends gcc libreoffice-core libreoffice-writer default-jre-headless fonts-liberation && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy requirements

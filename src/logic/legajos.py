@@ -38,13 +38,101 @@ def _replace_in_paragraphs(paragraphs: List[Any], data: Dict[str, Any], doc: Doc
                         # Crear e insertar tabla
                         table = doc.add_table(rows=1, cols=len(value["headers"]))
                         table.style = 'Table Grid'
+                        table.autofit = True
+                        table.allow_autofit = True
+                        
+                        from docx.enum.table import WD_TABLE_ALIGNMENT, WD_ROW_HEIGHT_RULE
+                        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+                        
+                        from docx.shared import Pt, RGBColor, Cm
+                        from docx.oxml import OxmlElement
+                        from docx.oxml.ns import qn
+                        
+                        # Configurar el encabezado para que se repita en nuevas páginas
+                        tr = table.rows[0]._tr
+                        trPr = tr.get_or_add_trPr()
+                        tblHeader = OxmlElement('w:tblHeader')
+                        tblHeader.set(qn('w:val'), "true")
+                        trPr.append(tblHeader)
+                        
+                        # Set exact height for header row
+                        table.rows[0].height_rule = WD_ROW_HEIGHT_RULE.EXACTLY
+                        table.rows[0].height = Pt(12)
+
                         hdr_cells = table.rows[0].cells
                         for i, hdr in enumerate(value["headers"]):
                             hdr_cells[i].text = hdr
-                        for r_data in value["rows"]:
-                            row_cells = table.add_row().cells
+                            tcPr = hdr_cells[i]._element.get_or_add_tcPr()
+                            
+                            # Prevent wrapping
+                            noWrap = OxmlElement('w:noWrap')
+                            tcPr.append(noWrap)
+                            
+                            # Header Background
+                            shd = tcPr.find(qn('w:shd'))
+                            if shd is None:
+                                shd = OxmlElement('w:shd')
+                                tcPr.append(shd)
+                            shd.set(qn('w:fill'), "4F81BD")  # Blue color
+                            
+                            # Cell margins (minimize to 20 dxa to fit text)
+                            tcMar = OxmlElement('w:tcMar')
+                            for margin in ['left', 'right']:
+                                m = OxmlElement(f'w:{margin}')
+                                m.set(qn('w:w'), "20")
+                                m.set(qn('w:type'), "dxa")
+                                tcMar.append(m)
+                            tcPr.append(tcMar)
+                            
+                            # Font styling for header
+                            for cell_p in hdr_cells[i].paragraphs:
+                                cell_p.paragraph_format.space_after = Pt(2)
+                                for run in cell_p.runs:
+                                    run.font.bold = True
+                                    run.font.color.rgb = RGBColor(255, 255, 255)
+                                    run.font.size = Pt(5)
+                                    
+                        for r_idx, r_data in enumerate(value["rows"]):
+                            new_row = table.add_row()
+                            new_row.height_rule = WD_ROW_HEIGHT_RULE.EXACTLY
+                            new_row.height = Pt(12)
+                            row_cells = new_row.cells
+                            is_even = (r_idx % 2 == 1)
+                            is_totals = (r_idx == len(value["rows"]) - 1)
+                            
                             for i, hdr in enumerate(value["headers"]):
                                 row_cells[i].text = str(r_data.get(hdr, ""))
+                                
+                                tcPr = row_cells[i]._element.get_or_add_tcPr()
+                                
+                                # Prevent wrapping
+                                noWrap = OxmlElement('w:noWrap')
+                                tcPr.append(noWrap)
+                                
+                                # Alternating background
+                                if is_even and not is_totals:
+                                    shd = tcPr.find(qn('w:shd'))
+                                    if shd is None:
+                                        shd = OxmlElement('w:shd')
+                                        tcPr.append(shd)
+                                    shd.set(qn('w:fill'), "DCE6F1")  # Light blue
+                                
+                                # Cell margins (minimize)
+                                tcMar = OxmlElement('w:tcMar')
+                                for margin in ['left', 'right']:
+                                    m = OxmlElement(f'w:{margin}')
+                                    m.set(qn('w:w'), "20")
+                                    m.set(qn('w:type'), "dxa")
+                                    tcMar.append(m)
+                                tcPr.append(tcMar)
+                                
+                                # Font size for data
+                                for cell_p in row_cells[i].paragraphs:
+                                    cell_p.paragraph_format.space_after = Pt(2)
+                                    for run in cell_p.runs:
+                                        run.font.size = Pt(5)
+                                        if is_totals:
+                                            run.font.bold = True
                         
                         # Mover la tabla justo después del párrafo actual
                         paragraph._p.addnext(table._tbl)
@@ -85,11 +173,17 @@ def _replace_in_paragraphs(paragraphs: List[Any], data: Dict[str, Any], doc: Doc
                                 chars_to_remove = 0
                             r_idx += 1
 
-        # Volcar los caracteres de nuevo a los runs
+        # Volcar los caracteres de nuevo a los runs preservando saltos de página (w:br)
         for run, chars in zip(paragraph.runs, run_chars):
             new_text = "".join(chars)
             if run.text != new_text:
-                run.text = new_text
+                t_elements = run._element.xpath('.//w:t')
+                if t_elements:
+                    t_elements[0].text = new_text
+                    for t in t_elements[1:]:
+                        run._element.remove(t)
+                else:
+                    run.text = new_text
 
 def replace_placeholders_in_doc(doc: Document, data: Dict[str, Any]) -> None:
     """
@@ -129,11 +223,27 @@ def replace_placeholders_in_doc(doc: Document, data: Dict[str, Any]) -> None:
             if footer:
                 _process_blocks(footer)
 
+def process_docx(template_path: str, output_docx: str, data: Dict[str, Any]) -> None:
+    """
+    Carga una plantilla, reemplaza las variables estipuladas y
+    lo exporta a formato .docx.
+    """
+    if not os.path.exists(template_path):
+        raise FileNotFoundError(f"No se encontró la plantilla en: {template_path}")
+        
+    try:
+        from docx import Document
+        doc = Document(template_path)
+        replace_placeholders_in_doc(doc, data)
+        doc.save(output_docx)
+    except Exception as e:
+        raise RuntimeError(f"Error interno modificando el documento .docx: {e}")
+
 def process_document(template_path: str, output_pdf: str, data: Dict[str, Any]) -> None:
     """
     Carga una plantilla, reemplaza las variables estipuladas y
     lo exporta automáticamente a formato .pdf sin guardar el .docx modificado en disco de forma permanente.
-
+    
     Args:
         template_path (str): Ruta absoluta o relativa al archivo .docx de origen.
         output_pdf (str): Ruta donde se exportará el archivo PDF final.
@@ -143,22 +253,13 @@ def process_document(template_path: str, output_pdf: str, data: Dict[str, Any]) 
         FileNotFoundError: Si el archivo de la plantilla no existe en la ruta dada.
         RuntimeError: Ante cualquier falla inesperada del motor de conversión docx2pdf.
     """
-    if not os.path.exists(template_path):
-        raise FileNotFoundError(f"No se encontró la plantilla en: {template_path}")
-
     import tempfile
     
+    temp_docx_fd, temp_docx_path = tempfile.mkstemp(suffix=".docx")
+    os.close(temp_docx_fd)
+    
     # Fase 1: Procesamiento del .docx
-    try:
-        doc = Document(template_path)
-        replace_placeholders_in_doc(doc, data)
-        
-        # Crear un archivo docx temporal
-        temp_docx_fd, temp_docx_path = tempfile.mkstemp(suffix=".docx")
-        os.close(temp_docx_fd)
-        doc.save(temp_docx_path)
-    except Exception as e:
-        raise RuntimeError(f"Error interno modificando el documento .docx: {e}")
+    process_docx(template_path, temp_docx_path, data)
 
     # Fase 2: Conversión a PDF mediante COM/Word nativo (Windows) o LibreOffice (Linux)
     try:
