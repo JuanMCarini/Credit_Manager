@@ -20,6 +20,10 @@ const DashboardCarteraPage = () => {
   const [tasaDescuento, setTasaDescuento] = useState(0);
   const [tasaDescuentoStr, setTasaDescuentoStr] = useState("0 %");
   const [activeTab, setActiveTab] = useState('total'); // 'total' or 'periodo'
+  const [filtroDueños, setFiltroDueños] = useState([]); // empty means 'Todos'
+  const [filtroOriginadores, setFiltroOriginadores] = useState([]); // empty means 'Todos'
+  const [openDueño, setOpenDueño] = useState(false);
+  const [openOriginador, setOpenOriginador] = useState(false);
 
   const handleTasaChange = (e) => {
     const raw = e.target.value.replace(/[^0-9.,]/g, '').replace(',', '.');
@@ -112,15 +116,23 @@ const DashboardCarteraPage = () => {
     // Agrupar por periodo (vencimientos futuros y el actual)
     const vtoYearMonth = fVtoStr.substring(0, 7);
     if (vtoYearMonth >= corteYearMonth) {
-      if (!gruposPeriodo[vtoYearMonth]) {
-        gruposPeriodo[vtoYearMonth] = { Periodo: vtoYearMonth, Capital: 0, 'Interés': 0, IVA: 0, Total: 0 };
+      const matchDueño = filtroDueños.length === 0 || filtroDueños.includes(dueño);
+      const matchOriginador = filtroOriginadores.length === 0 || filtroOriginadores.includes(originador);
+      
+      if (matchDueño && matchOriginador) {
+        if (!gruposPeriodo[vtoYearMonth]) {
+          gruposPeriodo[vtoYearMonth] = { Periodo: vtoYearMonth, Capital: 0, 'Interés': 0, IVA: 0, Total: 0 };
+        }
+        gruposPeriodo[vtoYearMonth].Capital += cap;
+        gruposPeriodo[vtoYearMonth]['Interés'] += int;
+        gruposPeriodo[vtoYearMonth].IVA += iva;
+        gruposPeriodo[vtoYearMonth].Total += tot;
       }
-      gruposPeriodo[vtoYearMonth].Capital += cap;
-      gruposPeriodo[vtoYearMonth]['Interés'] += int;
-      gruposPeriodo[vtoYearMonth].IVA += iva;
-      gruposPeriodo[vtoYearMonth].Total += tot;
     }
   });
+
+  const uniqueDueños = ['Todos', ...new Set(data.map(d => d.Dueño || 'Desconocido'))].sort();
+  const uniqueOriginadores = ['Todos', ...new Set(data.map(d => d.Originador || 'N/A'))].sort();
 
   const groupedData = Object.values(grupos);
   const periodData = Object.values(gruposPeriodo).sort((a, b) => a.Periodo.localeCompare(b.Periodo));
@@ -316,6 +328,82 @@ const DashboardCarteraPage = () => {
         </>
       ) : (
           <>
+            <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', flexWrap: 'wrap' }}>
+              
+              {/* Filtro Dueños Dropdown */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', position: 'relative' }}>
+                <label style={{ color: 'var(--text-secondary)', fontWeight: '500' }}>Dueño:</label>
+                <div style={{ position: 'relative' }}>
+                  <button 
+                    onClick={() => setOpenDueño(!openDueño)}
+                    style={{ padding: '8px 12px', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', minWidth: '150px', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                  >
+                    <span>{filtroDueños.length === 0 ? 'Todos' : `${filtroDueños.length} seleccionados`}</span>
+                    <span style={{ fontSize: '0.8rem', marginLeft: '10px' }}>▼</span>
+                  </button>
+                  
+                  {openDueño && (
+                    <div className="custom-scrollbar" style={{ position: 'absolute', top: '100%', left: 0, marginTop: '5px', padding: '8px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.2)', maxHeight: '200px', overflowY: 'auto', minWidth: '220px', zIndex: 10, boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', cursor: 'pointer', fontSize: '0.9rem' }}>
+                        <input type="checkbox" checked={filtroDueños.length === 0} onChange={() => setFiltroDueños([])} />
+                        <span style={{ opacity: filtroDueños.length === 0 ? 1 : 0.6 }}>Todos</span>
+                      </label>
+                      {uniqueDueños.filter(d => d !== 'Todos').map(d => (
+                        <label key={d} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', cursor: 'pointer', fontSize: '0.9rem' }}>
+                          <input 
+                            type="checkbox" 
+                            checked={filtroDueños.includes(d)} 
+                            onChange={(e) => {
+                              if (e.target.checked) setFiltroDueños([...filtroDueños, d]);
+                              else setFiltroDueños(filtroDueños.filter(item => item !== d));
+                            }} 
+                          />
+                          <span style={{ opacity: filtroDueños.includes(d) ? 1 : 0.6 }}>{d}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Filtro Originadores Dropdown */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', position: 'relative' }}>
+                <label style={{ color: 'var(--text-secondary)', fontWeight: '500' }}>Originador:</label>
+                <div style={{ position: 'relative' }}>
+                  <button 
+                    onClick={() => setOpenOriginador(!openOriginador)}
+                    style={{ padding: '8px 12px', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', minWidth: '150px', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                  >
+                    <span>{filtroOriginadores.length === 0 ? 'Todos' : `${filtroOriginadores.length} seleccionados`}</span>
+                    <span style={{ fontSize: '0.8rem', marginLeft: '10px' }}>▼</span>
+                  </button>
+                  
+                  {openOriginador && (
+                    <div className="custom-scrollbar" style={{ position: 'absolute', top: '100%', left: 0, marginTop: '5px', padding: '8px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.2)', maxHeight: '200px', overflowY: 'auto', minWidth: '220px', zIndex: 10, boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', cursor: 'pointer', fontSize: '0.9rem' }}>
+                        <input type="checkbox" checked={filtroOriginadores.length === 0} onChange={() => setFiltroOriginadores([])} />
+                        <span style={{ opacity: filtroOriginadores.length === 0 ? 1 : 0.6 }}>Todos</span>
+                      </label>
+                      {uniqueOriginadores.filter(o => o !== 'Todos').map(o => (
+                        <label key={o} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', cursor: 'pointer', fontSize: '0.9rem' }}>
+                          <input 
+                            type="checkbox" 
+                            checked={filtroOriginadores.includes(o)} 
+                            onChange={(e) => {
+                              if (e.target.checked) setFiltroOriginadores([...filtroOriginadores, o]);
+                              else setFiltroOriginadores(filtroOriginadores.filter(item => item !== o));
+                            }} 
+                          />
+                          <span style={{ opacity: filtroOriginadores.includes(o) ? 1 : 0.6 }}>{o}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+            </div>
+
             <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', marginBottom: '30px', height: '400px' }}>
               <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Proyección de Vencimientos</h2>
               {periodData.length === 0 ? (
@@ -384,6 +472,20 @@ const DashboardCarteraPage = () => {
       <style>{`
         .table-row-hover:hover {
           background-color: rgba(255,255,255,0.02);
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: rgba(0,0,0,0.1);
+          border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: rgba(255,255,255,0.2);
+          border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: rgba(255,255,255,0.3);
         }
         @keyframes fadeIn {
           from { opacity: 0; transform: translateY(10px); }
