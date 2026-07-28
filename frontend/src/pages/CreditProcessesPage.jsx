@@ -16,6 +16,7 @@ const CreditProcessesPage = () => {
   const [clientesFile, setClientesFile] = useState(null);
   const [creditosFile, setCreditosFile] = useState(null);
   const [transfFile, setTransfFile] = useState(null);
+  const [webCargaFile, setWebCargaFile] = useState(null);
   const [archivosImport, setArchivosImport] = useState([]);
   const [resultsImport, setResultsImport] = useState(null);
 
@@ -54,17 +55,29 @@ const CreditProcessesPage = () => {
   };
 
   const handleImportCreditos = async () => {
-    if (!clientesFile || !creditosFile || !transfFile) {
-      alert("Por favor, seleccione los archivos Excel/CSV obligatorios.");
-      return;
+    if (proveedor === 'QUOTA_CFL') {
+      if (!clientesFile || !creditosFile || !transfFile) {
+        alert("Por favor, seleccione los archivos Excel/CSV obligatorios.");
+        return;
+      }
+    } else if (proveedor === 'WEB_CARGA_CFL') {
+      if (!webCargaFile) {
+        alert("Por favor, seleccione el archivo TXT de Web Carga.");
+        return;
+      }
     }
 
     setLoadingImport(true);
     const formData = new FormData();
     formData.append('proveedor', proveedor);
-    formData.append('clientes_file', clientesFile);
-    formData.append('creditos_file', creditosFile);
-    formData.append('transferencias_file', transfFile);
+    
+    if (proveedor === 'QUOTA_CFL') {
+      formData.append('clientes_file', clientesFile);
+      formData.append('creditos_file', creditosFile);
+      formData.append('transferencias_file', transfFile);
+    } else if (proveedor === 'WEB_CARGA_CFL') {
+      formData.append('archivo_web_carga', webCargaFile);
+    }
     
     archivosImport.forEach((f) => formData.append('archivos', f));
 
@@ -216,23 +229,35 @@ const CreditProcessesPage = () => {
                 onChange={(e) => setProveedor(e.target.value)}
               >
                 <option value="QUOTA_CFL">Quota de Estudio CFL</option>
+                <option value="WEB_CARGA_CFL">Web Carga de Estudio CFL</option>
               </select>
             </div>
 
-            <div className="form-group" style={{ marginBottom: '16px' }}>
-              <label className="form-label">Archivo de Clientes (Excel)</label>
-              <input type="file" className="form-input" accept=".xlsx,.xls" onChange={(e) => setClientesFile(e.target.files[0])} />
-            </div>
+            {proveedor === 'QUOTA_CFL' && (
+              <>
+                <div className="form-group" style={{ marginBottom: '16px' }}>
+                  <label className="form-label">Archivo de Clientes (Excel)</label>
+                  <input type="file" className="form-input" accept=".xlsx,.xls" onChange={(e) => setClientesFile(e.target.files[0])} />
+                </div>
 
-            <div className="form-group" style={{ marginBottom: '16px' }}>
-              <label className="form-label">Archivo de Créditos (Excel)</label>
-              <input type="file" className="form-input" accept=".xlsx,.xls" onChange={(e) => setCreditosFile(e.target.files[0])} />
-            </div>
+                <div className="form-group" style={{ marginBottom: '16px' }}>
+                  <label className="form-label">Archivo de Créditos (Excel)</label>
+                  <input type="file" className="form-input" accept=".xlsx,.xls" onChange={(e) => setCreditosFile(e.target.files[0])} />
+                </div>
 
-            <div className="form-group" style={{ marginBottom: '16px' }}>
-              <label className="form-label">Archivo de Transferencias (CSV)</label>
-              <input type="file" className="form-input" accept=".csv" onChange={(e) => setTransfFile(e.target.files[0])} />
-            </div>
+                <div className="form-group" style={{ marginBottom: '16px' }}>
+                  <label className="form-label">Archivo de Transferencias (CSV)</label>
+                  <input type="file" className="form-input" accept=".csv" onChange={(e) => setTransfFile(e.target.files[0])} />
+                </div>
+              </>
+            )}
+
+            {proveedor === 'WEB_CARGA_CFL' && (
+              <div className="form-group" style={{ marginBottom: '16px' }}>
+                <label className="form-label">Archivo de Importación Web Carga (.txt)</label>
+                <input type="file" className="form-input" accept=".txt" onChange={(e) => setWebCargaFile(e.target.files[0])} />
+              </div>
+            )}
 
             <div className="form-group" style={{ marginBottom: '24px' }}>
               <label className="form-label">Archivos de Legajos y Comprobantes (PDFs o ZIP)</label>
@@ -240,7 +265,7 @@ const CreditProcessesPage = () => {
               <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>Puedes subir varios PDFs o comprimirlos todos en un único archivo ZIP.</p>
             </div>
 
-            <button className="btn-primary" onClick={handleImportCreditos} disabled={loadingImport || !clientesFile || !creditosFile || !transfFile} style={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}>
+            <button className="btn-primary" onClick={handleImportCreditos} disabled={loadingImport || (proveedor === 'QUOTA_CFL' && (!clientesFile || !creditosFile || !transfFile)) || (proveedor === 'WEB_CARGA_CFL' && !webCargaFile)} style={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}>
               {loadingImport ? (
                 <>
                   <svg className="spinner" viewBox="0 0 50 50" style={{ width: '20px', height: '20px', stroke: 'currentColor', strokeWidth: 4, fill: 'none', animation: 'spin 1s linear infinite' }}><circle cx="25" cy="25" r="20" strokeDasharray="90 150"></circle></svg>
