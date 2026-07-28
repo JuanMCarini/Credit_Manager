@@ -16,6 +16,7 @@ class DocumentoPapeleria(Base):
     nombre_archivo = Column(String(255), nullable=False)
     ruta_archivo = Column(String(500), nullable=False)
     tipo_archivo = Column(String(50), nullable=True)
+    categoria = Column(String(50), default="creditos", nullable=False)
     orden = Column(Integer, default=0, nullable=False)
     fecha_subida = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 

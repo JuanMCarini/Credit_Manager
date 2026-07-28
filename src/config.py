@@ -25,6 +25,9 @@ class CompanyConfig(BaseSettings):
     domicilio: str = Field(default="Bahía Blanca, Buenos Aires, Argentina")
     email_contacto: str = Field(default="admin@yoyo.com.ar")
     telefono: str = Field(default="+54 9 291 000-0000")
+    bank_account: str = Field(default="", description="Bank account number")
+    bank_name: str = Field(default="", description="Bank name")
+    cbu: str = Field(default="", description="CBU")
 
     # Configuration for the Pydantic model
     model_config = SettingsConfigDict(

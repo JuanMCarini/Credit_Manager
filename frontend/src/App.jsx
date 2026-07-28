@@ -45,7 +45,8 @@ function App() {
             <Route path="nueva-operacion-cartera" element={<PortfolioOriginationPage />} />
             <Route path="auxiliares" element={<AuxiliaryTablesPage />} />
             <Route path="acciones" element={<SystemActionsPage />} />
-            <Route path="papeleria" element={<PapeleriaPage />} />
+            <Route path="papeleria/creditos" element={<PapeleriaPage categoria="creditos" />} />
+            <Route path="papeleria/ventas" element={<PapeleriaPage categoria="ventas_cartera" />} />
             
             {/* Rutas exclusivas Administrador */}
             <Route element={<ProtectedRoute allowedRoles={[]} />}>

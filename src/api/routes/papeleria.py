@@ -49,7 +49,7 @@ def calcular_gastos_credito(credito) -> float:
             gastos = sum(float(t.monto) for t in credito.transferencias if t.razon_social in ["AMUF", "DALVI CULTURAL SRL"])
     return gastos
 
-from src.database import get_db, SocioComercial, Credito, Cliente
+from src.database import get_db, SocioComercial, Credito, Cliente, Cartera
 from src.database.models.papeleria import DocumentoPapeleria, DocumentoVariable
 from src.config import COMPANY_DATA
 
@@ -151,6 +151,12 @@ SYSTEM_FIELDS = [
     {"value": "empresa.razon_social", "label": "Empresa - Razón Social"},
     {"value": "empresa.cuit", "label": "Empresa - CUIT"},
     {"value": "socio.razon_social", "label": "Socio Comercial - Razón Social"},
+    {"value": "cartera.id", "label": "Cartera - ID"},
+    {"value": "cartera.nombre", "label": "Cartera - Nombre"},
+    {"value": "cartera.fecha_compra", "label": "Cartera - Fecha Venta/Compra"},
+    {"value": "cartera.monto_total", "label": "Cartera - Monto Total"},
+    {"value": "cartera.monto_total_letras", "label": "Cartera - Monto Total (En Letras)"},
+    {"value": "cartera.socio_comercial", "label": "Cartera - Socio Comercial"},
 ]
 
 router = APIRouter(prefix="/api/v1/papeleria", tags=["Papeleria"])
@@ -218,6 +224,7 @@ def _auto_map_variables(docx_path: str, doc_id: int, db: Session):
 @router.post("/upload")
 def upload_document(
     socio_id: int = Form(...),
+    categoria: str = Form("creditos"),
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
@@ -251,16 +258,18 @@ def upload_document(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al guardar el archivo: {str(e)}")
 
-    # Buscar si ya existe un registro para este socio y archivo
+    # Buscar si ya existe un registro para este socio y archivo y categoría
     if db_socio_id is not None:
         doc = db.query(DocumentoPapeleria).filter(
             DocumentoPapeleria.socio_id == db_socio_id,
-            DocumentoPapeleria.nombre_archivo == filename
+            DocumentoPapeleria.nombre_archivo == filename,
+            DocumentoPapeleria.categoria == categoria
         ).first()
     else:
         doc = db.query(DocumentoPapeleria).filter(
             DocumentoPapeleria.socio_id.is_(None),
-            DocumentoPapeleria.nombre_archivo == filename
+            DocumentoPapeleria.nombre_archivo == filename,
+            DocumentoPapeleria.categoria == categoria
         ).first()
 
     if doc:
@@ -273,7 +282,8 @@ def upload_document(
             socio_id=db_socio_id,
             nombre_archivo=filename,
             ruta_archivo=file_path,
-            tipo_archivo=ext
+            tipo_archivo=ext,
+            categoria=categoria
         )
         db.add(doc)
 
@@ -293,13 +303,16 @@ def upload_document(
     }
 
 @router.get("/")
-def list_documents(socio_id: int = None, db: Session = Depends(get_db)):
+def list_documents(socio_id: int = None, categoria: str = None, db: Session = Depends(get_db)):
     query = db.query(DocumentoPapeleria)
     if socio_id is not None:
         if socio_id == 0:
             query = query.filter(DocumentoPapeleria.socio_id.is_(None))
         else:
             query = query.filter(DocumentoPapeleria.socio_id == socio_id)
+            
+    if categoria:
+        query = query.filter(DocumentoPapeleria.categoria == categoria)
     
     docs = query.order_by(DocumentoPapeleria.orden.asc(), DocumentoPapeleria.fecha_subida.desc()).all()
     
@@ -313,6 +326,7 @@ def list_documents(socio_id: int = None, db: Session = Depends(get_db)):
             "socio_nombre": doc.socio.razon_social if doc.socio else COMPANY_DATA.razon_social,
             "nombre_archivo": doc.nombre_archivo,
             "tipo_archivo": doc.tipo_archivo,
+            "categoria": doc.categoria,
             "orden": doc.orden,
             "fecha_subida": doc.fecha_subida.isoformat() if doc.fecha_subida else None
         })
@@ -711,6 +725,27 @@ def resolve_system_field(credito: Credito, field: str):
         return {"__type__": "table", "headers": ["CUIL/CUIT", "CBU", "Razón Social", "Monto"], "rows": transferencias_data}
     return ""
 
+def resolve_system_field_cartera(cartera: Cartera, field: str, db: Session = None):
+    if field == "cartera.id":
+        return str(cartera.id)
+    elif field == "cartera.nombre":
+        return cartera.nombre or ""
+    elif field == "cartera.fecha_compra":
+        return cartera.fecha_compra.strftime("%d/%m/%Y") if cartera.fecha_compra else ""
+    elif field == "cartera.monto_total":
+        total = sum(float(c.capital or 0) for c in cartera.creditos) if cartera.creditos else 0
+        return format_currency(total)
+    elif field == "cartera.monto_total_letras":
+        total = sum(float(c.capital or 0) for c in cartera.creditos) if cartera.creditos else 0
+        return monto_a_letras(total)
+    elif field == "cartera.socio_comercial":
+        return cartera.socio_comercial.razon_social if cartera.socio_comercial else ""
+    elif field == "empresa.razon_social":
+        return COMPANY_DATA.razon_social
+    elif field == "empresa.cuit":
+        return COMPANY_DATA.cuit
+    return ""
+
 @router.post("/generar_por_credito/{credito_id}")
 def generar_papeleria_credito(credito_id: int, db: Session = Depends(get_db)):
     credito = db.query(Credito).filter(Credito.id == credito_id).first()
@@ -815,3 +850,94 @@ def _generar_pdf_for_credito(credito: Credito, db: Session) -> str:
         raise HTTPException(status_code=500, detail=error_msg)
         
     return final_pdf_path
+
+@router.post("/generar_por_cartera/{cartera_id}")
+def generar_papeleria_cartera(cartera_id: int, formato: str = 'pdf', db: Session = Depends(get_db)):
+    cartera = db.query(Cartera).filter(Cartera.id == cartera_id).first()
+    if not cartera:
+        raise HTTPException(status_code=404, detail="Cartera no encontrada.")
+    
+    socio_id = cartera.socio_comercial_id
+    
+    from sqlalchemy import or_
+    docs = db.query(DocumentoPapeleria).filter(
+        DocumentoPapeleria.categoria == "ventas_cartera",
+        or_(
+            DocumentoPapeleria.socio_id.is_(None),
+            DocumentoPapeleria.socio_id == socio_id if socio_id else False
+        )
+    ).order_by(
+        DocumentoPapeleria.socio_id.isnot(None),
+        DocumentoPapeleria.orden.asc()
+    ).all()
+    
+    if not docs:
+        raise HTTPException(status_code=400, detail="No hay documentos de papelería de ventas de cartera configurados para este socio (o genéricos).")
+        
+    import tempfile
+    import pythoncom
+    from src.logic.legajos import process_document
+    from pypdf import PdfWriter
+    
+    output_dir = "data/legajos"
+    os.makedirs(output_dir, exist_ok=True)
+    
+    if formato == 'docx' and len(docs) == 1:
+        doc = docs[0]
+        data = {}
+        for var in doc.variables:
+            data[var.placeholder] = resolve_system_field_cartera(cartera, var.system_field, db)
+            
+        final_docx_path = os.path.join(output_dir, f"Contrato_Cartera_{cartera_id}.docx")
+        process_document(doc.ruta_archivo, final_docx_path, data)
+        return FileResponse(
+            path=final_docx_path,
+            filename=f"Contrato_Cartera_{cartera_id}.docx",
+            media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        )
+    
+    # If multiple docs or forced PDF, merge as PDF
+    has_pythoncom = True
+    try:
+        pythoncom.CoInitialize()
+    except Exception:
+        has_pythoncom = False
+        
+    merger = PdfWriter()
+    temp_files = []
+    final_pdf_path = os.path.join(output_dir, f"Contrato_Cartera_{cartera_id}.pdf")
+    
+    try:
+        try:
+            for doc in docs:
+                data = {}
+                for var in doc.variables:
+                    data[var.placeholder] = resolve_system_field_cartera(cartera, var.system_field, db)
+
+                fd, temp_pdf = tempfile.mkstemp(suffix=".pdf")
+                os.close(fd)
+                os.remove(temp_pdf)
+                temp_files.append(temp_pdf)
+                
+                process_document(doc.ruta_archivo, temp_pdf, data)
+                merger.append(temp_pdf)
+
+            merger.write(final_pdf_path)
+            return FileResponse(
+                path=final_pdf_path,
+                filename=f"Contrato_Cartera_{cartera_id}.pdf",
+                media_type='application/pdf'
+            )
+        finally:
+            if has_pythoncom:
+                pythoncom.CoUninitialize()
+            for t in temp_files:
+                if os.path.exists(t):
+                    try:
+                        os.remove(t)
+                    except:
+                        pass
+    except Exception as e:
+        import traceback
+        error_msg = f"Error interno: {str(e)}\n\n{traceback.format_exc()}"
+        raise HTTPException(status_code=500, detail=error_msg)

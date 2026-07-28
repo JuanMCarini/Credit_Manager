@@ -45,6 +45,8 @@ class SocioComercial(Base):
     telefono = Column(String(50), nullable=True)
     dia_corte = Column(Integer, default=28)
     cbu = Column(String(22), nullable=True)
+    nro_cuenta_bancaria = Column(String(50), nullable=True)
+    nombre_banco = Column(String(100), nullable=True)
 
     # Relationships
     carteras = relationship("Cartera", back_populates="socio")
