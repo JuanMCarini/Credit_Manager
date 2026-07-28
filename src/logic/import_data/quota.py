@@ -8,7 +8,9 @@ import re
 import shutil
 from src.database.models.clientes import Cliente, SexoEnum, EstadoClienteEnum, Provincia, Empleador
 from src.database.models.creditos import Credito, Cuota, TipoCredito, EstadoCredito, EstadoCuota, DocumentoLegajo, Transferencia
+from src.database.models.socios import SocioComercial
 from src.logic.amortization import AmortizationEngine
+from src.config import COMPANY_DATA
 
 def map_sexo(sexo_str: str) -> SexoEnum:
     if pd.isna(sexo_str):
@@ -199,6 +201,9 @@ def import_credits_from_dataframe(df: pd.DataFrame, session: Session):
     errores = []
     nuevos_ids_externos = set()
 
+    company_socio = session.query(SocioComercial).filter(SocioComercial.razon_social == COMPANY_DATA.razon_social).first()
+    company_socio_id = company_socio.id if company_socio else None
+
     for index, row in df.iterrows():
         try:
             if pd.isna(row.get('DNI')) or pd.isna(row.get('ID Externo')):
@@ -239,7 +244,8 @@ def import_credits_from_dataframe(df: pd.DataFrame, session: Session):
                 fecha_emision=emision,
                 estado=EstadoCredito.APROBADO,
                 tipo_credito=TipoCredito.FRANCES,
-                dia_vencimiento=28
+                dia_vencimiento=28,
+                socio_originador_id=company_socio_id
             )
             session.add(credito)
             session.flush() # Para obtener el ID del crédito generado
