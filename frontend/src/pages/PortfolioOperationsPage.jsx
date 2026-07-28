@@ -228,6 +228,36 @@ const PortfolioOperationsPage = () => {
     }
   };
 
+  const handleDownloadContrato = async (cartera, formato = 'pdf') => {
+    setLoadingActions(prev => ({ ...prev, [`contrato-${formato}-${cartera.id}`]: true }));
+    try {
+      const response = await axiosClient.post(`/api/v1/papeleria/generar_por_cartera/${cartera.id}?formato=${formato}`, null, {
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Contrato_Cartera_${cartera.id}.${formato}`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode.removeChild(link);
+    } catch (error) {
+      if (error.response && error.response.data instanceof Blob) {
+        const text = await error.response.data.text();
+        try {
+          const json = JSON.parse(text);
+          alert("Error al descargar contrato: " + (json.detail || "Error desconocido"));
+        } catch {
+          alert("Error al descargar contrato.");
+        }
+      } else {
+        alert("Error al descargar contrato: " + (error.message || 'Error desconocido'));
+      }
+    } finally {
+      setLoadingActions(prev => ({ ...prev, [`contrato-${formato}-${cartera.id}`]: false }));
+    }
+  };
+
   return (
     <section className="tab-content active" style={{ animation: 'fadeIn 0.4s ease' }}>
       <header className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
@@ -305,6 +335,12 @@ const PortfolioOperationsPage = () => {
                                 {loadingActions[`csvs-${c.id}`] ? '⏳' : '📁'}
                               </button>
                             )}
+                            <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadContrato(c, 'pdf')} title="Descargar Contrato (PDF)" disabled={loadingActions[`contrato-pdf-${c.id}`]}>
+                              {loadingActions[`contrato-pdf-${c.id}`] ? '⏳' : '📜'}
+                            </button>
+                            <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadContrato(c, 'docx')} title="Descargar Contrato (DOCX)" disabled={loadingActions[`contrato-docx-${c.id}`]}>
+                              {loadingActions[`contrato-docx-${c.id}`] ? '⏳' : '📝'}
+                            </button>
                           </div>
                           <div style={{ display: 'flex', gap: '4px' }}>
                             <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleEditClick(c, true)} title="Ver Detalles">
@@ -341,6 +377,12 @@ const PortfolioOperationsPage = () => {
                             {loadingActions[`csvs-${c.id}`] ? '⏳' : '📁'}
                           </button>
                         )}
+                        <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadContrato(c, 'pdf')} title="Descargar Contrato (PDF)" disabled={loadingActions[`contrato-pdf-${c.id}`]}>
+                          {loadingActions[`contrato-pdf-${c.id}`] ? '⏳' : '📜'}
+                        </button>
+                        <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadContrato(c, 'docx')} title="Descargar Contrato (DOCX)" disabled={loadingActions[`contrato-docx-${c.id}`]}>
+                          {loadingActions[`contrato-docx-${c.id}`] ? '⏳' : '📝'}
+                        </button>
                         {(c.estado === 'VENDIDA' || c.estado === 'COMPRADA') && (
                           <>
                             <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleEditClick(c, true)} title="Ver Detalles">

@@ -83,7 +83,10 @@ def get_company_info():
         "cuit": COMPANY_DATA.cuit,
         "domicilio": COMPANY_DATA.domicilio,
         "email_contacto": COMPANY_DATA.email_contacto,
-        "telefono": COMPANY_DATA.telefono
+        "telefono": COMPANY_DATA.telefono,
+        "nro_cuenta_bancaria": COMPANY_DATA.bank_account,
+        "nombre_banco": COMPANY_DATA.bank_name,
+        "cbu": COMPANY_DATA.cbu
     }
 
 @router.post("/repet/sync")

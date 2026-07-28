@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axiosClient from '../api/axiosClient';
 
-const PapeleriaPage = () => {
+const PapeleriaPage = ({ categoria = 'creditos' }) => {
   const [socios, setSocios] = useState([]);
   const [documentos, setDocumentos] = useState([]);
   const [companyInfo, setCompanyInfo] = useState(null);
@@ -27,9 +27,12 @@ const PapeleriaPage = () => {
   useEffect(() => {
     fetchCompanyInfo();
     fetchSocios();
-    fetchDocumentos();
     fetchSystemFields();
   }, []);
+
+  useEffect(() => {
+    fetchDocumentos();
+  }, [categoria]);
 
   const fetchCompanyInfo = async () => {
     try {
@@ -51,7 +54,7 @@ const PapeleriaPage = () => {
 
   const fetchDocumentos = async () => {
     try {
-      const res = await axiosClient.get('/api/v1/papeleria');
+      const res = await axiosClient.get(`/api/v1/papeleria?categoria=${categoria}`);
       setDocumentos(res.data);
     } catch (error) {
       console.error("Error fetching documentos:", error);
@@ -88,6 +91,7 @@ const PapeleriaPage = () => {
 
     const formData = new FormData();
     formData.append('socio_id', selectedSocio);
+    formData.append('categoria', categoria);
     formData.append('file', file);
 
     setLoading(true);
@@ -283,8 +287,8 @@ const PapeleriaPage = () => {
   return (
     <section className="tab-content active" style={{ animation: 'fadeIn 0.4s ease' }}>
       <header className="section-header">
-        <h2>Papelería</h2>
-        <p>Gestión de documentos Word (.doc, .docx) asociados a Socios Comerciales.</p>
+        <h2>Papelería - {categoria === 'creditos' ? 'Créditos' : 'Ventas de Cartera'}</h2>
+        <p>Gestión de documentos Word (.doc, .docx) asociados a Socios Comerciales para {categoria === 'creditos' ? 'créditos' : 'ventas de cartera'}.</p>
       </header>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -301,7 +305,7 @@ const PapeleriaPage = () => {
                 <option value="0" style={{ fontWeight: 'bold' }}>
                   {companyInfo ? companyInfo.razon_social : 'Empresa Dueña del Sistema'}
                 </option>
-                {socios.map(socio => (
+                {socios.filter(socio => !companyInfo || socio.cuit !== companyInfo.cuit).map(socio => (
                   <option key={socio.id} value={socio.id}>{socio.razon_social} (CUIT: {socio.cuit})</option>
                 ))}
               </select>
@@ -376,7 +380,7 @@ const PapeleriaPage = () => {
                             <option value="0" style={{ fontWeight: 'bold' }}>
                               {companyInfo ? companyInfo.razon_social : 'Empresa Dueña del Sistema'}
                             </option>
-                            {socios.map(s => (
+                            {socios.filter(s => !companyInfo || s.cuit !== companyInfo.cuit).map(s => (
                               <option key={s.id} value={s.id}>{s.razon_social}</option>
                             ))}
                           </select>

@@ -39,7 +39,7 @@ const AuxiliaryTablesPage = () => {
   const tablesMap = {
     provincias: { name: 'Provincias', data: provincias, endpoint: 'provincias', schema: ['id', 'nombre'] },
     empleadores: { name: 'Empleadores', data: empleadores, endpoint: 'empleadores', schema: ['id', 'cuit', 'razon_social', 'es_pasivo', 'domicilio_calle', 'domicilio_nro', 'domicilio_piso', 'domicilio_depto', 'id_provincia', 'id_codigo_postal', 'localidad', 'telefono', 'socio_comercial_id'] },
-    socios: { name: 'Socios Comerciales', data: socios, endpoint: 'socios', schema: ['id', 'razon_social', 'cuit', 'domicilio_legal', 'contacto_nombre', 'mail', 'telefono', 'dia_corte', 'cbu', 'anticipo_vigente'] },
+    socios: { name: 'Socios Comerciales', data: socios, endpoint: 'socios', schema: ['id', 'razon_social', 'cuit', 'domicilio_legal', 'contacto_nombre', 'mail', 'telefono', 'dia_corte', 'cbu', 'nro_cuenta_bancaria', 'nombre_banco', 'anticipo_vigente'] },
     tasasYComisiones: { name: 'Tasas y Comisiones', data: tasasYComisiones, endpoint: 'tasas_y_comisiones', schema: ['id', 'fecha', 'estado', 'socio_originador_id', 'socio_intermediario_id', 'colocacion_originador', 'colocacion_intermediario', 'cobranza_originador', 'cobranza_intermediario', 'colocacion_propia', 'gasto_1_porcentaje', 'gasto_1_socio_id', 'gasto_2_porcentaje', 'gasto_2_socio_id', 'porcentaje_sellado', 'plazo', 'tna_c_iva'] },
     relaciones: { name: 'Relaciones Mapeadas', data: relaciones, endpoint: 'relaciones', schema: ['id', 'socio_id', 'tabla', 'id_local', 'id_foraneo'] },
     comercializadores: { name: 'Comercializadores', data: comercializadores, endpoint: 'comercializadores', schema: ['id', 'nombre'] }
