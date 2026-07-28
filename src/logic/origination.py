@@ -148,7 +148,7 @@ class LoanOriginator:
                 capital, tna_c_iva, term, partner_id, issuance_date, due_day, cutoff_day, type, comercializador_id, comision_id, id_externo
             )
 
-            from src.config import COMPANY_DATA
+
             if getattr(self.credit, 'comision', None) and getattr(self.credit.comision, 'porcentaje_sellado', 0):
                 porcentaje = float(self.credit.comision.porcentaje_sellado)
                 if porcentaje > 0:
@@ -239,7 +239,7 @@ class LoanOriginator:
                 id_externo,
             )
 
-            from src.config import COMPANY_DATA
+
             if getattr(self.credit, 'comision', None) and getattr(self.credit.comision, 'porcentaje_sellado', 0):
                 porcentaje = float(self.credit.comision.porcentaje_sellado)
                 if porcentaje > 0:

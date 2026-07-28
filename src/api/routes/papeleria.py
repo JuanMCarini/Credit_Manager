@@ -51,7 +51,7 @@ def calcular_gastos_credito(credito) -> float:
 
 from src.database import get_db, SocioComercial, Credito, Cliente, Cartera
 from src.database.models.papeleria import DocumentoPapeleria, DocumentoVariable
-from src.config import COMPANY_DATA
+from src.config import get_company_data
 
 class VariableItem(BaseModel):
     placeholder: str
@@ -316,14 +316,14 @@ def list_documents(socio_id: int = None, categoria: str = None, db: Session = De
     
     docs = query.order_by(DocumentoPapeleria.orden.asc(), DocumentoPapeleria.fecha_subida.desc()).all()
     
-    from src.config import COMPANY_DATA
+    company = get_company_data(db)
     
     result = []
     for doc in docs:
         result.append({
             "id": doc.id,
             "socio_id": doc.socio_id if doc.socio_id is not None else 0,
-            "socio_nombre": doc.socio.razon_social if doc.socio else COMPANY_DATA.razon_social,
+            "socio_nombre": doc.socio.razon_social if doc.socio else company.razon_social,
             "nombre_archivo": doc.nombre_archivo,
             "tipo_archivo": doc.tipo_archivo,
             "categoria": doc.categoria,
@@ -708,9 +708,9 @@ def resolve_system_field(credito: Credito, field: str):
             return credito.cuotas[0].fecha_vencimiento.strftime("%d/%m/%Y") if credito.cuotas[0].fecha_vencimiento else ""
         return ""
     elif field == "empresa.razon_social":
-        return COMPANY_DATA.razon_social
+        return get_company_data(db).razon_social
     elif field == "empresa.cuit":
-        return COMPANY_DATA.cuit
+        return get_company_data(db).cuit
     elif field == "socio.razon_social":
         return credito.socio_originador.razon_social if credito.socio_originador else ""
     elif field == "credito.tabla_transferencias":
@@ -741,9 +741,9 @@ def resolve_system_field_cartera(cartera: Cartera, field: str, db: Session = Non
     elif field == "cartera.socio_comercial":
         return cartera.socio_comercial.razon_social if cartera.socio_comercial else ""
     elif field == "empresa.razon_social":
-        return COMPANY_DATA.razon_social
+        return get_company_data(db).razon_social
     elif field == "empresa.cuit":
-        return COMPANY_DATA.cuit
+        return get_company_data(db).cuit
     return ""
 
 @router.post("/generar_por_credito/{credito_id}")

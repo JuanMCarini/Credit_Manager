@@ -10,8 +10,7 @@ from src.database.models.clientes import Cliente, SexoEnum, EstadoClienteEnum, P
 from src.database.models.creditos import Credito, Cuota, TipoCredito, EstadoCredito, EstadoCuota, DocumentoLegajo, Transferencia
 from src.database.models.socios import SocioComercial
 from src.logic.amortization import AmortizationEngine
-from src.config import COMPANY_DATA
-
+from src.config import get_company_data
 def map_sexo(sexo_str: str) -> SexoEnum:
     if pd.isna(sexo_str):
         return None
@@ -201,7 +200,8 @@ def import_credits_from_dataframe(df: pd.DataFrame, session: Session):
     errores = []
     nuevos_ids_externos = set()
 
-    company_socio = session.query(SocioComercial).filter(SocioComercial.razon_social == COMPANY_DATA.razon_social).first()
+    company_data = get_company_data(session)
+    company_socio = session.query(SocioComercial).filter(SocioComercial.cuit == company_data.cuit).first()
     company_socio_id = company_socio.id if company_socio else None
 
     for index, row in df.iterrows():
