@@ -51,9 +51,9 @@ def validar_mapeos_web_carga(df_clientes: pd.DataFrame, df_creditos: pd.DataFram
         if id_prov and id_prov not in map_provincias and id_prov != "nan":
             errores_faltantes.add(f"Provincia (Crédito): {id_prov} - {row.get('provincia', '')}")
 
-        id_fondeador = str(row.get("id_fondeador", "")).strip()
-        if id_fondeador and id_fondeador not in map_socios and id_fondeador != "nan":
-            errores_faltantes.add(f"Fondeador/Socio (Crédito): {id_fondeador} - {row.get('fondeador', '')}")
+        id_linea = str(row.get("id_linea", "")).strip()
+        if id_linea and id_linea not in map_socios and id_linea != "nan":
+            errores_faltantes.add(f"Línea/Socio Originador (Crédito): {id_linea} - {row.get('linea', '')}")
 
         id_comercializador = str(row.get("id_comercializador", "")).strip()
         if id_comercializador and id_comercializador not in map_comercializadores and id_comercializador != "nan":
@@ -237,9 +237,9 @@ def importar_creditos_y_transferencias(df_creditos: pd.DataFrame, df_transferenc
         else:
             fecha_emision = date.today()
 
-        # Mapear originador real (fondeador) y comercializador
-        id_fondeador = str(row.get("id_fondeador", "")).strip()
-        partner_id = mapeos["socios"].get(id_fondeador)
+        # Mapear originador real (ahora Línea es el socio originador)
+        id_linea = str(row.get("id_linea", "")).strip()
+        partner_id = mapeos["socios"].get(id_linea)
 
         id_comercializador = str(row.get("id_comercializador", "")).strip()
         comercializador_id = mapeos["comercializadores"].get(id_comercializador)

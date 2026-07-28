@@ -618,6 +618,8 @@ import tempfile
 import zipfile
 from src.logic.import_data import quota
 from src.logic.import_data.web_carga import importar_datos_web_carga, ImportValidationError
+from src.database.models import Relacion
+from src.database.models.socios import SocioComercial
 
 @router.post("/api/v1/creditos/importacion-masiva")
 async def importacion_masiva_creditos(
@@ -699,42 +701,55 @@ async def importacion_masiva_creditos(
             if res_crts_upd.get('errores'):
                 errores_globales.extend([{"Etapa": "Actualización Clientes", "Error": err} for err in res_crts_upd['errores']])
                 
-            res_crts = quota.import_credits_from_dataframe(df_crts, db)
-            if res_crts.get('errores'):
-                errores_globales.extend([{"Etapa": "Créditos", "Error": err} for err in res_crts['errores']])
-                
-            nuevos_ids = res_crts.get('nuevos_ids_externos', set())
+            quota_socio = db.query(SocioComercial).filter(SocioComercial.razon_social == 'SISTEMA QUOTA').first()
+            quota_socio_id = quota_socio.id if quota_socio else 8
+            map_socios_quota = Relacion.get_external_mapping_cache(quota_socio_id, "socios_comerciales", db)
             
-            res_transf = quota.import_transfers_from_dataframe(df_transf, df_crts, db, nuevos_ids_externos=nuevos_ids)
-            if res_transf.get('errores'):
-                errores_globales.extend([{"Etapa": "Transferencias", "Error": err} for err in res_transf['errores']])
+            # Pre-validación de Líneas (Socio Originador)
+            lineas_faltantes = set()
+            for _, row in df_crts.iterrows():
+                linea_val = str(row.get('Línea', row.get('Linea', ''))).strip()
+                if linea_val and linea_val != 'nan' and linea_val not in map_socios_quota:
+                    lineas_faltantes.add(linea_val)
+                    
+            if lineas_faltantes:
+                errores_globales.append({"Etapa": "Validación Fase Cero", "Error": f"Faltan mapeos en la tabla Relaciones para el SISTEMA QUOTA (Línea -> Socio). Faltan: {', '.join(lineas_faltantes)}"})
+            else:
+                res_crts = quota.import_credits_from_dataframe(df_crts, db, map_socios=map_socios_quota)
+                if res_crts.get('errores'):
+                    errores_globales.extend([{"Etapa": "Créditos", "Error": err} for err in res_crts['errores']])
+                    
+                nuevos_ids = res_crts.get('nuevos_ids_externos', set())
+                
+                res_transf = quota.import_transfers_from_dataframe(df_transf, df_crts, db, nuevos_ids_externos=nuevos_ids)
+                if res_transf.get('errores'):
+                    errores_globales.extend([{"Etapa": "Transferencias", "Error": err} for err in res_transf['errores']])
 
-            if extracted_files:
-                res_docs = quota.process_quota_documents(
-                    file_paths=extracted_files,
-                    df_crts=df_crts,
-                    session=db,
-                    upload_dir=UPLOAD_DIR,
-                    nuevos_ids_externos=nuevos_ids
-                )
-                archivos_procesados = len(res_docs.get('procesados', []))
-                if res_docs.get('errores'):
-                    errores_globales.extend([{"Etapa": "Documentos", "Error": str(err)} for err in res_docs['errores']])
+                if extracted_files:
+                    res_docs = quota.process_quota_documents(
+                        file_paths=extracted_files,
+                        df_crts=df_crts,
+                        session=db,
+                        upload_dir=UPLOAD_DIR,
+                        nuevos_ids_externos=nuevos_ids
+                    )
+                    archivos_procesados = len(res_docs.get('procesados', []))
+                    if res_docs.get('errores'):
+                        errores_globales.extend([{"Etapa": "Documentos", "Error": str(err)} for err in res_docs['errores']])
 
-            res_estados = quota.verify_and_update_credit_states(df_crts, db)
-            if res_estados.get('errores'):
-                errores_globales.extend([{"Etapa": "Verificación Estados", "Error": err} for err in res_estados['errores']])
+                res_estados = quota.verify_and_update_credit_states(df_crts, db)
+                if res_estados.get('errores'):
+                    errores_globales.extend([{"Etapa": "Verificación Estados", "Error": err} for err in res_estados['errores']])
 
-            resumen = {
-                "nuevos_clientes": res_clts.get('nuevos', 0),
-                "clientes_actualizados": res_clts.get('actualizados', 0) + res_crts_upd.get('actualizados', 0),
-                "nuevos_creditos": res_crts.get('nuevos_creditos', 0),
-                "creditos_existentes": res_crts.get('creditos_existentes', 0),
-                "transferencias_importadas": res_transf.get('importadas', 0),
-                "archivos_procesados": archivos_procesados,
-                "pasados_a_firmado": res_estados.get('pasados_a_firmado', 0),
-                "pasados_a_activo": res_estados.get('pasados_a_activo', 0)
-            }
+                resumen["nuevos_creditos"] = res_crts.get('nuevos_creditos', 0)
+                resumen["creditos_existentes"] = res_crts.get('creditos_existentes', 0)
+                resumen["transferencias_importadas"] = res_transf.get('importadas', 0)
+                resumen["pasados_a_firmado"] = res_estados.get('pasados_a_firmado', 0)
+                resumen["pasados_a_activo"] = res_estados.get('pasados_a_activo', 0)
+
+            resumen["nuevos_clientes"] = res_clts.get('nuevos', 0)
+            resumen["clientes_actualizados"] = res_clts.get('actualizados', 0) + res_crts_upd.get('actualizados', 0)
+            resumen["archivos_procesados"] = archivos_procesados
 
         elif proveedor == "WEB_CARGA_CFL":
             if not archivo_web_carga:
