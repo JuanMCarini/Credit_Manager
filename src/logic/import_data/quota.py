@@ -190,7 +190,7 @@ def update_clients_from_crts_dataframe(df: pd.DataFrame, session: Session):
         "errores": errores
     }
 
-def import_credits_from_dataframe(df: pd.DataFrame, session: Session):
+def import_credits_from_dataframe(df: pd.DataFrame, session: Session, map_socios: dict = None):
     """
     Importa créditos y sus respectivas cuotas a partir de un DataFrame de créditos.
     Las cuotas se calculan utilizando AmortizationEngine.
@@ -200,9 +200,8 @@ def import_credits_from_dataframe(df: pd.DataFrame, session: Session):
     errores = []
     nuevos_ids_externos = set()
 
-    company_data = get_company_data(session)
-    company_socio = session.query(SocioComercial).filter(SocioComercial.cuit == company_data.cuit).first()
-    company_socio_id = company_socio.id if company_socio else None
+    amuf_socio = session.query(SocioComercial).filter(SocioComercial.razon_social.ilike('%AMUF%')).first()
+    amuf_socio_id = amuf_socio.id if amuf_socio else None
 
     for index, row in df.iterrows():
         try:
@@ -234,6 +233,12 @@ def import_credits_from_dataframe(df: pd.DataFrame, session: Session):
                 
             emision = row['Emisión'].date() if not pd.isna(row.get('Emisión')) else date.today()
             
+            # Obtener socio originador
+            linea_val = str(row.get('Línea', row.get('Linea', ''))).strip()
+            socio_id = amuf_socio_id
+            if map_socios and linea_val and linea_val != 'nan':
+                socio_id = map_socios.get(linea_val, amuf_socio_id)
+            
             # Crear crédito
             credito = Credito(
                 id_externo=id_ext,
@@ -245,7 +250,7 @@ def import_credits_from_dataframe(df: pd.DataFrame, session: Session):
                 estado=EstadoCredito.APROBADO,
                 tipo_credito=TipoCredito.FRANCES,
                 dia_vencimiento=28,
-                socio_originador_id=company_socio_id
+                socio_originador_id=socio_id
             )
             session.add(credito)
             session.flush() # Para obtener el ID del crédito generado
