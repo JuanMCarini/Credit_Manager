@@ -52,9 +52,11 @@ const DashboardCarteraPage = () => {
   const [openDueño, setOpenDueño] = useState(false);
   const [openOriginador, setOpenOriginador] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [exportFormat, setExportFormat] = useState(null);
 
-  const exportToPDF = async () => {
+  const exportToPDF = async (orientation = 'p') => {
     setIsExporting(true);
+    setExportFormat(orientation);
     
     const root = document.documentElement;
     root.style.setProperty('--bg-base', '#ffffff');
@@ -72,7 +74,7 @@ const DashboardCarteraPage = () => {
     
     setTimeout(async () => {
       try {
-        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pdf = new jsPDF(orientation, 'mm', 'a4');
         const pdfWidth = pdf.internal.pageSize.getWidth();
         const pdfHeight = pdf.internal.pageSize.getHeight();
         
@@ -178,11 +180,13 @@ const DashboardCarteraPage = () => {
           }
         }
         
-        pdf.save('Dashboard_Cartera.pdf');
+        const tipoReporte = orientation === 'p' ? 'Detallado' : 'Grafico';
+        pdf.save(`Reporte Cartera - ${tipoReporte} - ${fechaCorte}.pdf`);
       } catch (err) {
         console.error("Error exporting to PDF:", err);
       } finally {
         setIsExporting(false);
+        setExportFormat(null);
         root.style.removeProperty('--bg-base');
         root.style.removeProperty('--bg-panel');
         root.style.removeProperty('--text-primary');
@@ -540,23 +544,46 @@ const DashboardCarteraPage = () => {
               }}
             />
           </div>
-          <button 
-            onClick={exportToPDF}
-            disabled={isExporting}
-            style={{ 
-              padding: '8px 16px', 
-              borderRadius: '8px', 
-              border: 'none',
-              background: 'var(--color-capital)',
-              color: 'white',
-              fontWeight: 'bold',
-              cursor: isExporting ? 'not-allowed' : 'pointer',
-              opacity: isExporting ? 0.7 : 1,
-              marginLeft: '10px'
-            }}
-          >
-            {isExporting ? 'Generando PDF...' : 'Exportar a PDF'}
-          </button>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button 
+              onClick={() => exportToPDF('p')}
+              disabled={exportFormat !== null}
+              style={{
+                padding: '10px 15px',
+                borderRadius: '8px',
+                border: 'none',
+                background: 'var(--color-capital)',
+                color: 'white',
+                fontWeight: 'bold',
+                cursor: exportFormat !== null ? 'not-allowed' : 'pointer',
+                opacity: exportFormat !== null ? 0.7 : 1,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+            >
+              📄 {exportFormat !== null ? 'Generando...' : 'Reporte Detallado'}
+            </button>
+            <button 
+              onClick={() => exportToPDF('l')}
+              disabled={exportFormat !== null}
+              style={{
+                padding: '10px 15px',
+                borderRadius: '8px',
+                border: 'none',
+                background: 'var(--color-total)',
+                color: 'white',
+                fontWeight: 'bold',
+                cursor: exportFormat !== null ? 'not-allowed' : 'pointer',
+                opacity: exportFormat !== null ? 0.7 : 1,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+            >
+              📊 {exportFormat !== null ? 'Generando...' : 'Reporte Gráfico'}
+            </button>
+          </div>
         </div>
       </header>
 
@@ -878,7 +905,7 @@ const DashboardCarteraPage = () => {
             )}
           </div>
           
-          <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', marginTop: '20px' }}>
+          <div className="glass-panel" style={{ display: exportFormat === 'l' ? 'none' : 'block', padding: '25px', borderRadius: '12px', marginTop: '20px' }}>
             <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Detalle Histórico (Últimos 12 Meses)</h2>
             {filteredEvolutionData.length === 0 ? (
               <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>No hay datos históricos disponibles.</p>
@@ -959,7 +986,7 @@ const DashboardCarteraPage = () => {
             )}
           </div>
           
-          <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', marginTop: '20px' }}>
+          <div className="glass-panel" style={{ display: exportFormat === 'l' ? 'none' : 'block', padding: '25px', borderRadius: '12px', marginTop: '20px' }}>
             <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Detalle por Período y Dueño</h2>
             {composicionTableRows.length === 0 ? (
               <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>No hay datos disponibles.</p>
@@ -1024,7 +1051,7 @@ const DashboardCarteraPage = () => {
               )}
             </div>
 
-            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px' }}>
+            <div className="glass-panel" style={{ display: exportFormat === 'l' ? 'none' : 'block', padding: '25px', borderRadius: '12px' }}>
               <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Detalle por Período (Actual y Futuros)</h2>
               {periodData.length === 0 ? (
                 <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>No hay vencimientos futuros registrados.</p>
@@ -1033,12 +1060,12 @@ const DashboardCarteraPage = () => {
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', textAlign: 'left' }}>
-                      <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500' }}>Período</th>
-                      <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Capital</th>
-                      <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Interés</th>
-                      <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Cap + Int</th>
-                      <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>IVA</th>
-                      <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Total</th>
+                      <th style={{ padding: '8px 10px', color: 'var(--text-secondary)', fontWeight: '500', fontSize: '0.95rem' }}>Período</th>
+                      <th style={{ padding: '8px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right', fontSize: '0.95rem' }}>Capital</th>
+                      <th style={{ padding: '8px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right', fontSize: '0.95rem' }}>Interés</th>
+                      <th style={{ padding: '8px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right', fontSize: '0.95rem' }}>Cap + Int</th>
+                      <th style={{ padding: '8px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right', fontSize: '0.95rem' }}>IVA</th>
+                      <th style={{ padding: '8px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right', fontSize: '0.95rem' }}>Total</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1046,13 +1073,14 @@ const DashboardCarteraPage = () => {
                       <tr key={idx} style={{ 
                         borderBottom: '1px solid rgba(255,255,255,0.05)',
                         transition: 'background-color 0.2s',
+                        fontSize: '0.9rem'
                       }} className="table-row-hover">
-                        <td style={{ padding: '15px 10px', fontWeight: '500' }}>{row.Periodo}</td>
-                        <td style={{ padding: '15px 10px', textAlign: 'right', fontFamily: 'monospace' }}>{formatCurrency(row.Capital)}</td>
-                        <td style={{ padding: '15px 10px', textAlign: 'right', fontFamily: 'monospace' }}>{formatCurrency(row['Interés'])}</td>
-                        <td style={{ padding: '15px 10px', textAlign: 'right', fontFamily: 'monospace', color: 'var(--color-capint)' }}>{formatCurrency(row.Capital + row['Interés'])}</td>
-                        <td style={{ padding: '15px 10px', textAlign: 'right', fontFamily: 'monospace' }}>{formatCurrency(row.IVA)}</td>
-                        <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--color-total)' }}>{formatCurrency(row.Total)}</td>
+                        <td style={{ padding: '6px 10px', fontWeight: '500' }}>{row.Periodo}</td>
+                        <td style={{ padding: '6px 10px', textAlign: 'right', fontFamily: 'monospace' }}>{formatCurrency(row.Capital)}</td>
+                        <td style={{ padding: '6px 10px', textAlign: 'right', fontFamily: 'monospace' }}>{formatCurrency(row['Interés'])}</td>
+                        <td style={{ padding: '6px 10px', textAlign: 'right', fontFamily: 'monospace', color: 'var(--color-capint)' }}>{formatCurrency(row.Capital + row['Interés'])}</td>
+                        <td style={{ padding: '6px 10px', textAlign: 'right', fontFamily: 'monospace' }}>{formatCurrency(row.IVA)}</td>
+                        <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--color-total)' }}>{formatCurrency(row.Total)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1136,7 +1164,7 @@ const DashboardCarteraPage = () => {
             </div>
           </div>
 
-          <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px' }}>
+          <div className="glass-panel" style={{ display: exportFormat === 'l' ? 'none' : 'block', padding: '25px', borderRadius: '12px' }}>
             <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Detalle de Montos por Estado (Capital + Interés)</h2>
             {estadosList.length === 0 ? (
               <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>No hay datos disponibles en la cartera activa.</p>
@@ -1204,7 +1232,7 @@ const DashboardCarteraPage = () => {
             </ResponsiveContainer>
           </div>
 
-          <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', marginBottom: '30px' }}>
+          <div className="glass-panel" style={{ display: exportFormat === 'l' ? 'none' : 'block', padding: '25px', borderRadius: '12px', marginBottom: '30px' }}>
             <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Detalle de Créditos Morosos</h2>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
