@@ -98,7 +98,6 @@ def saldos(
     for col in ["capital", "interes", "iva"]:
         df[col] = (df[col].round(2) - df[f"{col}_cobr"].round(2)).round(2)
 
-    df.drop(columns=["capital_cobr", "interes_cobr", "iva_cobr"], inplace=True)
     df["total"] = df[["capital", "interes", "iva"]].sum(axis=1)
 
     if con_saldo:
@@ -173,10 +172,14 @@ def saldos(
                 "id",
                 "fecha_vencimiento",
                 "Dueño",
+                "estado",
                 "capital",
                 "interes",
                 "iva",
                 "total",
+                "capital_cobr",
+                "interes_cobr",
+                "iva_cobr",
             ]
         ]
 
@@ -186,12 +189,16 @@ def saldos(
         "credito_id": "ID Credito",
         "nro_cuota": "Nro. Cuota",
         "fecha_vencimiento": "Fecha Vencimiento",
+        "estado": "Estado",
         "capital": "Capital",
         "interes": "Interés",
         "iva": "IVA",
+        "total": "Total",
+        "capital_cobr": "Capital Cobrado",
+        "interes_cobr": "Interés Cobrado",
+        "iva_cobr": "IVA Cobrado",
         "fecha_emision": "Fecha Emisión",
         "cliente_cuil": "CUIL Cliente",
-        "total": "Total",
         "cartera_id": "ID Cartera",
     }
     df.rename(columns=renames, errors="ignore", inplace=True)
