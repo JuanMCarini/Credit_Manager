@@ -4,7 +4,8 @@ Description: Main entry point for the Credit Manager API.
              Exposes core engine logic securely via RESTful endpoints.
 """
 
-from fastapi import FastAPI
+import os
+from fastapi import FastAPI, UploadFile, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -60,6 +61,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+os.makedirs("data/uploads", exist_ok=True)
+app.mount("/static", StaticFiles(directory="data/uploads"), name="static")
 
 # -------------------------------------------------------------------
 # Endpoints Root
