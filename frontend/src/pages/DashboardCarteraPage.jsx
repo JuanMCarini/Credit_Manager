@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-
+import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
 const formatCurrency = (value) => {
   if (value === null || value === undefined) return "$ 0";
   return new Intl.NumberFormat('es-AR', { 
@@ -47,6 +48,113 @@ const DashboardCarteraPage = () => {
   const [filtroOriginadores, setFiltroOriginadores] = useState([]); // empty means 'Todos'
   const [openDueño, setOpenDueño] = useState(false);
   const [openOriginador, setOpenOriginador] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const exportToPDF = async () => {
+    setIsExporting(true);
+    
+    const root = document.documentElement;
+    root.style.setProperty('--bg-base', '#ffffff');
+    root.style.setProperty('--bg-panel', '#ffffff');
+    root.style.setProperty('--text-primary', '#000000');
+    root.style.setProperty('--text-secondary', '#333333');
+    root.style.setProperty('--border-color', '#dddddd');
+    
+    root.style.setProperty('--color-capital', '#2E7D32');
+    root.style.setProperty('--color-interes', '#F57C00');
+    root.style.setProperty('--color-capint', '#0097A7');
+    root.style.setProperty('--color-iva', '#7B1FA2');
+    root.style.setProperty('--color-total', '#1976D2');
+    root.style.setProperty('--color-valoractual', '#C2185B');
+    
+    setTimeout(async () => {
+      try {
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+        
+        const tabsToExport = [
+          { id: 'export-tab-total', title: 'Cartera Total' },
+          { id: 'export-tab-periodo', title: 'Detalle por Período' },
+          { id: 'export-tab-estados', title: 'Detalle de Estados' },
+          { id: 'export-tab-morosidad', title: 'Análisis de Morosidad' }
+        ];
+
+        let pageCount = 0;
+        for (let i = 0; i < tabsToExport.length; i++) {
+          const el = document.getElementById(tabsToExport[i].id);
+          if (el) {
+            const originalWidth = el.style.width;
+            el.style.width = '1100px';
+            el.style.maxWidth = '1100px';
+            
+            await new Promise(resolve => setTimeout(resolve, 150)); // let recharts adjust
+
+            const canvas = await html2canvas(el, { 
+              scale: 2, 
+              backgroundColor: '#ffffff',
+              windowWidth: 1150
+            });
+            
+            el.style.width = originalWidth;
+            el.style.maxWidth = '';
+
+            const imgData = canvas.toDataURL('image/png');
+            
+            const imgProps = pdf.getImageProperties(imgData);
+            const ratio = imgProps.width / imgProps.height;
+            const margin = 10;
+            let width = pdfWidth - margin * 2;
+            let height = width / ratio;
+            
+            const maxPageHeight = pdfHeight - margin * 2 - 20;
+            if (height > maxPageHeight) {
+              height = maxPageHeight;
+              width = height * ratio;
+            }
+            
+            if (pageCount > 0) {
+              pdf.addPage();
+            }
+            
+            pdf.setFillColor(255, 255, 255);
+            pdf.rect(0, 0, pdfWidth, pdfHeight, 'F');
+            
+            pdf.setFontSize(16);
+            pdf.setTextColor(0, 0, 0);
+            pdf.text(`Dashboard - ${tabsToExport[i].title}`, margin, 15);
+            
+            pdf.setFontSize(9);
+            pdf.setTextColor(100, 100, 100);
+            const dueñosText = filtroDueños.length > 0 ? filtroDueños.join(', ') : 'Todos';
+            const origText = filtroOriginadores.length > 0 ? filtroOriginadores.join(', ') : 'Todos';
+            const filtrosStr = `Fecha de Corte: ${fechaCorte.split('-').reverse().join('/')} | TNA: ${tasaDescuento}% | Dueños: ${dueñosText} | Originadores: ${origText}`;
+            pdf.text(filtrosStr, margin, 22);
+            
+            pdf.addImage(imgData, 'PNG', margin, 28, width, height);
+            pageCount++;
+          }
+        }
+        
+        pdf.save('Dashboard_Cartera.pdf');
+      } catch (err) {
+        console.error("Error exporting to PDF:", err);
+      } finally {
+        setIsExporting(false);
+        root.style.removeProperty('--bg-base');
+        root.style.removeProperty('--bg-panel');
+        root.style.removeProperty('--text-primary');
+        root.style.removeProperty('--text-secondary');
+        root.style.removeProperty('--border-color');
+        root.style.removeProperty('--color-capital');
+        root.style.removeProperty('--color-interes');
+        root.style.removeProperty('--color-capint');
+        root.style.removeProperty('--color-iva');
+        root.style.removeProperty('--color-total');
+        root.style.removeProperty('--color-valoractual');
+      }
+    }, 1500);
+  };
 
   const handleTasaChange = (e) => {
     const raw = e.target.value.replace(/[^0-9.,]/g, '').replace(',', '.');
@@ -102,11 +210,11 @@ const DashboardCarteraPage = () => {
   const corteYearMonth = fechaCorte.substring(0, 7);
 
   const resumenEstados = {
-    'APROBADO': { Estado: 'Aprobado', Vencido: 0, AVencer: 0, Total: 0, fill: '#4CAF50' },
-    'ACTIVO': { Estado: 'Activo', Vencido: 0, AVencer: 0, Total: 0, fill: '#2196F3' },
-    'MOROSO': { Estado: 'Moroso', Vencido: 0, AVencer: 0, Total: 0, fill: '#FF9800' },
-    'INCOBRABLE': { Estado: 'Incobrable', Vencido: 0, AVencer: 0, Total: 0, fill: '#E91E63' },
-    'JUDICIALIZADO': { Estado: 'Judicializado', Vencido: 0, AVencer: 0, Total: 0, fill: '#9C27B0' },
+    'APROBADO': { Estado: 'Aprobado', Vencido: 0, AVencer: 0, Total: 0, fill: 'var(--color-capital)' },
+    'ACTIVO': { Estado: 'Activo', Vencido: 0, AVencer: 0, Total: 0, fill: 'var(--color-total)' },
+    'MOROSO': { Estado: 'Moroso', Vencido: 0, AVencer: 0, Total: 0, fill: 'var(--color-interes)' },
+    'INCOBRABLE': { Estado: 'Incobrable', Vencido: 0, AVencer: 0, Total: 0, fill: 'var(--color-valoractual)' },
+    'JUDICIALIZADO': { Estado: 'Judicializado', Vencido: 0, AVencer: 0, Total: 0, fill: 'var(--color-iva)' },
     'OTRO': { Estado: 'Otro', Vencido: 0, AVencer: 0, Total: 0, fill: '#607D8B' }
   };
 
@@ -288,6 +396,23 @@ const DashboardCarteraPage = () => {
               }}
             />
           </div>
+          <button 
+            onClick={exportToPDF}
+            disabled={isExporting}
+            style={{ 
+              padding: '8px 16px', 
+              borderRadius: '8px', 
+              border: 'none',
+              background: 'var(--color-capital)',
+              color: 'white',
+              fontWeight: 'bold',
+              cursor: isExporting ? 'not-allowed' : 'pointer',
+              opacity: isExporting ? 0.7 : 1,
+              marginLeft: '10px'
+            }}
+          >
+            {isExporting ? 'Generando PDF...' : 'Exportar a PDF'}
+          </button>
         </div>
       </header>
 
@@ -376,7 +501,7 @@ const DashboardCarteraPage = () => {
             padding: '10px 20px', 
             borderRadius: '8px', 
             border: 'none',
-            background: activeTab === 'total' ? '#2196F3' : 'rgba(255,255,255,0.05)',
+            background: activeTab === 'total' ? 'var(--color-total)' : 'rgba(255,255,255,0.05)',
             color: activeTab === 'total' ? 'white' : 'var(--text-secondary)',
             cursor: 'pointer',
             fontWeight: '600',
@@ -391,7 +516,7 @@ const DashboardCarteraPage = () => {
             padding: '10px 20px', 
             borderRadius: '8px', 
             border: 'none',
-            background: activeTab === 'periodo' ? '#2196F3' : 'rgba(255,255,255,0.05)',
+            background: activeTab === 'periodo' ? 'var(--color-total)' : 'rgba(255,255,255,0.05)',
             color: activeTab === 'periodo' ? 'white' : 'var(--text-secondary)',
             cursor: 'pointer',
             fontWeight: '600',
@@ -406,7 +531,7 @@ const DashboardCarteraPage = () => {
             padding: '10px 20px', 
             borderRadius: '8px', 
             border: 'none',
-            background: activeTab === 'estados' ? '#2196F3' : 'rgba(255,255,255,0.05)',
+            background: activeTab === 'estados' ? 'var(--color-total)' : 'rgba(255,255,255,0.05)',
             color: activeTab === 'estados' ? 'white' : 'var(--text-secondary)',
             cursor: 'pointer',
             fontWeight: '600',
@@ -421,7 +546,7 @@ const DashboardCarteraPage = () => {
             padding: '10px 20px', 
             borderRadius: '8px', 
             border: 'none',
-            background: activeTab === 'morosidad' ? '#2196F3' : 'rgba(255,255,255,0.05)',
+            background: activeTab === 'morosidad' ? 'var(--color-total)' : 'rgba(255,255,255,0.05)',
             color: activeTab === 'morosidad' ? 'white' : 'var(--text-secondary)',
             cursor: 'pointer',
             fontWeight: '600',
@@ -432,8 +557,27 @@ const DashboardCarteraPage = () => {
         </button>
       </div>
 
-      {activeTab === 'total' && (
-        <>
+      {isExporting && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(15, 23, 42, 0.9)',
+          zIndex: 9999,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'white',
+          fontSize: '1.5rem',
+          fontWeight: 'bold'
+        }}>
+          <div>Generando PDF...</div>
+          <div style={{ fontSize: '1rem', marginTop: '10px', color: 'var(--text-secondary)' }}>Por favor espere mientras se capturan los gráficos.</div>
+        </div>
+      )}
+
+      {(activeTab === 'total' || isExporting) && (
+        <div id="export-tab-total">
           {/* KPI Cards */}
           <div style={{ 
             display: 'flex', 
@@ -442,32 +586,32 @@ const DashboardCarteraPage = () => {
             gap: '20px', 
             marginBottom: '30px' 
           }}>
-            <div className="glass-panel" style={{ width: '100%', minWidth: '260px', maxWidth: '300px', padding: '20px', borderRadius: '12px', borderTop: '4px solid #4CAF50', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '10px', transition: 'transform 0.2s', cursor: 'default' }} onMouseOver={e => e.currentTarget.style.transform = 'translateY(-5px)'} onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}>
+            <div className="glass-panel" style={{ width: '100%', minWidth: '260px', maxWidth: '300px', padding: '20px', borderRadius: '12px', borderTop: '4px solid var(--color-capital)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '10px', transition: 'transform 0.2s', cursor: 'default' }} onMouseOver={e => e.currentTarget.style.transform = 'translateY(-5px)'} onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}>
               <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '1px' }}>Total Capital Activo</span>
               <span style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>{formatCurrency(totalCapital)}</span>
             </div>
             
-            <div className="glass-panel" style={{ width: '100%', minWidth: '260px', maxWidth: '300px', padding: '20px', borderRadius: '12px', borderTop: '4px solid #FF9800', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '10px', transition: 'transform 0.2s', cursor: 'default' }} onMouseOver={e => e.currentTarget.style.transform = 'translateY(-5px)'} onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}>
+            <div className="glass-panel" style={{ width: '100%', minWidth: '260px', maxWidth: '300px', padding: '20px', borderRadius: '12px', borderTop: '4px solid var(--color-interes)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '10px', transition: 'transform 0.2s', cursor: 'default' }} onMouseOver={e => e.currentTarget.style.transform = 'translateY(-5px)'} onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}>
               <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '1px' }}>Total Interés</span>
               <span style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>{formatCurrency(totalInteres)}</span>
             </div>
 
-            <div className="glass-panel" style={{ width: '100%', minWidth: '260px', maxWidth: '300px', padding: '20px', borderRadius: '12px', borderTop: '4px solid #00BCD4', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '10px', transition: 'transform 0.2s', cursor: 'default' }} onMouseOver={e => e.currentTarget.style.transform = 'translateY(-5px)'} onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}>
+            <div className="glass-panel" style={{ width: '100%', minWidth: '260px', maxWidth: '300px', padding: '20px', borderRadius: '12px', borderTop: '4px solid var(--color-capint)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '10px', transition: 'transform 0.2s', cursor: 'default' }} onMouseOver={e => e.currentTarget.style.transform = 'translateY(-5px)'} onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}>
               <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '1px' }}>Capital + Interés</span>
               <span style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>{formatCurrency(totalCapital + totalInteres)}</span>
             </div>
 
-            <div className="glass-panel" style={{ width: '100%', minWidth: '260px', maxWidth: '300px', padding: '20px', borderRadius: '12px', borderTop: '4px solid #9C27B0', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '10px', transition: 'transform 0.2s', cursor: 'default' }} onMouseOver={e => e.currentTarget.style.transform = 'translateY(-5px)'} onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}>
+            <div className="glass-panel" style={{ width: '100%', minWidth: '260px', maxWidth: '300px', padding: '20px', borderRadius: '12px', borderTop: '4px solid var(--color-iva)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '10px', transition: 'transform 0.2s', cursor: 'default' }} onMouseOver={e => e.currentTarget.style.transform = 'translateY(-5px)'} onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}>
               <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '1px' }}>Total IVA</span>
               <span style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>{formatCurrency(totalIva)}</span>
             </div>
 
-            <div className="glass-panel" style={{ width: '100%', minWidth: '260px', maxWidth: '300px', padding: '20px', borderRadius: '12px', borderTop: '4px solid #2196F3', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '10px', transition: 'transform 0.2s', cursor: 'default' }} onMouseOver={e => e.currentTarget.style.transform = 'translateY(-5px)'} onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}>
+            <div className="glass-panel" style={{ width: '100%', minWidth: '260px', maxWidth: '300px', padding: '20px', borderRadius: '12px', borderTop: '4px solid var(--color-total)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '10px', transition: 'transform 0.2s', cursor: 'default' }} onMouseOver={e => e.currentTarget.style.transform = 'translateY(-5px)'} onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}>
               <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '1px' }}>Saldo Total a Favor</span>
               <span style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>{formatCurrency(totalGeneral)}</span>
             </div>
 
-            <div className="glass-panel" style={{ width: '100%', minWidth: '260px', maxWidth: '300px', padding: '20px', borderRadius: '12px', borderTop: '4px solid #E91E63', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '10px', transition: 'transform 0.2s', cursor: 'default', background: 'linear-gradient(135deg, rgba(233, 30, 99, 0.1), rgba(0,0,0,0))' }} onMouseOver={e => e.currentTarget.style.transform = 'translateY(-5px)'} onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}>
+            <div className="glass-panel" style={{ width: '100%', minWidth: '260px', maxWidth: '300px', padding: '20px', borderRadius: '12px', borderTop: '4px solid var(--color-valoractual)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '10px', transition: 'transform 0.2s', cursor: 'default', background: 'linear-gradient(135deg, rgba(233, 30, 99, 0.1), rgba(0,0,0,0))' }} onMouseOver={e => e.currentTarget.style.transform = 'translateY(-5px)'} onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}>
               <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '1px' }}>Valor Actual ({tasaDescuento}%)</span>
               <span style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>{formatCurrency(valorActual)}</span>
             </div>
@@ -503,10 +647,10 @@ const DashboardCarteraPage = () => {
                         <td style={{ padding: '15px 10px', color: 'var(--text-secondary)' }}>{row.Originador}</td>
                         <td style={{ padding: '15px 10px', textAlign: 'right', fontFamily: 'monospace' }}>{formatCurrency(row.Capital)}</td>
                         <td style={{ padding: '15px 10px', textAlign: 'right', fontFamily: 'monospace' }}>{formatCurrency(row['Interés'])}</td>
-                        <td style={{ padding: '15px 10px', textAlign: 'right', fontFamily: 'monospace', color: '#00BCD4' }}>{formatCurrency(row.Capital + row['Interés'])}</td>
+                        <td style={{ padding: '15px 10px', textAlign: 'right', fontFamily: 'monospace', color: 'var(--color-capint)' }}>{formatCurrency(row.Capital + row['Interés'])}</td>
                         <td style={{ padding: '15px 10px', textAlign: 'right', fontFamily: 'monospace' }}>{formatCurrency(row.IVA)}</td>
                         <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace' }}>{formatCurrency(row.Total)}</td>
-                        <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: '#E91E63' }}>{formatCurrency(row.ValorActual)}</td>
+                        <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--color-valoractual)' }}>{formatCurrency(row.ValorActual)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -514,11 +658,11 @@ const DashboardCarteraPage = () => {
               </div>
             )}
           </div>
-        </>
+        </div>
       )}
 
-      {activeTab === 'periodo' && (
-          <>
+      {(activeTab === 'periodo' || isExporting) && (
+          <div id="export-tab-periodo">
             <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', marginBottom: '30px', height: '400px' }}>
               <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Proyección de Vencimientos</h2>
               {periodData.length === 0 ? (
@@ -538,9 +682,9 @@ const DashboardCarteraPage = () => {
                       itemStyle={{ color: 'white' }}
                     />
                     <Legend wrapperStyle={{ paddingTop: '20px' }} />
-                    <Bar dataKey="Capital" stackId="a" fill="#4CAF50" name="Capital" />
-                    <Bar dataKey="Interés" stackId="a" fill="#FF9800" name="Interés" />
-                    <Bar dataKey="IVA" stackId="a" fill="#9C27B0" name="IVA" />
+                    <Bar dataKey="Capital" stackId="a" fill="var(--color-capital)" name="Capital" />
+                    <Bar dataKey="Interés" stackId="a" fill="var(--color-interes)" name="Interés" />
+                    <Bar dataKey="IVA" stackId="a" fill="var(--color-iva)" name="IVA" />
                   </BarChart>
                 </ResponsiveContainer>
               )}
@@ -572,9 +716,9 @@ const DashboardCarteraPage = () => {
                         <td style={{ padding: '15px 10px', fontWeight: '500' }}>{row.Periodo}</td>
                         <td style={{ padding: '15px 10px', textAlign: 'right', fontFamily: 'monospace' }}>{formatCurrency(row.Capital)}</td>
                         <td style={{ padding: '15px 10px', textAlign: 'right', fontFamily: 'monospace' }}>{formatCurrency(row['Interés'])}</td>
-                        <td style={{ padding: '15px 10px', textAlign: 'right', fontFamily: 'monospace', color: '#00BCD4' }}>{formatCurrency(row.Capital + row['Interés'])}</td>
+                        <td style={{ padding: '15px 10px', textAlign: 'right', fontFamily: 'monospace', color: 'var(--color-capint)' }}>{formatCurrency(row.Capital + row['Interés'])}</td>
                         <td style={{ padding: '15px 10px', textAlign: 'right', fontFamily: 'monospace' }}>{formatCurrency(row.IVA)}</td>
-                        <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: '#2196F3' }}>{formatCurrency(row.Total)}</td>
+                        <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--color-total)' }}>{formatCurrency(row.Total)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -582,11 +726,11 @@ const DashboardCarteraPage = () => {
                 </div>
               )}
             </div>
-          </>
+          </div>
       )}
 
-      {activeTab === 'estados' && (
-        <>
+      {(activeTab === 'estados' || isExporting) && (
+        <div id="export-tab-estados">
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginBottom: '30px' }}>
             <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', flex: '1 1 300px', display: 'flex', flexDirection: 'column' }}>
               <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600', textAlign: 'center' }}>Porcentaje por Estado</h2>
@@ -665,8 +809,8 @@ const DashboardCarteraPage = () => {
                         transition: 'background-color 0.2s',
                       }} className="table-row-hover">
                         <td style={{ padding: '15px 10px', fontWeight: '500', color: row.fill }}>{row.Estado.toUpperCase()}</td>
-                        <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: '#FF9800' }}>{formatCurrency(row.Vencido)}</td>
-                        <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: '#2196F3' }}>{formatCurrency(row.AVencer)}</td>
+                        <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--color-interes)' }}>{formatCurrency(row.Vencido)}</td>
+                        <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--color-total)' }}>{formatCurrency(row.AVencer)}</td>
                         <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace' }}>{formatCurrency(row.Total)}</td>
                       </tr>
                     ))}
@@ -675,11 +819,11 @@ const DashboardCarteraPage = () => {
               </div>
             )}
           </div>
-        </>
+        </div>
       )}
 
-      {activeTab === 'morosidad' && (
-        <>
+      {(activeTab === 'morosidad' || isExporting) && (
+        <div id="export-tab-morosidad">
           <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', marginBottom: '30px', height: '400px' }}>
             <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Composición de la Morosidad</h2>
             <ResponsiveContainer width="100%" height="100%">
@@ -696,9 +840,9 @@ const DashboardCarteraPage = () => {
                   itemStyle={{ color: 'white' }}
                 />
                 <Legend wrapperStyle={{ paddingTop: '20px' }} />
-                <Bar dataKey="Capital" stackId="a" fill="#4CAF50" name="Capital" />
-                <Bar dataKey="Interés" stackId="a" fill="#FF9800" name="Interés" />
-                <Bar dataKey="IVA" stackId="a" fill="#9C27B0" name="IVA" />
+                <Bar dataKey="Capital" stackId="a" fill="var(--color-capital)" name="Capital" />
+                <Bar dataKey="Interés" stackId="a" fill="var(--color-interes)" name="Interés" />
+                <Bar dataKey="IVA" stackId="a" fill="var(--color-iva)" name="IVA" />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -726,7 +870,7 @@ const DashboardCarteraPage = () => {
                     <td style={{ padding: '15px 10px', textAlign: 'right', fontFamily: 'monospace' }}>{formatCurrency(row.Capital)}</td>
                     <td style={{ padding: '15px 10px', textAlign: 'right', fontFamily: 'monospace' }}>{formatCurrency(row.Interés)}</td>
                     <td style={{ padding: '15px 10px', textAlign: 'right', fontFamily: 'monospace' }}>{formatCurrency(row.IVA)}</td>
-                    <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: '#E91E63' }}>{formatCurrency(row.Total)}</td>
+                    <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--color-valoractual)' }}>{formatCurrency(row.Total)}</td>
                   </tr>
                 ))}
                 <tr style={{ backgroundColor: 'rgba(0,0,0,0.2)' }}>
@@ -734,13 +878,13 @@ const DashboardCarteraPage = () => {
                   <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace' }}>{formatCurrency(moraBuckets.reduce((acc, b) => acc + b.Capital, 0))}</td>
                   <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace' }}>{formatCurrency(moraBuckets.reduce((acc, b) => acc + b.Interés, 0))}</td>
                   <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace' }}>{formatCurrency(moraBuckets.reduce((acc, b) => acc + b.IVA, 0))}</td>
-                  <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: '#E91E63' }}>{formatCurrency(moraBuckets.reduce((acc, b) => acc + b.Total, 0))}</td>
+                  <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--color-valoractual)' }}>{formatCurrency(moraBuckets.reduce((acc, b) => acc + b.Total, 0))}</td>
                 </tr>
               </tbody>
             </table>
           </div>
         </div>
-        </>
+        </div>
       )}
 
       <style>{`
