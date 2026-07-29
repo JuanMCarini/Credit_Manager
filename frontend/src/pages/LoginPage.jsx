@@ -33,7 +33,7 @@ const LoginPage = () => {
       const data = await response.json();
 
       if (response.ok) {
-        login(data.user, data.access_token);
+        login(data.user);
         navigate('/');
       } else {
         setError(data.detail || 'Error al iniciar sesión');

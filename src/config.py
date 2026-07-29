@@ -87,6 +87,18 @@ class APIConfig(BaseSettings):
         default=["http://localhost:5173", "http://127.0.0.1:5173"],
         description="List of allowed origins for CORS."
     )
+    secret_key: str = Field(
+        default="super_secret_key_change_in_production_9s8d7f98s7df987",
+        description="JWT Secret Key"
+    )
+    algorithm: str = Field(
+        default="HS256",
+        description="JWT Algorithm"
+    )
+    access_token_expire_minutes: int = Field(
+        default=60,
+        description="JWT expiration time in minutes"
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -1,5 +1,6 @@
 from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
+from fastapi.security.utils import get_authorization_scheme_param
 from sqlalchemy.orm import Session
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -7,15 +8,29 @@ from datetime import datetime, timedelta, timezone
 
 from src.database.connection import get_db
 from src.database.models.auth import Usuario, Rol, TipoRolEnum, RegistroAuditoria
-from src.config import DATABASE_SETTINGS
+from src.config import DATABASE_SETTINGS, API_SETTINGS
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
+class OAuth2PasswordBearerWithCookie(OAuth2PasswordBearer):
+    async def __call__(self, request: Request) -> str | None:
+        authorization: str = request.headers.get("Authorization")
+        scheme, param = get_authorization_scheme_param(authorization)
+        if not authorization or scheme.lower() != "bearer":
+            # Fallback to cookie
+            param = request.cookies.get("access_token")
+
+        if not param:
+            if self.auto_error:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Not authenticated",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            else:
+                return None
+        return param
+
+oauth2_scheme = OAuth2PasswordBearerWithCookie(tokenUrl="api/auth/login")
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-# Para este ejemplo se usan variables fijas. En producción idealmente vienen de config.py
-SECRET_KEY = "super_secret_key_change_in_production"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 12 # 12 horas
 
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
@@ -25,9 +40,9 @@ def get_password_hash(password):
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + (expires_delta if expires_delta else timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    expire = datetime.now(timezone.utc) + (expires_delta if expires_delta else timedelta(minutes=API_SETTINGS.access_token_expire_minutes))
     to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(to_encode, API_SETTINGS.secret_key, algorithm=API_SETTINGS.algorithm)
 
 async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     credentials_exception = HTTPException(
@@ -36,7 +51,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, API_SETTINGS.secret_key, algorithms=[API_SETTINGS.algorithm])
         email: str = payload.get("sub")
         if email is None:
             raise credentials_exception
@@ -84,12 +99,16 @@ async def enforce_rbac(request: Request, db: Session = Depends(get_db)):
     if path == "/api/auth/login":
         return
 
-    # Extraer el token manualmente del header
+    # Extraer el token del header o de la cookie
+    token = None
     auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer "):
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header.split(" ")[1]
+    else:
+        token = request.cookies.get("access_token")
+        
+    if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    
-    token = auth_header.split(" ")[1]
     
     # Reutilizar get_current_user para validar token y obtener usuario
     current_user = await get_current_user(token=token, db=db)

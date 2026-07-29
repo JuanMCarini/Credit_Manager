@@ -11,6 +11,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from typing import Dict
 
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
 # Import routers
 from src.api.routes.reportes import router as reportes_router
 from src.api.routes.clientes import router as clientes_router
@@ -23,6 +27,7 @@ from src.api.routes.auth import router as auth_router
 from src.api.routes.usuarios import router as usuarios_router
 from src.api.routes.liquidaciones import router as liquidaciones_router
 from src.api.routes.papeleria import router as papeleria_router
+from src.api.routes.archivos import router as archivos_router
 from src.config import API_SETTINGS
 from src.database import Base, engine
 
@@ -30,6 +35,11 @@ from src.database import Base, engine
 # Inicialización de la Base de Datos
 # -------------------------------------------------------------------
 Base.metadata.create_all(bind=engine)
+
+# -------------------------------------------------------------------
+# Rate Limiter
+# -------------------------------------------------------------------
+from src.api.limiter import limiter
 
 # -------------------------------------------------------------------
 # Inicialización de la Aplicación
@@ -54,6 +64,9 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=API_SETTINGS.allowed_origins,
@@ -63,7 +76,6 @@ app.add_middleware(
 )
 
 os.makedirs("data/uploads", exist_ok=True)
-app.mount("/static", StaticFiles(directory="data/uploads"), name="static")
 
 # -------------------------------------------------------------------
 # Endpoints Root
@@ -92,6 +104,7 @@ app.include_router(carteras_router)
 app.include_router(usuarios_router)
 app.include_router(liquidaciones_router)
 app.include_router(papeleria_router)
+app.include_router(archivos_router)
 
 # -------------------------------------------------------------------
 # Frontend (Ahora servido por Nginx)

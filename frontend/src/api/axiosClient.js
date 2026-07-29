@@ -4,18 +4,15 @@ const API_URL = ""; // Vite proxy will handle /api
 
 const axiosClient = axios.create({
   baseURL: API_URL,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Request interceptor to attach the auth token and handle FormData properly
+// Request interceptor to handle FormData properly
 axiosClient.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers['Authorization'] = `Bearer ${token}`;
-    }
     if (config.data instanceof FormData) {
       delete config.headers['Content-Type'];
       if (typeof config.headers.delete === 'function') {
@@ -35,8 +32,7 @@ axiosClient.interceptors.response.use(
     
     // Redirect to login if token is expired or unauthorized
     if (error.response && error.response.status === 401) {
-      alert("Su sesión ha expirado por inactividad. Por favor, vuelva a iniciar sesión.");
-      localStorage.removeItem('token');
+      alert("Su sesión ha expirado por inactividad o no está autorizado. Por favor, vuelva a iniciar sesión.");
       localStorage.removeItem('userRole');
       window.location.href = '/login';
     }

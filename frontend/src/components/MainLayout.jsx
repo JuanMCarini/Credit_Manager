@@ -53,7 +53,7 @@ const MainLayout = () => {
       try {
         const response = await axiosClient.post('/api/auth/refresh');
         if (response.data && response.data.access_token) {
-          login(response.data.user, response.data.access_token);
+          login(response.data.user);
         }
       } catch (error) {
         console.error("Error refreshing token", error);
