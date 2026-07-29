@@ -72,6 +72,8 @@ def saldos(
     for col in ["fecha_emision", "cliente_cuil", "cartera_id", "socio_originador_id", "tipo_credito"]:
         df_ctas[col] = df_ctas["credito_id"].map(df_crts[col])
     
+    df_ctas["estado_credito"] = df_ctas["credito_id"].map(df_crts["estado"])
+    
     df_ctas["socio_id"] = df_ctas["cartera_id"].map(df_cart["socio_id"])
     df_ctas["Proveedor"] = df_ctas["socio_id"].map(df_socios["razon_social"])
     df_ctas["Originador"] = df_ctas["socio_originador_id"].map(
@@ -173,6 +175,7 @@ def saldos(
                 "fecha_vencimiento",
                 "Dueño",
                 "estado",
+                "estado_credito",
                 "capital",
                 "interes",
                 "iva",
@@ -190,6 +193,7 @@ def saldos(
         "nro_cuota": "Nro. Cuota",
         "fecha_vencimiento": "Fecha Vencimiento",
         "estado": "Estado",
+        "estado_credito": "Estado Credito",
         "capital": "Capital",
         "interes": "Interés",
         "iva": "IVA",
