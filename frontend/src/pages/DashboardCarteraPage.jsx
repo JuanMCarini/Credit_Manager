@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import axiosClient from '../api/axiosClient';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, LabelList } from 'recharts';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 const formatCurrency = (value) => {
@@ -12,6 +12,8 @@ const formatCurrency = (value) => {
     maximumFractionDigits: 0
   }).format(value);
 };
+
+const CHART_COLORS = ['#6366f1', '#14b8a6', '#f59e0b', '#ec4899', '#8b5cf6', '#10b981', '#f43f5e', '#3b82f6'];
 
 const RADIAN = Math.PI / 180;
 const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, index }) => {
@@ -38,6 +40,7 @@ const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, per
 
 const DashboardCarteraPage = () => {
   const [data, setData] = useState([]);
+  const [evolutionData, setEvolutionData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [fechaCorte, setFechaCorte] = useState(new Date().toISOString().split('T')[0]);
@@ -114,6 +117,8 @@ const DashboardCarteraPage = () => {
         
         const tabsToExport = [
           { id: 'export-tab-total', title: 'Cartera Total' },
+          { id: 'export-tab-evolucion', title: 'Evolución 12 Meses' },
+          { id: 'export-tab-composicion', title: 'Composición por Dueño' },
           { id: 'export-tab-periodo', title: 'Detalle por Período' },
           { id: 'export-tab-estados', title: 'Detalle de Estados' },
           { id: 'export-tab-morosidad', title: 'Análisis de Morosidad' }
@@ -213,15 +218,20 @@ const DashboardCarteraPage = () => {
     const fetchDashboardData = async () => {
       try {
         setLoading(true);
-        // Obtener datos crudos para poder calcular el descuento exacto por vencimiento
-        const response = await axiosClient.get('/api/v1/reports/balances', {
-          params: {
-            fecha: fechaCorte,
-            con_saldo: false,
-            agrupar: false
-          }
-        });
+        const [response, evolutionResponse] = await Promise.all([
+          axiosClient.get('/api/v1/reports/balances', {
+            params: {
+              fecha: fechaCorte,
+              con_saldo: false,
+              agrupar: false
+            }
+          }),
+          axiosClient.get('/api/v1/reports/balances/evolution', {
+            params: { meses: 12, fecha: fechaCorteDate.toISOString() }
+          })
+        ]);
         setData(response.data);
+        setEvolutionData(evolutionResponse.data);
       } catch (err) {
         console.error("Error cargando dashboard:", err);
         setError("Ocurrió un error al cargar la información del dashboard.");
@@ -363,6 +373,103 @@ const DashboardCarteraPage = () => {
   const groupedData = Object.values(grupos);
   const periodData = Object.values(gruposPeriodo).sort((a, b) => a.Periodo.localeCompare(b.Periodo));
   const estadosList = Object.values(resumenEstados).filter(e => e.Total > 0 || e.Estado !== 'Otro');
+
+  const filteredEvolutionData = useMemo(() => {
+    return evolutionData.map(month => {
+      let capital = 0;
+      let interes = 0;
+      let iva = 0;
+      let total = 0;
+      
+      const ownerCapital = {};
+      let totalCapitalForDistribution = 0;
+      
+      if (month.detalles) {
+        month.detalles.forEach(d => {
+          const dueño = String(d.Dueño || 'Desconocido').trim().toUpperCase();
+          const originador = String(d.Originador || 'N/A').trim().toUpperCase();
+          
+          const matchDueño = filtroDueños.length === 0 || filtroDueños.some(f => String(f).trim().toUpperCase() === dueño);
+          const matchOriginador = filtroOriginadores.length === 0 || filtroOriginadores.some(f => String(f).trim().toUpperCase() === originador);
+          
+          if (matchDueño && matchOriginador) {
+            capital += d.capital;
+            interes += d.interes;
+            iva += d.iva;
+            total += d.total;
+          }
+          
+          if (matchOriginador) {
+            const dueñoRaw = String(d.Dueño || 'Desconocido').trim();
+            if (!ownerCapital[dueñoRaw]) ownerCapital[dueñoRaw] = 0;
+            ownerCapital[dueñoRaw] += d.capital;
+            totalCapitalForDistribution += d.capital;
+          }
+        });
+      }
+      
+      const monthData = {
+        ...month,
+        capital,
+        interes,
+        iva,
+        total
+      };
+      
+      Object.keys(ownerCapital).forEach(owner => {
+        monthData[`owner_${owner}`] = totalCapitalForDistribution > 0 ? (ownerCapital[owner] / totalCapitalForDistribution) * 100 : 0;
+      });
+      
+      return monthData;
+    });
+  }, [evolutionData, filtroDueños, filtroOriginadores]);
+
+  const evolutionUniqueDueños = useMemo(() => {
+    const dueños = new Set();
+    filteredEvolutionData.forEach(month => {
+      Object.keys(month).forEach(key => {
+        if (key.startsWith('owner_')) {
+          dueños.add(key.replace('owner_', ''));
+        }
+      });
+    });
+    return Array.from(dueños).sort();
+  }, [filteredEvolutionData]);
+
+  const composicionTableRows = useMemo(() => {
+    const rows = [];
+    evolutionData.forEach(month => {
+      const aggByOwner = {};
+      
+      if (month.detalles) {
+        month.detalles.forEach(d => {
+          const originador = String(d.Originador || 'N/A').trim().toUpperCase();
+          const matchOriginador = filtroOriginadores.length === 0 || filtroOriginadores.some(f => String(f).trim().toUpperCase() === originador);
+          
+          if (matchOriginador) {
+            const dueño = String(d.Dueño || 'Desconocido').trim();
+            if (!aggByOwner[dueño]) {
+              aggByOwner[dueño] = { capital: 0, interes: 0, iva: 0, total: 0 };
+            }
+            aggByOwner[dueño].capital += d.capital;
+            aggByOwner[dueño].interes += d.interes;
+            aggByOwner[dueño].iva += d.iva;
+            aggByOwner[dueño].total += d.total;
+          }
+        });
+      }
+      
+      Object.keys(aggByOwner).sort().forEach(owner => {
+        rows.push({
+          periodo: month.periodo,
+          dueño: owner,
+          ...aggByOwner[owner]
+        });
+      });
+    });
+    
+    return rows.reverse();
+  }, [evolutionData, filtroOriginadores]);
 
   if (loading) {
     return (
@@ -548,6 +655,36 @@ const DashboardCarteraPage = () => {
           Cartera Total
         </button>
         <button 
+          onClick={() => setActiveTab('evolucion')}
+          style={{ 
+            padding: '10px 20px', 
+            borderRadius: '8px', 
+            border: 'none',
+            background: activeTab === 'evolucion' ? 'var(--color-total)' : 'rgba(255,255,255,0.05)',
+            color: activeTab === 'evolucion' ? 'white' : 'var(--text-secondary)',
+            cursor: 'pointer',
+            fontWeight: '600',
+            transition: 'background 0.2s'
+          }}
+        >
+          Evolución 12 Meses
+        </button>
+        <button 
+          onClick={() => setActiveTab('composicion')}
+          style={{ 
+            padding: '10px 20px', 
+            borderRadius: '8px', 
+            border: 'none',
+            background: activeTab === 'composicion' ? 'var(--color-total)' : 'rgba(255,255,255,0.05)',
+            color: activeTab === 'composicion' ? 'white' : 'var(--text-secondary)',
+            cursor: 'pointer',
+            fontWeight: '600',
+            transition: 'background 0.2s'
+          }}
+        >
+          Distribución Dueños
+        </button>
+        <button 
           onClick={() => setActiveTab('periodo')}
           style={{ 
             padding: '10px 20px', 
@@ -698,6 +835,166 @@ const DashboardCarteraPage = () => {
         </div>
       )}
 
+      {(activeTab === 'evolucion' || isExporting) && (
+        <div id="export-tab-evolucion">
+          <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', marginBottom: '30px', height: '400px' }}>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Evolución de la Cartera Total (Últimos 12 Meses)</h2>
+            {filteredEvolutionData.length === 0 ? (
+              <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>Cargando evolución histórica...</p>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart
+                  data={filteredEvolutionData}
+                  margin={{ top: 10, right: 30, left: 20, bottom: 25 }}
+                >
+                  <defs>
+                    <linearGradient id="colorCapital" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="var(--color-capital)" stopOpacity={0.8}/>
+                      <stop offset="95%" stopColor="var(--color-capital)" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="colorInteres" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="var(--color-interes)" stopOpacity={0.8}/>
+                      <stop offset="95%" stopColor="var(--color-interes)" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="colorIva" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="var(--color-iva)" stopOpacity={0.8}/>
+                      <stop offset="95%" stopColor="var(--color-iva)" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                  <XAxis dataKey="periodo" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)' }} />
+                  <YAxis stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)' }} tickFormatter={(value) => `$${(value / 1000000).toFixed(1)}M`} />
+                  <Tooltip 
+                    formatter={(value) => formatCurrency(value)}
+                    contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white' }}
+                    itemStyle={{ color: 'white' }}
+                  />
+                  <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                  <Area isAnimationActive={!isExporting} type="monotone" dataKey="capital" stackId="1" stroke="var(--color-capital)" fillOpacity={1} fill="url(#colorCapital)" name="Capital" />
+                  <Area isAnimationActive={!isExporting} type="monotone" dataKey="interes" stackId="1" stroke="var(--color-interes)" fillOpacity={1} fill="url(#colorInteres)" name="Interés" />
+                  <Area isAnimationActive={!isExporting} type="monotone" dataKey="iva" stackId="1" stroke="var(--color-iva)" fillOpacity={1} fill="url(#colorIva)" name="IVA" />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+          
+          <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', marginTop: '20px' }}>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Detalle Histórico (Últimos 12 Meses)</h2>
+            {filteredEvolutionData.length === 0 ? (
+              <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>No hay datos históricos disponibles.</p>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', textAlign: 'left' }}>
+                      <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500' }}>Período</th>
+                      <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Capital</th>
+                      <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Interés</th>
+                      <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Cap + Int</th>
+                      <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>IVA</th>
+                      <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...filteredEvolutionData].reverse().map((row, idx) => (
+                      <tr key={idx} style={{ 
+                        borderBottom: '1px solid rgba(255,255,255,0.05)',
+                        transition: 'background-color 0.2s',
+                      }} className="table-row-hover">
+                        <td style={{ padding: '15px 10px', fontWeight: '500' }}>{row.periodo}</td>
+                        <td style={{ padding: '15px 10px', textAlign: 'right', fontFamily: 'monospace' }}>{formatCurrency(row.capital)}</td>
+                        <td style={{ padding: '15px 10px', textAlign: 'right', fontFamily: 'monospace' }}>{formatCurrency(row.interes)}</td>
+                        <td style={{ padding: '15px 10px', textAlign: 'right', fontFamily: 'monospace', color: 'var(--color-capint)' }}>{formatCurrency(row.capital + row.interes)}</td>
+                        <td style={{ padding: '15px 10px', textAlign: 'right', fontFamily: 'monospace' }}>{formatCurrency(row.iva)}</td>
+                        <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--color-total)' }}>{formatCurrency(row.total)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {(activeTab === 'composicion' || isExporting) && (
+        <div id="export-tab-composicion">
+          <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', marginBottom: '30px' }}>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Composición de la Cartera por Dueño (%)</h2>
+            {filteredEvolutionData.length === 0 ? (
+              <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>No hay datos disponibles.</p>
+            ) : (
+              <ResponsiveContainer width="100%" height={400}>
+                <BarChart data={filteredEvolutionData} margin={{ top: 10, right: 30, left: 20, bottom: 25 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" vertical={false} />
+                  <XAxis dataKey="periodo" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} tickMargin={10} />
+                  <YAxis stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} tickFormatter={(val) => `${val}%`} domain={[0, 100]} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.9)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff' }}
+                    itemStyle={{ color: '#fff' }}
+                    formatter={(value, name) => [`${Number(value).toFixed(2)}%`, name]}
+                    labelFormatter={(label) => `Período: ${label}`}
+                  />
+                  <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                  {evolutionUniqueDueños.map((dueño, index) => (
+                    <Bar 
+                      isAnimationActive={!isExporting}
+                      key={dueño} 
+                      dataKey={`owner_${dueño}`} 
+                      name={dueño} 
+                      stackId="a" 
+                      fill={CHART_COLORS[index % CHART_COLORS.length]} 
+                    >
+                      <LabelList 
+                        dataKey={`owner_${dueño}`} 
+                        position="inside" 
+                        fill="#fff" 
+                        formatter={(val) => val > 5 ? `${val.toFixed(1)}%` : ''} 
+                        style={{ fontSize: 12, fontWeight: 'bold' }} 
+                      />
+                    </Bar>
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+          
+          <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', marginTop: '20px' }}>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Detalle por Período y Dueño</h2>
+            {composicionTableRows.length === 0 ? (
+              <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>No hay datos disponibles.</p>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                      <th style={{ textAlign: 'left', padding: '12px', color: 'var(--text-secondary)', fontWeight: '500' }}>Período</th>
+                      <th style={{ textAlign: 'left', padding: '12px', color: 'var(--text-secondary)', fontWeight: '500' }}>Dueño</th>
+                      <th style={{ textAlign: 'right', padding: '12px', color: 'var(--text-secondary)', fontWeight: '500' }}>Capital</th>
+                      <th style={{ textAlign: 'right', padding: '12px', color: 'var(--text-secondary)', fontWeight: '500' }}>Interés</th>
+                      <th style={{ textAlign: 'right', padding: '12px', color: 'var(--text-secondary)', fontWeight: '500' }}>IVA</th>
+                      <th style={{ textAlign: 'right', padding: '12px', color: 'var(--text-secondary)', fontWeight: '500' }}>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {composicionTableRows.map((row, idx) => (
+                      <tr key={`${row.periodo}-${row.dueño}-${idx}`} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', backgroundColor: idx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)' }}>
+                        <td style={{ padding: '12px', color: 'var(--text-primary)' }}>{row.periodo}</td>
+                        <td style={{ padding: '12px', color: 'var(--text-primary)' }}>{row.dueño}</td>
+                        <td style={{ padding: '12px', textAlign: 'right', color: 'var(--color-capital)', fontFamily: 'monospace' }}>{formatCurrency(row.capital)}</td>
+                        <td style={{ padding: '12px', textAlign: 'right', color: 'var(--color-interes)', fontFamily: 'monospace' }}>{formatCurrency(row.interes)}</td>
+                        <td style={{ padding: '12px', textAlign: 'right', color: 'var(--color-iva)', fontFamily: 'monospace' }}>{formatCurrency(row.iva)}</td>
+                        <td style={{ padding: '12px', textAlign: 'right', color: 'var(--color-total)', fontFamily: 'monospace', fontWeight: 'bold' }}>{formatCurrency(row.total)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {(activeTab === 'periodo' || isExporting) && (
           <div id="export-tab-periodo">
             <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', marginBottom: '30px', height: '400px' }}>
@@ -719,9 +1016,9 @@ const DashboardCarteraPage = () => {
                       itemStyle={{ color: 'white' }}
                     />
                     <Legend wrapperStyle={{ paddingTop: '20px' }} />
-                    <Bar dataKey="Capital" stackId="a" fill="var(--color-capital)" name="Capital" />
-                    <Bar dataKey="Interés" stackId="a" fill="var(--color-interes)" name="Interés" />
-                    <Bar dataKey="IVA" stackId="a" fill="var(--color-iva)" name="IVA" />
+                    <Bar isAnimationActive={!isExporting} dataKey="Capital" stackId="a" fill="var(--color-capital)" name="Capital" />
+                    <Bar isAnimationActive={!isExporting} dataKey="Interés" stackId="a" fill="var(--color-interes)" name="Interés" />
+                    <Bar isAnimationActive={!isExporting} dataKey="IVA" stackId="a" fill="var(--color-iva)" name="IVA" />
                   </BarChart>
                 </ResponsiveContainer>
               )}
@@ -775,6 +1072,7 @@ const DashboardCarteraPage = () => {
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
+                      isAnimationActive={!isExporting}
                       data={estadosList.filter(e => e.Total > 0)}
                       cx="50%"
                       cy="50%"
@@ -804,6 +1102,20 @@ const DashboardCarteraPage = () => {
             <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', flex: '2 1 500px' }}>
               <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Distribución de Estados (Capital + Interés)</h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '15px' }}>
+                <div style={{ 
+                  background: 'rgba(0,0,0,0.2)', 
+                  border: `1px solid var(--text-primary)40`, 
+                  borderLeft: `4px solid var(--text-primary)`, 
+                  borderRadius: '8px', 
+                  padding: '15px 20px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '5px',
+                  boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                }}>
+                  <span style={{ color: 'var(--text-primary)', fontSize: '0.85rem', fontWeight: '700', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Total General</span>
+                  <span style={{ fontSize: '1.3rem', fontWeight: 'bold', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{formatCurrency(estadosList.reduce((acc, curr) => acc + curr.Total, 0))}</span>
+                </div>
                 {estadosList.map((d, idx) => (
                   <div key={idx} style={{ 
                     background: 'rgba(0,0,0,0.2)', 
@@ -852,6 +1164,14 @@ const DashboardCarteraPage = () => {
                       </tr>
                     ))}
                   </tbody>
+                  <tfoot>
+                    <tr style={{ background: 'rgba(255,255,255,0.05)', borderTop: '2px solid rgba(255,255,255,0.2)' }}>
+                      <td style={{ padding: '15px 10px', fontWeight: 'bold', color: 'var(--text-primary)' }}>TOTALES</td>
+                      <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--color-interes)' }}>{formatCurrency(estadosList.reduce((acc, curr) => acc + curr.Vencido, 0))}</td>
+                      <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--color-total)' }}>{formatCurrency(estadosList.reduce((acc, curr) => acc + curr.AVencer, 0))}</td>
+                      <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--text-primary)' }}>{formatCurrency(estadosList.reduce((acc, curr) => acc + curr.Total, 0))}</td>
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
             )}
