@@ -3,6 +3,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
 import MainLayout from './components/MainLayout';
 import DashboardCarteraPage from './pages/DashboardCarteraPage';
+import DashboardClientesPage from './pages/DashboardClientesPage';
 import SimulationPage from './pages/SimulationPage';
 import BalancesPage from './pages/BalancesPage';
 import ClientRegistrationPage from './pages/ClientRegistrationPage';
@@ -32,6 +33,7 @@ function App() {
           <Route path="/" element={<MainLayout />}>
             <Route index element={<Navigate to="/dashboard-cartera" replace />} />
             <Route path="dashboard-cartera" element={<DashboardCarteraPage />} />
+            <Route path="dashboard-clientes" element={<DashboardClientesPage />} />
             <Route path="simulation" element={<SimulationPage />} />
             <Route path="balances" element={<BalancesPage />} />
             <Route path="clientes" element={<ClientListPage />} />
