@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 const formatCurrency = (value) => {
   if (value === null || value === undefined) return "$ 0";
@@ -10,6 +10,29 @@ const formatCurrency = (value) => {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0
   }).format(value);
+};
+
+const RADIAN = Math.PI / 180;
+const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, index }) => {
+  const radius = outerRadius + 20;
+  const x = cx + radius * Math.cos(-midAngle * RADIAN);
+  const y = cy + radius * Math.sin(-midAngle * RADIAN);
+
+  if (percent < 0.0001) return null; // Ocultar si el porcentaje es 0% para que no se superpongan todas las etiquetas nulas
+
+  return (
+    <text 
+      x={x} 
+      y={y} 
+      fill="var(--text-primary)" 
+      textAnchor={x > cx ? 'start' : 'end'} 
+      dominantBaseline="central" 
+      fontSize={16} 
+      fontWeight="bold"
+    >
+      {`${(percent * 100).toFixed(2)}%`}
+    </text>
+  );
 };
 
 const DashboardCarteraPage = () => {
@@ -49,7 +72,7 @@ const DashboardCarteraPage = () => {
         const response = await axiosClient.get('/api/v1/reports/balances', {
           params: {
             fecha: fechaCorte,
-            con_saldo: true,
+            con_saldo: false,
             agrupar: false
           }
         });
@@ -78,11 +101,43 @@ const DashboardCarteraPage = () => {
   const fechaCorteDate = new Date(fechaCorte + 'T00:00:00'); // Force local midnight
   const corteYearMonth = fechaCorte.substring(0, 7);
 
+  const resumenEstados = {
+    'APROBADO': { Estado: 'Aprobado', Vencido: 0, AVencer: 0, Total: 0, fill: '#4CAF50' },
+    'ACTIVO': { Estado: 'Activo', Vencido: 0, AVencer: 0, Total: 0, fill: '#2196F3' },
+    'MOROSO': { Estado: 'Moroso', Vencido: 0, AVencer: 0, Total: 0, fill: '#FF9800' },
+    'INCOBRABLE': { Estado: 'Incobrable', Vencido: 0, AVencer: 0, Total: 0, fill: '#E91E63' },
+    'JUDICIALIZADO': { Estado: 'Judicializado', Vencido: 0, AVencer: 0, Total: 0, fill: '#9C27B0' },
+    'OTRO': { Estado: 'Otro', Vencido: 0, AVencer: 0, Total: 0, fill: '#607D8B' }
+  };
+
+  const moraBuckets = [
+    { label: '1 - 30 días', min: 1, max: 30, Capital: 0, Interés: 0, IVA: 0, Total: 0 },
+    { label: '31 - 60 días', min: 31, max: 60, Capital: 0, Interés: 0, IVA: 0, Total: 0 },
+    { label: '61 - 90 días', min: 61, max: 90, Capital: 0, Interés: 0, IVA: 0, Total: 0 },
+    { label: '91 - 180 días', min: 91, max: 180, Capital: 0, Interés: 0, IVA: 0, Total: 0 },
+    { label: '181 - 365 días', min: 181, max: 365, Capital: 0, Interés: 0, IVA: 0, Total: 0 },
+    { label: '> 365 días', min: 366, max: Infinity, Capital: 0, Interés: 0, IVA: 0, Total: 0 },
+  ];
+
   data.forEach(row => {
+    const dueño = row.Dueño || 'Desconocido';
+    const originador = row.Originador || 'N/A';
+    
+    const matchDueño = filtroDueños.length === 0 || filtroDueños.includes(dueño);
+    const matchOriginador = filtroOriginadores.length === 0 || filtroOriginadores.includes(originador);
+    
+    if (!matchDueño || !matchOriginador) return;
+
     const cap = row.Capital || 0;
     const int = row['Interés'] || 0;
     const iva = row.IVA || 0;
     const tot = row.Total || 0;
+    
+    const capCobrado = row['Capital Cobrado'] || 0;
+    const intCobrado = row['Interés Cobrado'] || 0;
+    const ivaCobrado = row['IVA Cobrado'] || 0;
+    const totCobrado = capCobrado + intCobrado + ivaCobrado;
+    const estado = row.Estado || 'PENDIENTE';
 
     totalCapital += cap;
     totalInteres += int;
@@ -100,34 +155,60 @@ const DashboardCarteraPage = () => {
     valorActual += pv;
 
     // Agrupar para la tabla
-    const dueño = row.Dueño || 'Desconocido';
-    const originador = row.Originador || 'N/A';
     const key = `${dueño}|${originador}`;
 
     if (!grupos[key]) {
-      grupos[key] = { Dueño: dueño, Originador: originador, Capital: 0, 'Interés': 0, IVA: 0, Total: 0, ValorActual: 0 };
+      grupos[key] = { Dueño: dueño, Originador: originador, Capital: 0, 'Interés': 0, IVA: 0, Total: 0, ValorActual: 0, Cobrado: 0 };
     }
     grupos[key].Capital += cap;
     grupos[key]['Interés'] += int;
     grupos[key].IVA += iva;
     grupos[key].Total += tot;
     grupos[key].ValorActual += pv;
+    grupos[key].Cobrado += totCobrado;
+
+    const rawEstado = (row.Estado || '').toUpperCase();
+    let normalizedEstado = 'OTRO';
+    if (rawEstado.includes('APROBADO')) normalizedEstado = 'APROBADO';
+    else if (rawEstado.includes('ACTIVO') || rawEstado === 'PENDIENTE' || rawEstado === '') normalizedEstado = 'ACTIVO';
+    else if (rawEstado.includes('MOROS')) normalizedEstado = 'MOROSO';
+    else if (rawEstado.includes('INCOBRABLE')) normalizedEstado = 'INCOBRABLE';
+    else if (rawEstado.includes('JUDICIALIZADO')) normalizedEstado = 'JUDICIALIZADO';
+
+    const capInt = cap + int;
+    const isVencido = fVto < fechaCorteDate;
+    
+    if (isVencido) {
+      resumenEstados[normalizedEstado].Vencido += capInt;
+    } else {
+      resumenEstados[normalizedEstado].AVencer += capInt;
+    }
+    resumenEstados[normalizedEstado].Total += capInt;
+
+    // Calcular días de mora si es MOROSO
+    if (normalizedEstado === 'MOROSO') {
+      let diasMora = Math.floor((fechaCorteDate - fVto) / (1000 * 60 * 60 * 24));
+      if (diasMora < 1) diasMora = 1; // Si está moroso, asumimos al menos 1 día para que agrupe en "1 - 30 días"
+      
+      const bucket = moraBuckets.find(b => diasMora >= b.min && diasMora <= b.max);
+      if (bucket) {
+        bucket.Capital += cap;
+        bucket.Interés += int;
+        bucket.IVA += iva;
+        bucket.Total += tot;
+      }
+    }
 
     // Agrupar por periodo (vencimientos futuros y el actual)
     const vtoYearMonth = fVtoStr.substring(0, 7);
     if (vtoYearMonth >= corteYearMonth) {
-      const matchDueño = filtroDueños.length === 0 || filtroDueños.includes(dueño);
-      const matchOriginador = filtroOriginadores.length === 0 || filtroOriginadores.includes(originador);
-      
-      if (matchDueño && matchOriginador) {
-        if (!gruposPeriodo[vtoYearMonth]) {
-          gruposPeriodo[vtoYearMonth] = { Periodo: vtoYearMonth, Capital: 0, 'Interés': 0, IVA: 0, Total: 0 };
-        }
-        gruposPeriodo[vtoYearMonth].Capital += cap;
-        gruposPeriodo[vtoYearMonth]['Interés'] += int;
-        gruposPeriodo[vtoYearMonth].IVA += iva;
-        gruposPeriodo[vtoYearMonth].Total += tot;
+      if (!gruposPeriodo[vtoYearMonth]) {
+        gruposPeriodo[vtoYearMonth] = { Periodo: vtoYearMonth, Capital: 0, 'Interés': 0, IVA: 0, Total: 0 };
       }
+      gruposPeriodo[vtoYearMonth].Capital += cap;
+      gruposPeriodo[vtoYearMonth]['Interés'] += int;
+      gruposPeriodo[vtoYearMonth].IVA += iva;
+      gruposPeriodo[vtoYearMonth].Total += tot;
     }
   });
 
@@ -136,6 +217,7 @@ const DashboardCarteraPage = () => {
 
   const groupedData = Object.values(grupos);
   const periodData = Object.values(gruposPeriodo).sort((a, b) => a.Periodo.localeCompare(b.Periodo));
+  const estadosList = Object.values(resumenEstados).filter(e => e.Total > 0 || e.Estado !== 'Otro');
 
   if (loading) {
     return (
@@ -209,6 +291,83 @@ const DashboardCarteraPage = () => {
         </div>
       </header>
 
+      {/* Filtros */}
+      <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', flexWrap: 'wrap' }}>
+        
+        {/* Filtro Dueños Dropdown */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', position: 'relative' }}>
+          <label style={{ color: 'var(--text-secondary)', fontWeight: '500' }}>Dueño:</label>
+          <div style={{ position: 'relative' }}>
+            <button 
+              onClick={() => setOpenDueño(!openDueño)}
+              style={{ padding: '8px 12px', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', minWidth: '150px', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+            >
+              <span>{filtroDueños.length === 0 ? 'Todos' : `${filtroDueños.length} seleccionados`}</span>
+              <span style={{ fontSize: '0.8rem', marginLeft: '10px' }}>▼</span>
+            </button>
+            
+            {openDueño && (
+              <div className="custom-scrollbar" style={{ position: 'absolute', top: '100%', left: 0, marginTop: '5px', padding: '8px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.2)', maxHeight: '200px', overflowY: 'auto', minWidth: '220px', zIndex: 10, boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', cursor: 'pointer', fontSize: '0.9rem' }}>
+                  <input type="checkbox" checked={filtroDueños.length === 0} onChange={() => setFiltroDueños([])} />
+                  <span style={{ opacity: filtroDueños.length === 0 ? 1 : 0.6 }}>Todos</span>
+                </label>
+                {uniqueDueños.filter(d => d !== 'Todos').map(d => (
+                  <label key={d} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', cursor: 'pointer', fontSize: '0.9rem' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={filtroDueños.includes(d)} 
+                      onChange={(e) => {
+                        if (e.target.checked) setFiltroDueños([...filtroDueños, d]);
+                        else setFiltroDueños(filtroDueños.filter(item => item !== d));
+                      }} 
+                    />
+                    <span style={{ opacity: filtroDueños.includes(d) ? 1 : 0.6 }}>{d}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Filtro Originadores Dropdown */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', position: 'relative' }}>
+          <label style={{ color: 'var(--text-secondary)', fontWeight: '500' }}>Originador:</label>
+          <div style={{ position: 'relative' }}>
+            <button 
+              onClick={() => setOpenOriginador(!openOriginador)}
+              style={{ padding: '8px 12px', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', minWidth: '150px', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+            >
+              <span>{filtroOriginadores.length === 0 ? 'Todos' : `${filtroOriginadores.length} seleccionados`}</span>
+              <span style={{ fontSize: '0.8rem', marginLeft: '10px' }}>▼</span>
+            </button>
+            
+            {openOriginador && (
+              <div className="custom-scrollbar" style={{ position: 'absolute', top: '100%', left: 0, marginTop: '5px', padding: '8px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.2)', maxHeight: '200px', overflowY: 'auto', minWidth: '220px', zIndex: 10, boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', cursor: 'pointer', fontSize: '0.9rem' }}>
+                  <input type="checkbox" checked={filtroOriginadores.length === 0} onChange={() => setFiltroOriginadores([])} />
+                  <span style={{ opacity: filtroOriginadores.length === 0 ? 1 : 0.6 }}>Todos</span>
+                </label>
+                {uniqueOriginadores.filter(o => o !== 'Todos').map(o => (
+                  <label key={o} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', cursor: 'pointer', fontSize: '0.9rem' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={filtroOriginadores.includes(o)} 
+                      onChange={(e) => {
+                        if (e.target.checked) setFiltroOriginadores([...filtroOriginadores, o]);
+                        else setFiltroOriginadores(filtroOriginadores.filter(item => item !== o));
+                      }} 
+                    />
+                    <span style={{ opacity: filtroOriginadores.includes(o) ? 1 : 0.6 }}>{o}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+      </div>
+
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '15px', marginBottom: '20px' }}>
         <button 
@@ -241,9 +400,39 @@ const DashboardCarteraPage = () => {
         >
           Detalle por Período
         </button>
+        <button 
+          onClick={() => setActiveTab('estados')}
+          style={{ 
+            padding: '10px 20px', 
+            borderRadius: '8px', 
+            border: 'none',
+            background: activeTab === 'estados' ? '#2196F3' : 'rgba(255,255,255,0.05)',
+            color: activeTab === 'estados' ? 'white' : 'var(--text-secondary)',
+            cursor: 'pointer',
+            fontWeight: '600',
+            transition: 'background 0.2s'
+          }}
+        >
+          Detalle de Estados
+        </button>
+        <button 
+          onClick={() => setActiveTab('morosidad')}
+          style={{ 
+            padding: '10px 20px', 
+            borderRadius: '8px', 
+            border: 'none',
+            background: activeTab === 'morosidad' ? '#2196F3' : 'rgba(255,255,255,0.05)',
+            color: activeTab === 'morosidad' ? 'white' : 'var(--text-secondary)',
+            cursor: 'pointer',
+            fontWeight: '600',
+            transition: 'background 0.2s'
+          }}
+        >
+          Análisis de Morosidad
+        </button>
       </div>
 
-      {activeTab === 'total' ? (
+      {activeTab === 'total' && (
         <>
           {/* KPI Cards */}
           <div style={{ 
@@ -326,84 +515,10 @@ const DashboardCarteraPage = () => {
             )}
           </div>
         </>
-      ) : (
+      )}
+
+      {activeTab === 'periodo' && (
           <>
-            <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', flexWrap: 'wrap' }}>
-              
-              {/* Filtro Dueños Dropdown */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', position: 'relative' }}>
-                <label style={{ color: 'var(--text-secondary)', fontWeight: '500' }}>Dueño:</label>
-                <div style={{ position: 'relative' }}>
-                  <button 
-                    onClick={() => setOpenDueño(!openDueño)}
-                    style={{ padding: '8px 12px', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', minWidth: '150px', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                  >
-                    <span>{filtroDueños.length === 0 ? 'Todos' : `${filtroDueños.length} seleccionados`}</span>
-                    <span style={{ fontSize: '0.8rem', marginLeft: '10px' }}>▼</span>
-                  </button>
-                  
-                  {openDueño && (
-                    <div className="custom-scrollbar" style={{ position: 'absolute', top: '100%', left: 0, marginTop: '5px', padding: '8px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.2)', maxHeight: '200px', overflowY: 'auto', minWidth: '220px', zIndex: 10, boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', cursor: 'pointer', fontSize: '0.9rem' }}>
-                        <input type="checkbox" checked={filtroDueños.length === 0} onChange={() => setFiltroDueños([])} />
-                        <span style={{ opacity: filtroDueños.length === 0 ? 1 : 0.6 }}>Todos</span>
-                      </label>
-                      {uniqueDueños.filter(d => d !== 'Todos').map(d => (
-                        <label key={d} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', cursor: 'pointer', fontSize: '0.9rem' }}>
-                          <input 
-                            type="checkbox" 
-                            checked={filtroDueños.includes(d)} 
-                            onChange={(e) => {
-                              if (e.target.checked) setFiltroDueños([...filtroDueños, d]);
-                              else setFiltroDueños(filtroDueños.filter(item => item !== d));
-                            }} 
-                          />
-                          <span style={{ opacity: filtroDueños.includes(d) ? 1 : 0.6 }}>{d}</span>
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Filtro Originadores Dropdown */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', position: 'relative' }}>
-                <label style={{ color: 'var(--text-secondary)', fontWeight: '500' }}>Originador:</label>
-                <div style={{ position: 'relative' }}>
-                  <button 
-                    onClick={() => setOpenOriginador(!openOriginador)}
-                    style={{ padding: '8px 12px', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', minWidth: '150px', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                  >
-                    <span>{filtroOriginadores.length === 0 ? 'Todos' : `${filtroOriginadores.length} seleccionados`}</span>
-                    <span style={{ fontSize: '0.8rem', marginLeft: '10px' }}>▼</span>
-                  </button>
-                  
-                  {openOriginador && (
-                    <div className="custom-scrollbar" style={{ position: 'absolute', top: '100%', left: 0, marginTop: '5px', padding: '8px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.2)', maxHeight: '200px', overflowY: 'auto', minWidth: '220px', zIndex: 10, boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', cursor: 'pointer', fontSize: '0.9rem' }}>
-                        <input type="checkbox" checked={filtroOriginadores.length === 0} onChange={() => setFiltroOriginadores([])} />
-                        <span style={{ opacity: filtroOriginadores.length === 0 ? 1 : 0.6 }}>Todos</span>
-                      </label>
-                      {uniqueOriginadores.filter(o => o !== 'Todos').map(o => (
-                        <label key={o} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', cursor: 'pointer', fontSize: '0.9rem' }}>
-                          <input 
-                            type="checkbox" 
-                            checked={filtroOriginadores.includes(o)} 
-                            onChange={(e) => {
-                              if (e.target.checked) setFiltroOriginadores([...filtroOriginadores, o]);
-                              else setFiltroOriginadores(filtroOriginadores.filter(item => item !== o));
-                            }} 
-                          />
-                          <span style={{ opacity: filtroOriginadores.includes(o) ? 1 : 0.6 }}>{o}</span>
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-            </div>
-
             <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', marginBottom: '30px', height: '400px' }}>
               <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Proyección de Vencimientos</h2>
               {periodData.length === 0 ? (
@@ -468,7 +583,166 @@ const DashboardCarteraPage = () => {
               )}
             </div>
           </>
-        )}
+      )}
+
+      {activeTab === 'estados' && (
+        <>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginBottom: '30px' }}>
+            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', flex: '1 1 300px', display: 'flex', flexDirection: 'column' }}>
+              <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600', textAlign: 'center' }}>Porcentaje por Estado</h2>
+              <div style={{ flex: 1, minHeight: '250px' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={estadosList.filter(e => e.Total > 0)}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={true}
+                      label={renderCustomizedLabel}
+                      innerRadius={60}
+                      outerRadius={80}
+                      paddingAngle={5}
+                      dataKey="Total"
+                      nameKey="Estado"
+                    >
+                      {estadosList.filter(e => e.Total > 0).map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.fill} />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      formatter={(value) => formatCurrency(value)}
+                      contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white' }}
+                      itemStyle={{ color: 'white' }}
+                    />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', flex: '2 1 500px' }}>
+              <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Distribución de Estados (Capital + Interés)</h2>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '15px' }}>
+                {estadosList.map((d, idx) => (
+                  <div key={idx} style={{ 
+                    background: 'rgba(0,0,0,0.2)', 
+                    border: `1px solid ${d.fill}40`, 
+                    borderLeft: `4px solid ${d.fill}`, 
+                    borderRadius: '8px', 
+                    padding: '15px 20px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '5px',
+                    boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                  }}>
+                    <span style={{ color: d.fill, fontSize: '0.85rem', fontWeight: '700', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.Estado}</span>
+                    <span style={{ fontSize: '1.3rem', fontWeight: 'bold', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{formatCurrency(d.Total)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px' }}>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Detalle de Montos por Estado (Capital + Interés)</h2>
+            {estadosList.length === 0 ? (
+              <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>No hay datos disponibles en la cartera activa.</p>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', textAlign: 'left' }}>
+                      <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500' }}>Estado</th>
+                      <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Vencido</th>
+                      <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>A Vencer</th>
+                      <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {estadosList.map((row, idx) => (
+                      <tr key={idx} style={{ 
+                        borderBottom: '1px solid rgba(255,255,255,0.05)',
+                        transition: 'background-color 0.2s',
+                      }} className="table-row-hover">
+                        <td style={{ padding: '15px 10px', fontWeight: '500', color: row.fill }}>{row.Estado.toUpperCase()}</td>
+                        <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: '#FF9800' }}>{formatCurrency(row.Vencido)}</td>
+                        <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: '#2196F3' }}>{formatCurrency(row.AVencer)}</td>
+                        <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace' }}>{formatCurrency(row.Total)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {activeTab === 'morosidad' && (
+        <>
+          <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', marginBottom: '30px', height: '400px' }}>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Composición de la Morosidad</h2>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={moraBuckets}
+                margin={{ top: 10, right: 30, left: 20, bottom: 25 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                <XAxis dataKey="label" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)' }} />
+                <YAxis stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)' }} tickFormatter={(value) => `$${(value / 1000000).toFixed(1)}M`} />
+                <Tooltip 
+                  formatter={(value) => formatCurrency(value)}
+                  contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white' }}
+                  itemStyle={{ color: 'white' }}
+                />
+                <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                <Bar dataKey="Capital" stackId="a" fill="#4CAF50" name="Capital" />
+                <Bar dataKey="Interés" stackId="a" fill="#FF9800" name="Interés" />
+                <Bar dataKey="IVA" stackId="a" fill="#9C27B0" name="IVA" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', marginBottom: '30px' }}>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Detalle de Créditos Morosos</h2>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', textAlign: 'left' }}>
+                  <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500' }}>Días de Morosidad</th>
+                  <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Capital</th>
+                  <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Interés</th>
+                  <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>IVA</th>
+                  <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {moraBuckets.map((row, idx) => (
+                  <tr key={idx} style={{ 
+                    borderBottom: '1px solid rgba(255,255,255,0.05)',
+                    transition: 'background-color 0.2s',
+                  }} className="table-row-hover">
+                    <td style={{ padding: '15px 10px', fontWeight: '500' }}>{row.label}</td>
+                    <td style={{ padding: '15px 10px', textAlign: 'right', fontFamily: 'monospace' }}>{formatCurrency(row.Capital)}</td>
+                    <td style={{ padding: '15px 10px', textAlign: 'right', fontFamily: 'monospace' }}>{formatCurrency(row.Interés)}</td>
+                    <td style={{ padding: '15px 10px', textAlign: 'right', fontFamily: 'monospace' }}>{formatCurrency(row.IVA)}</td>
+                    <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: '#E91E63' }}>{formatCurrency(row.Total)}</td>
+                  </tr>
+                ))}
+                <tr style={{ backgroundColor: 'rgba(0,0,0,0.2)' }}>
+                  <td style={{ padding: '15px 10px', fontWeight: 'bold' }}>TOTAL MOROSIDAD</td>
+                  <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace' }}>{formatCurrency(moraBuckets.reduce((acc, b) => acc + b.Capital, 0))}</td>
+                  <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace' }}>{formatCurrency(moraBuckets.reduce((acc, b) => acc + b.Interés, 0))}</td>
+                  <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace' }}>{formatCurrency(moraBuckets.reduce((acc, b) => acc + b.IVA, 0))}</td>
+                  <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: '#E91E63' }}>{formatCurrency(moraBuckets.reduce((acc, b) => acc + b.Total, 0))}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        </>
+      )}
+
       <style>{`
         .table-row-hover:hover {
           background-color: rgba(255,255,255,0.02);
