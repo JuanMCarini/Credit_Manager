@@ -12,6 +12,7 @@ Sistema de gestión de carteras de créditos, motores de amortización financier
 * **Arquitectura de Datos ORM**: Modelado relacional estructurado con SQLAlchemy. Registra operaciones granulares de la cartera (Compra, Venta y Recompra de carteras con o sin recurso).
 * **Configuración Validada**: Gestión centralizada y fuertemente tipada de variables de entorno mediante Pydantic y Pydantic-Settings.
 * **API Web**: Endpoints desarrollados con FastAPI para realizar simulaciones de cuotas de crédito en tiempo real y consultar reportes de saldos de cartera en formato JSON.
+* **Dashboards Analíticos Avanzados**: Interfaces interactivas (React) para visualizar el estado global de la cartera y la ficha individual de cada cliente. Incluye filtrado dinámico, cálculo de KPIs en tiempo real (mora, capital, intereses) y exportación gráfica a PDF (vertical y apaisado) para reportes gerenciales.
 
 ## 📐 Arquitectura del Sistema
 
