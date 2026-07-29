@@ -326,7 +326,7 @@ const DashboardCarteraPage = () => {
     grupos[key].ValorActual += pv;
     grupos[key].Cobrado += totCobrado;
 
-    const rawEstado = (row.Estado || '').toUpperCase();
+    const rawEstado = (row['Estado Credito'] || row.Estado || '').toUpperCase();
     let normalizedEstado = 'OTRO';
     if (rawEstado.includes('APROBADO')) normalizedEstado = 'APROBADO';
     else if (rawEstado.includes('ACTIVO') || rawEstado === 'PENDIENTE' || rawEstado === '') normalizedEstado = 'ACTIVO';
