@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+import os
+import shutil
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 from datetime import date
@@ -101,4 +103,21 @@ async def sync_repet(db: Session = Depends(get_db)):
         return {"status": "success", "message": "Listados del RePET sincronizados correctamente."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/logo")
+async def upload_logo(file: UploadFile = File(...)):
+    if not file.content_type.startswith('image/'):
+        raise HTTPException(status_code=400, detail="El archivo debe ser una imagen.")
+    
+    os.makedirs("data/uploads", exist_ok=True)
+    file_location = "data/uploads/logo.png"
+    
+    try:
+        with open(file_location, "wb+") as file_object:
+            shutil.copyfileobj(file.file, file_object)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al guardar la imagen: {str(e)}")
+        
+    return {"status": "success", "message": "Logo actualizado correctamente. Recarga la página para ver los cambios."}
+
 

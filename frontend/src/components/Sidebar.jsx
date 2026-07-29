@@ -28,12 +28,29 @@ const Sidebar = () => {
   const isOnline = apiStatus.includes('Conectado');
   const isAdmin = user?.rol === 'Administrador';
 
+  const [logoError, setLogoError] = React.useState(false);
+
   return (
     <aside className="sidebar glass-panel">
-      <div className="logo-container">
-        <h1 className="logo-text">Credit<span>Manager</span></h1>
-        <p className="logo-subtext">Core Engine API</p>
-      </div>
+      <NavLink 
+        to="/dashboard-cartera"
+        className="logo-container" 
+        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none', color: 'inherit' }}
+      >
+        {!logoError ? (
+          <img 
+            src="/static/logo.png" 
+            alt="App Logo" 
+            style={{ maxWidth: '100%', maxHeight: '80px', objectFit: 'contain' }}
+            onError={() => setLogoError(true)}
+          />
+        ) : (
+          <div style={{ textAlign: 'center' }}>
+            <h1 className="logo-text">Credit<span>Manager</span></h1>
+            <p className="logo-subtext">Core Engine API</p>
+          </div>
+        )}
+      </NavLink>
 
       <nav className="nav-menu">
         <NavLink to="/dashboard-cartera" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
