@@ -73,6 +73,45 @@ const DashboardCarteraPage = () => {
         const pdfWidth = pdf.internal.pageSize.getWidth();
         const pdfHeight = pdf.internal.pageSize.getHeight();
         
+        // --- PORTADA ---
+        pdf.setFillColor(255, 255, 255);
+        pdf.rect(0, 0, pdfWidth, pdfHeight, 'F');
+        
+        try {
+          const img = new Image();
+          img.src = '/static/logo.png';
+          await new Promise((resolve, reject) => {
+            img.onload = () => resolve();
+            img.onerror = () => reject(new Error('Image failed to load'));
+          });
+          
+          const logoWidth = 80;
+          const logoHeight = (img.height * logoWidth) / img.width;
+          pdf.addImage(img, 'PNG', (pdfWidth - logoWidth) / 2, (pdfHeight / 2) - logoHeight - 20, logoWidth, logoHeight);
+        } catch (err) {
+          console.warn('Could not load logo for PDF cover', err);
+          pdf.setFontSize(30);
+          pdf.setTextColor(0, 0, 0);
+          pdf.text('CreditManager', pdfWidth / 2, pdfHeight / 2 - 20, { align: 'center' });
+        }
+        
+        pdf.setFontSize(24);
+        pdf.setTextColor(0, 0, 0);
+        pdf.text('Dashboard de Cartera', pdfWidth / 2, pdfHeight / 2 + 10, { align: 'center' });
+        
+        pdf.setFontSize(12);
+        pdf.setTextColor(100, 100, 100);
+        const dueñosTextCover = filtroDueños.length > 0 ? filtroDueños.join(', ') : 'Todos';
+        const origTextCover = filtroOriginadores.length > 0 ? filtroOriginadores.join(', ') : 'Todos';
+        pdf.text(`Fecha de Corte: ${fechaCorte.split('-').reverse().join('/')}`, pdfWidth / 2, pdfHeight / 2 + 25, { align: 'center' });
+        pdf.text(`TNA: ${tasaDescuento}%`, pdfWidth / 2, pdfHeight / 2 + 32, { align: 'center' });
+        pdf.text(`Dueños: ${dueñosTextCover}`, pdfWidth / 2, pdfHeight / 2 + 39, { align: 'center' });
+        pdf.text(`Originadores: ${origTextCover}`, pdfWidth / 2, pdfHeight / 2 + 46, { align: 'center' });
+        
+        pdf.setFontSize(10);
+        pdf.text(`Generado el: ${new Date().toLocaleDateString('es-AR')} ${new Date().toLocaleTimeString('es-AR')}`, pdfWidth / 2, pdfHeight - 20, { align: 'center' });
+        // --- FIN PORTADA ---
+        
         const tabsToExport = [
           { id: 'export-tab-total', title: 'Cartera Total' },
           { id: 'export-tab-periodo', title: 'Detalle por Período' },
@@ -113,9 +152,7 @@ const DashboardCarteraPage = () => {
               width = height * ratio;
             }
             
-            if (pageCount > 0) {
-              pdf.addPage();
-            }
+            pdf.addPage();
             
             pdf.setFillColor(255, 255, 255);
             pdf.rect(0, 0, pdfWidth, pdfHeight, 'F');
