@@ -222,6 +222,8 @@ def get_cliente_cuenta_corriente(cuil: str, db: Session = Depends(get_db)):
                 result.append({
                     "credito_id": c.id,
                     "id_externo": c.id_externo or "-",
+                    "tipo_credito": c.tipo_credito.value if hasattr(c.tipo_credito, "value") else str(c.tipo_credito),
+                    "estado_credito": c.estado.value if hasattr(c.estado, "value") else str(c.estado),
                     "nro_cuota": cuota.nro_cuota,
                     "vencimiento": cuota.fecha_vencimiento.strftime("%d/%m/%Y") if cuota.fecha_vencimiento else "-",
                     "vencimiento_raw": cuota.fecha_vencimiento or date.min,
