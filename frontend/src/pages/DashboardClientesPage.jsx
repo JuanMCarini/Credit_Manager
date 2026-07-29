@@ -19,6 +19,7 @@ const CHART_COLORS = ['#6366f1', '#14b8a6', '#f59e0b', '#ec4899', '#8b5cf6', '#1
 const DashboardClientesPage = () => {
   const [searchParams] = useSearchParams();
   const initialCuil = searchParams.get('cuil');
+  const initialCreditoId = searchParams.get('credito_id');
 
   // State for search and clients list
   const [allClients, setAllClients] = useState([]);
@@ -35,8 +36,8 @@ const DashboardClientesPage = () => {
   const [clientError, setClientError] = useState(null);
 
   // Dashboard UI state
-  const [activeTab, setActiveTab] = useState('genericos');
-  const [selectedCreditos, setSelectedCreditos] = useState([]);
+  const [activeTab, setActiveTab] = useState(initialCreditoId ? 'creditos' : 'genericos');
+  const [selectedCreditos, setSelectedCreditos] = useState(initialCreditoId ? [initialCreditoId] : []);
 
   // 1. Fetch all clients on mount for the search bar
   useEffect(() => {
@@ -66,7 +67,14 @@ const DashboardClientesPage = () => {
         const foundClient = allClients.find(c => c.CUIL === selectedCuil);
         setClientData(foundClient);
         setCcData(ccRes.data);
-        setSelectedCreditos([]); // Reset credit filters on new client
+        
+        if (initialCreditoId && selectedCuil === initialCuil) {
+          setSelectedCreditos([String(initialCreditoId)]);
+          setActiveTab('creditos');
+        } else {
+          setSelectedCreditos([]); // Reset credit filters on new client
+          setActiveTab('genericos');
+        }
       } catch (err) {
         console.error("Error cargando datos del cliente:", err);
         setClientError("Ocurrió un error al cargar la información del cliente seleccionado.");
@@ -119,18 +127,19 @@ const DashboardClientesPage = () => {
         });
       }
     });
-    return Array.from(map.entries()).map(([id, info]) => ({ id, tipo: info.tipo, estado: info.estado }));
+    return Array.from(map.entries()).map(([id, info]) => ({ id: String(id), tipo: info.tipo, estado: info.estado }));
   }, [ccData]);
 
   const filteredCcData = useMemo(() => {
     if (selectedCreditos.length === 0) return ccData;
-    const selectedIds = selectedCreditos.map(Number);
-    return ccData.filter(quota => selectedIds.includes(quota.credito_id));
+    const selectedIds = selectedCreditos.map(String);
+    return ccData.filter(quota => selectedIds.includes(String(quota.credito_id)));
   }, [ccData, selectedCreditos]);
 
   const kpisCreditos = useMemo(() => {
     let montoTotal = 0;
     let saldoPendiente = 0;
+    let montoEnMora = 0;
     let cuotasCanceladas = 0;
     let cuotasEnMora = 0;
     let cuotasPendientes = 0;
@@ -158,7 +167,10 @@ const DashboardClientesPage = () => {
       saldoPendiente += parseFloat(quota.saldo_pendiente || 0);
 
       if (estado === 'CANCELADA') cuotasCanceladas++;
-      else if (estado === 'MOROSA') cuotasEnMora++;
+      else if (estado === 'MOROSA') {
+        cuotasEnMora++;
+        montoEnMora += parseFloat(quota.saldo_pendiente || 0);
+      }
       else if (estado === 'PENDIENTE') cuotasPendientes++;
 
       if (estado !== 'NO COMPRADA' && estado !== 'CANCELADA') {
@@ -198,6 +210,7 @@ const DashboardClientesPage = () => {
       totalOps: selectedCreditos.length === 0 ? uniqueCreditos.length : selectedCreditos.length,
       montoTotal, 
       saldoPendiente,
+      montoEnMora,
       cuotasCanceladas,
       cuotasEnMora,
       cuotasPendientes,
@@ -421,34 +434,48 @@ const DashboardClientesPage = () => {
                 {uniqueCreditos.length === 0 ? (
                   <p style={{ color: 'var(--text-muted)' }}>El cliente no posee créditos registrados.</p>
                 ) : (
-                  <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap' }}>
-                    <select 
-                      multiple
-                      value={selectedCreditos}
-                      onChange={(e) => {
-                        const options = Array.from(e.target.options);
-                        const selected = options.filter(o => o.selected).map(o => o.value);
-                        setSelectedCreditos(selected);
-                      }}
-                      style={{ 
-                        background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', 
-                        padding: '10px', borderRadius: '8px', minHeight: '120px', flex: 1, minWidth: '200px' 
-                      }}
-                    >
-                      {uniqueCreditos.map(cred => (
-                        <option key={cred.id} value={cred.id}>Operación #{cred.id} - {cred.tipo} ({cred.estado})</option>
-                      ))}
-                    </select>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', justifyContent: 'center' }}>
-                      <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', maxWidth: '200px' }}>
-                        Mantén presionado Ctrl (o Cmd) para seleccionar múltiples operaciones. Si no seleccionas ninguna, se mostrará el total de todas las operaciones.
-                      </div>
-                      <button 
-                        onClick={() => setSelectedCreditos([])} 
-                        className="btn-secondary" 
-                        disabled={selectedCreditos.length === 0}
-                      >
-                        Ver todos
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+                      {uniqueCreditos.map(cred => {
+                        const isSelected = selectedCreditos.length === 0 || selectedCreditos.includes(cred.id);
+                        return (
+                          <div 
+                            key={cred.id}
+                            onClick={() => {
+                              if (selectedCreditos.length === 0) {
+                                setSelectedCreditos([cred.id]);
+                              } else {
+                                if (selectedCreditos.includes(cred.id)) {
+                                  setSelectedCreditos(selectedCreditos.filter(id => id !== cred.id));
+                                } else {
+                                  setSelectedCreditos([...selectedCreditos, cred.id]);
+                                }
+                              }
+                            }}
+                            style={{
+                              padding: '12px 16px',
+                              borderRadius: '10px',
+                              cursor: 'pointer',
+                              border: isSelected ? '2px solid #3b82f6' : '1px solid rgba(255,255,255,0.1)',
+                              background: isSelected ? 'rgba(59, 130, 246, 0.15)' : 'rgba(0,0,0,0.2)',
+                              color: isSelected ? 'white' : 'var(--text-muted)',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'flex-start',
+                              transition: 'all 0.2s ease',
+                              minWidth: '160px',
+                              userSelect: 'none'
+                            }}
+                          >
+                            <span style={{ fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '4px' }}>Op. #{cred.id}</span>
+                            <span style={{ fontSize: '0.85rem' }}>{cred.tipo} • {cred.estado}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div>
+                      <button className="btn-secondary" onClick={() => setSelectedCreditos([])} style={{ fontSize: '0.9rem', padding: '6px 12px' }}>
+                        Restablecer / Seleccionar Todos
                       </button>
                     </div>
                   </div>
@@ -465,10 +492,16 @@ const DashboardClientesPage = () => {
                   <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '10px' }}>Total Esperado (Cap+Int)</div>
                   <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>{formatCurrency(kpisCreditos.montoTotal)}</div>
                 </div>
-                <div className="glass-panel" style={{ padding: '20px', borderRadius: '12px', borderTop: '4px solid #ef4444', textAlign: 'center' }}>
+                <div className="glass-panel" style={{ padding: '20px', borderRadius: '12px', borderTop: '4px solid #f59e0b', textAlign: 'center' }}>
                   <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '10px' }}>Saldo Pendiente Total</div>
-                  <div style={{ fontSize: '2rem', fontWeight: 'bold', color: kpisCreditos.saldoPendiente > 0 ? '#ef4444' : 'inherit' }}>
+                  <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>
                     {formatCurrency(kpisCreditos.saldoPendiente)}
+                  </div>
+                </div>
+                <div className="glass-panel" style={{ padding: '20px', borderRadius: '12px', borderTop: '4px solid #ef4444', textAlign: 'center' }}>
+                  <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '10px' }}>Monto en Mora</div>
+                  <div style={{ fontSize: '2rem', fontWeight: 'bold', color: kpisCreditos.montoEnMora > 0 ? '#ef4444' : 'inherit' }}>
+                    {formatCurrency(kpisCreditos.montoEnMora)}
                   </div>
                 </div>
                 <div className="glass-panel" style={{ padding: '20px', borderRadius: '12px', borderTop: `4px solid ${kpisCreditos.maxDiasMora > 0 ? '#ef4444' : '#10b981'}`, textAlign: 'center' }}>
