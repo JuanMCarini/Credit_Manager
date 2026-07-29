@@ -3,6 +3,7 @@ import Sidebar from './Sidebar';
 import { useEffect, useRef, useCallback, useState } from 'react';
 import useAppStore from '../store/useAppStore';
 import { useNavigate } from 'react-router-dom';
+import { Menu } from 'lucide-react';
 import ChangeMyPasswordModal from './ChangeMyPasswordModal';
 import { useAuthStore } from '../store/useAuthStore';
 import axiosClient from '../api/axiosClient';
@@ -12,6 +13,7 @@ const MainLayout = () => {
   const { user, login, logout } = useAuthStore();
   const navigate = useNavigate();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   const timeoutRef = useRef(null);
   const intervalRef = useRef(null);
@@ -69,23 +71,30 @@ const MainLayout = () => {
 
   return (
     <div className="app-container">
-      <Sidebar />
+      {isSidebarOpen && <Sidebar />}
       <main className="main-content">
-        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: '24px', gap: '15px' }}>
-          {user && (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', marginRight: '10px' }}>
-              <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{user.nombre || user.nombre_completo}</span>
-              <span style={{ fontSize: '0.8em', color: 'var(--text-secondary)' }}>
-                {typeof user.rol === 'string' ? user.rol : user.rol?.nombre || 'Usuario'}
-              </span>
-            </div>
-          )}
-          <button className="btn-secondary" onClick={() => setShowPasswordModal(true)}>
-            Cambiar Contraseña
-          </button>
-          <button className="btn-secondary" onClick={handleLogout}>
-            Cerrar Sesión
-          </button>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+          <div>
+            <button className="btn-secondary" onClick={() => setIsSidebarOpen(!isSidebarOpen)} style={{ padding: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title={isSidebarOpen ? "Ocultar menú" : "Mostrar menú"}>
+              <Menu size={20} />
+            </button>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+            {user && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', marginRight: '10px' }}>
+                <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{user.nombre || user.nombre_completo}</span>
+                <span style={{ fontSize: '0.8em', color: 'var(--text-secondary)' }}>
+                  {typeof user.rol === 'string' ? user.rol : user.rol?.nombre || 'Usuario'}
+                </span>
+              </div>
+            )}
+            <button className="btn-secondary" onClick={() => setShowPasswordModal(true)}>
+              Cambiar Contraseña
+            </button>
+            <button className="btn-secondary" onClick={handleLogout}>
+              Cerrar Sesión
+            </button>
+          </div>
         </div>
         <Outlet />
         {showPasswordModal && (
