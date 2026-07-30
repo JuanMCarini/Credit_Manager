@@ -22,6 +22,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY .env .
 COPY src/ ./src/
 
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
 # Expose port
 EXPOSE 8000
 
