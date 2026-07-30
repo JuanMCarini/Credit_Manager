@@ -524,8 +524,9 @@ const DashboardCarteraPage = () => {
         
         const fVto = new Date(row['Fecha Vencimiento'] + 'T00:00:00');
         const isVencido = fVto < fechaCorteDate;
+        const balanceCuota = (row.Capital || 0) + (row['Interés'] || 0) + (row.IVA || 0);
 
-        if (isVencido) {
+        if (isVencido && balanceCuota > 0) {
           let diasMora = Math.floor((fechaCorteDate - fVto) / (1000 * 60 * 60 * 24));
           if (diasMora < 1) diasMora = 1;
           
@@ -561,7 +562,7 @@ const DashboardCarteraPage = () => {
         
         const fVto = new Date(row['Fecha Vencimiento'] + 'T00:00:00');
         const isVencido = fVto < fechaCorteDate;
-        const cuotaValue = (row.Capital || 0) + (row.Interés || 0) + (row.IVA || 0);
+        const cuotaValue = (row.Capital || 0) + (row['Interés'] || 0) + (row.IVA || 0);
 
         if (isVencido) {
           creditosMora[id].totalVencido += cuotaValue;
