@@ -7,7 +7,7 @@ const formatCurrency = (num) => {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(num);
 };
 
-const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' }) => {
+const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '', isModal = true }) => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -237,21 +237,20 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
     return <span style={{ marginLeft: '5px' }}>{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>;
   };
 
-  return (
-    <div style={{
-      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
-      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px',
-      backdropFilter: 'blur(5px)'
-    }}>
+  const content = (
       <div className="glass-panel" style={{
-        width: '100%', maxWidth: '1200px', height: '90vh', display: 'flex', flexDirection: 'column',
-        position: 'relative', padding: '24px'
+        width: '100%', maxWidth: isModal ? '1200px' : '100%', 
+        height: isModal ? '90vh' : 'auto', 
+        minHeight: isModal ? 'auto' : '800px',
+        display: 'flex', flexDirection: 'column',
+        position: 'relative', padding: '24px', animation: isModal ? 'none' : 'fadeIn 0.3s'
       }}>
-        <button onClick={onClose} style={{
-          position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none',
-          color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '20px', zIndex: 100
-        }}>✕</button>
+        {isModal && (
+          <button onClick={onClose} style={{
+            position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none',
+            color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '20px', zIndex: 100
+          }}>✕</button>
+        )}
         
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px', flexWrap: 'wrap', gap: '16px', flexShrink: 0 }}>
           <h2 style={{ margin: 0, fontFamily: 'var(--font-heading)' }}>
@@ -304,7 +303,7 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
         ) : error ? (
           <div style={{ color: 'var(--error)', textAlign: 'center', padding: '40px' }}>{error}</div>
         ) : (
-          <div className="table-responsive" style={{ flex: 1, overflowY: 'auto', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
+          <div className="table-responsive" style={{ flex: 1, overflowY: 'auto', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', minHeight: isModal ? 'auto' : '650px' }}>
             <table className="data-table" style={{ width: '100%', margin: 0 }}>
               <thead style={{position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-panel)', boxShadow: '0 2px 4px rgba(0,0,0,0.2)'}}>
                 <tr>
@@ -466,6 +465,20 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
           </div>
         )}
       </div>
+  );
+
+  if (!isModal) {
+    return content;
+  }
+
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+      backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px',
+      backdropFilter: 'blur(5px)'
+    }}>
+      {content}
     </div>
   );
 };
