@@ -345,9 +345,9 @@ const DashboardCarteraPage = () => {
     resumenEstados[normalizedEstado].Total += capInt;
 
     // Calcular días de mora si es MOROSO
-    if (normalizedEstado === 'MOROSO') {
+    if (normalizedEstado === 'MOROSO' && isVencido) {
       let diasMora = Math.floor((fechaCorteDate - fVto) / (1000 * 60 * 60 * 24));
-      if (diasMora < 1) diasMora = 1; // Si está moroso, asumimos al menos 1 día para que agrupe en "1 - 30 días"
+      if (diasMora < 1) diasMora = 1; // Si está moroso y vencido, asumimos al menos 1 día
       
       const bucket = moraBuckets.find(b => diasMora >= b.min && diasMora <= b.max);
       if (bucket) {
@@ -406,8 +406,8 @@ const DashboardCarteraPage = () => {
           if (matchOriginador) {
             const dueñoRaw = String(d.Dueño || 'Desconocido').trim();
             if (!ownerCapital[dueñoRaw]) ownerCapital[dueñoRaw] = 0;
-            ownerCapital[dueñoRaw] += d.capital;
-            totalCapitalForDistribution += d.capital;
+            ownerCapital[dueñoRaw] += d.total;
+            totalCapitalForDistribution += d.total;
           }
         });
       }
@@ -422,6 +422,7 @@ const DashboardCarteraPage = () => {
       
       Object.keys(ownerCapital).forEach(owner => {
         monthData[`owner_${owner}`] = totalCapitalForDistribution > 0 ? (ownerCapital[owner] / totalCapitalForDistribution) * 100 : 0;
+        monthData[`ownerRaw_${owner}`] = ownerCapital[owner];
       });
       
       return monthData;
@@ -947,7 +948,7 @@ const DashboardCarteraPage = () => {
       {(activeTab === 'composicion' || isExporting) && (
         <div id="export-tab-composicion">
           <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', marginBottom: '30px' }}>
-            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Composición de la Cartera por Dueño (%)</h2>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Composición de la Cartera por Dueño (Capital y Porcentaje)</h2>
             {filteredEvolutionData.length === 0 ? (
               <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>No hay datos disponibles.</p>
             ) : (
@@ -955,11 +956,16 @@ const DashboardCarteraPage = () => {
                 <BarChart data={filteredEvolutionData} margin={{ top: 10, right: 30, left: 20, bottom: 25 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" vertical={false} />
                   <XAxis dataKey="periodo" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} tickMargin={10} />
-                  <YAxis stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} tickFormatter={(val) => `${val}%`} domain={[0, 100]} />
+                  <YAxis stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} tickFormatter={(val) => `$${(val / 1000000).toFixed(1)}M`} />
                   <Tooltip
                     contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.9)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff' }}
                     itemStyle={{ color: '#fff' }}
-                    formatter={(value, name) => [`${Number(value).toFixed(2)}%`, name]}
+                    formatter={(value, name, props) => {
+                      const pct = props.payload[`owner_${name}`];
+                      const pctStr = pct ? pct.toFixed(1) : '0.0';
+                      const valStr = (value / 1000000).toFixed(1);
+                      return [`${pctStr}% - $${valStr}M`, name];
+                    }}
                     labelFormatter={(label) => `Período: ${label}`}
                   />
                   <Legend wrapperStyle={{ paddingTop: '20px' }} />
@@ -967,7 +973,7 @@ const DashboardCarteraPage = () => {
                     <Bar 
                       isAnimationActive={!isExporting}
                       key={dueño} 
-                      dataKey={`owner_${dueño}`} 
+                      dataKey={`ownerRaw_${dueño}`} 
                       name={dueño} 
                       stackId="a" 
                       fill={CHART_COLORS[index % CHART_COLORS.length]} 
@@ -1095,7 +1101,7 @@ const DashboardCarteraPage = () => {
         <div id="export-tab-estados">
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginBottom: '30px' }}>
             <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', flex: '1 1 300px', display: 'flex', flexDirection: 'column' }}>
-              <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600', textAlign: 'center' }}>Porcentaje por Estado</h2>
+              <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600', textAlign: 'center' }}>Distribución de Saldos por Estado del Crédito</h2>
               <div style={{ flex: 1, minHeight: '250px' }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -1128,7 +1134,7 @@ const DashboardCarteraPage = () => {
             </div>
 
             <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', flex: '2 1 500px' }}>
-              <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Distribución de Estados (Capital + Interés)</h2>
+              <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Total de Saldos agrupados por Estado del Crédito (Capital + Interés)</h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '15px' }}>
                 <div style={{ 
                   background: 'rgba(0,0,0,0.2)', 
@@ -1165,7 +1171,7 @@ const DashboardCarteraPage = () => {
           </div>
 
           <div className="glass-panel" style={{ display: exportFormat === 'l' ? 'none' : 'block', padding: '25px', borderRadius: '12px' }}>
-            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Detalle de Montos por Estado (Capital + Interés)</h2>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Detalle de Saldos (Vencidos vs A Vencer) según Estado del Crédito</h2>
             {estadosList.length === 0 ? (
               <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>No hay datos disponibles en la cartera activa.</p>
             ) : (
@@ -1210,7 +1216,7 @@ const DashboardCarteraPage = () => {
       {(activeTab === 'morosidad' || isExporting) && (
         <div id="export-tab-morosidad">
           <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', marginBottom: '30px', height: '400px' }}>
-            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Composición de la Morosidad</h2>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Composición de Saldos Vencidos (Mora Real)</h2>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={moraBuckets}
@@ -1233,7 +1239,7 @@ const DashboardCarteraPage = () => {
           </div>
 
           <div className="glass-panel" style={{ display: exportFormat === 'l' ? 'none' : 'block', padding: '25px', borderRadius: '12px', marginBottom: '30px' }}>
-            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Detalle de Créditos Morosos</h2>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Detalle de Cuotas Vencidas (Clasificadas por Días de Mora)</h2>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>

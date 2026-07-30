@@ -69,7 +69,7 @@ def saldos(
     )
 
     # 2. Data Mapping
-    for col in ["fecha_emision", "cliente_cuil", "cartera_id", "socio_originador_id", "tipo_credito"]:
+    for col in ["fecha_emision", "cliente_cuil", "cartera_id", "socio_originador_id", "tipo_credito", "estado"]:
         df_ctas[col] = df_ctas["credito_id"].map(df_crts[col])
     
     df_ctas["socio_id"] = df_ctas["cartera_id"].map(df_cart["socio_id"])
