@@ -21,9 +21,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy source code
 COPY src/ ./src/
 
-# Create a non-root user and change ownership
-RUN useradd -m appuser && chown -R appuser:appuser /app
-USER appuser
 
 # Expose port
 EXPOSE 8000
