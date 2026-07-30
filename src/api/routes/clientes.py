@@ -179,9 +179,17 @@ def get_cliente_bcra(cuil: str, db: Session = Depends(get_db)):
 
 
 @router.get("/{cuil}/cuenta_corriente")
-def get_cliente_cuenta_corriente(cuil: str, db: Session = Depends(get_db)):
+def get_cliente_cuenta_corriente(
+    cuil: str,
+    fecha_corte: str = None,
+    db: Session = Depends(get_db)
+):
     import traceback
     try:
+        from src.config import get_company_data
+        company_data = get_company_data()
+        empresa_nombre = company_data.razon_social
+        
         cliente = db.query(Cliente).options(
             joinedload(Cliente.creditos).joinedload(Credito.cuotas).joinedload(Cuota.cobranzas)
         ).filter(Cliente.cuil == cuil).first()
@@ -219,6 +227,29 @@ def get_cliente_cuenta_corriente(cuil: str, db: Session = Depends(get_db)):
                 total_cobrado = round(total_cobrado, 2)
                 saldo = round(total_esperado - total_cobrado, 2)
                 
+                dueno = empresa_nombre
+                if fecha_corte:
+                    try:
+                        from datetime import datetime
+                        hoy = datetime.strptime(fecha_corte, "%Y-%m-%d").date()
+                    except ValueError:
+                        hoy = date.today()
+                else:
+                    hoy = date.today()
+                
+                movimientos_validos = [op for op in cuota.movimientos_cartera if op.fecha_registro and op.fecha_registro <= hoy]
+                if movimientos_validos:
+                    last_op = sorted(movimientos_validos, key=lambda x: x.fecha_registro)[-1]
+                    if last_op.cartera:
+                        tipo_op = last_op.cartera.tipo_operacion.value if hasattr(last_op.cartera.tipo_operacion, "value") else str(last_op.cartera.tipo_operacion)
+                        socio_nombre = last_op.cartera.socio.razon_social if last_op.cartera.socio else "Desconocido"
+                        comercializada = last_op.cuota_comercializada
+                        
+                        if tipo_op in ["COMPRA", "RECOMPRA"]:
+                            dueno = empresa_nombre if comercializada else socio_nombre
+                        elif tipo_op == "VENTA":
+                            dueno = socio_nombre if comercializada else empresa_nombre
+                
                 result.append({
                     "credito_id": c.id,
                     "id_externo": c.id_externo or "-",
@@ -234,6 +265,7 @@ def get_cliente_cuenta_corriente(cuil: str, db: Session = Depends(get_db)):
                     "total_cobrado": total_cobrado,
                     "saldo_pendiente": saldo,
                     "estado": cuota.estado.value if hasattr(cuota.estado, "value") else str(cuota.estado) if cuota.estado else "-",
+                    "dueno": dueno,
                     "detalle_cobranzas": detalle_cobranzas
                 })
                 

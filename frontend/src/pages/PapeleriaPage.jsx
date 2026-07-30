@@ -54,7 +54,7 @@ const PapeleriaPage = ({ categoria = 'creditos' }) => {
 
   const fetchDocumentos = async () => {
     try {
-      const res = await axiosClient.get(`/api/v1/papeleria?categoria=${categoria}`);
+      const res = await axiosClient.get(`/api/v1/papeleria/?categoria=${categoria}`);
       setDocumentos(res.data);
     } catch (error) {
       console.error("Error fetching documentos:", error);
