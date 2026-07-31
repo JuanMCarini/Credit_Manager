@@ -130,7 +130,7 @@ def saldos(
     df["Dueño"] = np.select(conditions, choices, default=company_data.razon_social)
 
     df.drop(
-        columns=["Dueño_id_tmp", "Partner_Name", "tipo_op", "comercializada"],
+        columns=["Dueño_id_tmp", "Partner_Name", "comercializada"],
         inplace=True,
         errors="ignore",
     )

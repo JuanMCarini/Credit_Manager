@@ -28,6 +28,7 @@ from src.api.routes.usuarios import router as usuarios_router
 from src.api.routes.liquidaciones import router as liquidaciones_router
 from src.api.routes.papeleria import router as papeleria_router
 from src.api.routes.archivos import router as archivos_router
+from src.api.routes.bcra import router as bcra_router
 from src.config import API_SETTINGS
 from src.database import Base, engine
 
@@ -105,6 +106,7 @@ app.include_router(usuarios_router)
 app.include_router(liquidaciones_router)
 app.include_router(papeleria_router)
 app.include_router(archivos_router)
+app.include_router(bcra_router)
 
 # -------------------------------------------------------------------
 # Frontend (Ahora servido por Nginx)
