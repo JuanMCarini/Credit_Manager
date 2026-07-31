@@ -79,7 +79,8 @@ def assign_bcra_situation(dias: int) -> str:
         return "05"
 
 
-def generate_bcra_files(
+
+def _get_bcra_aggregated_data(
     fecha_corte: date,
     vto_hasta: Optional[date] = None,
     origen: Optional[str] = None,
@@ -88,11 +89,9 @@ def generate_bcra_files(
     sit_mora: Optional[str] = None,
     comprado: Optional[str] = None,
     min_monto_mora: Optional[float] = None,
-) -> bytes:
-    
+):
     dt_corte = datetime.combine(fecha_corte, datetime.min.time())
     
-    # 1. Fetch data
     propias = None
     if comprado == "Propias":
         propias = True
@@ -109,32 +108,25 @@ def generate_bcra_files(
 
     df = calculate_arrears_and_situation(df, dt_corte)
     
-    # Legacy BCRA calculation rule: 
-    # For past-due installments, sum Total (Capital + Interest + IVA).
-    # For future/current installments, sum only Capital.
     df["Importe_BCRA"] = df.apply(
         lambda row: row["Total"] if row["dias_atraso"] > 0 else row["Capital"], 
         axis=1
     )
     
     if df.empty:
-        return _create_zip("", "", "0;000,00")
-
+        return pd.DataFrame(), None
+        
     # Fetch client names
     cuils = df["CUIL Cliente"].dropna().unique().tolist()
-    if not cuils:
-        return _create_zip("", "", "0;000,00")
-        
-    cuils_str = ",".join(f"'{c}'" for c in cuils)
-    clientes_query = text(f"SELECT cuil, apellido, nombre FROM clientes WHERE cuil IN ({cuils_str})")
-    df_clientes = pd.read_sql_query(clientes_query, engine)
-    
-    df_clientes["Nombre Completo"] = df_clientes["apellido"] + " " + df_clientes["nombre"]
-    df_clientes["Nombre Completo"] = df_clientes["Nombre Completo"].apply(normalize_text)
-
-    # Merge client names
-    df = df.merge(df_clientes, left_on="CUIL Cliente", right_on="cuil", how="left")
-    df["Nombre Completo"] = df["Nombre Completo"].fillna("DESCONOCIDO")
+    if cuils:
+        cuils_str = ",".join(f"'{c}'" for c in cuils)
+        clientes_query = text(f"SELECT cuil, apellido, nombre FROM clientes WHERE cuil IN ({cuils_str})")
+        df_clientes = pd.read_sql_query(clientes_query, engine)
+        df_clientes["Nombre Completo"] = df_clientes["apellido"] + " " + df_clientes["nombre"]
+        df_clientes["Nombre Completo"] = df_clientes["Nombre Completo"].apply(normalize_text)
+        df = df.merge(df_clientes[["cuil", "Nombre Completo"]], left_on="CUIL Cliente", right_on="cuil", how="left")
+    else:
+        df["Nombre Completo"] = "DESCONOCIDO"
 
     # Aggregate by Client
     agg_df = df.groupby("CUIL Cliente").agg(
@@ -145,12 +137,41 @@ def generate_bcra_files(
 
     agg_df["Situacion"] = agg_df["Max_Dias_Atraso"].apply(assign_bcra_situation)
     
-    # If filtered by sit_mora
     if sit_mora and sit_mora != "Todas" and str(sit_mora).strip():
         agg_df = agg_df[agg_df["Situacion"] == str(sit_mora).strip()]
 
     if min_monto_mora is not None:
         agg_df = agg_df[agg_df["Total_Deuda"] >= min_monto_mora]
+
+    # Get TNA
+    min_tna_val = None
+    credito_ids = df["ID Credito"].dropna().unique().tolist()
+    if credito_ids:
+        ids_str = ",".join(str(int(c)) for c in credito_ids)
+        min_tna_query = text(f"SELECT MIN(tna_c_iva) FROM creditos WHERE id IN ({ids_str}) AND tna_c_iva > 0")
+        with engine.connect() as conn:
+            min_tna_val = conn.execute(min_tna_query).scalar()
+            if min_tna_val is None:
+                min_tna_val = conn.execute(text("SELECT MIN(tna_c_iva) FROM creditos WHERE tna_c_iva > 0")).scalar()
+                
+    return agg_df, min_tna_val
+
+def generate_bcra_files(
+    fecha_corte: date,
+    vto_hasta: Optional[date] = None,
+    origen: Optional[str] = None,
+    socio_originador: Optional[str] = None,
+    nro_orden: Optional[str] = None,
+    sit_mora: Optional[str] = None,
+    comprado: Optional[str] = None,
+    min_monto_mora: Optional[float] = None,
+) -> bytes:
+    agg_df, min_tna_val = _get_bcra_aggregated_data(
+        fecha_corte, vto_hasta, origen, socio_originador, nro_orden, sit_mora, comprado, min_monto_mora
+    )
+    
+    if agg_df.empty:
+        return _create_zip("", "", "0;000,00\r\n")
 
     proveedores_lines = []
     importes_lines = []
@@ -165,40 +186,17 @@ def generate_bcra_files(
         total_miles_proveedores = str(total_miles).zfill(14)
         total_miles_importes = str(total_miles).zfill(12)
         
-        # PROVEEDORES.TXT
-        # Tipo Id (11) ; Nro Id (11 chars) ; Nombre ; Situacion (2) ; Total (miles) ; Encuadramiento Art 26 (0) ; Recategorizacion (0) ; Dias Atraso (0000) ; Sit sin reclasif (00)
         proveedores_lines.append(f"11;{cuil};{nombre_padded};{sit};{total_miles_proveedores};0;0;0000;00")
-        
-        # IMPORTES.TXT
-        # Tipo Id (11) ; Nro Id ; Tipo Asistencia (09) ; Importe
         importes_lines.append(f"11;{cuil};09;{total_miles_importes}")
 
     proveedores_txt = "\r\n".join(proveedores_lines) + "\r\n"
     importes_txt = "\r\n".join(importes_lines) + "\r\n"
     
-    # TASA.TXT
-    if len(agg_df) > 0:
-        # Get minimum TNA with IVA > 0 for the credits in the report
-        credito_ids = df["ID Credito"].dropna().unique().tolist()
-        if credito_ids:
-            ids_str = ",".join(str(int(c)) for c in credito_ids)
-            min_tna_query = text(f"SELECT MIN(tna_c_iva) FROM creditos WHERE id IN ({ids_str}) AND tna_c_iva > 0")
-            with engine.connect() as conn:
-                min_tna_val = conn.execute(min_tna_query).scalar()
-                if min_tna_val is None:
-                    # Fallback to global minimum if no credits have TNA > 0 in this subset
-                    min_tna_val = conn.execute(text("SELECT MIN(tna_c_iva) FROM creditos WHERE tna_c_iva > 0")).scalar()
-            
-            if min_tna_val is not None:
-                # Multiply by 100 and format to 2 decimal places with comma
-                tna_formatted = f"{min_tna_val * 100:06.2f}".replace(".", ",")
-                tasa_txt = f"1;{tna_formatted}\r\n"
-            else:
-                tasa_txt = "1;000,00\r\n"
-        else:
-            tasa_txt = "1;000,00\r\n"
+    if min_tna_val is not None:
+        tna_formatted = f"{min_tna_val * 100:06.2f}".replace(".", ",")
+        tasa_txt = f"1;{tna_formatted}\r\n"
     else:
-        tasa_txt = "0;000,00\r\n"
+        tasa_txt = "1;000,00\r\n"
         
     return _create_zip(proveedores_txt, importes_txt, tasa_txt)
 
@@ -222,44 +220,67 @@ def generar_reporte_personalizado_excel(
     comprado: Optional[str] = None,
     min_monto_mora: Optional[float] = None,
 ) -> io.BytesIO:
-    dt_corte = datetime.combine(fecha_corte, datetime.min.time())
+    agg_df, min_tna_val = _get_bcra_aggregated_data(
+        fecha_corte, vto_hasta, origen, socio_originador, nro_orden, sit_mora, comprado, min_monto_mora
+    )
     
-    propias = None
-    if comprado == "Propias":
-        propias = True
-    elif comprado == "Terceros":
-        propias = False
-        
-    df = saldos(fecha=dt_corte, con_saldo=True, propias=propias)
-    df = df.reset_index()
-    df = apply_custom_filters(df, origen, socio_originador, nro_orden, None, comprado)
+    proveedores_data = []
+    importes_data = []
     
-    if vto_hasta:
-        dt_vto = datetime.combine(vto_hasta, datetime.min.time())
-        df = df[pd.to_datetime(df["Fecha Emisión"]) <= dt_vto]
-
-    df = calculate_arrears_and_situation(df, dt_corte)
-    
-    if not df.empty:
-        cuils = df["CUIL Cliente"].dropna().unique().tolist()
-        if cuils:
-            cuils_str = ",".join(f"'{c}'" for c in cuils)
-            clientes_query = text(f"SELECT cuil, apellido, nombre FROM clientes WHERE cuil IN ({cuils_str})")
-            df_clientes = pd.read_sql_query(clientes_query, engine)
-            df_clientes["Nombre Completo"] = df_clientes["apellido"] + " " + df_clientes["nombre"]
-            df = df.merge(df_clientes[["cuil", "Nombre Completo"]], left_on="CUIL Cliente", right_on="cuil", how="left")
-            df.drop(columns=["cuil"], inplace=True)
+    if not agg_df.empty:
+        for _, row in agg_df.iterrows():
+            cuil = str(row["CUIL Cliente"]).replace("-", "").strip()
+            nombre = str(row["Nombre"])
+            sit = row["Situacion"]
+            total_miles = format_bcra_amount(row["Total_Deuda"])
             
-        df["Situacion BCRA"] = df["dias_atraso"].apply(assign_bcra_situation)
+            nombre_padded = nombre.ljust(55)[:55]
+            total_miles_proveedores = str(total_miles).zfill(14)
+            total_miles_importes = str(total_miles).zfill(12)
+            
+            proveedores_data.append({
+                "Tipo Id": "11",
+                "Nro Id": cuil,
+                "Nombre": nombre_padded,
+                "Situacion": sit,
+                "Importe": total_miles_proveedores,
+                "Encuadramiento Art 26": "0",
+                "Recategorizacion": "0",
+                "Dias Atraso": "0000",
+                "Sit sin reclasif": "00"
+            })
+            
+            importes_data.append({
+                "Tipo Id": "11",
+                "Nro Id": cuil,
+                "Tipo Asistencia": "09",
+                "Importe": total_miles_importes
+            })
+            
+    tasa_data = []
+    if agg_df.empty:
+        tasa_data.append({"Tipo": "0", "TNA": "000,00"})
+    else:
+        if min_tna_val is not None:
+            tna_formatted = f"{min_tna_val * 100:06.2f}".replace(".", ",")
+            tasa_data.append({"Tipo": "1", "TNA": tna_formatted})
+        else:
+            tasa_data.append({"Tipo": "1", "TNA": "000,00"})
+            
+    df_prov = pd.DataFrame(proveedores_data)
+    df_imp = pd.DataFrame(importes_data)
+    df_tasa = pd.DataFrame(tasa_data)
+
+    # If DataFrames are empty, ensure they still have columns
+    if df_prov.empty:
+        df_prov = pd.DataFrame(columns=["Tipo Id", "Nro Id", "Nombre", "Situacion", "Importe", "Encuadramiento Art 26", "Recategorizacion", "Dias Atraso", "Sit sin reclasif"])
+    if df_imp.empty:
+        df_imp = pd.DataFrame(columns=["Tipo Id", "Nro Id", "Tipo Asistencia", "Importe"])
         
-        if sit_mora and sit_mora != "Todas" and str(sit_mora).strip():
-            df = df[df["Situacion BCRA"] == str(sit_mora).strip()]
-
-        if min_monto_mora is not None:
-            df = df[df["Total"] >= min_monto_mora]
-
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Reporte')
+        df_prov.to_excel(writer, index=False, sheet_name='PROVEEDORES')
+        df_imp.to_excel(writer, index=False, sheet_name='IMPORTES')
+        df_tasa.to_excel(writer, index=False, sheet_name='TASA')
     output.seek(0)
     return output
