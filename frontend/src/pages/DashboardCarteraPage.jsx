@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axiosClient from '../api/axiosClient';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, LabelList } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, LabelList, ComposedChart, Line } from 'recharts';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 const formatCurrency = (value) => {
@@ -122,6 +122,7 @@ const DashboardCarteraPage = () => {
           { id: 'export-tab-evolucion', title: 'Evolución 12 Meses' },
           { id: 'export-tab-composicion', title: 'Composición por Dueño' },
           { id: 'export-tab-periodo', title: 'Detalle por Período' },
+          { id: 'export-tab-colocaciones', title: 'Colocaciones' },
           { id: 'export-tab-estados', title: 'Detalle de Estados' },
           { id: 'export-tab-morosidad', title: 'Análisis de Morosidad' }
         ];
@@ -176,6 +177,13 @@ const DashboardCarteraPage = () => {
             pdf.text(filtrosStr, margin, 22);
             
             pdf.addImage(imgData, 'PNG', margin, 28, width, height);
+            
+            if (orientation === 'p') {
+              pdf.setFontSize(10);
+              pdf.setTextColor(150, 150, 150);
+              pdf.text(`Página ${pdf.internal.getNumberOfPages()}`, pdfWidth / 2, pdfHeight - 10, { align: 'center' });
+            }
+            
             pageCount++;
           }
         }
@@ -269,15 +277,6 @@ const DashboardCarteraPage = () => {
     'OTRO': { Estado: 'Otro', Vencido: 0, AVencer: 0, Total: 0, fill: '#607D8B' }
   };
 
-  const moraBuckets = [
-    { label: '1 - 30 días', min: 1, max: 30, Capital: 0, Interés: 0, IVA: 0, Total: 0 },
-    { label: '31 - 60 días', min: 31, max: 60, Capital: 0, Interés: 0, IVA: 0, Total: 0 },
-    { label: '61 - 90 días', min: 61, max: 90, Capital: 0, Interés: 0, IVA: 0, Total: 0 },
-    { label: '91 - 180 días', min: 91, max: 180, Capital: 0, Interés: 0, IVA: 0, Total: 0 },
-    { label: '181 - 365 días', min: 181, max: 365, Capital: 0, Interés: 0, IVA: 0, Total: 0 },
-    { label: '> 365 días', min: 366, max: Infinity, Capital: 0, Interés: 0, IVA: 0, Total: 0 },
-  ];
-
   data.forEach(row => {
     const dueño = row.Dueño || 'Desconocido';
     const originador = row.Originador || 'N/A';
@@ -344,20 +343,6 @@ const DashboardCarteraPage = () => {
     }
     resumenEstados[normalizedEstado].Total += capInt;
 
-    // Calcular días de mora si es MOROSO
-    if (normalizedEstado === 'MOROSO') {
-      let diasMora = Math.floor((fechaCorteDate - fVto) / (1000 * 60 * 60 * 24));
-      if (diasMora < 1) diasMora = 1; // Si está moroso, asumimos al menos 1 día para que agrupe en "1 - 30 días"
-      
-      const bucket = moraBuckets.find(b => diasMora >= b.min && diasMora <= b.max);
-      if (bucket) {
-        bucket.Capital += cap;
-        bucket.Interés += int;
-        bucket.IVA += iva;
-        bucket.Total += tot;
-      }
-    }
-
     // Agrupar por periodo (vencimientos futuros y el actual)
     const vtoYearMonth = fVtoStr.substring(0, 7);
     if (vtoYearMonth >= corteYearMonth) {
@@ -406,8 +391,8 @@ const DashboardCarteraPage = () => {
           if (matchOriginador) {
             const dueñoRaw = String(d.Dueño || 'Desconocido').trim();
             if (!ownerCapital[dueñoRaw]) ownerCapital[dueñoRaw] = 0;
-            ownerCapital[dueñoRaw] += d.capital;
-            totalCapitalForDistribution += d.capital;
+            ownerCapital[dueñoRaw] += d.total;
+            totalCapitalForDistribution += d.total;
           }
         });
       }
@@ -422,6 +407,7 @@ const DashboardCarteraPage = () => {
       
       Object.keys(ownerCapital).forEach(owner => {
         monthData[`owner_${owner}`] = totalCapitalForDistribution > 0 ? (ownerCapital[owner] / totalCapitalForDistribution) * 100 : 0;
+        monthData[`ownerRaw_${owner}`] = ownerCapital[owner];
       });
       
       return monthData;
@@ -439,6 +425,179 @@ const DashboardCarteraPage = () => {
     });
     return Array.from(dueños).sort();
   }, [filteredEvolutionData]);
+
+  const colocacionesData = useMemo(() => {
+    const creditos = {};
+    data.forEach(row => {
+      const dueño = row.Dueño || 'Desconocido';
+      const originador = row.Originador || 'N/A';
+      
+      const matchDueño = filtroDueños.length === 0 || filtroDueños.includes(dueño);
+      const matchOriginador = filtroOriginadores.length === 0 || filtroOriginadores.includes(originador);
+      
+      if (!matchDueño || !matchOriginador) return;
+
+      const id = row['ID Credito'];
+      if (!id) return;
+      
+      if (!creditos[id]) {
+        creditos[id] = {
+          fechaEmision: row['Fecha Emisión'],
+          originador: originador,
+          dueño: dueño,
+          montoOriginal: 0,
+          montoGenerado: 0,
+        };
+      }
+      creditos[id].montoOriginal += (row.Capital || 0) + (row['Capital Cobrado'] || 0);
+      creditos[id].montoGenerado += (row.Capital || 0) + (row['Capital Cobrado'] || 0) 
+                                 + (row['Interés'] || 0) + (row['Interés Cobrado'] || 0) 
+                                 + (row.IVA || 0) + (row['IVA Cobrado'] || 0);
+    });
+
+    const periodos = {};
+    Object.values(creditos).forEach(c => {
+      if (!c.fechaEmision) return;
+      const d = new Date(c.fechaEmision);
+      if (isNaN(d.getTime())) return;
+      
+      const periodo = c.fechaEmision.substring(0, 7); // 'YYYY-MM'
+      if (!periodos[periodo]) {
+        periodos[periodo] = { periodo, totalColocado: 0, totalGenerado: 0 };
+      }
+      
+      periodos[periodo].totalColocado += c.montoOriginal;
+      periodos[periodo].totalGenerado += c.montoGenerado;
+      
+      const origKey = `orig_${c.originador}`;
+      if (!periodos[periodo][origKey]) periodos[periodo][origKey] = 0;
+      periodos[periodo][origKey] += c.montoOriginal;
+    });
+
+    const allData = Object.values(periodos).sort((a, b) => a.periodo.localeCompare(b.periodo));
+    
+    allData.forEach(p => {
+      Object.keys(p).forEach(k => {
+        if (k.startsWith('orig_')) {
+          const originador = k.replace('orig_', '');
+          const val = p[k];
+          p[`origPct_${originador}`] = p.totalColocado > 0 ? (val / p.totalColocado) * 100 : 0;
+        }
+      });
+    });
+    
+    // Retornamos los últimos 12 periodos con actividad
+    return allData.slice(-12);
+  }, [data, filtroDueños, filtroOriginadores]);
+
+  const moraBuckets = useMemo(() => {
+    const buckets = [
+      { label: '1 - 30 días', min: 1, max: 30, Vencido: 0, AVencer: 0, Total: 0 },
+      { label: '31 - 60 días', min: 31, max: 60, Vencido: 0, AVencer: 0, Total: 0 },
+      { label: '61 - 90 días', min: 61, max: 90, Vencido: 0, AVencer: 0, Total: 0 },
+      { label: '91 - 180 días', min: 91, max: 180, Vencido: 0, AVencer: 0, Total: 0 },
+      { label: '181 - 365 días', min: 181, max: 365, Vencido: 0, AVencer: 0, Total: 0 },
+      { label: '> 365 días', min: 366, max: Infinity, Vencido: 0, AVencer: 0, Total: 0 },
+    ];
+
+    const creditosMora = {};
+    const fechaCorteDate = new Date(fechaCorte + 'T00:00:00');
+
+    // Primer pasada: Calcular la mora (maxDiasMora) a nivel CRÉDITO, sin importar quién sea el dueño
+    // de cada cuota. La mora es una propiedad del crédito.
+    data.forEach(row => {
+      const rawEstado = (row.Estado || '').toUpperCase();
+      let normalizedEstado = 'OTRO';
+      if (rawEstado.includes('APROBADO')) normalizedEstado = 'APROBADO';
+      else if (rawEstado.includes('ACTIVO') || rawEstado === 'PENDIENTE' || rawEstado === '') normalizedEstado = 'ACTIVO';
+      else if (rawEstado.includes('MOROS')) normalizedEstado = 'MOROSO';
+      else if (rawEstado.includes('INCOBRABLE')) normalizedEstado = 'INCOBRABLE';
+      else if (rawEstado.includes('JUDICIALIZADO')) normalizedEstado = 'JUDICIALIZADO';
+
+      if (normalizedEstado === 'MOROSO') {
+        const id = row['ID Credito'];
+        if (!id) return;
+        
+        if (!creditosMora[id]) {
+          creditosMora[id] = { maxDiasMora: 0, totalVencido: 0, totalAVencer: 0, total: 0 };
+        }
+        
+        const fVto = new Date(row['Fecha Vencimiento'] + 'T00:00:00');
+        const isVencido = fVto < fechaCorteDate;
+        const balanceCuota = (row.Capital || 0) + (row['Interés'] || 0) + (row.IVA || 0);
+
+        if (isVencido && balanceCuota > 0) {
+          let diasMora = Math.floor((fechaCorteDate - fVto) / (1000 * 60 * 60 * 24));
+          if (diasMora < 1) diasMora = 1;
+          
+          if (diasMora > creditosMora[id].maxDiasMora) {
+            creditosMora[id].maxDiasMora = diasMora;
+          }
+        }
+      }
+    });
+
+    // Segunda pasada: Sumarizar los valores monetarios, pero SOLO de las cuotas que cumplen
+    // los filtros seleccionados (Dueño, Originador).
+    data.forEach(row => {
+      const dueño = row.Dueño || 'Desconocido';
+      const originador = row.Originador || 'N/A';
+      
+      const matchDueño = filtroDueños.length === 0 || filtroDueños.includes(dueño);
+      const matchOriginador = filtroOriginadores.length === 0 || filtroOriginadores.includes(originador);
+      
+      if (!matchDueño || !matchOriginador) return;
+
+      const rawEstado = (row.Estado || '').toUpperCase();
+      let normalizedEstado = 'OTRO';
+      if (rawEstado.includes('APROBADO')) normalizedEstado = 'APROBADO';
+      else if (rawEstado.includes('ACTIVO') || rawEstado === 'PENDIENTE' || rawEstado === '') normalizedEstado = 'ACTIVO';
+      else if (rawEstado.includes('MOROS')) normalizedEstado = 'MOROSO';
+      else if (rawEstado.includes('INCOBRABLE')) normalizedEstado = 'INCOBRABLE';
+      else if (rawEstado.includes('JUDICIALIZADO')) normalizedEstado = 'JUDICIALIZADO';
+
+      if (normalizedEstado === 'MOROSO') {
+        const id = row['ID Credito'];
+        if (!id || !creditosMora[id]) return;
+        
+        const fVto = new Date(row['Fecha Vencimiento'] + 'T00:00:00');
+        const isVencido = fVto < fechaCorteDate;
+        const cuotaValue = (row.Capital || 0) + (row['Interés'] || 0) + (row.IVA || 0);
+
+        if (isVencido) {
+          creditosMora[id].totalVencido += cuotaValue;
+        } else {
+          creditosMora[id].totalAVencer += cuotaValue;
+        }
+        creditosMora[id].total += cuotaValue;
+      }
+    });
+
+    Object.values(creditosMora).forEach(credito => {
+      if (credito.maxDiasMora === 0) return; 
+
+      const bucket = buckets.find(b => credito.maxDiasMora >= b.min && credito.maxDiasMora <= b.max);
+      if (bucket) {
+        bucket.Vencido += credito.totalVencido;
+        bucket.AVencer += credito.totalAVencer;
+        bucket.Total += credito.total;
+      }
+    });
+
+    return buckets;
+  }, [data, fechaCorte, filtroDueños, filtroOriginadores]);
+
+  const colocacionesUniqueOriginadores = useMemo(() => {
+    const originadores = new Set();
+    colocacionesData.forEach(month => {
+      Object.keys(month).forEach(key => {
+        if (key.startsWith('orig_')) {
+          originadores.add(key.replace('orig_', ''));
+        }
+      });
+    });
+    return Array.from(originadores).sort();
+  }, [colocacionesData]);
 
   const composicionTableRows = useMemo(() => {
     const rows = [];
@@ -679,7 +838,7 @@ const DashboardCarteraPage = () => {
             transition: 'background 0.2s'
           }}
         >
-          Cartera Total
+          Resumen General
         </button>
         <button 
           onClick={() => setActiveTab('evolucion')}
@@ -694,7 +853,7 @@ const DashboardCarteraPage = () => {
             transition: 'background 0.2s'
           }}
         >
-          Evolución 12 Meses
+          Evolución Anual
         </button>
         <button 
           onClick={() => setActiveTab('composicion')}
@@ -709,7 +868,7 @@ const DashboardCarteraPage = () => {
             transition: 'background 0.2s'
           }}
         >
-          Distribución Dueños
+          Por Dueño
         </button>
         <button 
           onClick={() => setActiveTab('periodo')}
@@ -724,7 +883,22 @@ const DashboardCarteraPage = () => {
             transition: 'background 0.2s'
           }}
         >
-          Detalle por Período
+          Por Período
+        </button>
+        <button 
+          onClick={() => setActiveTab('colocaciones')}
+          style={{ 
+            padding: '10px 20px', 
+            borderRadius: '8px', 
+            border: 'none',
+            background: activeTab === 'colocaciones' ? 'var(--color-total)' : 'rgba(255,255,255,0.05)',
+            color: activeTab === 'colocaciones' ? 'white' : 'var(--text-secondary)',
+            cursor: 'pointer',
+            fontWeight: '600',
+            transition: 'background 0.2s'
+          }}
+        >
+          Colocaciones
         </button>
         <button 
           onClick={() => setActiveTab('estados')}
@@ -739,7 +913,7 @@ const DashboardCarteraPage = () => {
             transition: 'background 0.2s'
           }}
         >
-          Detalle de Estados
+          Estado Cuotas
         </button>
         <button 
           onClick={() => setActiveTab('morosidad')}
@@ -754,7 +928,7 @@ const DashboardCarteraPage = () => {
             transition: 'background 0.2s'
           }}
         >
-          Análisis de Morosidad
+          Morosidad
         </button>
       </div>
 
@@ -947,7 +1121,7 @@ const DashboardCarteraPage = () => {
       {(activeTab === 'composicion' || isExporting) && (
         <div id="export-tab-composicion">
           <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', marginBottom: '30px' }}>
-            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Composición de la Cartera por Dueño (%)</h2>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Composición de la Cartera por Dueño (Capital y Porcentaje)</h2>
             {filteredEvolutionData.length === 0 ? (
               <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>No hay datos disponibles.</p>
             ) : (
@@ -955,11 +1129,16 @@ const DashboardCarteraPage = () => {
                 <BarChart data={filteredEvolutionData} margin={{ top: 10, right: 30, left: 20, bottom: 25 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" vertical={false} />
                   <XAxis dataKey="periodo" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} tickMargin={10} />
-                  <YAxis stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} tickFormatter={(val) => `${val}%`} domain={[0, 100]} />
+                  <YAxis stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} tickFormatter={(val) => `$${(val / 1000000).toFixed(1)}M`} />
                   <Tooltip
                     contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.9)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff' }}
                     itemStyle={{ color: '#fff' }}
-                    formatter={(value, name) => [`${Number(value).toFixed(2)}%`, name]}
+                    formatter={(value, name, props) => {
+                      const pct = props.payload[`owner_${name}`];
+                      const pctStr = pct ? pct.toFixed(1) : '0.0';
+                      const valStr = (value / 1000000).toFixed(1);
+                      return [`${pctStr}% - $${valStr}M`, name];
+                    }}
                     labelFormatter={(label) => `Período: ${label}`}
                   />
                   <Legend wrapperStyle={{ paddingTop: '20px' }} />
@@ -967,7 +1146,7 @@ const DashboardCarteraPage = () => {
                     <Bar 
                       isAnimationActive={!isExporting}
                       key={dueño} 
-                      dataKey={`owner_${dueño}`} 
+                      dataKey={`ownerRaw_${dueño}`} 
                       name={dueño} 
                       stackId="a" 
                       fill={CHART_COLORS[index % CHART_COLORS.length]} 
@@ -1095,7 +1274,7 @@ const DashboardCarteraPage = () => {
         <div id="export-tab-estados">
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginBottom: '30px' }}>
             <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', flex: '1 1 300px', display: 'flex', flexDirection: 'column' }}>
-              <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600', textAlign: 'center' }}>Porcentaje por Estado</h2>
+              <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600', textAlign: 'center' }}>Distribución de Saldos por Estado del Crédito</h2>
               <div style={{ flex: 1, minHeight: '250px' }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -1128,7 +1307,7 @@ const DashboardCarteraPage = () => {
             </div>
 
             <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', flex: '2 1 500px' }}>
-              <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Distribución de Estados (Capital + Interés)</h2>
+              <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Total de Saldos agrupados por Estado del Crédito (Capital + Interés)</h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '15px' }}>
                 <div style={{ 
                   background: 'rgba(0,0,0,0.2)', 
@@ -1165,7 +1344,7 @@ const DashboardCarteraPage = () => {
           </div>
 
           <div className="glass-panel" style={{ display: exportFormat === 'l' ? 'none' : 'block', padding: '25px', borderRadius: '12px' }}>
-            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Detalle de Montos por Estado (Capital + Interés)</h2>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Detalle de Saldos (Vencidos vs A Vencer) según Estado del Crédito</h2>
             {estadosList.length === 0 ? (
               <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>No hay datos disponibles en la cartera activa.</p>
             ) : (
@@ -1210,11 +1389,11 @@ const DashboardCarteraPage = () => {
       {(activeTab === 'morosidad' || isExporting) && (
         <div id="export-tab-morosidad">
           <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', marginBottom: '30px', height: '400px' }}>
-            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Composición de la Morosidad</h2>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Composición de Saldos Vencidos (Mora Real)</h2>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={moraBuckets}
-                margin={{ top: 10, right: 30, left: 20, bottom: 25 }}
+                margin={{ top: 35, right: 30, left: 20, bottom: 25 }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
                 <XAxis dataKey="label" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)' }} />
@@ -1225,24 +1404,38 @@ const DashboardCarteraPage = () => {
                   itemStyle={{ color: 'white' }}
                 />
                 <Legend wrapperStyle={{ paddingTop: '20px' }} />
-                <Bar dataKey="Capital" stackId="a" fill="var(--color-capital)" name="Capital" />
-                <Bar dataKey="Interés" stackId="a" fill="var(--color-interes)" name="Interés" />
-                <Bar dataKey="IVA" stackId="a" fill="var(--color-iva)" name="IVA" />
+                <Bar isAnimationActive={!isExporting} dataKey="Vencido" fill="var(--color-interes)" name="Valor Vencido" radius={[4, 4, 0, 0]}>
+                  <LabelList
+                    dataKey="Vencido"
+                    position="top"
+                    fill="var(--color-interes)"
+                    formatter={(val) => val > 0 ? `$${(val / 1000000).toFixed(1)}M` : ''}
+                    style={{ fontSize: 11, fontWeight: 'bold' }}
+                  />
+                </Bar>
+                <Bar isAnimationActive={!isExporting} dataKey="AVencer" fill="var(--color-total)" name="Valor A Vencer" radius={[4, 4, 0, 0]}>
+                  <LabelList
+                    dataKey="AVencer"
+                    position="top"
+                    fill="var(--color-total)"
+                    formatter={(val) => val > 0 ? `$${(val / 1000000).toFixed(1)}M` : ''}
+                    style={{ fontSize: 11, fontWeight: 'bold' }}
+                  />
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
 
           <div className="glass-panel" style={{ display: exportFormat === 'l' ? 'none' : 'block', padding: '25px', borderRadius: '12px', marginBottom: '30px' }}>
-            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Detalle de Créditos Morosos</h2>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Detalle de Cuotas Vencidas (Clasificadas por Días de Mora)</h2>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', textAlign: 'left' }}>
                   <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500' }}>Días de Morosidad</th>
-                  <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Capital</th>
-                  <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Interés</th>
-                  <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>IVA</th>
-                  <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Total</th>
+                  <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Valor Vencido</th>
+                  <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Valor A Vencer</th>
+                  <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Deuda Total Crédito</th>
                 </tr>
               </thead>
               <tbody>
@@ -1252,23 +1445,120 @@ const DashboardCarteraPage = () => {
                     transition: 'background-color 0.2s',
                   }} className="table-row-hover">
                     <td style={{ padding: '15px 10px', fontWeight: '500' }}>{row.label}</td>
-                    <td style={{ padding: '15px 10px', textAlign: 'right', fontFamily: 'monospace' }}>{formatCurrency(row.Capital)}</td>
-                    <td style={{ padding: '15px 10px', textAlign: 'right', fontFamily: 'monospace' }}>{formatCurrency(row.Interés)}</td>
-                    <td style={{ padding: '15px 10px', textAlign: 'right', fontFamily: 'monospace' }}>{formatCurrency(row.IVA)}</td>
-                    <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--color-valoractual)' }}>{formatCurrency(row.Total)}</td>
+                    <td style={{ padding: '15px 10px', textAlign: 'right', fontFamily: 'monospace', color: 'var(--color-interes)' }}>{formatCurrency(row.Vencido)}</td>
+                    <td style={{ padding: '15px 10px', textAlign: 'right', fontFamily: 'monospace', color: 'var(--color-total)' }}>{formatCurrency(row.AVencer)}</td>
+                    <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--text-primary)' }}>{formatCurrency(row.Total)}</td>
                   </tr>
                 ))}
                 <tr style={{ backgroundColor: 'rgba(0,0,0,0.2)' }}>
                   <td style={{ padding: '15px 10px', fontWeight: 'bold' }}>TOTAL MOROSIDAD</td>
-                  <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace' }}>{formatCurrency(moraBuckets.reduce((acc, b) => acc + b.Capital, 0))}</td>
-                  <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace' }}>{formatCurrency(moraBuckets.reduce((acc, b) => acc + b.Interés, 0))}</td>
-                  <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace' }}>{formatCurrency(moraBuckets.reduce((acc, b) => acc + b.IVA, 0))}</td>
-                  <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--color-valoractual)' }}>{formatCurrency(moraBuckets.reduce((acc, b) => acc + b.Total, 0))}</td>
+                  <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--color-interes)' }}>{formatCurrency(moraBuckets.reduce((acc, b) => acc + b.Vencido, 0))}</td>
+                  <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--color-total)' }}>{formatCurrency(moraBuckets.reduce((acc, b) => acc + b.AVencer, 0))}</td>
+                  <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--text-primary)' }}>{formatCurrency(moraBuckets.reduce((acc, b) => acc + b.Total, 0))}</td>
                 </tr>
               </tbody>
             </table>
           </div>
         </div>
+        </div>
+      )}
+
+      {(activeTab === 'colocaciones' || isExporting) && (
+        <div id="export-tab-colocaciones">
+          <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', marginBottom: '30px' }}>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Volumen de Colocaciones (Capital Vendido por Período)</h2>
+            {colocacionesData.length === 0 ? (
+              <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>No hay datos de originación en este rango.</p>
+            ) : (
+              <ResponsiveContainer width="100%" height={400}>
+                <ComposedChart data={colocacionesData} margin={{ top: 10, right: 30, left: 20, bottom: 25 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" vertical={false} />
+                  <XAxis dataKey="periodo" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} tickMargin={10} />
+                  <YAxis yAxisId="left" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} tickFormatter={(val) => `$${(val / 1000000).toFixed(1)}M`} />
+                  <YAxis yAxisId="right" orientation="right" stroke="var(--color-total)" tick={{ fill: 'var(--color-total)', fontSize: 12 }} tickFormatter={(val) => `$${(val / 1000000).toFixed(1)}M`} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.9)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff' }}
+                    itemStyle={{ color: '#fff' }}
+                    formatter={(value, name, props) => {
+                      if (name === 'Monto Generado') {
+                         return [`$${(value / 1000000).toFixed(2)}M`, name];
+                      }
+                      const pct = props.payload[`origPct_${name}`];
+                      const pctStr = pct ? pct.toFixed(1) : '0.0';
+                      const valStr = (value / 1000000).toFixed(1);
+                      return [`${pctStr}% - $${valStr}M`, name];
+                    }}
+                    labelFormatter={(label) => `Período de Emisión: ${label}`}
+                  />
+                  <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                  {colocacionesUniqueOriginadores.map((originador, index) => (
+                    <Bar 
+                      yAxisId="left"
+                      isAnimationActive={!isExporting}
+                      key={originador} 
+                      dataKey={`orig_${originador}`} 
+                      name={originador} 
+                      stackId="a" 
+                      fill={CHART_COLORS[(index + 2) % CHART_COLORS.length]} 
+                    >
+                      <LabelList 
+                        dataKey={`origPct_${originador}`} 
+                        position="inside" 
+                        fill="#fff" 
+                        formatter={(val) => val > 5 ? `${val.toFixed(1)}%` : ''} 
+                        style={{ fontSize: 12, fontWeight: 'bold' }} 
+                      />
+                    </Bar>
+                  ))}
+                  <Line isAnimationActive={!isExporting} yAxisId="right" type="monotone" dataKey="totalGenerado" stroke="var(--color-total)" strokeWidth={3} name="Monto Generado" dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+          
+          <div className="glass-panel" style={{ display: exportFormat === 'l' ? 'none' : 'block', padding: '25px', borderRadius: '12px', marginTop: '20px', marginBottom: '30px' }}>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Detalle de Originaciones por Período</h2>
+            {colocacionesData.length === 0 ? (
+              <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>No hay datos disponibles.</p>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                      <th style={{ textAlign: 'left', padding: '12px', color: 'var(--text-secondary)', fontWeight: '500' }}>Período</th>
+                      <th style={{ textAlign: 'left', padding: '12px', color: 'var(--text-secondary)', fontWeight: '500' }}>Socio Originador</th>
+                      <th style={{ textAlign: 'right', padding: '12px', color: 'var(--text-secondary)', fontWeight: '500' }}>Volumen de Colocación</th>
+                      <th style={{ textAlign: 'right', padding: '12px', color: 'var(--text-secondary)', fontWeight: '500' }}>% del Período</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...colocacionesData].reverse().map((row, idx) => (
+                      <React.Fragment key={idx}>
+                        {colocacionesUniqueOriginadores.map(originador => {
+                          const val = row[`orig_${originador}`];
+                          if (!val) return null;
+                          const pct = row[`origPct_${originador}`];
+                          return (
+                            <tr key={`${row.periodo}-${originador}`} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }} className="table-row-hover">
+                              <td style={{ padding: '12px' }}>{row.periodo}</td>
+                              <td style={{ padding: '12px', fontWeight: '500', color: 'var(--text-primary)' }}>{originador}</td>
+                              <td style={{ padding: '12px', textAlign: 'right', fontFamily: 'monospace' }}>{formatCurrency(val)}</td>
+                              <td style={{ padding: '12px', textAlign: 'right', fontFamily: 'monospace', color: 'var(--text-secondary)' }}>{pct.toFixed(2)}%</td>
+                            </tr>
+                          );
+                        })}
+                        <tr style={{ borderBottom: '2px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
+                          <td colSpan={2} style={{ padding: '8px 12px', fontWeight: '600', color: 'var(--text-secondary)' }}>TOTAL {row.periodo}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace' }}>{formatCurrency(row.totalColocado)}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--text-secondary)' }}>100%</td>
+                        </tr>
+                      </React.Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

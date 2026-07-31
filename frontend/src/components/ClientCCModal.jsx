@@ -7,13 +7,13 @@ const formatCurrency = (num) => {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(num);
 };
 
-const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' }) => {
+const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '', isModal = true }) => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [processingCobranza, setProcessingCobranza] = useState(false);
 
-  const [filter, setFilter] = useState({ Credito: String(initialFilterCredito), Cuota: '', Vto: [], Estado: [] });
+  const [filter, setFilter] = useState({ Credito: String(initialFilterCredito), Cuota: '', Vto: [], Estado: [], Dueno: '' });
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [showEstadoFilter, setShowEstadoFilter] = useState(false);
   const [anticipadaMode, setAnticipadaMode] = useState(false);
@@ -26,14 +26,15 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
 
   const fetchCC = React.useCallback(async () => {
     try {
-      const res = await axiosClient.get(`/api/v1/clientes/${cuil}/cuenta_corriente`);
+      const url = fechaCorte ? `/api/v1/clientes/${cuil}/cuenta_corriente?fecha_corte=${fechaCorte}` : `/api/v1/clientes/${cuil}/cuenta_corriente`;
+      const res = await axiosClient.get(url);
       setData(res.data);
     } catch (err) {
       setError(err.response?.data?.detail || err.message);
     } finally {
       setLoading(false);
     }
-  }, [cuil]);
+  }, [cuil, fechaCorte]);
 
   useEffect(() => {
     fetchCC();
@@ -141,6 +142,7 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
       result = result.filter(c => filter.Vto.includes(c.vencimiento));
     }
     if (filter.Estado.length > 0) result = result.filter(c => filter.Estado.includes(c.estado));
+    if (filter.Dueno) result = result.filter(c => c.dueno && c.dueno.toLowerCase().includes(filter.Dueno.toLowerCase()));
 
     if (sortConfig.key) {
       result.sort((a, b) => {
@@ -192,6 +194,7 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
         'ID Externo': c.id_externo || '-',
         'Nro Cuota': c.nro_cuota,
         'Tipo Registro': 'CUOTA',
+        'Dueño': c.dueno || '-',
         'Estado': c.estado,
         'Vencimiento': c.vencimiento,
         'Fecha Cobranza': '-',
@@ -209,6 +212,7 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
             'ID Externo': c.id_externo || '-',
             'Nro Cuota': c.nro_cuota,
             'Tipo Registro': 'COBRANZA',
+            'Dueño': c.dueno || '-',
             'Estado': cob.tipo,
             'Vencimiento': c.vencimiento,
             'Fecha Cobranza': cob.fecha,
@@ -233,27 +237,35 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
     return <span style={{ marginLeft: '5px' }}>{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>;
   };
 
-  return (
-    <div style={{
-      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
-      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px',
-      backdropFilter: 'blur(5px)'
-    }}>
+  const content = (
       <div className="glass-panel" style={{
-        width: '100%', maxWidth: '1200px', height: '90vh', display: 'flex', flexDirection: 'column',
-        position: 'relative', padding: '24px'
+        width: '100%', maxWidth: isModal ? '1200px' : '100%', 
+        height: isModal ? '90vh' : 'auto', 
+        minHeight: isModal ? 'auto' : '800px',
+        display: 'flex', flexDirection: 'column',
+        position: 'relative', padding: '24px', animation: isModal ? 'none' : 'fadeIn 0.3s'
       }}>
-        <button onClick={onClose} style={{
-          position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none',
-          color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '20px', zIndex: 100
-        }}>✕</button>
+        {isModal && (
+          <button onClick={onClose} style={{
+            position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none',
+            color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '20px', zIndex: 100
+          }}>✕</button>
+        )}
         
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px', flexWrap: 'wrap', gap: '16px', flexShrink: 0 }}>
           <h2 style={{ margin: 0, fontFamily: 'var(--font-heading)' }}>
             Cuenta Corriente Unificada: {clientName ? `${clientName} (CUIL: ${cuil})` : cuil}
           </h2>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px', background: 'rgba(255,255,255,0.05)', padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderRight: '1px solid rgba(255,255,255,0.1)', paddingRight: '16px' }}>
+              <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }} title="Fecha base para evaluar dueños y saldos esperados">Fecha Eval:</span>
+              <input 
+                type="date" 
+                value={fechaCorte} 
+                onChange={(e) => setFechaCorte(e.target.value)}
+                style={{ padding: '4px 8px', fontSize: '12px', width: 'auto' }}
+              />
+            </div>
             <ExportExcelButton data={exportAllData} filteredData={exportFilteredData} filename={`CC_${cuil}`} />
             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
               <div className="toggle-switch">
@@ -263,17 +275,7 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
               <span style={{ fontSize: '13px', fontWeight: 'bold' }}>Cancelación Anticipada</span>
             </label>
             
-            {anticipadaMode ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderLeft: '1px solid rgba(255,255,255,0.1)', paddingLeft: '16px' }}>
-                <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Fecha Corte:</span>
-                <input 
-                  type="date" 
-                  value={fechaCorte} 
-                  onChange={(e) => setFechaCorte(e.target.value)}
-                  style={{ padding: '4px 8px', fontSize: '12px', width: 'auto' }}
-                />
-              </div>
-            ) : (
+            {!anticipadaMode && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderLeft: '1px solid rgba(255,255,255,0.1)', paddingLeft: '16px' }}>
                 <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Fecha Pago:</span>
                 <input 
@@ -301,7 +303,7 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
         ) : error ? (
           <div style={{ color: 'var(--error)', textAlign: 'center', padding: '40px' }}>{error}</div>
         ) : (
-          <div className="table-responsive" style={{ flex: 1, overflowY: 'auto', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
+          <div className="table-responsive" style={{ flex: 1, overflowY: 'auto', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', minHeight: isModal ? 'auto' : '650px' }}>
             <table className="data-table" style={{ width: '100%', margin: 0 }}>
               <thead style={{position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-panel)', boxShadow: '0 2px 4px rgba(0,0,0,0.2)'}}>
                 <tr>
@@ -322,6 +324,10 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
                         onChange={dates => setFilter({ ...filter, Vto: dates })}
                       />
                     </div>
+                  </th>
+                  <th onClick={() => handleSort('dueno')} style={{ cursor: 'pointer' }}>
+                    Dueño <SortIcon columnKey="dueno" />
+                    <input type="text" placeholder="Filtrar..." value={filter.Dueno} onChange={e => setFilter({ ...filter, Dueno: e.target.value })} onClick={e => e.stopPropagation()} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
                   </th>
                   <th onClick={() => handleSort('capital')} style={{ cursor: 'pointer' }}>Capital <SortIcon columnKey="capital" /></th>
                   <th onClick={() => handleSort('interes')} style={{ cursor: 'pointer' }}>Interés <SortIcon columnKey="interes" /></th>
@@ -351,7 +357,7 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
               <tbody>
                 {filteredAndSortedData.length === 0 ? (
                   <tr>
-                    <td colSpan="11" style={{ textAlign: 'center', padding: '40px' }}>
+                    <td colSpan="12" style={{ textAlign: 'center', padding: '40px' }}>
                       No hay cuotas registradas para este cliente con los filtros actuales.
                     </td>
                   </tr>
@@ -366,6 +372,7 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
                           <td>{creditoLabel}</td>
                           <td>{c.nro_cuota}</td>
                           <td>{c.vencimiento}</td>
+                          <td>{c.dueno || '-'}</td>
                           <td>{formatCurrency(c.capital)}</td>
                           <td>{formatCurrency(c.interes)}</td>
                           <td>{formatCurrency(c.iva)}</td>
@@ -408,7 +415,7 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
                         </tr>
                         {c.detalle_cobranzas && c.detalle_cobranzas.map((cob, j) => (
                           <tr key={`cob-${j}`} style={{ background: 'rgba(255, 255, 255, 0.02)', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                            <td colSpan="3" style={{ textAlign: 'right', borderLeft: '2px solid var(--accent-secondary)' }}>
+                            <td colSpan="4" style={{ textAlign: 'right', borderLeft: '2px solid var(--accent-secondary)' }}>
                               ↳ Cobranza ({cob.tipo}) el {cob.fecha}
                             </td>
                             <td>{formatCurrency(cob.capital ? -cob.capital : 0)}</td>
@@ -444,7 +451,7 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
               </tbody>
               <tfoot style={{ position: 'sticky', bottom: 0, zIndex: 10, background: 'var(--bg-panel)', boxShadow: '0 -2px 4px rgba(0,0,0,0.2)', fontWeight: 'bold' }}>
                 <tr>
-                  <td colSpan="3" style={{ textAlign: 'right' }}>TOTALES:</td>
+                  <td colSpan="4" style={{ textAlign: 'right' }}>TOTALES:</td>
                   <td>{formatCurrency(totals.capital)}</td>
                   <td>{formatCurrency(totals.interes)}</td>
                   <td>{formatCurrency(totals.iva)}</td>
@@ -458,6 +465,20 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '' })
           </div>
         )}
       </div>
+  );
+
+  if (!isModal) {
+    return content;
+  }
+
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+      backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px',
+      backdropFilter: 'blur(5px)'
+    }}>
+      {content}
     </div>
   );
 };

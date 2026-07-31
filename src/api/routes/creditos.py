@@ -784,8 +784,8 @@ async def importacion_masiva_creditos(
                     "creditos_existentes": res_wc.get('creditos', {}).get('existentes', 0),
                     "transferencias_importadas": res_wc.get('creditos', {}).get('nuevos', 0), 
                     "archivos_procesados": archivos_procesados,
-                    "pasados_a_firmado": "N/A",
-                    "pasados_a_activo": "N/A"
+                    "pasados_a_firmado": res_wc.get("documentos", {}).get("pasados_a_firmado", 0),
+                    "pasados_a_activo": res_wc.get("documentos", {}).get("pasados_a_activo", 0)
                 }
             except ImportValidationError as e:
                 db.rollback()
