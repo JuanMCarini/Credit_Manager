@@ -12,6 +12,28 @@ Esta guía detalla el paso a paso para publicar el sistema **Credit Manager** en
 
 ---
 
+## Paso 0: Ajustes Críticos de Seguridad (Previo al Despliegue)
+
+Antes de subir el código a los servicios externos, **es obligatorio** tener en cuenta estos ajustes para garantizar la seguridad en producción:
+
+1. **Cookies Seguras (Autenticación):**
+   - En el archivo `src/api/routes/auth.py`, dentro de los endpoints de login y refresh, la función `response.set_cookie` tiene el valor `secure=False`. 
+   - **Debes cambiarlo a `secure=True`** (o hacerlo depender de una variable de entorno) para que los navegadores modernos acepten la cookie al estar desplegado en dominios cruzados (Vercel <-> Railway) con HTTPS.
+
+2. **Secretos Fuertes (JWT):**
+   - Nunca uses la clave `secret_key` por defecto (`super_secret_key_change_in_production...`) definida en `src/config.py`. 
+   - Durante el despliegue en Railway (Paso 3), asegúrate de definir una variable de entorno `API_SECRET_KEY` con un valor largo y aleatorio (ej. generado con `openssl rand -hex 32`).
+
+3. **Orígenes CORS Estrictos:**
+   - Por defecto, la API permite peticiones desde `localhost`. Para producción, deberás agregar la URL de tu frontend.
+   - En Railway, crea la variable de entorno `API_ALLOWED_ORIGINS` y asígnale el dominio de tu frontend en Vercel (ej. `https://sistema.neocredit.com`).
+
+4. **Almacenamiento de Archivos (AWS S3 / R2):**
+   - Actualmente el código guarda las imágenes y legajos localmente en `data/uploads/`. 
+   - Como los servicios en la nube como Railway son efímeros (borran su disco al reiniciarse), **es obligatorio** implementar un servicio como AWS S3 en el código backend antes de salir a producción para no perder datos.
+
+---
+
 ## Paso 1: Configurar la Base de Datos (Supabase)
 
 1. Ingresa a [Supabase.com](https://supabase.com/) y crea una cuenta gratuita.
@@ -33,14 +55,14 @@ Esta guía detalla el paso a paso para publicar el sistema **Credit Manager** en
 
 ## Paso 2: Configurar Almacenamiento en la Nube (AWS S3)
 
-Dado que los archivos de "Uploads" no deben guardarse localmente en el servidor, la mejor práctica es usar Amazon S3 (o R2 de Cloudflare). *(Nota: Actualmente el sistema los guarda localmente y los sirve por `/api/archivos`, esta sección es para una futura implementación en la nube).*
+Dado que el sistema de archivos de Railway es **efímero** (se borra en cada actualización o reinicio del servidor), **es obligatorio implementar un almacenamiento externo como Amazon S3 o Cloudflare R2 antes de salir a producción**, para evitar la pérdida de PDFs, legajos e imágenes subidas localmente (carpeta `data/uploads`).
 
 1. Crea una cuenta en [AWS Console](https://aws.amazon.com/).
 2. Ve al servicio **S3** y crea un nuevo **Bucket** (ej. `credit-manager-legajos`).
 3. **¡IMPORTANTE - SEGURIDAD!:** Asegúrate de que la configuración **"Block all public access"** esté **activada**. Los archivos (DNI, Legajos) son sumamente sensibles y bajo ninguna circunstancia el bucket debe ser público.
 4. Ve a **IAM (Identity and Access Management)** y crea un usuario de acceso programático. Otórgale permisos exclusivos para leer y escribir en el bucket que acabas de crear.
 5. Anota el `AWS_ACCESS_KEY_ID` y el `AWS_SECRET_ACCESS_KEY`.
-6. En el futuro, cuando implementes Boto3 en el backend, usarás "Pre-signed URLs" para que el frontend pueda descargar los archivos temporalmente de manera segura.
+6. Implementa Boto3 (o una librería compatible con S3) en el backend y refactoriza la carga de archivos para subirlos al Bucket. Para visualizarlos, deberás usar "Pre-signed URLs" para que el frontend pueda descargar los archivos temporalmente de manera 100% segura.
 
 ---
 
