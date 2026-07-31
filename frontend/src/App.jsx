@@ -21,6 +21,7 @@ import PortfolioLiquidationsProcessingPage from './pages/PortfolioLiquidationsPr
 import UsersListPage from './pages/UsersListPage';
 import CreditProcessesPage from './pages/CreditProcessesPage';
 import PapeleriaPage from './pages/PapeleriaPage';
+import BcraReportsPage from './pages/BcraReportsPage';
 
 function App() {
   return (
@@ -51,6 +52,7 @@ function App() {
             <Route path="acciones" element={<SystemActionsPage />} />
             <Route path="papeleria/creditos" element={<PapeleriaPage categoria="creditos" />} />
             <Route path="papeleria/ventas" element={<PapeleriaPage categoria="ventas_cartera" />} />
+            <Route path="reportes/bcra" element={<BcraReportsPage />} />
             
             {/* Rutas exclusivas Administrador */}
             <Route element={<ProtectedRoute allowedRoles={[]} />}>
