@@ -166,16 +166,53 @@ const BcraReportsPage = () => {
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', marginBottom: '32px' }}>
-          <div className="form-group">
+          <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <label>Tipo de Reporte</label>
-            <select 
-              name="tipo_reporte" 
-              value={filters.tipo_reporte} 
-              onChange={handleChange}
-            >
-              <option value="NORMAL">Normal (Por Defecto)</option>
-              <option value="RECTIFICATORIO">Rectificatorio</option>
-            </select>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '4px' }}>
+              <span style={{ 
+                fontSize: '14px', 
+                color: filters.tipo_reporte === 'NORMAL' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                fontWeight: filters.tipo_reporte === 'NORMAL' ? '600' : '400'
+              }}>
+                Normal
+              </span>
+              
+              <label style={{ position: 'relative', display: 'inline-block', width: '44px', height: '24px', margin: 0, cursor: 'pointer' }}>
+                <input 
+                  type="checkbox" 
+                  style={{ opacity: 0, width: 0, height: 0, position: 'absolute' }}
+                  checked={filters.tipo_reporte === 'RECTIFICATORIO'}
+                  onChange={(e) => handleChange({ target: { name: 'tipo_reporte', value: e.target.checked ? 'RECTIFICATORIO' : 'NORMAL' } })}
+                />
+                <span style={{
+                  position: 'absolute',
+                  top: 0, left: 0, right: 0, bottom: 0,
+                  backgroundColor: filters.tipo_reporte === 'RECTIFICATORIO' ? 'var(--primary-color, #4CAF50)' : '#ccc',
+                  transition: '0.3s',
+                  borderRadius: '24px'
+                }}>
+                  <span style={{
+                    position: 'absolute',
+                    height: '18px',
+                    width: '18px',
+                    left: filters.tipo_reporte === 'RECTIFICATORIO' ? '23px' : '3px',
+                    bottom: '3px',
+                    backgroundColor: 'white',
+                    transition: '0.3s',
+                    borderRadius: '50%',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                  }} />
+                </span>
+              </label>
+
+              <span style={{ 
+                fontSize: '14px', 
+                color: filters.tipo_reporte === 'RECTIFICATORIO' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                fontWeight: filters.tipo_reporte === 'RECTIFICATORIO' ? '600' : '400'
+              }}>
+                Rectificatorio
+              </span>
+            </div>
           </div>
 
           {filters.tipo_reporte === 'RECTIFICATORIO' && (
