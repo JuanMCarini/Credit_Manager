@@ -318,6 +318,7 @@ def upload_document(
         }
     }
 
+@router.get("")
 @router.get("/")
 def list_documents(socio_id: int = None, categoria: str = None, db: Session = Depends(get_db)):
     query = db.query(DocumentoPapeleria)
@@ -956,6 +957,7 @@ def _generar_pdf_for_credito(credito: Credito, db: Session) -> str:
     valid_ids = [s for s in socio_ids if s is not None]
     
     docs = db.query(DocumentoPapeleria).filter(
+        DocumentoPapeleria.categoria == "creditos",
         or_(
             DocumentoPapeleria.socio_id.is_(None),
             DocumentoPapeleria.socio_id.in_(valid_ids) if valid_ids else False

@@ -69,7 +69,7 @@ def saldos(
     )
 
     # 2. Data Mapping
-    for col in ["fecha_emision", "cliente_cuil", "cartera_id", "socio_originador_id", "tipo_credito"]:
+    for col in ["fecha_emision", "cliente_cuil", "cartera_id", "socio_originador_id", "tipo_credito", "estado"]:
         df_ctas[col] = df_ctas["credito_id"].map(df_crts[col])
     
     df_ctas["estado_credito"] = df_ctas["credito_id"].map(df_crts["estado"])
@@ -132,7 +132,7 @@ def saldos(
     df["Dueño"] = np.select(conditions, choices, default=company_data.razon_social)
 
     df.drop(
-        columns=["Dueño_id_tmp", "Partner_Name", "tipo_op", "comercializada"],
+        columns=["Dueño_id_tmp", "Partner_Name", "comercializada"],
         inplace=True,
         errors="ignore",
     )

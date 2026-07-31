@@ -354,6 +354,9 @@ def procesar_documentos_web_carga(file_paths: list, db_session: Session, upload_
 
     db_session.flush()
     
+    pasados_a_firmado = 0
+    pasados_a_activo = 0
+
     # Actualizar estados de los créditos afectados
     for c_id in creditos_afectados:
         c = db_session.query(Credito).get(c_id)
@@ -368,6 +371,7 @@ def procesar_documentos_web_carga(file_paths: list, db_session: Session, upload_
         if estado_actual == "APROBADO":
             c.estado = EstadoCredito.FIRMADO
             estado_actual = "FIRMADO"
+            pasados_a_firmado += 1
             
         if estado_actual == "FIRMADO":
             # Verificar si todas sus transferencias tienen documento
@@ -382,9 +386,15 @@ def procesar_documentos_web_carga(file_paths: list, db_session: Session, upload_
                         
                 if todas_con_comprobante:
                     c.estado = EstadoCredito.ACTIVO
+                    pasados_a_activo += 1
                     
     db_session.flush()
-    return {"procesados": procesados, "errores": errores}
+    return {
+        "procesados": procesados, 
+        "errores": errores,
+        "pasados_a_firmado": pasados_a_firmado,
+        "pasados_a_activo": pasados_a_activo
+    }
 
 def importar_datos_web_carga(filepath: str, db_session: Session, socio_id_web_carga: int, file_paths_docs: list = None, upload_dir: str = None):
     """

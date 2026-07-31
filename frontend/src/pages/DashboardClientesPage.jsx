@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import axiosClient from '../api/axiosClient';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Search, User, Briefcase, MapPin, Phone, Mail, FileText, CreditCard } from 'lucide-react';
+import ClientCCModal from '../components/ClientCCModal';
 
 const formatCurrency = (value) => {
   if (value === null || value === undefined) return "$ 0";
@@ -362,6 +363,16 @@ const DashboardClientesPage = () => {
             >
               Créditos y Estado
             </button>
+            <button 
+              onClick={() => setActiveTab('cuenta_corriente')}
+              style={{ 
+                padding: '10px 20px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: '600', transition: 'all 0.2s',
+                background: activeTab === 'cuenta_corriente' ? 'var(--accent-primary)' : 'rgba(255,255,255,0.05)',
+                color: activeTab === 'cuenta_corriente' ? 'white' : 'var(--text-secondary)'
+              }}
+            >
+              Cuenta Corriente
+            </button>
           </div>
 
           {/* TAB 1: DATOS GENERICOS */}
@@ -581,6 +592,17 @@ const DashboardClientesPage = () => {
                 </div>
               )}
 
+            </div>
+          )}
+
+          {/* TAB 3: CUENTA CORRIENTE */}
+          {activeTab === 'cuenta_corriente' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', animation: 'fadeIn 0.3s' }}>
+              <ClientCCModal 
+                cuil={selectedCuil} 
+                clientName={`${clientData.Apellido}, ${clientData.Nombre}`} 
+                isModal={false} 
+              />
             </div>
           )}
 
