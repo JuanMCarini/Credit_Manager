@@ -217,13 +217,13 @@ const BcraReportsPage = () => {
 
           {filters.tipo_reporte === 'RECTIFICATORIO' && (
             <div className="form-group">
-              <label>Cliente (ID, CUIL o DNI)</label>
+              <label>Cliente (ID, CUIL o DNI) - Separados por coma</label>
               <input 
                 type="text" 
                 name="cliente" 
                 value={filters.cliente} 
                 onChange={handleChange}
-                placeholder="Ingrese ID, CUIL o DNI del cliente"
+                placeholder="Ej: 20334455667, 105, 34556677"
                 required={filters.tipo_reporte === 'RECTIFICATORIO'}
               />
             </div>
