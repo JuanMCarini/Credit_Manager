@@ -192,45 +192,65 @@ def generate_bcra_files(
     )
     
     if agg_df.empty:
-        return _create_zip("", "", "0;000,00\r\n", tipo_reporte)
+        if tipo_reporte == "RECTIFICATORIO":
+            return _create_zip_rectificativa("")
+        return _create_zip("", "", "0;000,00\r\n")
 
-    proveedores_lines = []
-    importes_lines = []
-    
-    for _, row in agg_df.iterrows():
-        cuil = str(row["CUIL Cliente"]).replace("-", "").strip()
-        nombre = str(row["Nombre"])
-        sit = row["Situacion"]
-        total_miles = format_bcra_amount(row["Total_Deuda"])
-        
-        nombre_padded = nombre.ljust(55)[:55]
-        total_miles_proveedores = str(total_miles).zfill(14)
-        total_miles_importes = str(total_miles).zfill(12)
-        
-        proveedores_lines.append(f"11;{cuil};{nombre_padded};{sit};{total_miles_proveedores};0;0;0000;00")
-        importes_lines.append(f"11;{cuil};09;{total_miles_importes}")
-
-    proveedores_txt = "\r\n".join(proveedores_lines) + "\r\n"
-    importes_txt = "\r\n".join(importes_lines) + "\r\n"
-    
-    if min_tna_val is not None:
-        tna_formatted = f"{min_tna_val * 100:06.2f}".replace(".", ",")
-        tasa_txt = f"1;{tna_formatted}\r\n"
+    if tipo_reporte == "RECTIFICATORIO":
+        rectificativa_lines = []
+        periodo = fecha_corte.strftime("%Y%m")
+        for _, row in agg_df.iterrows():
+            cuil = str(row["CUIL Cliente"]).replace("-", "").strip()
+            sit = row["Situacion"]
+            total_miles = format_bcra_amount(row["Total_Deuda"])
+            total_miles_12 = str(total_miles).zfill(12)
+            
+            # Format: YYYYMM ; 11 ; CUIL ; 2 ; Sit ; 0 ; Importe (12)
+            rectificativa_lines.append(f"{periodo};11;{cuil};2;{sit};0;{total_miles_12}")
+            
+        rect_txt = "\r\n".join(rectificativa_lines) + "\r\n"
+        return _create_zip_rectificativa(rect_txt)
     else:
-        tasa_txt = "1;000,00\r\n"
+        proveedores_lines = []
+        importes_lines = []
         
-    return _create_zip(proveedores_txt, importes_txt, tasa_txt, tipo_reporte)
+        for _, row in agg_df.iterrows():
+            cuil = str(row["CUIL Cliente"]).replace("-", "").strip()
+            nombre = str(row["Nombre"])
+            sit = row["Situacion"]
+            total_miles = format_bcra_amount(row["Total_Deuda"])
+            
+            nombre_padded = nombre.ljust(55)[:55]
+            total_miles_proveedores = str(total_miles).zfill(14)
+            total_miles_importes = str(total_miles).zfill(12)
+            
+            proveedores_lines.append(f"11;{cuil};{nombre_padded};{sit};{total_miles_proveedores};0;0;0000;00")
+            importes_lines.append(f"11;{cuil};09;{total_miles_importes}")
+
+        proveedores_txt = "\r\n".join(proveedores_lines) + "\r\n"
+        importes_txt = "\r\n".join(importes_lines) + "\r\n"
+        
+        if min_tna_val is not None:
+            tna_formatted = f"{min_tna_val * 100:06.2f}".replace(".", ",")
+            tasa_txt = f"1;{tna_formatted}\r\n"
+        else:
+            tasa_txt = "1;000,00\r\n"
+            
+        return _create_zip(proveedores_txt, importes_txt, tasa_txt)
 
 
-def _create_zip(proveedores: str, importes: str, tasa: str, tipo_reporte: str = "NORMAL") -> bytes:
+def _create_zip(proveedores: str, importes: str, tasa: str) -> bytes:
     zip_buffer = io.BytesIO()
-    
-    prov_filename = "RECTPARC.TXT" if tipo_reporte == "RECTIFICATORIO" else "PROVEEDORES.TXT"
-    
     with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
-        zip_file.writestr(prov_filename, proveedores.encode('cp1252', errors='replace'))
+        zip_file.writestr("PROVEEDORES.TXT", proveedores.encode('cp1252', errors='replace'))
         zip_file.writestr("IMPORTES.TXT", importes.encode('cp1252', errors='replace'))
         zip_file.writestr("TASA.TXT", tasa.encode('cp1252', errors='replace'))
+    return zip_buffer.getvalue()
+
+def _create_zip_rectificativa(rectificativa: str) -> bytes:
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
+        zip_file.writestr("RECTIFICATIVA.TXT", rectificativa.encode('cp1252', errors='replace'))
     return zip_buffer.getvalue()
 
 
@@ -264,49 +284,66 @@ def generar_reporte_personalizado_excel(
             total_miles_proveedores = str(total_miles).zfill(14)
             total_miles_importes = str(total_miles).zfill(12)
             
-            proveedores_data.append({
-                "Tipo Id": "11",
-                "Nro Id": cuil,
-                "Nombre": nombre_padded,
-                "Situacion": sit,
-                "Importe": total_miles_proveedores,
-                "Encuadramiento Art 26": "0",
-                "Recategorizacion": "0",
-                "Dias Atraso": "0000",
-                "Sit sin reclasif": "00"
-            })
-            
-            importes_data.append({
-                "Tipo Id": "11",
-                "Nro Id": cuil,
-                "Tipo Asistencia": "09",
-                "Importe": total_miles_importes
-            })
+            if tipo_reporte == "RECTIFICATORIO":
+                periodo = fecha_corte.strftime("%Y%m")
+                total_miles_12 = str(total_miles).zfill(12)
+                proveedores_data.append({
+                    "Periodo": periodo,
+                    "Tipo Id": "11",
+                    "CUIL": cuil,
+                    "Columna 4": "2",
+                    "Situacion": sit,
+                    "Columna 6": "0",
+                    "Importe": total_miles_12
+                })
+            else:
+                proveedores_data.append({
+                    "Tipo Id": "11",
+                    "Nro Id": cuil,
+                    "Nombre": nombre_padded,
+                    "Situacion": sit,
+                    "Importe": total_miles_proveedores,
+                    "Encuadramiento Art 26": "0",
+                    "Recategorizacion": "0",
+                    "Dias Atraso": "0000",
+                    "Sit sin reclasif": "00"
+                })
+                
+                importes_data.append({
+                    "Tipo Id": "11",
+                    "Nro Id": cuil,
+                    "Tipo Asistencia": "09",
+                    "Importe": total_miles_importes
+                })
             
     tasa_data = []
-    if agg_df.empty:
-        tasa_data.append({"Tipo": "0", "TNA": "000,00"})
-    else:
-        if min_tna_val is not None:
-            tna_formatted = f"{min_tna_val * 100:06.2f}".replace(".", ",")
-            tasa_data.append({"Tipo": "1", "TNA": tna_formatted})
+    if tipo_reporte != "RECTIFICATORIO":
+        if agg_df.empty:
+            tasa_data.append({"Tipo": "0", "TNA": "000,00"})
         else:
-            tasa_data.append({"Tipo": "1", "TNA": "000,00"})
+            if min_tna_val is not None:
+                tna_formatted = f"{min_tna_val * 100:06.2f}".replace(".", ",")
+                tasa_data.append({"Tipo": "1", "TNA": tna_formatted})
+            else:
+                tasa_data.append({"Tipo": "1", "TNA": "000,00"})
             
     df_prov = pd.DataFrame(proveedores_data)
     df_imp = pd.DataFrame(importes_data)
     df_tasa = pd.DataFrame(tasa_data)
 
-    # If DataFrames are empty, ensure they still have columns
-    if df_prov.empty:
-        df_prov = pd.DataFrame(columns=["Tipo Id", "Nro Id", "Nombre", "Situacion", "Importe", "Encuadramiento Art 26", "Recategorizacion", "Dias Atraso", "Sit sin reclasif"])
-    if df_imp.empty:
-        df_imp = pd.DataFrame(columns=["Tipo Id", "Nro Id", "Tipo Asistencia", "Importe"])
-        
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df_prov.to_excel(writer, index=False, sheet_name='PROVEEDORES')
-        df_imp.to_excel(writer, index=False, sheet_name='IMPORTES')
-        df_tasa.to_excel(writer, index=False, sheet_name='TASA')
+        if tipo_reporte == "RECTIFICATORIO":
+            if df_prov.empty:
+                df_prov = pd.DataFrame(columns=["Periodo", "Tipo Id", "CUIL", "Columna 4", "Situacion", "Columna 6", "Importe"])
+            df_prov.to_excel(writer, index=False, sheet_name='RECTIFICATIVA')
+        else:
+            if df_prov.empty:
+                df_prov = pd.DataFrame(columns=["Tipo Id", "Nro Id", "Nombre", "Situacion", "Importe", "Encuadramiento Art 26", "Recategorizacion", "Dias Atraso", "Sit sin reclasif"])
+            if df_imp.empty:
+                df_imp = pd.DataFrame(columns=["Tipo Id", "Nro Id", "Tipo Asistencia", "Importe"])
+            df_prov.to_excel(writer, index=False, sheet_name='PROVEEDORES')
+            df_imp.to_excel(writer, index=False, sheet_name='IMPORTES')
+            df_tasa.to_excel(writer, index=False, sheet_name='TASA')
     output.seek(0)
     return output
