@@ -230,7 +230,7 @@ const DashboardCarteraPage = () => {
     const fetchDashboardData = async () => {
       try {
         setLoading(true);
-        const [response, evolutionResponse] = await Promise.all([
+        const [response, evolutionResponse, tnaResponse] = await Promise.all([
           axiosClient.get('/api/v1/reports/balances', {
             params: {
               fecha: fechaCorte,
@@ -240,10 +240,22 @@ const DashboardCarteraPage = () => {
           }),
           axiosClient.get('/api/v1/reports/balances/evolution', {
             params: { meses: 12, fecha: fechaCorteDate.toISOString() }
+          }),
+          axiosClient.get('/api/v1/carteras/venta/tna_reciente', {
+            params: { fecha: fechaCorte }
+          }).catch(err => {
+            console.error("Error fetching recent TNA:", err);
+            return { data: { tna: 0 } };
           })
         ]);
         setData(response.data);
         setEvolutionData(evolutionResponse.data);
+        
+        if (tnaResponse && tnaResponse.data && tnaResponse.data.tna !== undefined) {
+           const newTna = tnaResponse.data.tna;
+           setTasaDescuento(newTna);
+           setTasaDescuentoStr(`${newTna} %`);
+        }
       } catch (err) {
         console.error("Error cargando dashboard:", err);
         setError("Ocurrió un error al cargar la información del dashboard.");
