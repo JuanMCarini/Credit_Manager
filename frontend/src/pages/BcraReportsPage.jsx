@@ -20,7 +20,9 @@ const BcraReportsPage = () => {
     comprado: 'Ambas',
     nro_orden: '1',
     sit_mora: 'Todas',
-    min_monto_mora: '2500'
+    min_monto_mora: '2500',
+    tipo_reporte: 'NORMAL',
+    cliente: ''
   });
 
   const handleChange = (e) => {
@@ -37,6 +39,10 @@ const BcraReportsPage = () => {
     if (filters.nro_orden) params.append('nro_orden', filters.nro_orden);
     if (filters.sit_mora !== 'Todas') params.append('sit_mora', filters.sit_mora);
     if (filters.min_monto_mora !== '') params.append('min_monto_mora', filters.min_monto_mora);
+    params.append('tipo_reporte', filters.tipo_reporte);
+    if (filters.tipo_reporte === 'RECTIFICATORIO' && filters.cliente) {
+      params.append('cliente', filters.cliente);
+    }
     return params;
   };
 
@@ -157,11 +163,37 @@ const BcraReportsPage = () => {
               min="0"
             />
           </div>
-
-
         </div>
 
-        <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', marginTop: '40px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', marginBottom: '32px' }}>
+          <div className="form-group">
+            <label>Tipo de Reporte</label>
+            <select 
+              name="tipo_reporte" 
+              value={filters.tipo_reporte} 
+              onChange={handleChange}
+            >
+              <option value="NORMAL">Normal (Por Defecto)</option>
+              <option value="RECTIFICATORIO">Rectificatorio</option>
+            </select>
+          </div>
+
+          {filters.tipo_reporte === 'RECTIFICATORIO' && (
+            <div className="form-group">
+              <label>Cliente (ID, CUIL o DNI)</label>
+              <input 
+                type="text" 
+                name="cliente" 
+                value={filters.cliente} 
+                onChange={handleChange}
+                placeholder="Ingrese ID, CUIL o DNI del cliente"
+                required={filters.tipo_reporte === 'RECTIFICATORIO'}
+              />
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', gap: '16px', justifyContent: 'flex-end', marginTop: '24px' }}>
           <button 
             type="button" 
             className="btn-secondary" 

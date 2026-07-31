@@ -19,6 +19,8 @@ def export_bcra_report(
     sit_mora: Optional[str] = Query(None, description="Filtro por situación BCRA (ej. '01', '02')."),
     comprado: Optional[str] = Query(None, description="'Ambas', 'Propias' o 'Terceros'."),
     min_monto_mora: Optional[float] = Query(None, description="Límite mínimo de monto de mora."),
+    tipo_reporte: Optional[str] = Query("NORMAL", description="NORMAL o RECTIFICATORIO"),
+    cliente: Optional[str] = Query(None, description="ID, CUIL, o DNI del cliente para rectificatorio."),
 ):
     try:
         zip_bytes = generate_bcra_files(
@@ -30,6 +32,8 @@ def export_bcra_report(
             sit_mora=sit_mora,
             comprado=comprado,
             min_monto_mora=min_monto_mora,
+            tipo_reporte=tipo_reporte,
+            cliente=cliente,
         )
         
         headers = {
@@ -51,6 +55,8 @@ def export_normal_excel(
     sit_mora: Optional[str] = Query(None, description="Filtro por situación BCRA (ej. '01', '02')."),
     comprado: Optional[str] = Query(None, description="'Ambas', 'Propias' o 'Terceros'."),
     min_monto_mora: Optional[float] = Query(None, description="Límite mínimo de monto de mora."),
+    tipo_reporte: Optional[str] = Query("NORMAL", description="NORMAL o RECTIFICATORIO"),
+    cliente: Optional[str] = Query(None, description="ID, CUIL, o DNI del cliente para rectificatorio."),
 ):
     try:
         excel_bytes_io = generar_reporte_personalizado_excel(
@@ -62,6 +68,8 @@ def export_normal_excel(
             sit_mora=sit_mora,
             comprado=comprado,
             min_monto_mora=min_monto_mora,
+            tipo_reporte=tipo_reporte,
+            cliente=cliente,
         )
         
         headers = {

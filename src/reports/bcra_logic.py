@@ -89,6 +89,8 @@ def _get_bcra_aggregated_data(
     sit_mora: Optional[str] = None,
     comprado: Optional[str] = None,
     min_monto_mora: Optional[float] = None,
+    tipo_reporte: Optional[str] = "NORMAL",
+    cliente: Optional[str] = None,
 ):
     dt_corte = datetime.combine(fecha_corte, datetime.min.time())
     
@@ -101,6 +103,26 @@ def _get_bcra_aggregated_data(
     df = saldos(fecha=dt_corte, con_saldo=True, propias=propias)
     df = df.reset_index()
     df = apply_custom_filters(df, origen, socio_originador, nro_orden, None, comprado)
+
+    if tipo_reporte == "RECTIFICATORIO" and cliente and cliente.strip():
+        cid = cliente.strip()
+        with engine.connect() as conn:
+            try:
+                int_cid = int(cid)
+                where_clause = "id = :int_cid OR cuil = :cid OR dni = :cid"
+                params = {"int_cid": int_cid, "cid": cid}
+            except ValueError:
+                where_clause = "cuil = :cid OR dni = :cid"
+                params = {"cid": cid}
+                
+            res = conn.execute(text(f"SELECT cuil FROM clientes WHERE {where_clause}"), params).fetchall()
+            matching_cuils = [r[0] for r in res]
+            
+        if matching_cuils:
+            df = df[df["CUIL Cliente"].isin(matching_cuils)]
+        else:
+            return pd.DataFrame(), None
+
     
     if vto_hasta:
         dt_vto = datetime.combine(vto_hasta, datetime.min.time())
@@ -165,9 +187,11 @@ def generate_bcra_files(
     sit_mora: Optional[str] = None,
     comprado: Optional[str] = None,
     min_monto_mora: Optional[float] = None,
+    tipo_reporte: Optional[str] = "NORMAL",
+    cliente: Optional[str] = None,
 ) -> bytes:
     agg_df, min_tna_val = _get_bcra_aggregated_data(
-        fecha_corte, vto_hasta, origen, socio_originador, nro_orden, sit_mora, comprado, min_monto_mora
+        fecha_corte, vto_hasta, origen, socio_originador, nro_orden, sit_mora, comprado, min_monto_mora, tipo_reporte, cliente
     )
     
     if agg_df.empty:
@@ -219,9 +243,11 @@ def generar_reporte_personalizado_excel(
     sit_mora: Optional[str] = None,
     comprado: Optional[str] = None,
     min_monto_mora: Optional[float] = None,
+    tipo_reporte: Optional[str] = "NORMAL",
+    cliente: Optional[str] = None,
 ) -> io.BytesIO:
     agg_df, min_tna_val = _get_bcra_aggregated_data(
-        fecha_corte, vto_hasta, origen, socio_originador, nro_orden, sit_mora, comprado, min_monto_mora
+        fecha_corte, vto_hasta, origen, socio_originador, nro_orden, sit_mora, comprado, min_monto_mora, tipo_reporte, cliente
     )
     
     proveedores_data = []
