@@ -105,19 +105,21 @@ def _get_bcra_aggregated_data(
     df = apply_custom_filters(df, origen, socio_originador, nro_orden, None, comprado)
 
     if tipo_reporte == "RECTIFICATORIO" and cliente and cliente.strip():
-        cid = cliente.strip()
+        cids = [c.strip() for c in cliente.split(",") if c.strip()]
+        matching_cuils = []
         with engine.connect() as conn:
-            try:
-                int_cid = int(cid)
-                where_clause = "id = :int_cid OR cuil = :cid OR dni = :cid"
-                params = {"int_cid": int_cid, "cid": cid}
-            except ValueError:
-                where_clause = "cuil = :cid OR dni = :cid"
-                params = {"cid": cid}
+            for cid in cids:
+                try:
+                    int_cid = int(cid)
+                    where_clause = "id = :int_cid OR cuil = :cid OR dni = :cid"
+                    params = {"int_cid": int_cid, "cid": cid}
+                except ValueError:
+                    where_clause = "cuil = :cid OR dni = :cid"
+                    params = {"cid": cid}
+                    
+                res = conn.execute(text(f"SELECT cuil FROM clientes WHERE {where_clause}"), params).fetchall()
+                matching_cuils.extend([r[0] for r in res])
                 
-            res = conn.execute(text(f"SELECT cuil FROM clientes WHERE {where_clause}"), params).fetchall()
-            matching_cuils = [r[0] for r in res]
-            
         if matching_cuils:
             df = df[df["CUIL Cliente"].isin(matching_cuils)]
         else:
@@ -195,7 +197,7 @@ def generate_bcra_files(
     )
     
     if agg_df.empty:
-        return _create_zip("", "", "0;000,00\r\n")
+        return _create_zip("", "", "0;000,00\r\n", tipo_reporte)
 
     proveedores_lines = []
     importes_lines = []
@@ -222,13 +224,16 @@ def generate_bcra_files(
     else:
         tasa_txt = "1;000,00\r\n"
         
-    return _create_zip(proveedores_txt, importes_txt, tasa_txt)
+    return _create_zip(proveedores_txt, importes_txt, tasa_txt, tipo_reporte)
 
 
-def _create_zip(proveedores: str, importes: str, tasa: str) -> bytes:
+def _create_zip(proveedores: str, importes: str, tasa: str, tipo_reporte: str = "NORMAL") -> bytes:
     zip_buffer = io.BytesIO()
+    
+    prov_filename = "RECTPARC.TXT" if tipo_reporte == "RECTIFICATORIO" else "PROVEEDORES.TXT"
+    
     with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
-        zip_file.writestr("PROVEEDORES.TXT", proveedores.encode('cp1252', errors='replace'))
+        zip_file.writestr(prov_filename, proveedores.encode('cp1252', errors='replace'))
         zip_file.writestr("IMPORTES.TXT", importes.encode('cp1252', errors='replace'))
         zip_file.writestr("TASA.TXT", tasa.encode('cp1252', errors='replace'))
     return zip_buffer.getvalue()
