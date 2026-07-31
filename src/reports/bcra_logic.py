@@ -109,13 +109,8 @@ def _get_bcra_aggregated_data(
         matching_cuils = []
         with engine.connect() as conn:
             for cid in cids:
-                try:
-                    int_cid = int(cid)
-                    where_clause = "id = :int_cid OR cuil = :cid OR dni = :cid"
-                    params = {"int_cid": int_cid, "cid": cid}
-                except ValueError:
-                    where_clause = "cuil = :cid OR dni = :cid"
-                    params = {"cid": cid}
+                where_clause = "cuil = :cid OR documento = :cid"
+                params = {"cid": cid}
                     
                 res = conn.execute(text(f"SELECT cuil FROM clientes WHERE {where_clause}"), params).fetchall()
                 matching_cuils.extend([r[0] for r in res])
