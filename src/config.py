@@ -8,7 +8,7 @@ Date: 2026-05-13
 """
 
 from typing import List, Union
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -83,6 +83,14 @@ class APIConfig(BaseSettings):
     """
     Configuration for the API server (CORS, security, etc.).
     """
+    environment: str = Field(
+        default="development",
+        description="Deployment environment (development, staging, production)"
+    )
+    secure_cookies: bool = Field(
+        default=False,
+        description="Whether to use secure cookies (HTTPS only)"
+    )
     allowed_origins: List[str] = Field(
         default=["http://localhost:5173", "http://127.0.0.1:5173"],
         description="List of allowed origins for CORS."
@@ -113,6 +121,14 @@ class APIConfig(BaseSettings):
         if isinstance(v, str):
             return [origin.strip() for origin in v.split(",") if origin.strip()]
         return v
+
+    @model_validator(mode="after")
+    def validate_production_settings(self) -> 'APIConfig':
+        if self.environment == "production":
+            if self.secret_key == "super_secret_key_change_in_production_9s8d7f98s7df987":
+                raise ValueError("API_SECRET_KEY must be overridden con a strong secret in production!")
+            self.secure_cookies = True
+        return self
 
 API_SETTINGS = APIConfig()
 

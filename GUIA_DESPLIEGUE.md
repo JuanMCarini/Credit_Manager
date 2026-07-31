@@ -16,17 +16,17 @@ Esta guía detalla el paso a paso para publicar el sistema **Credit Manager** en
 
 Antes de subir el código a los servicios externos, **es obligatorio** tener en cuenta estos ajustes para garantizar la seguridad en producción:
 
-1. **Cookies Seguras (Autenticación):**
-   - En el archivo `src/api/routes/auth.py`, dentro de los endpoints de login y refresh, la función `response.set_cookie` tiene el valor `secure=False`. 
-   - **Debes cambiarlo a `secure=True`** (o hacerlo depender de una variable de entorno) para que los navegadores modernos acepten la cookie al estar desplegado en dominios cruzados (Vercel <-> Railway) con HTTPS.
+1. **Entorno y Cookies Seguras (Autenticación):**
+   - El código ahora detecta automáticamente si está en producción. En Railway, debes crear la variable de entorno `API_ENVIRONMENT=production`. 
+   - Al hacer esto, el sistema forzará que todas las cookies de sesión se envíen de forma segura (`secure=True` vía HTTPS) para que no fallen entre Vercel y Railway.
 
 2. **Secretos Fuertes (JWT):**
-   - Nunca uses la clave `secret_key` por defecto (`super_secret_key_change_in_production...`) definida en `src/config.py`. 
-   - Durante el despliegue en Railway (Paso 3), asegúrate de definir una variable de entorno `API_SECRET_KEY` con un valor largo y aleatorio (ej. generado con `openssl rand -hex 32`).
+   - Si `API_ENVIRONMENT=production` está activo, la API **se negará a arrancar** si detecta que usas la clave secreta por defecto.
+   - Durante el despliegue en Railway, asegúrate de definir `API_SECRET_KEY` con un valor largo y aleatorio (ej. generado con `openssl rand -hex 32`).
 
 3. **Orígenes CORS Estrictos:**
-   - Por defecto, la API permite peticiones desde `localhost`. Para producción, deberás agregar la URL de tu frontend.
-   - En Railway, crea la variable de entorno `API_ALLOWED_ORIGINS` y asígnale el dominio de tu frontend en Vercel (ej. `https://sistema.neocredit.com`).
+   - La API permite peticiones desde `localhost` por defecto. 
+   - En Railway, crea la variable de entorno `API_ALLOWED_ORIGINS` y asígnale el dominio exacto de tu frontend en Vercel (ej. `https://sistema.neocredit.com`).
 
 4. **Almacenamiento de Archivos (AWS S3 / R2):**
    - Actualmente el código guarda las imágenes y legajos localmente en `data/uploads/`. 

@@ -7,6 +7,7 @@ from src.api.dependencies.auth import verify_password, create_access_token, get_
 from src.api.schemas.auth import Token
 from src.database.connection import get_db
 from src.api.limiter import limiter
+from src.config import API_SETTINGS
 
 router = APIRouter(prefix="/api/auth", tags=["Autenticacion"])
 
@@ -31,7 +32,7 @@ def login(request: Request, response: Response, form_data: OAuth2PasswordRequest
         value=access_token,
         httponly=True,
         samesite="lax",
-        secure=False, # Set to True in production with HTTPS
+        secure=API_SETTINGS.secure_cookies,
         max_age=3600
     )
     return {"access_token": access_token, "token_type": "bearer", "user": {"email": user.email, "nombre": user.nombre_completo, "rol": user.rol.nombre}}
@@ -57,7 +58,7 @@ def refresh_token(response: Response, current_user: Usuario = Depends(get_curren
         value=access_token,
         httponly=True,
         samesite="lax",
-        secure=False, # Set to True in production with HTTPS
+        secure=API_SETTINGS.secure_cookies,
         max_age=3600
     )
     return {
