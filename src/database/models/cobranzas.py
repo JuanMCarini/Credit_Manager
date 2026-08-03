@@ -121,6 +121,7 @@ class Cobranza(Base):
     interes = Column(Numeric(15, 2), nullable=False)
     iva = Column(Numeric(15, 2), nullable=False)
     fecha = Column(Date, nullable=False)
+    facturada = Column(Boolean, nullable=False, default=False)
 
     def default_facturada(context):
         tipo = context.current_parameters.get("tipo_cobranza")

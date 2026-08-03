@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { FilterX } from 'lucide-react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import axiosClient from '../api/axiosClient';
 import ClientCCModal from '../components/ClientCCModal';
 import CreditEditEstadoModal from '../components/CreditEditEstadoModal';
@@ -20,6 +20,7 @@ const CreditListPage = () => {
   const [creditos, setCreditos] = useState([]);
   const [loading, setLoading] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
   
   const [filter, setFilter] = useState({ ID: [], IdExterno: '', Originador: '', CUIL: '', Capital: {}, Plazo: '', TNA: '', Estado: [], Fecha: [], TipoCredito: [], SaldoMora: {}, DiasMora: {} });
   const [sortConfig, setSortConfig] = useState({ key: 'ID', direction: 'desc' });
@@ -365,6 +366,9 @@ const CreditListPage = () => {
                     <td>{c["Fecha Emisión"]}</td>
                     <td>
                       <div style={{ display: 'flex', gap: '8px', flexWrap: 'nowrap', alignItems: 'center' }}>
+                        <button className="btn-secondary" onClick={() => navigate(`/dashboard-clientes?cuil=${c["Cliente CUIL"]}&credito_id=${c.ID}`)} style={{ padding: '4px 8px', fontSize: '14px' }} title="Dashboard de Cliente">
+                          📊
+                        </button>
                         <button className="btn-secondary" onClick={() => setCcCuil(c["Cliente CUIL"])} style={{ padding: '4px 8px', fontSize: '14px' }} title="Ver Cuenta Corriente">
                           👁️
                         </button>

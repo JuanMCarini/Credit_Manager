@@ -12,6 +12,7 @@ A credit portfolio management system, financial amortization engine, and data in
 * **ORM Data Architecture**: Structured relational modeling with SQLAlchemy. Records granular portfolio operations (Purchase, Sale, and Repurchase of portfolios with or without recourse).
 * **Validated Configuration**: Centralized and strongly-typed management of environment variables using Pydantic and Pydantic-Settings.
 * **Web API**: Endpoints developed with FastAPI to perform real-time credit installment simulations and query portfolio balance reports in JSON format.
+* **Advanced Analytical Dashboards**: Interactive interfaces (React) to visualize the global portfolio status and individual client profiles. Includes dynamic filtering, real-time KPI calculation (arrears, principal, interests), and graphical PDF export (portrait and landscape) for management reports.
 
 ## 📐 System Architecture
 

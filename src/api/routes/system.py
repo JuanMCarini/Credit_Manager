@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+import os
+import shutil
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 from datetime import date
@@ -76,14 +78,18 @@ def sync_system_states(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/company")
-def get_company_info():
-    from src.config import COMPANY_DATA
+def get_company_info(db: Session = Depends(get_db)):
+    from src.config import get_company_data
+    company = get_company_data(db)
     return {
-        "razon_social": COMPANY_DATA.razon_social,
-        "cuit": COMPANY_DATA.cuit,
-        "domicilio": COMPANY_DATA.domicilio,
-        "email_contacto": COMPANY_DATA.email_contacto,
-        "telefono": COMPANY_DATA.telefono
+        "razon_social": company.razon_social,
+        "cuit": company.cuit,
+        "domicilio": company.domicilio,
+        "email_contacto": company.email_contacto,
+        "telefono": company.telefono,
+        "nro_cuenta_bancaria": company.bank_account,
+        "nombre_banco": company.bank_name,
+        "cbu": company.cbu
     }
 
 @router.post("/repet/sync")
@@ -97,4 +103,21 @@ async def sync_repet(db: Session = Depends(get_db)):
         return {"status": "success", "message": "Listados del RePET sincronizados correctamente."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/logo")
+async def upload_logo(file: UploadFile = File(...)):
+    if not file.content_type.startswith('image/'):
+        raise HTTPException(status_code=400, detail="El archivo debe ser una imagen.")
+    
+    os.makedirs("data/uploads", exist_ok=True)
+    file_location = "data/uploads/logo.png"
+    
+    try:
+        with open(file_location, "wb+") as file_object:
+            shutil.copyfileobj(file.file, file_object)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al guardar la imagen: {str(e)}")
+        
+    return {"status": "success", "message": "Logo actualizado correctamente. Recarga la página para ver los cambios."}
+
 

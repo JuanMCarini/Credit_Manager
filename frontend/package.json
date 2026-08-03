@@ -12,11 +12,14 @@
   "dependencies": {
     "@tanstack/react-query": "^5.101.0",
     "axios": "^1.17.0",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.1",
     "lucide-react": "^1.17.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-router-dom": "^7.17.0",
     "react-tabulator": "latest",
+    "recharts": "^3.10.1",
     "tabulator-tables": "latest",
     "xlsx": "^0.18.5",
     "zustand": "^5.0.14"

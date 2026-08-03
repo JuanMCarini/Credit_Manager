@@ -1,5 +1,6 @@
 import os
 import tempfile
+import zipfile
 import pandas as pd
 from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Form, UploadFile, File
@@ -12,6 +13,7 @@ from src.api.schemas.carteras import VentaCarteraRequest, UpdateCarteraRequest
 from src.portfolio.sell import PortfolioSell
 from src.portfolio.purchase import PortfolioPurchase
 from src.api.routes.system import sync_system_states
+from src.api.routes.creditos import _merge_uploaded_docs_for_credito
 
 router = APIRouter(prefix="/api/v1/carteras", tags=["Carteras"])
 
@@ -326,6 +328,14 @@ def preview_compra_cartera(
                 if remuneracion > 0:
                     relacion_cuota_sueldo = round((valor_cuota / remuneracion) * 100, 0)
                 
+                f_emision = row.get("Fecha Emisión", row.get("Fecha Emision", row.get("fecha_emision", None)))
+                f_emision_str = None
+                if f_emision is not None and not pd.isna(f_emision):
+                    if hasattr(f_emision, 'strftime'):
+                        f_emision_str = f_emision.strftime("%Y-%m-%d")
+                    else:
+                        f_emision_str = str(f_emision).split("T")[0].split(" ")[0]
+
                 creditos_res.append({
                     "id_externo": str(id_op),
                     "cliente_nombre": str(row.get("Cliente", "")).strip() or str(row.get("CUIL", "")),
@@ -336,7 +346,8 @@ def preview_compra_cartera(
                     "valor_actual_csv": val_act_csv,
                     "plazo": plazo,
                     "cuotas_compradas": cuotas_compradas,
-                    "relacion_cuota_sueldo": relacion_cuota_sueldo
+                    "relacion_cuota_sueldo": relacion_cuota_sueldo,
+                    "fecha_emision": f_emision_str
                 })
                 
             cuotas_res = []
@@ -585,7 +596,8 @@ def get_compra_preview(cartera_id: int, db: Session = Depends(get_db)):
             "valor_actual_csv": round(va_por_credito[cred.id], 2),
             "plazo": cred.plazo,
             "cuotas_compradas": cuotas_compradas_por_cred[cred.id],
-            "relacion_cuota_sueldo": 0.0
+            "relacion_cuota_sueldo": 0.0,
+            "fecha_emision": cred.fecha_emision.isoformat() if cred.fecha_emision else None
         })
         
     resumen_res = []
@@ -757,3 +769,76 @@ def delete_cartera(cartera_id: int, db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=f"No se puede eliminar la cartera (puede estar referenciada). Error: {str(e)}")
+
+@router.get("/{cartera_id}/legajos/export")
+def export_cartera_legajos(cartera_id: int, db: Session = Depends(get_db)):
+    cartera = db.query(Cartera).filter(Cartera.id == cartera_id).first()
+    if not cartera:
+        raise HTTPException(status_code=404, detail="Cartera no encontrada")
+        
+    creditos_ids = set()
+    if cartera.tipo_operacion == TipoOperacionCartera.COMPRA:
+        creditos = db.query(Credito).filter(Credito.cartera_id == cartera_id).all()
+        for c in creditos:
+            creditos_ids.add(c.id)
+    else:
+        operaciones = db.query(OperacionCartera).filter(OperacionCartera.cartera_id == cartera_id).all()
+        if operaciones:
+            cuotas_ids = [op.cuota_id for op in operaciones]
+            cuotas = db.query(Cuota).filter(Cuota.id.in_(cuotas_ids)).all()
+            for c in cuotas:
+                creditos_ids.add(c.credito_id)
+
+    if not creditos_ids:
+        raise HTTPException(status_code=400, detail="La cartera no tiene créditos asociados.")
+        
+    creditos = db.query(Credito).filter(Credito.id.in_(creditos_ids)).all()
+    
+    temp_dir = tempfile.mkdtemp()
+    tna = float(cartera.tna_descuento) if cartera.tna_descuento is not None else 0.0
+    socio_nombre = cartera.socio.razon_social if cartera.socio else "SinSocio"
+    default_name = f"Legajos - Cartera Nro. {str(cartera.id).zfill(2)} - {socio_nombre} - {cartera.fecha_compra} - {tna:.2%}.zip"
+    zip_path = os.path.join(temp_dir, default_name.replace("/", "-").replace(":", "-"))
+    
+    errores = []
+    
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+        for credito in creditos:
+            try:
+                pdf_io = _merge_uploaded_docs_for_credito(credito.id, db)
+                id_ext = f"{credito.id_externo} - " if credito.id_externo else ""
+                nombre_pdf = f"Legajo Nro. {credito.id} - {id_ext}{credito.cliente_cuil}.pdf"
+                
+                # Create a temporary file to save the BytesIO content before adding to zip
+                temp_pdf_path = os.path.join(temp_dir, nombre_pdf)
+                with open(temp_pdf_path, "wb") as f:
+                    f.write(pdf_io.getvalue())
+                    
+                zipf.write(temp_pdf_path, nombre_pdf)
+                os.remove(temp_pdf_path)
+            except Exception as e:
+                errores.append(f"Credito ID {credito.id} (CUIL: {credito.cliente_cuil}): {str(e)}")
+                
+        if errores:
+            errors_path = os.path.join(temp_dir, "errores.txt")
+            with open(errors_path, "w") as f:
+                f.write("Errores durante la generacion de legajos:\n")
+                for err in errores:
+                    f.write(f"- {err}\n")
+            zipf.write(errors_path, "errores.txt")
+            
+    return FileResponse(zip_path, media_type="application/zip", filename=os.path.basename(zip_path))
+
+@router.get("/venta/tna_reciente")
+def get_tna_venta_reciente(fecha: date, db: Session = Depends(get_db)):
+    cartera = db.query(Cartera).filter(
+        Cartera.tipo_operacion == TipoOperacionCartera.VENTA,
+        Cartera.fecha_compra <= fecha
+    ).order_by(Cartera.fecha_compra.desc()).first()
+    
+    tna = 0.0
+    if cartera and cartera.tna_descuento is not None:
+        tna = float(cartera.tna_descuento) * 100
+        
+    return {"tna": tna}
+

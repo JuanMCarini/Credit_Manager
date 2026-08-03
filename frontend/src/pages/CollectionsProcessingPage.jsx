@@ -98,9 +98,7 @@ const CollectionsProcessingPage = () => {
     formData.append('file', masData.file);
 
     try {
-      const res = await axiosClient.post('/api/v1/cobranzas/masiva', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      const res = await axiosClient.post('/api/v1/cobranzas/masiva', formData);
       setMasFeedback({ type: 'success', message: res.data.message || `Lote procesado. ID: ${res.data.proceso_id}` });
       setMasData({ ...masData, file: null, fecha_pago: '', fecha_corte: '' });
       document.getElementById('cob-mas-file').value = '';

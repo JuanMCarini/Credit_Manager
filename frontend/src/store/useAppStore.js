@@ -7,6 +7,7 @@ const useAppStore = create((set) => ({
   socios: [],
   tasasYComisiones: [],
   relaciones: [],
+  comercializadores: [],
   
   isLoadingAuxiliares: false,
   error: null,
@@ -17,12 +18,13 @@ const useAppStore = create((set) => ({
   fetchAuxiliares: async () => {
     set({ isLoadingAuxiliares: true, error: null });
     try {
-      const [provRes, empRes, sociosRes, tasasRes, relacionesRes] = await Promise.all([
+      const [provRes, empRes, sociosRes, tasasRes, relacionesRes, comerRes] = await Promise.all([
         axiosClient.get('/api/v1/auxiliares/provincias').catch(() => ({ data: [] })),
         axiosClient.get('/api/v1/auxiliares/empleadores').catch(() => ({ data: [] })),
         axiosClient.get('/api/v1/auxiliares/socios').catch(() => ({ data: [] })),
         axiosClient.get('/api/v1/auxiliares/tasas_y_comisiones').catch(() => ({ data: [] })),
-        axiosClient.get('/api/v1/auxiliares/relaciones').catch(() => ({ data: [] }))
+        axiosClient.get('/api/v1/auxiliares/relaciones').catch(() => ({ data: [] })),
+        axiosClient.get('/api/v1/auxiliares/comercializadores').catch(() => ({ data: [] }))
       ]);
 
       set({
@@ -31,6 +33,7 @@ const useAppStore = create((set) => ({
         socios: sociosRes.data,
         tasasYComisiones: tasasRes.data,
         relaciones: relacionesRes.data,
+        comercializadores: comerRes.data,
         isLoadingAuxiliares: false,
       });
     } catch (error) {
