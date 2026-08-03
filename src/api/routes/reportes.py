@@ -45,6 +45,42 @@ def get_saldos(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error en la generación del reporte: {str(e)}")
 
+@router.get("/balances/evolution")
+def get_saldos_evolution(
+    meses: int = Query(12, description="Cantidad de meses hacia atrás"),
+    propias: Optional[bool] = Query(None, description="Verdadero para cartera propia, Falso para terceros, Nulo para ambas."),
+    fecha: Optional[datetime] = Query(None, description="Fecha base para calcular los meses hacia atrás")
+) -> List[Dict[str, Any]]:
+    try:
+        base_date = fecha if fecha else datetime.today()
+        results = []
+        for i in range(meses - 1, -1, -1):
+            fecha_corte = base_date - pd.DateOffset(months=i)
+            df = saldos(fecha=fecha_corte, con_saldo=True, propias=propias, agrupar=True, agrupadores=["dueno", "originador"])
+            
+            detalles = []
+            if not df.empty:
+                df = df.reset_index()
+                for _, row in df.iterrows():
+                    detalles.append({
+                        "Dueño": str(row.get("Dueño", "Desconocido") or "Desconocido"),
+                        "Originador": str(row.get("Originador", "N/A") or "N/A"),
+                        "capital": float(row.get("Capital", 0)),
+                        "interes": float(row.get("Interés", 0)),
+                        "iva": float(row.get("IVA", 0)),
+                        "total": float(row.get("Total", 0)),
+                    })
+                
+            results.append({
+                "periodo": fecha_corte.strftime("%Y-%m"),
+                "fecha": fecha_corte.strftime("%Y-%m-%d"),
+                "detalles": detalles
+            })
+            
+        return results
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error en evolución: {str(e)}")
+
 @router.get("/balances/excel")
 def export_saldos_excel(
     fecha: Optional[datetime] = Query(None, description="Fecha de corte para el cálculo. Por defecto es hoy."),

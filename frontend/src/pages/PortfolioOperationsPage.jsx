@@ -19,6 +19,9 @@ const PortfolioOperationsPage = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingCartera, setEditingCartera] = useState(null);
   const [isReadOnly, setIsReadOnly] = useState(false);
+  
+  // Loading state for actions
+  const [loadingActions, setLoadingActions] = useState({});
 
   const fetchCarteras = async () => {
     setLoading(true);
@@ -46,21 +49,27 @@ const PortfolioOperationsPage = () => {
 
   const handleChangeEstado = async (id, nuevoEstado) => {
     if (!window.confirm(`¿Seguro que desea cambiar el estado a ${nuevoEstado}?`)) return;
+    setLoadingActions(prev => ({ ...prev, [`estado-${id}`]: true }));
     try {
       await axiosClient.patch(`/api/v1/carteras/${id}`, { estado: nuevoEstado });
       fetchCarteras();
     } catch (error) {
       alert("Error al cambiar estado: " + error.message);
+    } finally {
+      setLoadingActions(prev => ({ ...prev, [`estado-${id}`]: false }));
     }
   };
 
   const handleDelete = async (id) => {
     if (!window.confirm("¿Seguro que desea eliminar esta cartera permanentemente?")) return;
+    setLoadingActions(prev => ({ ...prev, [`delete-${id}`]: true }));
     try {
       await axiosClient.delete(`/api/v1/carteras/${id}`);
       fetchCarteras();
     } catch (error) {
       alert("Error al eliminar cartera: " + error.message);
+    } finally {
+      setLoadingActions(prev => ({ ...prev, [`delete-${id}`]: false }));
     }
   };
 
@@ -89,6 +98,7 @@ const PortfolioOperationsPage = () => {
   };
 
   const handleDownloadExcel = async (cartera) => {
+    setLoadingActions(prev => ({ ...prev, [`excel-${cartera.id}`]: true }));
     try {
       let res;
       if (cartera.tipo_operacion === 'COMPRA') {
@@ -117,12 +127,13 @@ const PortfolioOperationsPage = () => {
           const newItem = { ...item };
           for (const field of dateFields) {
             if (newItem[field]) {
-              let dateStr = newItem[field];
+              let dateStr = String(newItem[field]).split('T')[0];
               if (dateStr.length === 7) dateStr += "-01";
               
-              const d = new Date(dateStr + "T00:00:00");
-              if (!isNaN(d)) {
-                newItem[field] = d;
+              const parts = dateStr.split('-');
+              if (parts.length === 3) {
+                // Formatting directly as DD/MM/YYYY string to avoid SheetJS timezone shift bugs
+                newItem[field] = `${parts[2]}/${parts[1]}/${parts[0]}`;
               }
             }
           }
@@ -136,7 +147,7 @@ const PortfolioOperationsPage = () => {
 
       const wb = XLSX.utils.book_new();
       
-      const sheetOptions = { cellDates: true, dateNF: 'dd/mm/yyyy' };
+      const sheetOptions = {};
       
       const wsCreditos = XLSX.utils.json_to_sheet(formattedCreditos, sheetOptions);
       XLSX.utils.book_append_sheet(wb, wsCreditos, "Créditos");
@@ -150,10 +161,13 @@ const PortfolioOperationsPage = () => {
       XLSX.writeFile(wb, `Operacion_${cartera.id}_${cartera.nombre}.xlsx`);
     } catch (error) {
       alert("Error al descargar Excel: " + (error.response?.data?.detail || error.message));
+    } finally {
+      setLoadingActions(prev => ({ ...prev, [`excel-${cartera.id}`]: false }));
     }
   };
 
   const handleDownloadCsvs = async (cartera) => {
+    setLoadingActions(prev => ({ ...prev, [`csvs-${cartera.id}`]: true }));
     try {
       const response = await axiosClient.get(`/api/v1/carteras/${cartera.id}/export`, {
         responseType: 'blob'
@@ -178,6 +192,69 @@ const PortfolioOperationsPage = () => {
       } else {
         alert("Error al descargar CSVs: " + (error.message || 'Error desconocido'));
       }
+    } finally {
+      setLoadingActions(prev => ({ ...prev, [`csvs-${cartera.id}`]: false }));
+    }
+  };
+
+  const handleDownloadLegajos = async (cartera) => {
+    setLoadingActions(prev => ({ ...prev, [`legajos-${cartera.id}`]: true }));
+    try {
+      const response = await axiosClient.get(`/api/v1/carteras/${cartera.id}/legajos/export`, {
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Legajos_${cartera.id}_${cartera.nombre}.zip`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode.removeChild(link);
+    } catch (error) {
+      if (error.response && error.response.data instanceof Blob) {
+        // Parse error blob
+        const text = await error.response.data.text();
+        try {
+          const json = JSON.parse(text);
+          alert("Error al descargar Legajos: " + (json.detail || "Error desconocido"));
+        } catch {
+          alert("Error al descargar Legajos.");
+        }
+      } else {
+        alert("Error al descargar Legajos: " + (error.message || 'Error desconocido'));
+      }
+    } finally {
+      setLoadingActions(prev => ({ ...prev, [`legajos-${cartera.id}`]: false }));
+    }
+  };
+
+  const handleDownloadContrato = async (cartera, formato = 'pdf') => {
+    setLoadingActions(prev => ({ ...prev, [`contrato-${formato}-${cartera.id}`]: true }));
+    try {
+      const response = await axiosClient.post(`/api/v1/papeleria/generar_por_cartera/${cartera.id}?formato=${formato}`, null, {
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Contrato_Cartera_${cartera.id}.${formato}`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode.removeChild(link);
+    } catch (error) {
+      if (error.response && error.response.data instanceof Blob) {
+        const text = await error.response.data.text();
+        try {
+          const json = JSON.parse(text);
+          alert("Error al descargar contrato: " + (json.detail || "Error desconocido"));
+        } catch {
+          alert("Error al descargar contrato.");
+        }
+      } else {
+        alert("Error al descargar contrato: " + (error.message || 'Error desconocido'));
+      }
+    } finally {
+      setLoadingActions(prev => ({ ...prev, [`contrato-${formato}-${cartera.id}`]: false }));
     }
   };
 
@@ -243,42 +320,81 @@ const PortfolioOperationsPage = () => {
                   <td>{c.recurso ? 'Sí' : 'No'}</td>
                   <td>{c.iva ? 'Sí' : 'No'}</td>
                   <td>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadExcel(c)} title="Descargar Excel de la Operación">
-                        📊
-                      </button>
-                      {c.tipo_operacion === 'VENTA' && (
-                        <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadCsvs(c)} title="Descargar CSVs Generados">
-                          📁
+                    {c.estado === 'PENDIENTE' ? (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'auto auto', gap: '8px', alignItems: 'stretch' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadExcel(c)} title="Descargar Excel de la Operación" disabled={loadingActions[`excel-${c.id}`]}>
+                              {loadingActions[`excel-${c.id}`] ? '⏳' : '📊'}
+                            </button>
+                            <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadLegajos(c)} title="Descargar Legajos (PDF)" disabled={loadingActions[`legajos-${c.id}`]}>
+                              {loadingActions[`legajos-${c.id}`] ? '⏳' : '📑'}
+                            </button>
+                            {c.tipo_operacion === 'VENTA' && (
+                              <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadCsvs(c)} title="Descargar CSVs Generados" disabled={loadingActions[`csvs-${c.id}`]}>
+                                {loadingActions[`csvs-${c.id}`] ? '⏳' : '📁'}
+                              </button>
+                            )}
+                            <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadContrato(c, 'pdf')} title="Descargar Contrato (PDF)" disabled={loadingActions[`contrato-pdf-${c.id}`]}>
+                              {loadingActions[`contrato-pdf-${c.id}`] ? '⏳' : '📜'}
+                            </button>
+                            <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadContrato(c, 'docx')} title="Descargar Contrato (DOCX)" disabled={loadingActions[`contrato-docx-${c.id}`]}>
+                              {loadingActions[`contrato-docx-${c.id}`] ? '⏳' : '📝'}
+                            </button>
+                          </div>
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleEditClick(c, true)} title="Ver Detalles">
+                              👁️
+                            </button>
+                            <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleEditClick(c)} title="Editar">
+                              ✏️
+                            </button>
+                            <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px', color: 'var(--danger-color)' }} onClick={() => handleDelete(c.id)} title="Eliminar" disabled={loadingActions[`delete-${c.id}`]}>
+                              {loadingActions[`delete-${c.id}`] ? '⏳' : '🗑️'}
+                            </button>
+                          </div>
+                        </div>
+                        <button 
+                          className="btn-secondary" 
+                          style={{ padding: '4px', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} 
+                          onClick={() => handleChangeEstado(c.id, c.tipo_operacion === 'VENTA' ? 'VENDIDA' : 'COMPRADA')} 
+                          title="Confirmar"
+                          disabled={loadingActions[`estado-${c.id}`]}
+                        >
+                          {loadingActions[`estado-${c.id}`] ? '⏳' : '✅'}
                         </button>
-                      )}
-                      {c.estado === 'PENDIENTE' && (
-                        <>
-                          <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleChangeEstado(c.id, c.tipo_operacion === 'VENTA' ? 'VENDIDA' : 'COMPRADA')} title="Confirmar">
-                            ✅
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadExcel(c)} title="Descargar Excel de la Operación" disabled={loadingActions[`excel-${c.id}`]}>
+                          {loadingActions[`excel-${c.id}`] ? '⏳' : '📊'}
+                        </button>
+                        <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadLegajos(c)} title="Descargar Legajos (PDF)" disabled={loadingActions[`legajos-${c.id}`]}>
+                          {loadingActions[`legajos-${c.id}`] ? '⏳' : '📑'}
+                        </button>
+                        {c.tipo_operacion === 'VENTA' && (
+                          <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadCsvs(c)} title="Descargar CSVs Generados" disabled={loadingActions[`csvs-${c.id}`]}>
+                            {loadingActions[`csvs-${c.id}`] ? '⏳' : '📁'}
                           </button>
-                          <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleEditClick(c, true)} title="Ver Detalles">
-                            👁️
-                          </button>
-                          <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleEditClick(c)} title="Editar">
-                            ✏️
-                          </button>
-                          <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px', color: 'var(--danger-color)' }} onClick={() => handleDelete(c.id)} title="Eliminar">
-                            🗑️
-                          </button>
-                        </>
-                      )}
-                      {(c.estado === 'VENDIDA' || c.estado === 'COMPRADA') && (
-                        <>
-                          <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleEditClick(c, true)} title="Ver Detalles">
-                            👁️
-                          </button>
-                          <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px', color: 'var(--danger-color)' }} onClick={() => alert('No se puede anular una cartera ya confirmada directamente.')} title="Anular (No Permitido)">
-                            ❌
-                          </button>
-                        </>
-                      )}
-                    </div>
+                        )}
+                        <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadContrato(c, 'pdf')} title="Descargar Contrato (PDF)" disabled={loadingActions[`contrato-pdf-${c.id}`]}>
+                          {loadingActions[`contrato-pdf-${c.id}`] ? '⏳' : '📜'}
+                        </button>
+                        <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadContrato(c, 'docx')} title="Descargar Contrato (DOCX)" disabled={loadingActions[`contrato-docx-${c.id}`]}>
+                          {loadingActions[`contrato-docx-${c.id}`] ? '⏳' : '📝'}
+                        </button>
+                        {(c.estado === 'VENDIDA' || c.estado === 'COMPRADA') && (
+                          <>
+                            <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleEditClick(c, true)} title="Ver Detalles">
+                              👁️
+                            </button>
+                            <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px', color: 'var(--danger-color)' }} onClick={() => alert('No se puede anular una cartera ya confirmada directamente.')} title="Anular (No Permitido)">
+                              ❌
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))

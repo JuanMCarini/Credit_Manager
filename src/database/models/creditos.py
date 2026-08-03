@@ -75,6 +75,7 @@ class Credito(Base):
     socio_originador_id = Column(
         Integer, ForeignKey("socios_comerciales.id"), nullable=True
     )
+    comercializador_id = Column(Integer, ForeignKey("comercializadores.id"), nullable=True)
     cartera_id = Column(Integer, ForeignKey("carteras.id"), nullable=True)
     comision_id = Column(Integer, ForeignKey("tasas_y_comisiones.id"), nullable=True)
 
@@ -95,6 +96,7 @@ class Credito(Base):
 
     # Relationships
     cliente = relationship("Cliente", back_populates="creditos")
+    comercializador = relationship("Comercializador", back_populates="creditos")
     cuotas = relationship(
         "Cuota", back_populates="credito", cascade="all, delete-orphan", lazy="selectin"
     )

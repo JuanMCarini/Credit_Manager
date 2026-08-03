@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 from sqlalchemy import text
 
-from src.config import COMPANY_DATA
+from src.config import get_company_data
 from src.database import engine
 
 
@@ -69,8 +69,10 @@ def saldos(
     )
 
     # 2. Data Mapping
-    for col in ["fecha_emision", "cliente_cuil", "cartera_id", "socio_originador_id", "tipo_credito"]:
+    for col in ["fecha_emision", "cliente_cuil", "cartera_id", "socio_originador_id", "tipo_credito", "estado"]:
         df_ctas[col] = df_ctas["credito_id"].map(df_crts[col])
+    
+    df_ctas["estado_credito"] = df_ctas["credito_id"].map(df_crts["estado"])
     
     df_ctas["socio_id"] = df_ctas["cartera_id"].map(df_cart["socio_id"])
     df_ctas["Proveedor"] = df_ctas["socio_id"].map(df_socios["razon_social"])
@@ -98,7 +100,6 @@ def saldos(
     for col in ["capital", "interes", "iva"]:
         df[col] = (df[col].round(2) - df[f"{col}_cobr"].round(2)).round(2)
 
-    df.drop(columns=["capital_cobr", "interes_cobr", "iva_cobr"], inplace=True)
     df["total"] = df[["capital", "interes", "iva"]].sum(axis=1)
 
     if con_saldo:
@@ -114,6 +115,7 @@ def saldos(
     df["Partner_Name"] = (
         df["Dueño_id_tmp"].map(df_cart["socio_id"]).map(df_socios["razon_social"])
     )
+    company_data = get_company_data()
 
     conditions = [
         (df["tipo_op"].isin(["COMPRA", "RECOMPRA"])) & (df["comercializada"] == True),  # noqa: E712
@@ -122,15 +124,15 @@ def saldos(
         (df["tipo_op"] == "VENTA") & (df["comercializada"] == False),  # noqa: E712
     ]
     choices = [
-        COMPANY_DATA.razon_social,
+        company_data.razon_social,
         df["Partner_Name"],
         df["Partner_Name"],
-        COMPANY_DATA.razon_social,
+        company_data.razon_social,
     ]
-    df["Dueño"] = np.select(conditions, choices, default=COMPANY_DATA.razon_social)
+    df["Dueño"] = np.select(conditions, choices, default=company_data.razon_social)
 
     df.drop(
-        columns=["Dueño_id_tmp", "Partner_Name", "tipo_op", "comercializada"],
+        columns=["Dueño_id_tmp", "Partner_Name", "comercializada"],
         inplace=True,
         errors="ignore",
     )
@@ -138,9 +140,9 @@ def saldos(
     if propias is None:
         pass
     elif propias:
-        df = df[df["Dueño"] == COMPANY_DATA.razon_social]
+        df = df[df["Dueño"] == company_data.razon_social]
     else:
-        df = df[df["Dueño"] != COMPANY_DATA.razon_social]
+        df = df[df["Dueño"] != company_data.razon_social]
 
     if agrupar and agrupadores:
         mapper = {
@@ -172,10 +174,15 @@ def saldos(
                 "id",
                 "fecha_vencimiento",
                 "Dueño",
+                "estado",
+                "estado_credito",
                 "capital",
                 "interes",
                 "iva",
                 "total",
+                "capital_cobr",
+                "interes_cobr",
+                "iva_cobr",
             ]
         ]
 
@@ -185,12 +192,17 @@ def saldos(
         "credito_id": "ID Credito",
         "nro_cuota": "Nro. Cuota",
         "fecha_vencimiento": "Fecha Vencimiento",
+        "estado": "Estado",
+        "estado_credito": "Estado Credito",
         "capital": "Capital",
         "interes": "Interés",
         "iva": "IVA",
+        "total": "Total",
+        "capital_cobr": "Capital Cobrado",
+        "interes_cobr": "Interés Cobrado",
+        "iva_cobr": "IVA Cobrado",
         "fecha_emision": "Fecha Emisión",
         "cliente_cuil": "CUIL Cliente",
-        "total": "Total",
         "cartera_id": "ID Cartera",
     }
     df.rename(columns=renames, errors="ignore", inplace=True)

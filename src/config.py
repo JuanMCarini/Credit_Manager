@@ -25,6 +25,9 @@ class CompanyConfig(BaseSettings):
     domicilio: str = Field(default="Bahía Blanca, Buenos Aires, Argentina")
     email_contacto: str = Field(default="admin@yoyo.com.ar")
     telefono: str = Field(default="+54 9 291 000-0000")
+    bank_account: str = Field(default="", description="Bank account number")
+    bank_name: str = Field(default="", description="Bank name")
+    cbu: str = Field(default="", description="CBU")
 
     # Configuration for the Pydantic model
     model_config = SettingsConfigDict(
@@ -51,6 +54,30 @@ class CompanyConfig(BaseSettings):
 # Global immutable instance to be imported across the application
 # Usage: from config import COMPANY_DATA
 COMPANY_DATA = CompanyConfig()
+
+def get_company_data(db=None) -> CompanyConfig:
+    from sqlalchemy.orm import Session
+    from src.database.connection import SessionLocal
+    from src.database.models.socios import SocioComercial
+
+    session = db or SessionLocal()
+    try:
+        socio = session.query(SocioComercial).filter(SocioComercial.cuit == COMPANY_DATA.cuit).first()
+        if socio:
+            return CompanyConfig(
+                razon_social=socio.razon_social,
+                cuit=socio.cuit,
+                domicilio=socio.domicilio_legal or "",
+                email_contacto=socio.mail or "",
+                telefono=socio.telefono or "",
+                bank_account=socio.nro_cuenta_bancaria or "",
+                bank_name=socio.nombre_banco or "",
+                cbu=socio.cbu or ""
+            )
+        return COMPANY_DATA
+    finally:
+        if db is None:
+            session.close()
 
 class APIConfig(BaseSettings):
     """

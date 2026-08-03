@@ -205,7 +205,7 @@ const PortfolioLiquidationsProcessingPage = () => {
 
           <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
             <button type="submit" className="btn-primary" disabled={loading || processing}>
-              {loading ? 'Consultando...' : 'Previsualizar Liquidaciones'}
+              {loading ? '⏳ Consultando...' : 'Previsualizar Liquidaciones'}
             </button>
           </div>
         </form>
@@ -260,7 +260,7 @@ const PortfolioLiquidationsProcessingPage = () => {
                 }
               }}
             >
-              {processing ? 'Procesando...' : '🚀 Confirmar y Ejecutar Transacciones'}
+              {processing ? '⏳ Procesando...' : '🚀 Confirmar y Ejecutar Transacciones'}
             </button>
             </div>
           </div>

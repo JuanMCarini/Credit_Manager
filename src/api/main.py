@@ -4,7 +4,8 @@ Description: Main entry point for the Credit Manager API.
              Exposes core engine logic securely via RESTful endpoints.
 """
 
-from fastapi import FastAPI
+import os
+from fastapi import FastAPI, UploadFile, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -23,6 +24,7 @@ from src.api.routes.usuarios import router as usuarios_router
 from src.api.routes.liquidaciones import router as liquidaciones_router
 from src.api.routes.papeleria import router as papeleria_router
 from src.api.routes.facturacion import router as facturacion_router
+from src.api.routes.bcra import router as bcra_router
 from src.config import API_SETTINGS
 from src.database import Base, engine
 
@@ -62,6 +64,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+os.makedirs("data/uploads", exist_ok=True)
+app.mount("/static", StaticFiles(directory="data/uploads"), name="static")
+
 # -------------------------------------------------------------------
 # Endpoints Root
 # -------------------------------------------------------------------
@@ -90,6 +95,7 @@ app.include_router(usuarios_router)
 app.include_router(liquidaciones_router)
 app.include_router(papeleria_router)
 app.include_router(facturacion_router)
+app.include_router(bcra_router)
 
 # -------------------------------------------------------------------
 # Frontend (Ahora servido por Nginx)

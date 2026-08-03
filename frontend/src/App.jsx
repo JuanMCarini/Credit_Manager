@@ -2,6 +2,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
 import MainLayout from './components/MainLayout';
+import DashboardCarteraPage from './pages/DashboardCarteraPage';
+import DashboardClientesPage from './pages/DashboardClientesPage';
 import SimulationPage from './pages/SimulationPage';
 import BalancesPage from './pages/BalancesPage';
 import ClientRegistrationPage from './pages/ClientRegistrationPage';
@@ -20,6 +22,7 @@ import UsersListPage from './pages/UsersListPage';
 import CreditProcessesPage from './pages/CreditProcessesPage';
 import PapeleriaPage from './pages/PapeleriaPage';
 import FacturacionPage from './pages/FacturacionPage';
+import BcraReportsPage from './pages/BcraReportsPage';
 
 function App() {
   return (
@@ -30,7 +33,9 @@ function App() {
         {/* Rutas protegidas genéricas (cualquier rol) */}
         <Route element={<ProtectedRoute allowedRoles={['Auditor / Solo Lectura', 'Operador de Cobranzas', 'Oficial de Crédito']} />}>
           <Route path="/" element={<MainLayout />}>
-            <Route index element={<Navigate to="/simulation" replace />} />
+            <Route index element={<Navigate to="/dashboard-cartera" replace />} />
+            <Route path="dashboard-cartera" element={<DashboardCarteraPage />} />
+            <Route path="dashboard-clientes" element={<DashboardClientesPage />} />
             <Route path="simulation" element={<SimulationPage />} />
             <Route path="balances" element={<BalancesPage />} />
             <Route path="clientes" element={<ClientListPage />} />
@@ -46,7 +51,9 @@ function App() {
             <Route path="nueva-operacion-cartera" element={<PortfolioOriginationPage />} />
             <Route path="auxiliares" element={<AuxiliaryTablesPage />} />
             <Route path="acciones" element={<SystemActionsPage />} />
-            <Route path="papeleria" element={<PapeleriaPage />} />
+            <Route path="papeleria/creditos" element={<PapeleriaPage categoria="creditos" />} />
+            <Route path="papeleria/ventas" element={<PapeleriaPage categoria="ventas_cartera" />} />
+            <Route path="reportes/bcra" element={<BcraReportsPage />} />
             <Route path="facturacion" element={<FacturacionPage />} />
             
             {/* Rutas exclusivas Administrador */}

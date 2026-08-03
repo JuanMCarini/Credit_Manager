@@ -10,6 +10,8 @@ const PortfolioLiquidationsPage = () => {
   const [liquidaciones, setLiquidaciones] = useState([]);
   const [procesos, setProcesos] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [loadingActions, setLoadingActions] = useState({});
+  const [payModalLoading, setPayModalLoading] = useState(false);
 
   const [showPayModal, setShowPayModal] = useState(false);
   const [payModalData, setPayModalData] = useState({
@@ -99,12 +101,15 @@ const PortfolioLiquidationsPage = () => {
     if (!window.confirm("¿Estás seguro de que deseas eliminar este proceso? Esto borrará todas las liquidaciones asociadas y no se puede deshacer.")) {
       return;
     }
+    setLoadingActions(prev => ({ ...prev, [`delete-${procesoId}`]: true }));
     try {
       await axiosClient.delete(`/api/v1/procesos/${procesoId}`);
       alert("Proceso eliminado con éxito.");
       fetchLiquidacionesYProcesos();
     } catch (error) {
       alert("Error al eliminar proceso: " + (error.response?.data?.detail || error.message));
+    } finally {
+      setLoadingActions(prev => ({ ...prev, [`delete-${procesoId}`]: false }));
     }
   };
 
@@ -140,6 +145,7 @@ const PortfolioLiquidationsPage = () => {
       return;
     }
 
+    setPayModalLoading(true);
     try {
       const response = await axiosClient.post(`/api/v1/procesos/${procesoId}/liquidaciones/pagar`, {
         monto: Number(amount),
@@ -150,6 +156,8 @@ const PortfolioLiquidationsPage = () => {
       fetchLiquidacionesYProcesos();
     } catch (error) {
       alert("Error al registrar pago: " + (error.response?.data?.detail || error.message));
+    } finally {
+      setPayModalLoading(false);
     }
   };
 
@@ -365,8 +373,9 @@ const PortfolioLiquidationsPage = () => {
                             title="Eliminar Proceso"
                             onClick={() => handleDeleteProceso(p.ID)}
                             style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--danger-color)' }}
+                            disabled={loadingActions[`delete-${p.ID}`]}
                           >
-                            🗑️
+                            {loadingActions[`delete-${p.ID}`] ? '⏳' : '🗑️'}
                           </button>
                         </>
                       )}
@@ -425,8 +434,10 @@ const PortfolioLiquidationsPage = () => {
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '16px' }}>
-                <button className="btn-secondary" onClick={() => setShowPayModal(false)}>Cancelar</button>
-                <button className="btn-primary" onClick={submitPayProceso} style={{ width: 'auto' }}>Aceptar</button>
+                <button className="btn-secondary" onClick={() => setShowPayModal(false)} disabled={payModalLoading}>Cancelar</button>
+                <button className="btn-primary" onClick={submitPayProceso} style={{ width: 'auto' }} disabled={payModalLoading}>
+                  {payModalLoading ? '⏳ Procesando...' : 'Aceptar'}
+                </button>
               </div>
             </div>
           </div>

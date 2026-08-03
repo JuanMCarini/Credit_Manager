@@ -49,9 +49,9 @@ def calcular_gastos_credito(credito) -> float:
             gastos = sum(float(t.monto) for t in credito.transferencias if t.razon_social in ["AMUF", "DALVI CULTURAL SRL"])
     return gastos
 
-from src.database import get_db, SocioComercial, Credito, Cliente
+from src.database import get_db, SocioComercial, Credito, Cliente, Cartera
 from src.database.models.papeleria import DocumentoPapeleria, DocumentoVariable
-from src.config import COMPANY_DATA
+from src.config import get_company_data
 
 class VariableItem(BaseModel):
     placeholder: str
@@ -151,6 +151,28 @@ SYSTEM_FIELDS = [
     {"value": "empresa.razon_social", "label": "Empresa - Razón Social"},
     {"value": "empresa.cuit", "label": "Empresa - CUIT"},
     {"value": "socio.razon_social", "label": "Socio Comercial - Razón Social"},
+    {"value": "cartera.id", "label": "Cartera - ID"},
+    {"value": "cartera.nombre", "label": "Cartera - Nombre"},
+    {"value": "cartera.fecha_compra", "label": "Cartera - Fecha Venta/Compra"},
+    {"value": "cartera.monto_total", "label": "Cartera - Monto Total"},
+    {"value": "cartera.monto_total_letras", "label": "Cartera - Monto Total (En Letras)"},
+    {"value": "cartera.socio_comercial", "label": "Cartera - Socio Comercial"},
+    {"value": "cartera.recurso", "label": "Cartera - Con/Sin Recurso"},
+    {"value": "cartera.fecha_dia", "label": "Cartera - Fecha Venta (Día)"},
+    {"value": "cartera.fecha_mes_letras", "label": "Cartera - Fecha Venta (Mes Letras)"},
+    {"value": "cartera.fecha_anio", "label": "Cartera - Fecha Venta (Año)"},
+    {"value": "empresa.nro_cta_bancaria", "label": "Empresa - Nro. Cta. Bancaria"},
+    {"value": "empresa.cbu", "label": "Empresa - CBU"},
+    {"value": "empresa.domicilio", "label": "Empresa - Domicilio"},
+    {"value": "empresa.nombre_banco", "label": "Empresa - Nombre del Banco"},
+    {"value": "socio.cuit_formato", "label": "Socio Comercial - CUIT (con guiones)"},
+    {"value": "socio.direccion", "label": "Socio Comercial - Dirección"},
+    {"value": "socio.domicilio", "label": "Socio Comercial - Domicilio"},
+    {"value": "socio.contacto", "label": "Socio Comercial - Contacto"},
+    {"value": "cartera.valor_actual", "label": "Cartera - Valor Actual"},
+    {"value": "cartera.valor_actual_letras", "label": "Cartera - Valor Actual (En Letras)"},
+    {"value": "cartera.anexo_1", "label": "Cartera - Tabla Anexo A-I"},
+    {"value": "cartera.anexo_2", "label": "Cartera - Tabla Anexo A-II"},
 ]
 
 router = APIRouter(prefix="/api/v1/papeleria", tags=["Papeleria"])
@@ -218,6 +240,7 @@ def _auto_map_variables(docx_path: str, doc_id: int, db: Session):
 @router.post("/upload")
 def upload_document(
     socio_id: int = Form(...),
+    categoria: str = Form("creditos"),
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
@@ -251,16 +274,18 @@ def upload_document(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al guardar el archivo: {str(e)}")
 
-    # Buscar si ya existe un registro para este socio y archivo
+    # Buscar si ya existe un registro para este socio y archivo y categoría
     if db_socio_id is not None:
         doc = db.query(DocumentoPapeleria).filter(
             DocumentoPapeleria.socio_id == db_socio_id,
-            DocumentoPapeleria.nombre_archivo == filename
+            DocumentoPapeleria.nombre_archivo == filename,
+            DocumentoPapeleria.categoria == categoria
         ).first()
     else:
         doc = db.query(DocumentoPapeleria).filter(
             DocumentoPapeleria.socio_id.is_(None),
-            DocumentoPapeleria.nombre_archivo == filename
+            DocumentoPapeleria.nombre_archivo == filename,
+            DocumentoPapeleria.categoria == categoria
         ).first()
 
     if doc:
@@ -273,7 +298,8 @@ def upload_document(
             socio_id=db_socio_id,
             nombre_archivo=filename,
             ruta_archivo=file_path,
-            tipo_archivo=ext
+            tipo_archivo=ext,
+            categoria=categoria
         )
         db.add(doc)
 
@@ -292,27 +318,32 @@ def upload_document(
         }
     }
 
+@router.get("")
 @router.get("/")
-def list_documents(socio_id: int = None, db: Session = Depends(get_db)):
+def list_documents(socio_id: int = None, categoria: str = None, db: Session = Depends(get_db)):
     query = db.query(DocumentoPapeleria)
     if socio_id is not None:
         if socio_id == 0:
             query = query.filter(DocumentoPapeleria.socio_id.is_(None))
         else:
             query = query.filter(DocumentoPapeleria.socio_id == socio_id)
+            
+    if categoria:
+        query = query.filter(DocumentoPapeleria.categoria == categoria)
     
     docs = query.order_by(DocumentoPapeleria.orden.asc(), DocumentoPapeleria.fecha_subida.desc()).all()
     
-    from src.config import COMPANY_DATA
+    company = get_company_data(db)
     
     result = []
     for doc in docs:
         result.append({
             "id": doc.id,
             "socio_id": doc.socio_id if doc.socio_id is not None else 0,
-            "socio_nombre": doc.socio.razon_social if doc.socio else COMPANY_DATA.razon_social,
+            "socio_nombre": doc.socio.razon_social if doc.socio else company.razon_social,
             "nombre_archivo": doc.nombre_archivo,
             "tipo_archivo": doc.tipo_archivo,
+            "categoria": doc.categoria,
             "orden": doc.orden,
             "fecha_subida": doc.fecha_subida.isoformat() if doc.fecha_subida else None
         })
@@ -694,9 +725,9 @@ def resolve_system_field(credito: Credito, field: str):
             return credito.cuotas[0].fecha_vencimiento.strftime("%d/%m/%Y") if credito.cuotas[0].fecha_vencimiento else ""
         return ""
     elif field == "empresa.razon_social":
-        return COMPANY_DATA.razon_social
+        return get_company_data(db).razon_social
     elif field == "empresa.cuit":
-        return COMPANY_DATA.cuit
+        return get_company_data(db).cuit
     elif field == "socio.razon_social":
         return credito.socio_originador.razon_social if credito.socio_originador else ""
     elif field == "credito.tabla_transferencias":
@@ -709,6 +740,184 @@ def resolve_system_field(credito: Credito, field: str):
                 "Monto": format_currency(t.monto)
             })
         return {"__type__": "table", "headers": ["CUIL/CUIT", "CBU", "Razón Social", "Monto"], "rows": transferencias_data}
+    return ""
+
+def resolve_system_field_cartera(cartera: Cartera, field: str, db: Session = None):
+    if field == "cartera.id":
+        return str(cartera.id)
+    elif field == "cartera.nombre":
+        return cartera.nombre or ""
+    elif field == "cartera.fecha_compra":
+        return cartera.fecha_compra.strftime("%d/%m/%Y") if cartera.fecha_compra else ""
+    elif field == "cartera.monto_total":
+        total = sum(float(c.capital or 0) for c in cartera.creditos_incluidos) if cartera.creditos_incluidos else 0
+        return format_currency(total)
+    elif field == "cartera.monto_total_letras":
+        total = sum(float(c.capital or 0) for c in cartera.creditos_incluidos) if cartera.creditos_incluidos else 0
+        return monto_a_letras(total)
+    elif field == "cartera.socio_comercial" or field == "socio.razon_social":
+        return cartera.socio.razon_social if cartera.socio else ""
+    elif field == "empresa.razon_social":
+        return get_company_data(db).razon_social
+    elif field == "empresa.cuit":
+        return get_company_data(db).cuit
+    elif field == "cartera.recurso":
+        return "CON RECURSO" if cartera.recurso else "SIN RECURSO"
+    elif field == "cartera.fecha_dia":
+        return str(cartera.fecha_compra.day) if cartera.fecha_compra else ""
+    elif field == "cartera.fecha_mes_letras":
+        if cartera.fecha_compra:
+            meses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+            return meses[cartera.fecha_compra.month - 1]
+        return ""
+    elif field == "cartera.fecha_anio":
+        return str(cartera.fecha_compra.year) if cartera.fecha_compra else ""
+    elif field == "empresa.nro_cta_bancaria":
+        return get_company_data(db).bank_account
+    elif field == "empresa.cbu":
+        return get_company_data(db).cbu
+    elif field == "empresa.domicilio":
+        return get_company_data(db).domicilio
+    elif field == "empresa.nombre_banco":
+        return get_company_data(db).bank_name
+    elif field == "socio.cuit_formato":
+        cuit = cartera.socio.cuit if cartera.socio else ""
+        if len(cuit) == 11:
+            return f"{cuit[:2]}-{cuit[2:10]}-{cuit[10:]}"
+        return cuit
+    elif field == "socio.direccion" or field == "socio.domicilio":
+        return cartera.socio.domicilio_legal if cartera.socio else ""
+    elif field == "socio.contacto":
+        return cartera.socio.contacto_nombre if cartera.socio else ""
+    elif field in ("cartera.valor_actual", "cartera.valor_actual_letras"):
+        tna = float(cartera.tna_descuento) if cartera.tna_descuento else 0.0
+        va_total = 0.0
+        if cartera.operaciones:
+            for op in cartera.operaciones:
+                if op.cuota_comercializada and op.cuota:
+                    c = op.cuota
+                    total_cuota = float(c.capital or 0) + float(c.interes or 0)
+                    if c.fecha_vencimiento and cartera.fecha_compra:
+                        dias = max(0, (c.fecha_vencimiento - cartera.fecha_compra).days)
+                        va_cuota = total_cuota / ((1 + (tna * 30 / 365)) ** (dias / 30))
+                    else:
+                        va_cuota = total_cuota
+                    va_total += va_cuota
+        
+        if field == "cartera.valor_actual":
+            return format_currency(va_total)
+        else:
+            return monto_a_letras(va_total)
+    
+    elif field == "cartera.anexo_1":
+        tna = float(cartera.tna_descuento) if cartera.tna_descuento else 0.0
+        headers = ['OPERACIÓN', 'APELLIDO', 'NOMBRE', 'Tipo Doc.', 'Nro Doc.', 'LINEA', 'ORGANISMO', 'FECHA LIQUIDACION', 'PLAZO OPERACIÓN', 'PLAZO VENDIDO', 'VALOR NOMINAL', 'CAPITAL + INTERES', 'VALOR ACTUAL', 'TASA']
+        rows = []
+        tot_vn = 0.0
+        tot_cap_int = 0.0
+        tot_va = 0.0
+        credito_ops = {}
+        for op in cartera.operaciones:
+            if not op.cuota_comercializada or not op.cuota:
+                continue
+            cid = op.cuota.credito_id
+            if cid not in credito_ops:
+                credito_ops[cid] = []
+            credito_ops[cid].append(op)
+        for cid, ops in credito_ops.items():
+            credito = ops[0].cuota.credito
+            cli = credito.cliente
+            plazo_vend = len(ops)
+            vn = sum(float(op.cuota.capital or 0) for op in ops)
+            cap_int = sum(float(op.cuota.capital or 0) + float(op.cuota.interes or 0) + float(op.cuota.iva or 0) for op in ops)
+            va_credito = 0.0
+            for op in ops:
+                c = op.cuota
+                total_c = float(c.capital or 0) + float(c.interes or 0)
+                if c.fecha_vencimiento and cartera.fecha_compra:
+                    dias = max(0, (c.fecha_vencimiento - cartera.fecha_compra).days)
+                    va_credito += total_c / ((1 + (tna * 30 / 365)) ** (dias / 30))
+                else:
+                    va_credito += total_c
+            tot_vn += vn
+            tot_cap_int += cap_int
+            tot_va += va_credito
+            rows.append({
+                "OPERACIÓN": str(credito.id_externo or credito.id),
+                "APELLIDO": cli.apellido if cli else "",
+                "NOMBRE": cli.nombre if cli else "",
+                "Tipo Doc.": "DNI" if cli else "",
+                "Nro Doc.": cli.documento if cli else "",
+                "LINEA": credito.socio_originador.razon_social if credito.socio_originador else "",
+                "ORGANISMO": cli.empleador.razon_social if cli and cli.empleador else "",
+                "FECHA LIQUIDACION": credito.fecha_emision.strftime("%d/%m/%Y") if credito.fecha_emision else "",
+                "PLAZO OPERACIÓN": str(credito.plazo or ""),
+                "PLAZO VENDIDO": str(plazo_vend),
+                "VALOR NOMINAL": format_currency(vn),
+                "CAPITAL + INTERES": format_currency(cap_int),
+                "VALOR ACTUAL": format_currency(va_credito),
+                "TASA": f"{tna:.2f}%"
+            })
+        rows.append({
+            "OPERACIÓN": "TOTALES", "APELLIDO": "", "NOMBRE": "", "Tipo Doc.": "", "Nro Doc.": "",
+            "LINEA": "", "ORGANISMO": "", "FECHA LIQUIDACION": "", "PLAZO OPERACIÓN": "", "PLAZO VENDIDO": "",
+            "VALOR NOMINAL": format_currency(tot_vn), "CAPITAL + INTERES": format_currency(tot_cap_int),
+            "VALOR ACTUAL": format_currency(tot_va), "TASA": ""
+        })
+        return {"__type__": "table", "headers": headers, "rows": rows}
+    
+    elif field == "cartera.anexo_2":
+        tna = float(cartera.tna_descuento) if cartera.tna_descuento else 0.0
+        headers = ['Fecha de Vencimiento', 'Fecha de Rendición', 'Capital', 'Interés', 'Monto Financiado', 'Tasa', 'Valor Actual', 'Fecha de Cesión', 'Entidad Cesionaria', 'Nº Cesión']
+        rows = []
+        from collections import defaultdict
+        due_dates = defaultdict(list)
+        for op in cartera.operaciones:
+            if op.cuota_comercializada and op.cuota and op.cuota.fecha_vencimiento:
+                due_dates[op.cuota.fecha_vencimiento].append(op.cuota)
+        tot_cap = 0.0
+        tot_int = 0.0
+        tot_monto = 0.0
+        tot_va = 0.0
+        for fv in sorted(due_dates.keys()):
+            cuotas_fv = due_dates[fv]
+            import calendar
+            last_day = calendar.monthrange(fv.year, fv.month)[1]
+            fr = fv.replace(day=last_day)
+            cap = sum(float(c.capital or 0) for c in cuotas_fv)
+            int = sum(float(c.interes or 0) for c in cuotas_fv)
+            monto = cap + int
+            va_fv = 0.0
+            if cartera.fecha_compra:
+                dias = max(0, (fv - cartera.fecha_compra).days)
+                va_fv = monto / ((1 + (tna * 30 / 365)) ** (dias / 30))
+            else:
+                va_fv = monto
+            tot_cap += cap
+            tot_int += int
+            tot_monto += monto
+            tot_va += va_fv
+            rows.append({
+                "Fecha de Vencimiento": fv.strftime("%d/%m/%Y"),
+                "Fecha de Rendición": fr.strftime("%d/%m/%Y"),
+                "Capital": format_currency(cap),
+                "Interés": format_currency(int),
+                "Monto Financiado": format_currency(monto),
+                "Tasa": f"{tna:.2%}",
+                "Valor Actual": format_currency(va_fv),
+                "Fecha de Cesión": cartera.fecha_compra.strftime("%d/%m/%Y") if cartera.fecha_compra else "",
+                "Entidad Cesionaria": cartera.socio.razon_social if cartera.socio else "",
+                "Nº Cesión": str(cartera.id).zfill(3)
+            })
+        rows.append({
+            "Fecha de Vencimiento": "TOTALES", "Fecha de Rendición": "",
+            "Capital": format_currency(tot_cap), "Interés": format_currency(tot_int),
+            "Monto Financiado": format_currency(tot_monto), "Tasa": "",
+            "Valor Actual": format_currency(tot_va), "Fecha de Cesión": "",
+            "Entidad Cesionaria": "", "Nº Cesión": ""
+        })
+        return {"__type__": "table", "headers": headers, "rows": rows}
+    
     return ""
 
 @router.post("/generar_por_credito/{credito_id}")
@@ -748,6 +957,7 @@ def _generar_pdf_for_credito(credito: Credito, db: Session) -> str:
     valid_ids = [s for s in socio_ids if s is not None]
     
     docs = db.query(DocumentoPapeleria).filter(
+        DocumentoPapeleria.categoria == "creditos",
         or_(
             DocumentoPapeleria.socio_id.is_(None),
             DocumentoPapeleria.socio_id.in_(valid_ids) if valid_ids else False
@@ -773,10 +983,17 @@ def _generar_pdf_for_credito(credito: Credito, db: Session) -> str:
     credito_ident = credito.id if credito.id else f"simulacion_{credito.cliente_cuil}"
     final_pdf_path = os.path.join(output_dir, f"credito_{credito_ident}.pdf")
 
-    import pythoncom
+    has_pythoncom = False
+    try:
+        import pythoncom
+        has_pythoncom = True
+    except ImportError:
+        pass
+
     try:
         try:
-            pythoncom.CoInitialize()
+            if has_pythoncom:
+                pythoncom.CoInitialize()
             for doc in docs:
                 data = {}
                 for var in doc.variables:
@@ -794,7 +1011,8 @@ def _generar_pdf_for_credito(credito: Credito, db: Session) -> str:
             merger.close()
 
         finally:
-            pythoncom.CoUninitialize()
+            if has_pythoncom:
+                pythoncom.CoUninitialize()
             for f in temp_files:
                 if os.path.exists(f):
                     try:
@@ -807,3 +1025,100 @@ def _generar_pdf_for_credito(credito: Credito, db: Session) -> str:
         raise HTTPException(status_code=500, detail=error_msg)
         
     return final_pdf_path
+
+@router.post("/generar_por_cartera/{cartera_id}")
+def generar_papeleria_cartera(cartera_id: int, formato: str = 'pdf', db: Session = Depends(get_db)):
+    cartera = db.query(Cartera).filter(Cartera.id == cartera_id).first()
+    if not cartera:
+        raise HTTPException(status_code=404, detail="Cartera no encontrada.")
+    
+    socio_id = cartera.socio_id
+    
+    from sqlalchemy import or_
+    docs = db.query(DocumentoPapeleria).filter(
+        DocumentoPapeleria.categoria == "ventas_cartera",
+        or_(
+            DocumentoPapeleria.socio_id.is_(None),
+            DocumentoPapeleria.socio_id == socio_id if socio_id else False
+        )
+    ).order_by(
+        DocumentoPapeleria.socio_id.isnot(None),
+        DocumentoPapeleria.orden.asc()
+    ).all()
+    
+    if not docs:
+        raise HTTPException(status_code=400, detail="No hay documentos de papelería de ventas de cartera configurados para este socio (o genéricos).")
+        
+    import tempfile
+    from src.logic.legajos import process_document, process_docx
+    from pypdf import PdfWriter
+    
+    has_pythoncom = False
+    try:
+        import pythoncom
+        has_pythoncom = True
+    except ImportError:
+        pass
+    
+    output_dir = "data/legajos"
+    os.makedirs(output_dir, exist_ok=True)
+    
+    if formato == 'docx' and len(docs) == 1:
+        doc = docs[0]
+        data = {}
+        for var in doc.variables:
+            data[var.placeholder] = resolve_system_field_cartera(cartera, var.system_field, db)
+            
+        final_docx_path = os.path.join(output_dir, f"Contrato_Cartera_{cartera_id}.docx")
+        process_docx(doc.ruta_archivo, final_docx_path, data)
+        return FileResponse(
+            path=final_docx_path,
+            filename=f"Contrato_Cartera_{cartera_id}.docx",
+            media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        )
+    
+    # If multiple docs or forced PDF, merge as PDF
+    if has_pythoncom:
+        try:
+            pythoncom.CoInitialize()
+        except Exception:
+            has_pythoncom = False
+        
+    merger = PdfWriter()
+    temp_files = []
+    final_pdf_path = os.path.join(output_dir, f"Contrato_Cartera_{cartera_id}.pdf")
+    
+    try:
+        try:
+            for doc in docs:
+                data = {}
+                for var in doc.variables:
+                    data[var.placeholder] = resolve_system_field_cartera(cartera, var.system_field, db)
+
+                fd, temp_pdf = tempfile.mkstemp(suffix=".pdf")
+                os.close(fd)
+                os.remove(temp_pdf)
+                temp_files.append(temp_pdf)
+                
+                process_document(doc.ruta_archivo, temp_pdf, data)
+                merger.append(temp_pdf)
+
+            merger.write(final_pdf_path)
+            return FileResponse(
+                path=final_pdf_path,
+                filename=f"Contrato_Cartera_{cartera_id}.pdf",
+                media_type='application/pdf'
+            )
+        finally:
+            if has_pythoncom:
+                pythoncom.CoUninitialize()
+            for t in temp_files:
+                if os.path.exists(t):
+                    try:
+                        os.remove(t)
+                    except:
+                        pass
+    except Exception as e:
+        import traceback
+        error_msg = f"Error interno: {str(e)}\n\n{traceback.format_exc()}"
+        raise HTTPException(status_code=500, detail=error_msg)

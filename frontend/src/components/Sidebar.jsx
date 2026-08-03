@@ -28,14 +28,38 @@ const Sidebar = () => {
   const isOnline = apiStatus.includes('Conectado');
   const isAdmin = user?.rol === 'Administrador';
 
+  const [logoError, setLogoError] = React.useState(false);
+
   return (
     <aside className="sidebar glass-panel">
-      <div className="logo-container">
-        <h1 className="logo-text">Credit<span>Manager</span></h1>
-        <p className="logo-subtext">Core Engine API</p>
-      </div>
+      <NavLink 
+        to="/dashboard-cartera"
+        className="logo-container" 
+        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none', color: 'inherit' }}
+      >
+        {!logoError ? (
+          <img 
+            src="/static/logo.png" 
+            alt="App Logo" 
+            style={{ maxWidth: '100%', maxHeight: '80px', objectFit: 'contain' }}
+            onError={() => setLogoError(true)}
+          />
+        ) : (
+          <div style={{ textAlign: 'center' }}>
+            <h1 className="logo-text">Credit<span>Manager</span></h1>
+            <p className="logo-subtext">Core Engine API</p>
+          </div>
+        )}
+      </NavLink>
 
       <nav className="nav-menu">
+        <NavLink to="/dashboard-cartera" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path>
+            <path d="M22 12A10 10 0 0 0 12 2v10z"></path>
+          </svg>
+          Dashboard
+        </NavLink>
         <NavLink to="/simulation" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
@@ -52,8 +76,23 @@ const Sidebar = () => {
           </svg>
           Reportes de Saldos
         </NavLink>
+        <NavLink to="/reportes/bcra" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+            <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+            <line x1="12" y1="22.08" x2="12" y2="12"></line>
+          </svg>
+          Reportes Regulados
+        </NavLink>
 
         <NavGroup title="Clientes">
+          <NavLink to="/dashboard-clientes" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path>
+              <path d="M22 12A10 10 0 0 0 12 2v10z"></path>
+            </svg>
+            Dashboard
+          </NavLink>
           <NavLink to="/clientes" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -183,13 +222,6 @@ const Sidebar = () => {
             </svg>
             Acciones del Sistema
           </NavLink>
-          <NavLink to="/papeleria" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
-              <polyline points="13 2 13 9 20 9"></polyline>
-            </svg>
-            Papelería
-          </NavLink>
           {isAdmin && (
             <NavLink to="/usuarios" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -201,6 +233,25 @@ const Sidebar = () => {
               Usuarios
             </NavLink>
           )}
+          <NavGroup title="Papelería">
+            <NavLink to="/papeleria/creditos" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                <polyline points="13 2 13 9 20 9"></polyline>
+              </svg>
+              Créditos
+            </NavLink>
+            <NavLink to="/papeleria/ventas" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+                <polyline points="10 9 9 9 8 9"></polyline>
+              </svg>
+              Ventas de Cartera
+            </NavLink>
+          </NavGroup>
         </NavGroup>
       </nav>
 

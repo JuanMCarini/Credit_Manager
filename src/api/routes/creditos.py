@@ -171,7 +171,7 @@ def create_credito(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error originando el crédito: {str(e)}")
 
-@router.patch("/api/v1/creditos/{credito_id}/estado")
+@router.patch("/api/v1/creditos/{credito_id:int}/estado")
 def update_credito_estado(credito_id: int, data: CreditoEstadoUpdate, db: Session = Depends(get_db)):
     credito = db.query(Credito).filter(Credito.id == credito_id).first()
     if not credito:
@@ -186,7 +186,7 @@ def update_credito_estado(credito_id: int, data: CreditoEstadoUpdate, db: Sessio
     db.commit()
     return {"status": "success", "message": "Estado actualizado"}
 
-@router.get("/api/v1/creditos/{credito_id}/cuotas")
+@router.get("/api/v1/creditos/{credito_id:int}/cuotas")
 def get_credito_cuotas(credito_id: int, db: Session = Depends(get_db)):
     cuotas = db.query(Cuota).options(joinedload(Cuota.cobranzas)).filter(Cuota.credito_id == credito_id).order_by(Cuota.nro_cuota).all()
     
@@ -228,7 +228,7 @@ def get_credito_cuotas(credito_id: int, db: Session = Depends(get_db)):
         
     return result
 
-@router.get("/api/v1/creditos/{credito_id}/transferencias")
+@router.get("/api/v1/creditos/{credito_id:int}/transferencias")
 def get_credito_transferencias(credito_id: int, db: Session = Depends(get_db)):
     credito = db.query(Credito).filter(Credito.id == credito_id).first()
     if not credito:
@@ -313,7 +313,7 @@ def get_creditos_list(fecha_corte: Optional[date] = Query(None, description="Fec
         })
     return result
 
-@router.delete("/api/v1/creditos/{credito_id}")
+@router.delete("/api/v1/creditos/{credito_id:int}")
 def delete_credito(credito_id: int, db: Session = Depends(get_db)):
     credito = db.query(Credito).options(joinedload(Credito.cuotas).joinedload(Cuota.cobranzas)).filter(Credito.id == credito_id).first()
     if not credito:
@@ -344,7 +344,7 @@ def delete_credito(credito_id: int, db: Session = Depends(get_db)):
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 UPLOAD_DIR = os.path.join(project_root, "data", "uploads", "legajos")
-@router.post("/api/v1/creditos/{credito_id}/documentos", response_model=DocumentoLegajoOut)
+@router.post("/api/v1/creditos/{credito_id:int}/documentos", response_model=DocumentoLegajoOut)
 async def upload_documento(credito_id: int, file: UploadFile = File(...), transferencia_id: Optional[int] = Form(None), es_legajo_firmado: bool = Form(False), db: Session = Depends(get_db)):
     try:
         credito = db.query(Credito).filter(Credito.id == credito_id).first()
@@ -393,12 +393,12 @@ async def upload_documento(credito_id: int, file: UploadFile = File(...), transf
         error_msg = f"Error interno: {str(e)}\n\n{traceback.format_exc()}"
         raise HTTPException(status_code=500, detail=error_msg)
 
-@router.get("/api/v1/creditos/{credito_id}/documentos", response_model=List[DocumentoLegajoOut])
+@router.get("/api/v1/creditos/{credito_id:int}/documentos", response_model=List[DocumentoLegajoOut])
 def get_documentos(credito_id: int, db: Session = Depends(get_db)):
     docs = db.query(DocumentoLegajo).filter(DocumentoLegajo.credito_id == credito_id).all()
     return docs
 
-@router.delete("/api/v1/creditos/{credito_id}/documentos/{doc_id}")
+@router.delete("/api/v1/creditos/{credito_id:int}/documentos/{doc_id:int}")
 def delete_documento(credito_id: int, doc_id: int, db: Session = Depends(get_db)):
     doc = db.query(DocumentoLegajo).filter(DocumentoLegajo.id == doc_id, DocumentoLegajo.credito_id == credito_id).first()
     if not doc:
@@ -414,11 +414,10 @@ def delete_documento(credito_id: int, doc_id: int, db: Session = Depends(get_db)
     db.commit()
     return {"status": "success", "message": "Documento eliminado"}
 
-@router.get("/api/v1/creditos/{credito_id}/documentos/merged/download")
-def download_merged_pdf(credito_id: int, db: Session = Depends(get_db)):
+def _merge_uploaded_docs_for_credito(credito_id: int, db: Session) -> BytesIO:
     docs = db.query(DocumentoLegajo).filter(DocumentoLegajo.credito_id == credito_id).all()
     if not docs:
-        raise HTTPException(status_code=404, detail="No hay documentos para este crédito")
+        raise ValueError("No hay documentos para este crédito")
 
     # Ordenar: Documentos generales primero (transferencia_id is None), transferencias al final
     docs = sorted(docs, key=lambda d: 1 if d.transferencia_id is not None else 0)
@@ -454,6 +453,17 @@ def download_merged_pdf(credito_id: int, db: Session = Depends(get_db)):
                 
     output_pdf = BytesIO()
     merger.write(output_pdf)
+    output_pdf.seek(0)
+    return output_pdf
+
+@router.get("/api/v1/creditos/{credito_id:int}/documentos/merged/download")
+def download_merged_pdf(credito_id: int, db: Session = Depends(get_db)):
+    try:
+        output_pdf = _merge_uploaded_docs_for_credito(credito_id, db)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
     
     return Response(
         content=output_pdf.getvalue(), 
@@ -461,7 +471,7 @@ def download_merged_pdf(credito_id: int, db: Session = Depends(get_db)):
         headers={"Content-Disposition": f"attachment; filename=legajo_credito_{credito_id}.pdf"}
     )
 
-@router.get("/api/v1/creditos/{credito_id}/documentos/{doc_id}/download")
+@router.get("/api/v1/creditos/{credito_id:int}/documentos/{doc_id:int}/download")
 def download_documento(credito_id: int, doc_id: int, db: Session = Depends(get_db)):
     doc = db.query(DocumentoLegajo).filter(DocumentoLegajo.id == doc_id, DocumentoLegajo.credito_id == credito_id).first()
     if not doc:
@@ -604,76 +614,116 @@ import base64
 import tempfile
 import importlib
 import traceback
+import tempfile
+import zipfile
 from src.logic.import_data import quota
+from src.logic.import_data.web_carga import importar_datos_web_carga, ImportValidationError
+from src.database.models import Relacion
+from src.database.models.socios import SocioComercial
 
 @router.post("/api/v1/creditos/importacion-masiva")
 async def importacion_masiva_creditos(
     proveedor: str = Form("QUOTA_CFL"),
-    clientes_file: UploadFile = File(...),
-    creditos_file: UploadFile = File(...),
-    transferencias_file: UploadFile = File(...),
+    clientes_file: UploadFile = File(default=None),
+    creditos_file: UploadFile = File(default=None),
+    transferencias_file: UploadFile = File(default=None),
+    archivo_web_carga: UploadFile = File(default=None),
     archivos: List[UploadFile] = File(default=[]),
     db: Session = Depends(get_db)
 ):
-    if proveedor != "QUOTA_CFL":
+    if proveedor not in ["QUOTA_CFL", "WEB_CARGA_CFL"]:
         raise HTTPException(status_code=400, detail="Proveedor no soportado actualmente.")
 
     try:
-        # 1. Leer Archivos en Memoria
-        clts_bytes = await clientes_file.read()
-        df_clts = pd.read_excel(BytesIO(clts_bytes))
-        
-        crts_bytes = await creditos_file.read()
-        df_crts = pd.read_excel(BytesIO(crts_bytes), usecols=['Crédito', 'Emisión', 'DNI', 'CBU', 'Organismo', 'Capital', 'Neto', 'Plazo', 'Imp. Cuota', 'Tasa', 'ID Externo'])
-        
-        transf_bytes = await transferencias_file.read()
-        df_transf = pd.read_csv(BytesIO(transf_bytes), sep=";", header=0, names=["CBU/CVU", "Fecha", "Monto", "CUIT/CUIL", "ID Quota", "Razon Social"])
-
-        # 2. Pipeline de Importación Quota
         errores_globales = []
-        
-        res_clts = quota.import_clients_from_dataframe(df_clts, db)
-        if res_clts.get('errores'):
-            errores_globales.extend([{"Etapa": "Clientes", "Error": err} for err in res_clts['errores']])
-            
-        res_crts_upd = quota.update_clients_from_crts_dataframe(df_crts, db)
-        if res_crts_upd.get('errores'):
-            errores_globales.extend([{"Etapa": "Actualización Clientes", "Error": err} for err in res_crts_upd['errores']])
-            
-        res_crts = quota.import_credits_from_dataframe(df_crts, db)
-        if res_crts.get('errores'):
-            errores_globales.extend([{"Etapa": "Créditos", "Error": err} for err in res_crts['errores']])
-            
-        nuevos_ids = res_crts.get('nuevos_ids_externos', set())
-        
-        res_transf = quota.import_transfers_from_dataframe(df_transf, df_crts, db, nuevos_ids_externos=nuevos_ids)
-        if res_transf.get('errores'):
-            errores_globales.extend([{"Etapa": "Transferencias", "Error": err} for err in res_transf['errores']])
-
-        # 3. Procesar Archivos (Legajos)
         archivos_procesados = 0
+        resumen = {}
+        
+        # Procesar extracción de archivos adjuntos (legajos)
+        extracted_files = []
+        tmpdirname = None
         if archivos:
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                extracted_files = []
-                for file in archivos:
-                    if file.filename.lower().endswith(".zip"):
-                        content = await file.read()
-                        with zipfile.ZipFile(BytesIO(content)) as zf:
-                            for zip_info in zf.infolist():
-                                if not zip_info.is_dir() and not zip_info.filename.startswith("__MACOSX/") and not zip_info.filename.startswith("."):
-                                    extracted_bytes = zf.read(zip_info.filename)
-                                    base_name = os.path.basename(zip_info.filename)
-                                    if base_name:
-                                        file_path = os.path.join(tmpdirname, base_name)
-                                        with open(file_path, "wb") as f:
-                                            f.write(extracted_bytes)
-                                        extracted_files.append(file_path)
-                    else:
-                        file_bytes = await file.read()
-                        file_path = os.path.join(tmpdirname, file.filename)
-                        with open(file_path, "wb") as f:
-                            f.write(file_bytes)
-                        extracted_files.append(file_path)
+            tmpdirname = tempfile.mkdtemp()
+            for file in archivos:
+                if file.filename.lower().endswith(".zip"):
+                    content = await file.read()
+                    with zipfile.ZipFile(BytesIO(content)) as zf:
+                        for zip_info in zf.infolist():
+                            if not zip_info.is_dir() and not zip_info.filename.startswith("__MACOSX/") and not zip_info.filename.startswith("."):
+                                extracted_bytes = zf.read(zip_info.filename)
+                                base_name = os.path.basename(zip_info.filename)
+                                if base_name:
+                                    file_path = os.path.join(tmpdirname, base_name)
+                                    with open(file_path, "wb") as f:
+                                        f.write(extracted_bytes)
+                                    extracted_files.append(file_path)
+                else:
+                    file_bytes = await file.read()
+                    file_path = os.path.join(tmpdirname, file.filename)
+                    with open(file_path, "wb") as f:
+                        f.write(file_bytes)
+                    extracted_files.append(file_path)
+
+        if proveedor == "QUOTA_CFL":
+            if not clientes_file or not creditos_file or not transferencias_file:
+                raise HTTPException(status_code=400, detail="Faltan archivos requeridos para Quota.")
+                
+            clts_bytes = await clientes_file.read()
+            df_clts = pd.read_excel(BytesIO(clts_bytes))
+            df_clts.columns = [str(c).strip() for c in df_clts.columns]
+            
+            crts_bytes = await creditos_file.read()
+            df_crts = pd.read_excel(BytesIO(crts_bytes))
+            df_crts.columns = [str(c).strip() for c in df_crts.columns]
+
+            col_mappings = {
+                'Credito': 'Crédito',
+                'id externo': 'ID Externo',
+                'id_externo': 'ID Externo',
+                'ID EXTERNO': 'ID Externo',
+                'Imp.Cuota': 'Imp. Cuota',
+                'Imp Cuota': 'Imp. Cuota',
+                'Emision': 'Emisión',
+            }
+            df_crts.rename(columns=col_mappings, inplace=True)
+            
+            transf_bytes = await transferencias_file.read()
+            try:
+                df_transf = pd.read_csv(BytesIO(transf_bytes), sep=";", header=None, names=["CBU/CVU", "Fecha", "Monto", "CUIT/CUIL", "ID Quota", "Razon Social"], encoding="utf-8")
+            except Exception:
+                df_transf = pd.read_csv(BytesIO(transf_bytes), sep=";", header=None, names=["CBU/CVU", "Fecha", "Monto", "CUIT/CUIL", "ID Quota", "Razon Social"], encoding="latin-1", on_bad_lines='skip')
+
+            res_clts = quota.import_clients_from_dataframe(df_clts, db)
+            if res_clts.get('errores'):
+                errores_globales.extend([{"Etapa": "Clientes", "Error": err} for err in res_clts['errores']])
+                
+            res_crts_upd = quota.update_clients_from_crts_dataframe(df_crts, db)
+            if res_crts_upd.get('errores'):
+                errores_globales.extend([{"Etapa": "Actualización Clientes", "Error": err} for err in res_crts_upd['errores']])
+                
+            quota_socio = db.query(SocioComercial).filter(SocioComercial.razon_social == 'SISTEMA QUOTA').first()
+            quota_socio_id = quota_socio.id if quota_socio else 8
+            map_socios_quota = Relacion.get_external_mapping_cache(quota_socio_id, "socios_comerciales", db)
+            
+            # Pre-validación de Líneas (Socio Originador)
+            lineas_faltantes = set()
+            for _, row in df_crts.iterrows():
+                linea_val = str(row.get('Línea', row.get('Linea', ''))).strip()
+                if linea_val and linea_val != 'nan' and linea_val not in map_socios_quota:
+                    lineas_faltantes.add(linea_val)
+                    
+            if lineas_faltantes:
+                errores_globales.append({"Etapa": "Validación Fase Cero", "Error": f"Faltan mapeos en la tabla Relaciones para el SISTEMA QUOTA (Línea -> Socio). Faltan: {', '.join(lineas_faltantes)}"})
+            else:
+                res_crts = quota.import_credits_from_dataframe(df_crts, db, map_socios=map_socios_quota)
+                if res_crts.get('errores'):
+                    errores_globales.extend([{"Etapa": "Créditos", "Error": err} for err in res_crts['errores']])
+                    
+                nuevos_ids = res_crts.get('nuevos_ids_externos', set())
+                
+                res_transf = quota.import_transfers_from_dataframe(df_transf, df_crts, db, nuevos_ids_externos=nuevos_ids)
+                if res_transf.get('errores'):
+                    errores_globales.extend([{"Etapa": "Transferencias", "Error": err} for err in res_transf['errores']])
 
                 if extracted_files:
                     res_docs = quota.process_quota_documents(
@@ -687,12 +737,64 @@ async def importacion_masiva_creditos(
                     if res_docs.get('errores'):
                         errores_globales.extend([{"Etapa": "Documentos", "Error": str(err)} for err in res_docs['errores']])
 
-        # 4. Verificar estados
-        res_estados = quota.verify_and_update_credit_states(df_crts, db)
-        if res_estados.get('errores'):
-            errores_globales.extend([{"Etapa": "Verificación Estados", "Error": err} for err in res_estados['errores']])
+                res_estados = quota.verify_and_update_credit_states(df_crts, db)
+                if res_estados.get('errores'):
+                    errores_globales.extend([{"Etapa": "Verificación Estados", "Error": err} for err in res_estados['errores']])
 
-        # 5. Generar reporte de errores si los hay
+                resumen["nuevos_creditos"] = res_crts.get('nuevos_creditos', 0)
+                resumen["creditos_existentes"] = res_crts.get('creditos_existentes', 0)
+                resumen["transferencias_importadas"] = res_transf.get('importadas', 0)
+                resumen["pasados_a_firmado"] = res_estados.get('pasados_a_firmado', 0)
+                resumen["pasados_a_activo"] = res_estados.get('pasados_a_activo', 0)
+
+            resumen["nuevos_clientes"] = res_clts.get('nuevos', 0)
+            resumen["clientes_actualizados"] = res_clts.get('actualizados', 0) + res_crts_upd.get('actualizados', 0)
+            resumen["archivos_procesados"] = archivos_procesados
+
+        elif proveedor == "WEB_CARGA_CFL":
+            if not archivo_web_carga:
+                raise HTTPException(status_code=400, detail="Falta el archivo TXT para Web Carga.")
+                
+            if not tmpdirname:
+                tmpdirname = tempfile.mkdtemp()
+                
+            txt_path = os.path.join(tmpdirname, archivo_web_carga.filename)
+            txt_content = await archivo_web_carga.read()
+            with open(txt_path, "wb") as f:
+                f.write(txt_content)
+                
+            try:
+                res_wc = importar_datos_web_carga(
+                    filepath=txt_path,
+                    db_session=db,
+                    socio_id_web_carga=7,  # ID hardcodeado a pedido del usuario (Socio = SISTEMA WEB CARGA)
+                    file_paths_docs=extracted_files,
+                    upload_dir=UPLOAD_DIR
+                )
+                db.commit()
+                
+                archivos_procesados = len(res_wc.get("documentos", {}).get("procesados", []))
+                if res_wc.get("documentos", {}).get("errores"):
+                    errores_globales.extend([{"Etapa": "Documentos Web Carga", "Error": err} for err in res_wc["documentos"]["errores"]])
+                    
+                resumen = {
+                    "nuevos_clientes": res_wc.get('clientes', {}).get('nuevos', 0),
+                    "clientes_actualizados": res_wc.get('clientes', {}).get('actualizados', 0),
+                    "nuevos_creditos": res_wc.get('creditos', {}).get('nuevos', 0),
+                    "creditos_existentes": res_wc.get('creditos', {}).get('existentes', 0),
+                    "transferencias_importadas": res_wc.get('creditos', {}).get('nuevos', 0), 
+                    "archivos_procesados": archivos_procesados,
+                    "pasados_a_firmado": res_wc.get("documentos", {}).get("pasados_a_firmado", 0),
+                    "pasados_a_activo": res_wc.get("documentos", {}).get("pasados_a_activo", 0)
+                }
+            except ImportValidationError as e:
+                db.rollback()
+                errores_globales.append({"Etapa": "Validación Fase Cero", "Error": str(e)})
+
+        if tmpdirname and os.path.exists(tmpdirname):
+            import shutil
+            shutil.rmtree(tmpdirname)
+
         excel_base64 = None
         if errores_globales:
             df_err = pd.DataFrame(errores_globales)
@@ -704,16 +806,7 @@ async def importacion_masiva_creditos(
         return {
             "status": "success",
             "message": "Importación procesada",
-            "resumen": {
-                "nuevos_clientes": res_clts.get('nuevos', 0),
-                "clientes_actualizados": res_clts.get('actualizados', 0) + res_crts_upd.get('actualizados', 0),
-                "nuevos_creditos": res_crts.get('nuevos_creditos', 0),
-                "creditos_existentes": res_crts.get('creditos_existentes', 0),
-                "transferencias_importadas": res_transf.get('importadas', 0),
-                "archivos_procesados": archivos_procesados,
-                "pasados_a_firmado": res_estados.get('pasados_a_firmado', 0),
-                "pasados_a_activo": res_estados.get('pasados_a_activo', 0)
-            },
+            "resumen": resumen,
             "errores_count": len(errores_globales),
             "excel_base64": excel_base64
         }

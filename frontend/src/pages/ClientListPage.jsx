@@ -218,6 +218,9 @@ const ClientListPage = () => {
                     <td>{c["Teléfono"]}</td>
                     <td>
                       <div style={{ display: 'flex', gap: '8px', flexWrap: 'nowrap', alignItems: 'center' }}>
+                        <button className="btn-secondary" onClick={() => navigate(`/dashboard-clientes?cuil=${c.CUIL}`)} style={{ padding: '4px 8px', fontSize: '14px' }} title="Dashboard de Cliente">
+                          📊
+                        </button>
                         <button className="btn-secondary" onClick={() => setViewClient(c)} style={{ padding: '4px 8px', fontSize: '14px' }} title="Ver Detalles">
                           ℹ️
                         </button>
