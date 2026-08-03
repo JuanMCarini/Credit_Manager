@@ -52,15 +52,26 @@ const ExportExcelButton = ({ data, filteredData, filename = 'exportacion', fetch
             const numRegex = /^-?\d+(\.\d+)?$/;
 
             if (dateRegex.test(strVal)) {
-              const parsedDate = new Date(strVal);
-              if (!isNaN(parsedDate.getTime())) {
-                // Ajustar zona horaria para fechas YYYY-MM-DD puras (evita que se reste un día)
-                if (strVal.length === 10) {
-                  parsedDate.setMinutes(parsedDate.getMinutes() + parsedDate.getTimezoneOffset());
-                }
+              if (strVal.length === 10) {
+                // "YYYY-MM-DD" exactly - parse manually to avoid timezone shifting
+                const [year, month, day] = strVal.split('-');
+                const parsedDate = new Date(Number(year), Number(month) - 1, Number(day));
+                
+                // Compensar el bug de SheetJS (xlsx) con las zonas horarias históricas.
+                // Excel usa la época 1899-12-30. Como el offset UTC en Argentina en 1899 era distinto al de hoy,
+                // la resta de milisegundos genera un desfase de fracciones de día (ej: 23:59:12 del día anterior).
+                const epoch = new Date(1899, 11, 30);
+                const offsetDiff = epoch.getTimezoneOffset() - parsedDate.getTimezoneOffset();
+                parsedDate.setMinutes(parsedDate.getMinutes() + offsetDiff);
+                
                 newRow[key] = parsedDate;
               } else {
-                newRow[key] = value;
+                const parsedDate = new Date(strVal);
+                if (!isNaN(parsedDate.getTime())) {
+                  newRow[key] = parsedDate;
+                } else {
+                  newRow[key] = value;
+                }
               }
             } else if (numRegex.test(strVal)) {
               // Evitar quitar ceros a la izquierda (ej: '0123') y evitar pérdida de precisión en números muy largos
