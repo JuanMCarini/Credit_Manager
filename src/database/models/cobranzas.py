@@ -121,6 +121,7 @@ class Cobranza(Base):
     interes = Column(Numeric(15, 2), nullable=False)
     iva = Column(Numeric(15, 2), nullable=False)
     fecha = Column(Date, nullable=False)
+    facturada = Column(Boolean, nullable=False, default=False)
 
     # Relationships
     cuota = relationship("Cuota", back_populates="cobranzas")
