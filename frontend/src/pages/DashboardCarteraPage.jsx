@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import axiosClient from '../api/axiosClient';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, LabelList, ComposedChart, Line } from 'recharts';
 import { jsPDF } from 'jspdf';
@@ -34,6 +34,60 @@ const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, per
       fontWeight="bold"
     >
       {`${(percent * 100).toFixed(2)}%`}
+    </text>
+  );
+};
+
+const renderCustomizedLabelMora = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, index, payload }) => {
+  const radius = outerRadius + 10;
+  const x = cx + radius * Math.cos(-midAngle * RADIAN);
+  const y = cy + radius * Math.sin(-midAngle * RADIAN);
+
+  if (payload.isSmall && !payload.showSmallSum) return null;
+
+  const displayPercent = payload.showSmallSum ? payload.smallSumPercent : percent;
+  if (isNaN(displayPercent)) return null;
+  const isRightSide = x > cx;
+
+  if (payload.showSmallSum) {
+    return (
+      <g>
+        <text
+          x={x}
+          y={y - 12}
+          fill="var(--text-primary)"
+          textAnchor={isRightSide ? 'start' : 'end'}
+          dominantBaseline="central"
+          fontSize={16}
+          fontWeight="bold"
+        >
+          {`${(displayPercent * 100).toFixed(2)}%`}
+        </text>
+        <text
+          x={x}
+          y={y + 12}
+          fill="var(--text-secondary)"
+          textAnchor={isRightSide ? 'start' : 'end'}
+          dominantBaseline="central"
+          fontSize={10}
+        >
+          (MENORES A 5%)
+        </text>
+      </g>
+    );
+  }
+
+  return (
+    <text
+      x={x}
+      y={y}
+      fill="var(--text-primary)"
+      textAnchor={isRightSide ? 'start' : 'end'}
+      dominantBaseline="central"
+      fontSize={16}
+      fontWeight="bold"
+    >
+      {`${(displayPercent * 100).toFixed(2)}%`}
     </text>
   );
 };
@@ -239,7 +293,7 @@ const DashboardCarteraPage = () => {
             }
           }),
           axiosClient.get('/api/v1/reports/balances/evolution', {
-            params: { meses: 12, fecha: fechaCorteDate.toISOString() }
+            params: { meses: 12, fecha: new Date(fechaCorte + 'T00:00:00').toISOString() }
           }),
           axiosClient.get('/api/v1/carteras/venta/tna_reciente', {
             params: { fecha: fechaCorte }
@@ -655,6 +709,48 @@ const DashboardCarteraPage = () => {
     return rows.reverse();
   }, [evolutionData, filtroOriginadores]);
 
+  const moraBucketsPie = useMemo(() => {
+    const totalMora = moraBuckets.reduce((acc, b) => acc + b.Total, 0);
+    
+    let smallSumTotal = 0;
+    const smallBucketsIndices = [];
+    
+    moraBuckets.forEach((b, idx) => {
+      if (b.Total > 0 && b.Total / totalMora < 0.05) {
+        smallSumTotal += b.Total;
+        smallBucketsIndices.push(idx);
+      }
+    });
+
+    // We designate the LAST small bucket so all previous points are available in refs when it renders
+    const designatedSmallBucketIndex = smallBucketsIndices.length > 0 ? smallBucketsIndices[smallBucketsIndices.length - 1] : -1;
+
+    return moraBuckets.filter(b => b.Total > 0).map((b) => {
+      const originalIdx = moraBuckets.indexOf(b);
+      const isSmall = b.Total / totalMora < 0.05;
+      const showSmallSum = originalIdx === designatedSmallBucketIndex;
+      
+      return {
+        ...b,
+        isSmall,
+        showSmallSum,
+        smallSumPercent: smallSumTotal / totalMora
+      };
+    });
+  }, [moraBuckets]);
+
+  const smallBucketsFootnote = useMemo(() => {
+    const totalMora = moraBuckets.reduce((acc, b) => acc + b.Total, 0);
+    const smallBuckets = moraBuckets.filter(b => b.Total > 0 && b.Total / totalMora < 0.05);
+    if (smallBuckets.length > 1) {
+      const sum = smallBuckets.reduce((acc, b) => acc + b.Total, 0);
+      return `El valor ${(sum / totalMora * 100).toFixed(2)}% agrupa las categorías: ${smallBuckets.map(b => b.label).join(', ')}.`;
+    }
+    return '';
+  }, [moraBuckets]);
+
+  const smallSlicesRef = useRef({});
+
   if (loading) {
     return (
       <div className="page-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
@@ -1060,7 +1156,7 @@ const DashboardCarteraPage = () => {
       {(activeTab === 'evolucion' || isExporting) && (
         <div id="export-tab-evolucion">
           <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', marginBottom: '30px', height: '400px' }}>
-            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Evolución de la Cartera Total (Últimos 12 Meses)</h2>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Evolución de Cartera (12 Meses)</h2>
             {filteredEvolutionData.length === 0 ? (
               <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>Cargando evolución histórica...</p>
             ) : (
@@ -1101,7 +1197,7 @@ const DashboardCarteraPage = () => {
           </div>
 
           <div className="glass-panel" style={{ display: exportFormat === 'l' ? 'none' : 'block', padding: '25px', borderRadius: '12px', marginTop: '20px' }}>
-            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Detalle Histórico (Últimos 12 Meses)</h2>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Detalle Histórico (12 Meses)</h2>
             {filteredEvolutionData.length === 0 ? (
               <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>No hay datos históricos disponibles.</p>
             ) : (
@@ -1142,7 +1238,7 @@ const DashboardCarteraPage = () => {
       {(activeTab === 'composicion' || isExporting) && (
         <div id="export-tab-composicion">
           <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', marginBottom: '30px' }}>
-            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Composición de la Cartera por Dueño (Capital y Porcentaje)</h2>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Cartera por Dueño (Capital y %)</h2>
             {filteredEvolutionData.length === 0 ? (
               <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>No hay datos disponibles.</p>
             ) : (
@@ -1295,7 +1391,7 @@ const DashboardCarteraPage = () => {
         <div id="export-tab-estados">
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginBottom: '30px' }}>
             <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', flex: '1 1 300px', display: 'flex', flexDirection: 'column' }}>
-              <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600', textAlign: 'center' }}>Distribución de Saldos por Estado del Crédito</h2>
+              <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600', textAlign: 'center' }}>Distribución por Estado</h2>
               <div style={{ flex: 1, minHeight: '250px' }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -1328,7 +1424,7 @@ const DashboardCarteraPage = () => {
             </div>
 
             <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', flex: '2 1 500px' }}>
-              <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Total de Saldos agrupados por Estado del Crédito (Capital + Interés)</h2>
+              <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Saldos por Estado (Cap+Int)</h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '15px' }}>
                 <div style={{
                   background: 'rgba(0,0,0,0.2)',
@@ -1365,7 +1461,7 @@ const DashboardCarteraPage = () => {
           </div>
 
           <div className="glass-panel" style={{ display: exportFormat === 'l' ? 'none' : 'block', padding: '25px', borderRadius: '12px' }}>
-            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Detalle de Saldos (Vencidos vs A Vencer) según Estado del Crédito</h2>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Saldos Vencidos vs A Vencer (Cap+Int)</h2>
             {estadosList.length === 0 ? (
               <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>No hay datos disponibles en la cartera activa.</p>
             ) : (
@@ -1410,12 +1506,54 @@ const DashboardCarteraPage = () => {
       {(activeTab === 'morosidad' || isExporting) && (
         <div id="export-tab-morosidad">
           <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '30px' }}>
-            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', flex: '1 1 400px', minHeight: '400px' }}>
-              <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Distribución de Mora (Inc. Al día)</h2>
+            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', flex: '1 1 300px', minHeight: '400px' }}>
+              <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Distribución de Mora (Cap+Int+IVA)</h2>
               <ResponsiveContainer width="100%" height={320}>
-                <PieChart>
-                  <Pie data={moraBuckets} dataKey="Total" nameKey="label" cx="50%" cy="50%" innerRadius={60} outerRadius={100} label>
-                    {moraBuckets.map((entry, index) => <Cell key={index} fill={entry.fill} />)}
+                <PieChart margin={{ top: 10, right: 60, bottom: 10, left: 60 }}>
+                  <Pie 
+                    isAnimationActive={!isExporting}
+                    data={moraBucketsPie} 
+                    dataKey="Total" 
+                    nameKey="label" 
+                    cx="50%" 
+                    cy="50%" 
+                    innerRadius={45} 
+                    outerRadius={70} 
+                    label={renderCustomizedLabelMora} 
+                    labelLine={(props) => {
+                      const { points, payload, index } = props;
+                      if (!points) return null;
+                      
+                      if (payload.isSmall) {
+                        smallSlicesRef.current[index] = points[0];
+                      }
+
+                      if (payload.isSmall && !payload.showSmallSum) return <g></g>;
+                      
+                      if (payload.showSmallSum) {
+                        const elbow = points[1] || points[0];
+                        if (!elbow) return null;
+                        const smallIndices = moraBucketsPie.map((b, i) => b.isSmall ? i : -1).filter(i => i !== -1);
+                        
+                        return (
+                          <g>
+                            <polyline points={points.map(p => `${p.x},${p.y}`).join(' ')} fill="none" stroke="var(--text-secondary)" />
+                            {smallIndices.map(si => {
+                              if (si === index) return null;
+                              const p0 = smallSlicesRef.current[si];
+                              if (!p0) return null;
+                              return (
+                                <line key={`conn-${si}`} x1={p0.x} y1={p0.y} x2={elbow.x} y2={elbow.y} stroke="var(--text-secondary)" strokeDasharray="3 3" />
+                              );
+                            })}
+                          </g>
+                        );
+                      }
+                      
+                      return <polyline points={points.map(p => `${p.x},${p.y}`).join(' ')} fill="none" stroke="var(--text-secondary)" />;
+                    }}
+                  >
+                    {moraBucketsPie.map((entry, index) => <Cell key={index} fill={entry.fill} />)}
                   </Pie>
                   <Tooltip
                     formatter={(value) => formatCurrency(value)}
@@ -1425,10 +1563,15 @@ const DashboardCarteraPage = () => {
                   <Legend />
                 </PieChart>
               </ResponsiveContainer>
+              {smallBucketsFootnote && (
+                <div style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '10px' }}>
+                  {smallBucketsFootnote}
+                </div>
+              )}
             </div>
             
-            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', flex: '2 1 600px', minHeight: '400px' }}>
-              <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Composición de Saldos Vencidos (Mora Real)</h2>
+            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', flex: '2 1 500px', minHeight: '400px' }}>
+              <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Saldos Vencidos (Cap+Int+IVA)</h2>
               <ResponsiveContainer width="100%" height={320}>
                 <BarChart
                   data={moraBuckets.filter(b => b.label !== 'Al día')}
