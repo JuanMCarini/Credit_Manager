@@ -314,6 +314,7 @@ class CollectionManager:
                 "interes": row.interes,
                 "iva": row.iva,
                 "fecha": payment_date,
+                "facturada": False,
             })
 
         self.db.bulk_insert_mappings(Cobranza, records)
