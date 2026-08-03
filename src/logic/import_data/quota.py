@@ -8,7 +8,8 @@ import re
 import shutil
 from src.database.models.clientes import Cliente, SexoEnum, EstadoClienteEnum, Provincia, Empleador
 from src.database.models.creditos import Credito, Cuota, TipoCredito, EstadoCredito, EstadoCuota, DocumentoLegajo, Transferencia
-from src.database.models.socios import SocioComercial
+from src.database.models.socios import SocioComercial, TasaYComision
+from sqlalchemy import func
 from src.logic.amortization import AmortizationEngine
 from src.config import get_company_data
 def map_sexo(sexo_str: str) -> SexoEnum:
@@ -239,6 +240,24 @@ def import_credits_from_dataframe(df: pd.DataFrame, session: Session, map_socios
             if map_socios and linea_val and linea_val != 'nan':
                 socio_id = map_socios.get(linea_val, amuf_socio_id)
             
+            # Buscar comision_id
+            comision_id = None
+            if socio_id:
+                comision = session.query(TasaYComision).filter(
+                    TasaYComision.socio_originador_id == socio_id,
+                    TasaYComision.plazo == plazo,
+                    func.round(TasaYComision.tna_c_iva, 4) == round(tasa, 4),
+                    TasaYComision.fecha <= emision
+                ).order_by(TasaYComision.fecha.desc()).first()
+                if comision:
+                    comision_id = comision.id
+                else:
+                    errores.append(f"DNI {dni_val} (ID Externo {id_ext}): No se encontró una Tasa y Comisión activa para socio originador ID {socio_id}, plazo {plazo}, tasa {tasa} y fecha de emisión {emision}.")
+                    continue
+            else:
+                errores.append(f"DNI {dni_val} (ID Externo {id_ext}): No se puede asignar comisión porque el socio originador es nulo.")
+                continue
+
             # Crear crédito
             credito = Credito(
                 id_externo=id_ext,
@@ -250,7 +269,8 @@ def import_credits_from_dataframe(df: pd.DataFrame, session: Session, map_socios
                 estado=EstadoCredito.APROBADO,
                 tipo_credito=TipoCredito.FRANCES,
                 dia_vencimiento=28,
-                socio_originador_id=socio_id
+                socio_originador_id=socio_id,
+                comision_id=comision_id
             )
             session.add(credito)
             session.flush() # Para obtener el ID del crédito generado

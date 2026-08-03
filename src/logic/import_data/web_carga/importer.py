@@ -10,6 +10,8 @@ from src.database.models import (
     Cliente, Provincia, Credito, Transferencia, DocumentoLegajo,
     EstadoCredito, Relacion, TipoCredito
 )
+from src.database.models.socios import TasaYComision
+from sqlalchemy import func
 from src.logic.origination import LoanOriginator
 from .parser import leer_archivo_web_carga
 
@@ -191,6 +193,7 @@ def importar_creditos_y_transferencias(df_creditos: pd.DataFrame, df_transferenc
     originator = LoanOriginator(db_session)
     nuevos_creditos = 0
     creditos_existentes = 0
+    errores = []
 
     # Crear diccionario para buscar el cuil por id_web_carga (usando la relación armada en el parser)
     cuil_by_id_web_carga = {}
@@ -258,6 +261,28 @@ def importar_creditos_y_transferencias(df_creditos: pd.DataFrame, df_transferenc
                 "razon_social": str(t_row.get("destinatario", "")).strip()
             })
 
+        # Buscar comision_id
+        comision_id = None
+        if partner_id:
+            comision = db_session.query(TasaYComision).filter(
+                TasaYComision.socio_originador_id == partner_id,
+                TasaYComision.plazo == plazo,
+                func.round(TasaYComision.tna_c_iva, 4) == round(tna, 4),
+                TasaYComision.fecha <= fecha_emision
+            ).order_by(TasaYComision.fecha.desc()).first()
+            if comision:
+                comision_id = comision.id
+            else:
+                msg_error = f"ID Externo {id_externo}: No se encontró Tasa y Comisión activa para socio ID {partner_id}, plazo {plazo}, tasa {tna}, fecha {fecha_emision}."
+                logger.error(msg_error)
+                errores.append(msg_error)
+                continue
+        else:
+            msg_error = f"ID Externo {id_externo}: No se puede asignar comisión porque el socio originador es nulo."
+            logger.error(msg_error)
+            errores.append(msg_error)
+            continue
+
         try:
             nuevo_credito = originator.originate(
                 client_cuil=cuil,
@@ -269,7 +294,7 @@ def importar_creditos_y_transferencias(df_creditos: pd.DataFrame, df_transferenc
                 issuance_date=fecha_emision,
                 due_day=28,
                 type=TipoCredito.FRANCES,
-                comision_id=None,
+                comision_id=comision_id,
                 id_externo=id_externo,
                 transferencias_data=t_data_list,
                 commit=False
@@ -281,9 +306,10 @@ def importar_creditos_y_transferencias(df_creditos: pd.DataFrame, df_transferenc
             # La verificación de cuotas la ejecutamos pasando el DataFrame de cuotas
         except Exception as e:
             logger.error(f"Error generando crédito {id_externo}: {e}")
+            errores.append(f"Error generando crédito {id_externo}: {e}")
 
     db_session.flush()
-    return nuevos_creditos, creditos_existentes
+    return nuevos_creditos, creditos_existentes, errores
 
 def procesar_documentos_web_carga(file_paths: list, db_session: Session, upload_dir: str):
     """
@@ -415,7 +441,7 @@ def importar_datos_web_carga(filepath: str, db_session: Session, socio_id_web_ca
     clientes_nuevos, clientes_act = importar_clientes(df_clientes, db_session, mapeos)
 
     # 4. Importar Créditos y Transferencias
-    creditos_nuevos, creditos_existentes = importar_creditos_y_transferencias(
+    creditos_nuevos, creditos_existentes, errores_creditos = importar_creditos_y_transferencias(
         df_creditos, df_transferencias, df_clientes, db_session, mapeos
     )
 
@@ -433,6 +459,6 @@ def importar_datos_web_carga(filepath: str, db_session: Session, socio_id_web_ca
     
     return {
         "clientes": {"nuevos": clientes_nuevos, "actualizados": clientes_act},
-        "creditos": {"nuevos": creditos_nuevos, "existentes": creditos_existentes},
+        "creditos": {"nuevos": creditos_nuevos, "existentes": creditos_existentes, "errores": errores_creditos},
         "documentos": docs_result
     }
