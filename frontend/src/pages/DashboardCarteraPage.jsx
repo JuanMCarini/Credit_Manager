@@ -5,8 +5,8 @@ import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 const formatCurrency = (value) => {
   if (value === null || value === undefined) return "$ 0";
-  return new Intl.NumberFormat('es-AR', { 
-    style: 'currency', 
+  return new Intl.NumberFormat('es-AR', {
+    style: 'currency',
     currency: 'ARS',
     minimumFractionDigits: 0,
     maximumFractionDigits: 0
@@ -24,13 +24,13 @@ const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, per
   if (percent < 0.0001) return null; // Ocultar si el porcentaje es 0% para que no se superpongan todas las etiquetas nulas
 
   return (
-    <text 
-      x={x} 
-      y={y} 
-      fill="var(--text-primary)" 
-      textAnchor={x > cx ? 'start' : 'end'} 
-      dominantBaseline="central" 
-      fontSize={16} 
+    <text
+      x={x}
+      y={y}
+      fill="var(--text-primary)"
+      textAnchor={x > cx ? 'start' : 'end'}
+      dominantBaseline="central"
+      fontSize={16}
       fontWeight="bold"
     >
       {`${(percent * 100).toFixed(2)}%`}
@@ -57,31 +57,31 @@ const DashboardCarteraPage = () => {
   const exportToPDF = async (orientation = 'p') => {
     setIsExporting(true);
     setExportFormat(orientation);
-    
+
     const root = document.documentElement;
     root.style.setProperty('--bg-base', '#ffffff');
     root.style.setProperty('--bg-panel', '#ffffff');
     root.style.setProperty('--text-primary', '#000000');
     root.style.setProperty('--text-secondary', '#333333');
     root.style.setProperty('--border-color', '#dddddd');
-    
+
     root.style.setProperty('--color-capital', '#2E7D32');
     root.style.setProperty('--color-interes', '#F57C00');
     root.style.setProperty('--color-capint', '#0097A7');
     root.style.setProperty('--color-iva', '#7B1FA2');
     root.style.setProperty('--color-total', '#1976D2');
     root.style.setProperty('--color-valoractual', '#C2185B');
-    
+
     setTimeout(async () => {
       try {
         const pdf = new jsPDF(orientation, 'mm', 'a4');
         const pdfWidth = pdf.internal.pageSize.getWidth();
         const pdfHeight = pdf.internal.pageSize.getHeight();
-        
+
         // --- PORTADA ---
         pdf.setFillColor(255, 255, 255);
         pdf.rect(0, 0, pdfWidth, pdfHeight, 'F');
-        
+
         try {
           const img = new Image();
           img.src = '/static/logo.png';
@@ -89,7 +89,7 @@ const DashboardCarteraPage = () => {
             img.onload = () => resolve();
             img.onerror = () => reject(new Error('Image failed to load'));
           });
-          
+
           const logoWidth = 80;
           const logoHeight = (img.height * logoWidth) / img.width;
           pdf.addImage(img, 'PNG', (pdfWidth - logoWidth) / 2, (pdfHeight / 2) - logoHeight - 20, logoWidth, logoHeight);
@@ -99,11 +99,11 @@ const DashboardCarteraPage = () => {
           pdf.setTextColor(0, 0, 0);
           pdf.text('CreditManager', pdfWidth / 2, pdfHeight / 2 - 20, { align: 'center' });
         }
-        
+
         pdf.setFontSize(24);
         pdf.setTextColor(0, 0, 0);
         pdf.text('Dashboard de Cartera', pdfWidth / 2, pdfHeight / 2 + 10, { align: 'center' });
-        
+
         pdf.setFontSize(12);
         pdf.setTextColor(100, 100, 100);
         const dueñosTextCover = filtroDueños.length > 0 ? filtroDueños.join(', ') : 'Todos';
@@ -112,11 +112,11 @@ const DashboardCarteraPage = () => {
         pdf.text(`TNA: ${tasaDescuento}%`, pdfWidth / 2, pdfHeight / 2 + 32, { align: 'center' });
         pdf.text(`Dueños: ${dueñosTextCover}`, pdfWidth / 2, pdfHeight / 2 + 39, { align: 'center' });
         pdf.text(`Originadores: ${origTextCover}`, pdfWidth / 2, pdfHeight / 2 + 46, { align: 'center' });
-        
+
         pdf.setFontSize(10);
         pdf.text(`Generado el: ${new Date().toLocaleDateString('es-AR')} ${new Date().toLocaleTimeString('es-AR')}`, pdfWidth / 2, pdfHeight - 20, { align: 'center' });
         // --- FIN PORTADA ---
-        
+
         const tabsToExport = [
           { id: 'export-tab-total', title: 'Cartera Total' },
           { id: 'export-tab-evolucion', title: 'Evolución 12 Meses' },
@@ -134,60 +134,60 @@ const DashboardCarteraPage = () => {
             const originalWidth = el.style.width;
             el.style.width = '1100px';
             el.style.maxWidth = '1100px';
-            
+
             await new Promise(resolve => setTimeout(resolve, 150)); // let recharts adjust
 
-            const canvas = await html2canvas(el, { 
-              scale: 2, 
+            const canvas = await html2canvas(el, {
+              scale: 2,
               backgroundColor: '#ffffff',
               windowWidth: 1150
             });
-            
+
             el.style.width = originalWidth;
             el.style.maxWidth = '';
 
             const imgData = canvas.toDataURL('image/png');
-            
+
             const imgProps = pdf.getImageProperties(imgData);
             const ratio = imgProps.width / imgProps.height;
             const margin = 10;
             let width = pdfWidth - margin * 2;
             let height = width / ratio;
-            
+
             const maxPageHeight = pdfHeight - margin * 2 - 20;
             if (height > maxPageHeight) {
               height = maxPageHeight;
               width = height * ratio;
             }
-            
+
             pdf.addPage();
-            
+
             pdf.setFillColor(255, 255, 255);
             pdf.rect(0, 0, pdfWidth, pdfHeight, 'F');
-            
+
             pdf.setFontSize(16);
             pdf.setTextColor(0, 0, 0);
             pdf.text(`Dashboard - ${tabsToExport[i].title}`, margin, 15);
-            
+
             pdf.setFontSize(9);
             pdf.setTextColor(100, 100, 100);
             const dueñosText = filtroDueños.length > 0 ? filtroDueños.join(', ') : 'Todos';
             const origText = filtroOriginadores.length > 0 ? filtroOriginadores.join(', ') : 'Todos';
             const filtrosStr = `Fecha de Corte: ${fechaCorte.split('-').reverse().join('/')} | TNA: ${tasaDescuento}% | Dueños: ${dueñosText} | Originadores: ${origText}`;
             pdf.text(filtrosStr, margin, 22);
-            
+
             pdf.addImage(imgData, 'PNG', margin, 28, width, height);
-            
+
             if (orientation === 'p') {
               pdf.setFontSize(10);
               pdf.setTextColor(150, 150, 150);
               pdf.text(`Página ${pdf.internal.getNumberOfPages()}`, pdfWidth / 2, pdfHeight - 10, { align: 'center' });
             }
-            
+
             pageCount++;
           }
         }
-        
+
         const tipoReporte = orientation === 'p' ? 'Detallado' : 'Grafico';
         pdf.save(`Reporte Cartera - ${tipoReporte} - ${fechaCorte}.pdf`);
       } catch (err) {
@@ -248,13 +248,14 @@ const DashboardCarteraPage = () => {
             return { data: { tna: 0 } };
           })
         ]);
+        
         setData(response.data);
         setEvolutionData(evolutionResponse.data);
-        
+
         if (tnaResponse && tnaResponse.data && tnaResponse.data.tna !== undefined) {
-           const newTna = tnaResponse.data.tna;
-           setTasaDescuento(newTna);
-           setTasaDescuentoStr(`${newTna} %`);
+          const newTna = tnaResponse.data.tna;
+          setTasaDescuento(newTna);
+          setTasaDescuentoStr(`${newTna} %`);
         }
       } catch (err) {
         console.error("Error cargando dashboard:", err);
@@ -286,23 +287,24 @@ const DashboardCarteraPage = () => {
     'MOROSO': { Estado: 'Moroso', Vencido: 0, AVencer: 0, Total: 0, fill: 'var(--color-interes)' },
     'INCOBRABLE': { Estado: 'Incobrable', Vencido: 0, AVencer: 0, Total: 0, fill: 'var(--color-valoractual)' },
     'JUDICIALIZADO': { Estado: 'Judicializado', Vencido: 0, AVencer: 0, Total: 0, fill: 'var(--color-iva)' },
+    'CANCELADO': { Estado: 'Cancelado', Vencido: 0, AVencer: 0, Total: 0, fill: '#9E9E9E' },
     'OTRO': { Estado: 'Otro', Vencido: 0, AVencer: 0, Total: 0, fill: '#607D8B' }
   };
 
   data.forEach(row => {
     const dueño = row.Dueño || 'Desconocido';
     const originador = row.Originador || 'N/A';
-    
+
     const matchDueño = filtroDueños.length === 0 || filtroDueños.includes(dueño);
     const matchOriginador = filtroOriginadores.length === 0 || filtroOriginadores.includes(originador);
-    
+
     if (!matchDueño || !matchOriginador) return;
 
     const cap = row.Capital || 0;
     const int = row['Interés'] || 0;
     const iva = row.IVA || 0;
     const tot = row.Total || 0;
-    
+
     const capCobrado = row['Capital Cobrado'] || 0;
     const intCobrado = row['Interés Cobrado'] || 0;
     const ivaCobrado = row['IVA Cobrado'] || 0;
@@ -339,15 +341,20 @@ const DashboardCarteraPage = () => {
 
     const rawEstado = (row['Estado Credito'] || row.Estado || '').toUpperCase();
     let normalizedEstado = 'OTRO';
-    if (rawEstado.includes('APROBADO')) normalizedEstado = 'APROBADO';
+    if (rawEstado.includes('APROBADO') || rawEstado.includes('FIRMADO')) normalizedEstado = 'APROBADO';
     else if (rawEstado.includes('ACTIVO') || rawEstado === 'PENDIENTE' || rawEstado === '') normalizedEstado = 'ACTIVO';
     else if (rawEstado.includes('MOROS')) normalizedEstado = 'MOROSO';
     else if (rawEstado.includes('INCOBRABLE')) normalizedEstado = 'INCOBRABLE';
-    else if (rawEstado.includes('JUDICIALIZADO')) normalizedEstado = 'JUDICIALIZADO';
+    else if (rawEstado.includes('JUDICIAL')) normalizedEstado = 'JUDICIALIZADO';
+    else if (rawEstado.includes('CANCELAD')) normalizedEstado = 'CANCELADO';
 
-    const capInt = cap + int;
-    const isVencido = fVto < fechaCorteDate;
+    let capInt = cap + int;
+    if (normalizedEstado === 'CANCELADO') {
+      capInt = cap + int + capCobrado + intCobrado;
+    }
     
+    const isVencido = fVto < fechaCorteDate;
+
     if (isVencido) {
       resumenEstados[normalizedEstado].Vencido += capInt;
     } else {
@@ -381,25 +388,25 @@ const DashboardCarteraPage = () => {
       let interes = 0;
       let iva = 0;
       let total = 0;
-      
+
       const ownerCapital = {};
       let totalCapitalForDistribution = 0;
-      
+
       if (month.detalles) {
         month.detalles.forEach(d => {
           const dueño = String(d.Dueño || 'Desconocido').trim().toUpperCase();
           const originador = String(d.Originador || 'N/A').trim().toUpperCase();
-          
+
           const matchDueño = filtroDueños.length === 0 || filtroDueños.some(f => String(f).trim().toUpperCase() === dueño);
           const matchOriginador = filtroOriginadores.length === 0 || filtroOriginadores.some(f => String(f).trim().toUpperCase() === originador);
-          
+
           if (matchDueño && matchOriginador) {
             capital += d.capital;
             interes += d.interes;
             iva += d.iva;
             total += d.total;
           }
-          
+
           if (matchOriginador) {
             const dueñoRaw = String(d.Dueño || 'Desconocido').trim();
             if (!ownerCapital[dueñoRaw]) ownerCapital[dueñoRaw] = 0;
@@ -408,7 +415,7 @@ const DashboardCarteraPage = () => {
           }
         });
       }
-      
+
       const monthData = {
         ...month,
         capital,
@@ -416,12 +423,12 @@ const DashboardCarteraPage = () => {
         iva,
         total
       };
-      
+
       Object.keys(ownerCapital).forEach(owner => {
         monthData[`owner_${owner}`] = totalCapitalForDistribution > 0 ? (ownerCapital[owner] / totalCapitalForDistribution) * 100 : 0;
         monthData[`ownerRaw_${owner}`] = ownerCapital[owner];
       });
-      
+
       return monthData;
     });
   }, [evolutionData, filtroDueños, filtroOriginadores]);
@@ -443,15 +450,15 @@ const DashboardCarteraPage = () => {
     data.forEach(row => {
       const dueño = row.Dueño || 'Desconocido';
       const originador = row.Originador || 'N/A';
-      
+
       const matchDueño = filtroDueños.length === 0 || filtroDueños.includes(dueño);
       const matchOriginador = filtroOriginadores.length === 0 || filtroOriginadores.includes(originador);
-      
+
       if (!matchDueño || !matchOriginador) return;
 
       const id = row['ID Credito'];
       if (!id) return;
-      
+
       if (!creditos[id]) {
         creditos[id] = {
           fechaEmision: row['Fecha Emisión'],
@@ -462,9 +469,9 @@ const DashboardCarteraPage = () => {
         };
       }
       creditos[id].montoOriginal += (row.Capital || 0) + (row['Capital Cobrado'] || 0);
-      creditos[id].montoGenerado += (row.Capital || 0) + (row['Capital Cobrado'] || 0) 
-                                 + (row['Interés'] || 0) + (row['Interés Cobrado'] || 0) 
-                                 + (row.IVA || 0) + (row['IVA Cobrado'] || 0);
+      creditos[id].montoGenerado += (row.Capital || 0) + (row['Capital Cobrado'] || 0)
+        + (row['Interés'] || 0) + (row['Interés Cobrado'] || 0)
+        + (row.IVA || 0) + (row['IVA Cobrado'] || 0);
     });
 
     const periodos = {};
@@ -472,22 +479,22 @@ const DashboardCarteraPage = () => {
       if (!c.fechaEmision) return;
       const d = new Date(c.fechaEmision);
       if (isNaN(d.getTime())) return;
-      
+
       const periodo = c.fechaEmision.substring(0, 7); // 'YYYY-MM'
       if (!periodos[periodo]) {
         periodos[periodo] = { periodo, totalColocado: 0, totalGenerado: 0 };
       }
-      
+
       periodos[periodo].totalColocado += c.montoOriginal;
       periodos[periodo].totalGenerado += c.montoGenerado;
-      
+
       const origKey = `orig_${c.originador}`;
       if (!periodos[periodo][origKey]) periodos[periodo][origKey] = 0;
       periodos[periodo][origKey] += c.montoOriginal;
     });
 
     const allData = Object.values(periodos).sort((a, b) => a.periodo.localeCompare(b.periodo));
-    
+
     allData.forEach(p => {
       Object.keys(p).forEach(k => {
         if (k.startsWith('orig_')) {
@@ -497,19 +504,20 @@ const DashboardCarteraPage = () => {
         }
       });
     });
-    
+
     // Retornamos los últimos 12 periodos con actividad
     return allData.slice(-12);
   }, [data, filtroDueños, filtroOriginadores]);
 
   const moraBuckets = useMemo(() => {
     const buckets = [
-      { label: '1 - 30 días', min: 1, max: 30, Vencido: 0, AVencer: 0, Total: 0 },
-      { label: '31 - 60 días', min: 31, max: 60, Vencido: 0, AVencer: 0, Total: 0 },
-      { label: '61 - 90 días', min: 61, max: 90, Vencido: 0, AVencer: 0, Total: 0 },
-      { label: '91 - 180 días', min: 91, max: 180, Vencido: 0, AVencer: 0, Total: 0 },
-      { label: '181 - 365 días', min: 181, max: 365, Vencido: 0, AVencer: 0, Total: 0 },
-      { label: '> 365 días', min: 366, max: Infinity, Vencido: 0, AVencer: 0, Total: 0 },
+      { label: 'Al día', min: 0, max: 0, Vencido: 0, AVencer: 0, Total: 0, fill: '#4CAF50' },
+      { label: '1 - 30 días', min: 1, max: 30, Vencido: 0, AVencer: 0, Total: 0, fill: '#FFB74D' },
+      { label: '31 - 60 días', min: 31, max: 60, Vencido: 0, AVencer: 0, Total: 0, fill: '#FF9800' },
+      { label: '61 - 90 días', min: 61, max: 90, Vencido: 0, AVencer: 0, Total: 0, fill: '#F57C00' },
+      { label: '91 - 180 días', min: 91, max: 180, Vencido: 0, AVencer: 0, Total: 0, fill: '#E65100' },
+      { label: '181 - 365 días', min: 181, max: 365, Vencido: 0, AVencer: 0, Total: 0, fill: '#D32F2F' },
+      { label: '> 365 días', min: 366, max: Infinity, Vencido: 0, AVencer: 0, Total: 0, fill: '#B71C1C' },
     ];
 
     const creditosMora = {};
@@ -518,22 +526,23 @@ const DashboardCarteraPage = () => {
     // Primer pasada: Calcular la mora (maxDiasMora) a nivel CRÉDITO, sin importar quién sea el dueño
     // de cada cuota. La mora es una propiedad del crédito.
     data.forEach(row => {
-      const rawEstado = (row.Estado || '').toUpperCase();
+      const rawEstado = (row['Estado Credito'] || row.Estado || '').toUpperCase();
       let normalizedEstado = 'OTRO';
-      if (rawEstado.includes('APROBADO')) normalizedEstado = 'APROBADO';
+      if (rawEstado.includes('APROBADO') || rawEstado.includes('FIRMADO')) normalizedEstado = 'APROBADO';
       else if (rawEstado.includes('ACTIVO') || rawEstado === 'PENDIENTE' || rawEstado === '') normalizedEstado = 'ACTIVO';
       else if (rawEstado.includes('MOROS')) normalizedEstado = 'MOROSO';
       else if (rawEstado.includes('INCOBRABLE')) normalizedEstado = 'INCOBRABLE';
-      else if (rawEstado.includes('JUDICIALIZADO')) normalizedEstado = 'JUDICIALIZADO';
+      else if (rawEstado.includes('JUDICIAL')) normalizedEstado = 'JUDICIALIZADO';
+      else if (rawEstado.includes('CANCELAD')) normalizedEstado = 'CANCELADO';
 
-      if (normalizedEstado === 'MOROSO') {
+      if (normalizedEstado === 'MOROSO' || normalizedEstado === 'ACTIVO' || normalizedEstado === 'APROBADO') {
         const id = row['ID Credito'];
         if (!id) return;
-        
+
         if (!creditosMora[id]) {
           creditosMora[id] = { maxDiasMora: 0, totalVencido: 0, totalAVencer: 0, total: 0 };
         }
-        
+
         const fVto = new Date(row['Fecha Vencimiento'] + 'T00:00:00');
         const isVencido = fVto < fechaCorteDate;
         const balanceCuota = (row.Capital || 0) + (row['Interés'] || 0) + (row.IVA || 0);
@@ -541,7 +550,7 @@ const DashboardCarteraPage = () => {
         if (isVencido && balanceCuota > 0) {
           let diasMora = Math.floor((fechaCorteDate - fVto) / (1000 * 60 * 60 * 24));
           if (diasMora < 1) diasMora = 1;
-          
+
           if (diasMora > creditosMora[id].maxDiasMora) {
             creditosMora[id].maxDiasMora = diasMora;
           }
@@ -554,24 +563,25 @@ const DashboardCarteraPage = () => {
     data.forEach(row => {
       const dueño = row.Dueño || 'Desconocido';
       const originador = row.Originador || 'N/A';
-      
+
       const matchDueño = filtroDueños.length === 0 || filtroDueños.includes(dueño);
       const matchOriginador = filtroOriginadores.length === 0 || filtroOriginadores.includes(originador);
-      
+
       if (!matchDueño || !matchOriginador) return;
 
-      const rawEstado = (row.Estado || '').toUpperCase();
+      const rawEstado = (row['Estado Credito'] || row.Estado || '').toUpperCase();
       let normalizedEstado = 'OTRO';
-      if (rawEstado.includes('APROBADO')) normalizedEstado = 'APROBADO';
+      if (rawEstado.includes('APROBADO') || rawEstado.includes('FIRMADO')) normalizedEstado = 'APROBADO';
       else if (rawEstado.includes('ACTIVO') || rawEstado === 'PENDIENTE' || rawEstado === '') normalizedEstado = 'ACTIVO';
       else if (rawEstado.includes('MOROS')) normalizedEstado = 'MOROSO';
       else if (rawEstado.includes('INCOBRABLE')) normalizedEstado = 'INCOBRABLE';
-      else if (rawEstado.includes('JUDICIALIZADO')) normalizedEstado = 'JUDICIALIZADO';
+      else if (rawEstado.includes('JUDICIAL')) normalizedEstado = 'JUDICIALIZADO';
+      else if (rawEstado.includes('CANCELAD')) normalizedEstado = 'CANCELADO';
 
-      if (normalizedEstado === 'MOROSO') {
+      if (normalizedEstado === 'MOROSO' || normalizedEstado === 'ACTIVO' || normalizedEstado === 'APROBADO') {
         const id = row['ID Credito'];
         if (!id || !creditosMora[id]) return;
-        
+
         const fVto = new Date(row['Fecha Vencimiento'] + 'T00:00:00');
         const isVencido = fVto < fechaCorteDate;
         const cuotaValue = (row.Capital || 0) + (row['Interés'] || 0) + (row.IVA || 0);
@@ -586,7 +596,6 @@ const DashboardCarteraPage = () => {
     });
 
     Object.values(creditosMora).forEach(credito => {
-      if (credito.maxDiasMora === 0) return; 
 
       const bucket = buckets.find(b => credito.maxDiasMora >= b.min && credito.maxDiasMora <= b.max);
       if (bucket) {
@@ -615,12 +624,12 @@ const DashboardCarteraPage = () => {
     const rows = [];
     evolutionData.forEach(month => {
       const aggByOwner = {};
-      
+
       if (month.detalles) {
         month.detalles.forEach(d => {
           const originador = String(d.Originador || 'N/A').trim().toUpperCase();
           const matchOriginador = filtroOriginadores.length === 0 || filtroOriginadores.some(f => String(f).trim().toUpperCase() === originador);
-          
+
           if (matchOriginador) {
             const dueño = String(d.Dueño || 'Desconocido').trim();
             if (!aggByOwner[dueño]) {
@@ -633,7 +642,7 @@ const DashboardCarteraPage = () => {
           }
         });
       }
-      
+
       Object.keys(aggByOwner).sort().forEach(owner => {
         rows.push({
           periodo: month.periodo,
@@ -642,7 +651,7 @@ const DashboardCarteraPage = () => {
         });
       });
     });
-    
+
     return rows.reverse();
   }, [evolutionData, filtroOriginadores]);
 
@@ -680,16 +689,16 @@ const DashboardCarteraPage = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <label htmlFor="tasaDescuento" style={{ color: 'var(--text-secondary)', fontWeight: '500' }}>TNA Descuento:</label>
-            <input 
-              type="text" 
+            <input
+              type="text"
               id="tasaDescuento"
               value={tasaDescuentoStr}
               onChange={handleTasaChange}
               onBlur={handleTasaBlur}
               onFocus={handleTasaFocus}
-              style={{ 
-                padding: '8px 12px', 
-                borderRadius: '8px', 
+              style={{
+                padding: '8px 12px',
+                borderRadius: '8px',
                 border: '1px solid rgba(255,255,255,0.1)',
                 background: 'rgba(0,0,0,0.2)',
                 color: 'var(--text-primary)',
@@ -700,14 +709,14 @@ const DashboardCarteraPage = () => {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <label htmlFor="fechaCorte" style={{ color: 'var(--text-secondary)', fontWeight: '500' }}>Fecha de Corte:</label>
-            <input 
-              type="date" 
+            <input
+              type="date"
               id="fechaCorte"
               value={fechaCorte}
               onChange={(e) => setFechaCorte(e.target.value)}
-              style={{ 
-                padding: '8px 12px', 
-                borderRadius: '8px', 
+              style={{
+                padding: '8px 12px',
+                borderRadius: '8px',
                 border: '1px solid rgba(255,255,255,0.1)',
                 background: 'rgba(0,0,0,0.2)',
                 color: 'var(--text-primary)',
@@ -716,7 +725,7 @@ const DashboardCarteraPage = () => {
             />
           </div>
           <div style={{ display: 'flex', gap: '10px' }}>
-            <button 
+            <button
               onClick={() => exportToPDF('p')}
               disabled={exportFormat !== null}
               style={{
@@ -735,7 +744,7 @@ const DashboardCarteraPage = () => {
             >
               📄 {exportFormat !== null ? 'Generando...' : 'Reporte Detallado'}
             </button>
-            <button 
+            <button
               onClick={() => exportToPDF('l')}
               disabled={exportFormat !== null}
               style={{
@@ -760,19 +769,19 @@ const DashboardCarteraPage = () => {
 
       {/* Filtros */}
       <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', flexWrap: 'wrap' }}>
-        
+
         {/* Filtro Dueños Dropdown */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', position: 'relative' }}>
           <label style={{ color: 'var(--text-secondary)', fontWeight: '500' }}>Dueño:</label>
           <div style={{ position: 'relative' }}>
-            <button 
+            <button
               onClick={() => setOpenDueño(!openDueño)}
               style={{ padding: '8px 12px', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', minWidth: '150px', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
             >
               <span>{filtroDueños.length === 0 ? 'Todos' : `${filtroDueños.length} seleccionados`}</span>
               <span style={{ fontSize: '0.8rem', marginLeft: '10px' }}>▼</span>
             </button>
-            
+
             {openDueño && (
               <div className="custom-scrollbar" style={{ position: 'absolute', top: '100%', left: 0, marginTop: '5px', padding: '8px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.2)', maxHeight: '200px', overflowY: 'auto', minWidth: '220px', zIndex: 10, boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', cursor: 'pointer', fontSize: '0.9rem' }}>
@@ -781,13 +790,13 @@ const DashboardCarteraPage = () => {
                 </label>
                 {uniqueDueños.filter(d => d !== 'Todos').map(d => (
                   <label key={d} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', cursor: 'pointer', fontSize: '0.9rem' }}>
-                    <input 
-                      type="checkbox" 
-                      checked={filtroDueños.includes(d)} 
+                    <input
+                      type="checkbox"
+                      checked={filtroDueños.includes(d)}
                       onChange={(e) => {
                         if (e.target.checked) setFiltroDueños([...filtroDueños, d]);
                         else setFiltroDueños(filtroDueños.filter(item => item !== d));
-                      }} 
+                      }}
                     />
                     <span style={{ opacity: filtroDueños.includes(d) ? 1 : 0.6 }}>{d}</span>
                   </label>
@@ -801,14 +810,14 @@ const DashboardCarteraPage = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', position: 'relative' }}>
           <label style={{ color: 'var(--text-secondary)', fontWeight: '500' }}>Originador:</label>
           <div style={{ position: 'relative' }}>
-            <button 
+            <button
               onClick={() => setOpenOriginador(!openOriginador)}
               style={{ padding: '8px 12px', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', minWidth: '150px', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
             >
               <span>{filtroOriginadores.length === 0 ? 'Todos' : `${filtroOriginadores.length} seleccionados`}</span>
               <span style={{ fontSize: '0.8rem', marginLeft: '10px' }}>▼</span>
             </button>
-            
+
             {openOriginador && (
               <div className="custom-scrollbar" style={{ position: 'absolute', top: '100%', left: 0, marginTop: '5px', padding: '8px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.2)', maxHeight: '200px', overflowY: 'auto', minWidth: '220px', zIndex: 10, boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', cursor: 'pointer', fontSize: '0.9rem' }}>
@@ -817,13 +826,13 @@ const DashboardCarteraPage = () => {
                 </label>
                 {uniqueOriginadores.filter(o => o !== 'Todos').map(o => (
                   <label key={o} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', cursor: 'pointer', fontSize: '0.9rem' }}>
-                    <input 
-                      type="checkbox" 
-                      checked={filtroOriginadores.includes(o)} 
+                    <input
+                      type="checkbox"
+                      checked={filtroOriginadores.includes(o)}
                       onChange={(e) => {
                         if (e.target.checked) setFiltroOriginadores([...filtroOriginadores, o]);
                         else setFiltroOriginadores(filtroOriginadores.filter(item => item !== o));
-                      }} 
+                      }}
                     />
                     <span style={{ opacity: filtroOriginadores.includes(o) ? 1 : 0.6 }}>{o}</span>
                   </label>
@@ -837,11 +846,11 @@ const DashboardCarteraPage = () => {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '15px', marginBottom: '20px' }}>
-        <button 
+        <button
           onClick={() => setActiveTab('total')}
-          style={{ 
-            padding: '10px 20px', 
-            borderRadius: '8px', 
+          style={{
+            padding: '10px 20px',
+            borderRadius: '8px',
             border: 'none',
             background: activeTab === 'total' ? 'var(--color-total)' : 'rgba(255,255,255,0.05)',
             color: activeTab === 'total' ? 'white' : 'var(--text-secondary)',
@@ -852,11 +861,11 @@ const DashboardCarteraPage = () => {
         >
           Resumen General
         </button>
-        <button 
+        <button
           onClick={() => setActiveTab('evolucion')}
-          style={{ 
-            padding: '10px 20px', 
-            borderRadius: '8px', 
+          style={{
+            padding: '10px 20px',
+            borderRadius: '8px',
             border: 'none',
             background: activeTab === 'evolucion' ? 'var(--color-total)' : 'rgba(255,255,255,0.05)',
             color: activeTab === 'evolucion' ? 'white' : 'var(--text-secondary)',
@@ -867,11 +876,11 @@ const DashboardCarteraPage = () => {
         >
           Evolución Anual
         </button>
-        <button 
+        <button
           onClick={() => setActiveTab('composicion')}
-          style={{ 
-            padding: '10px 20px', 
-            borderRadius: '8px', 
+          style={{
+            padding: '10px 20px',
+            borderRadius: '8px',
             border: 'none',
             background: activeTab === 'composicion' ? 'var(--color-total)' : 'rgba(255,255,255,0.05)',
             color: activeTab === 'composicion' ? 'white' : 'var(--text-secondary)',
@@ -882,11 +891,11 @@ const DashboardCarteraPage = () => {
         >
           Por Dueño
         </button>
-        <button 
+        <button
           onClick={() => setActiveTab('periodo')}
-          style={{ 
-            padding: '10px 20px', 
-            borderRadius: '8px', 
+          style={{
+            padding: '10px 20px',
+            borderRadius: '8px',
             border: 'none',
             background: activeTab === 'periodo' ? 'var(--color-total)' : 'rgba(255,255,255,0.05)',
             color: activeTab === 'periodo' ? 'white' : 'var(--text-secondary)',
@@ -897,11 +906,11 @@ const DashboardCarteraPage = () => {
         >
           Por Período
         </button>
-        <button 
+        <button
           onClick={() => setActiveTab('colocaciones')}
-          style={{ 
-            padding: '10px 20px', 
-            borderRadius: '8px', 
+          style={{
+            padding: '10px 20px',
+            borderRadius: '8px',
             border: 'none',
             background: activeTab === 'colocaciones' ? 'var(--color-total)' : 'rgba(255,255,255,0.05)',
             color: activeTab === 'colocaciones' ? 'white' : 'var(--text-secondary)',
@@ -912,11 +921,11 @@ const DashboardCarteraPage = () => {
         >
           Colocaciones
         </button>
-        <button 
+        <button
           onClick={() => setActiveTab('estados')}
-          style={{ 
-            padding: '10px 20px', 
-            borderRadius: '8px', 
+          style={{
+            padding: '10px 20px',
+            borderRadius: '8px',
             border: 'none',
             background: activeTab === 'estados' ? 'var(--color-total)' : 'rgba(255,255,255,0.05)',
             color: activeTab === 'estados' ? 'white' : 'var(--text-secondary)',
@@ -927,11 +936,11 @@ const DashboardCarteraPage = () => {
         >
           Estado Cuotas
         </button>
-        <button 
+        <button
           onClick={() => setActiveTab('morosidad')}
-          style={{ 
-            padding: '10px 20px', 
-            borderRadius: '8px', 
+          style={{
+            padding: '10px 20px',
+            borderRadius: '8px',
             border: 'none',
             background: activeTab === 'morosidad' ? 'var(--color-total)' : 'rgba(255,255,255,0.05)',
             color: activeTab === 'morosidad' ? 'white' : 'var(--text-secondary)',
@@ -966,18 +975,18 @@ const DashboardCarteraPage = () => {
       {(activeTab === 'total' || isExporting) && (
         <div id="export-tab-total">
           {/* KPI Cards */}
-          <div style={{ 
-            display: 'flex', 
+          <div style={{
+            display: 'flex',
             flexWrap: 'wrap',
-            justifyContent: 'center', 
-            gap: '20px', 
-            marginBottom: '30px' 
+            justifyContent: 'center',
+            gap: '20px',
+            marginBottom: '30px'
           }}>
             <div className="glass-panel" style={{ width: '100%', minWidth: '260px', maxWidth: '300px', padding: '20px', borderRadius: '12px', borderTop: '4px solid var(--color-capital)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '10px', transition: 'transform 0.2s', cursor: 'default' }} onMouseOver={e => e.currentTarget.style.transform = 'translateY(-5px)'} onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}>
               <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '1px' }}>Total Capital Activo</span>
               <span style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>{formatCurrency(totalCapital)}</span>
             </div>
-            
+
             <div className="glass-panel" style={{ width: '100%', minWidth: '260px', maxWidth: '300px', padding: '20px', borderRadius: '12px', borderTop: '4px solid var(--color-interes)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '10px', transition: 'transform 0.2s', cursor: 'default' }} onMouseOver={e => e.currentTarget.style.transform = 'translateY(-5px)'} onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}>
               <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '1px' }}>Total Interés</span>
               <span style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>{formatCurrency(totalInteres)}</span>
@@ -1026,7 +1035,7 @@ const DashboardCarteraPage = () => {
                   </thead>
                   <tbody>
                     {groupedData.map((row, idx) => (
-                      <tr key={idx} style={{ 
+                      <tr key={idx} style={{
                         borderBottom: '1px solid rgba(255,255,255,0.05)',
                         transition: 'background-color 0.2s',
                       }} className="table-row-hover">
@@ -1062,22 +1071,22 @@ const DashboardCarteraPage = () => {
                 >
                   <defs>
                     <linearGradient id="colorCapital" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="var(--color-capital)" stopOpacity={0.8}/>
-                      <stop offset="95%" stopColor="var(--color-capital)" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="var(--color-capital)" stopOpacity={0.8} />
+                      <stop offset="95%" stopColor="var(--color-capital)" stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="colorInteres" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="var(--color-interes)" stopOpacity={0.8}/>
-                      <stop offset="95%" stopColor="var(--color-interes)" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="var(--color-interes)" stopOpacity={0.8} />
+                      <stop offset="95%" stopColor="var(--color-interes)" stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="colorIva" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="var(--color-iva)" stopOpacity={0.8}/>
-                      <stop offset="95%" stopColor="var(--color-iva)" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="var(--color-iva)" stopOpacity={0.8} />
+                      <stop offset="95%" stopColor="var(--color-iva)" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
                   <XAxis dataKey="periodo" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)' }} />
                   <YAxis stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)' }} tickFormatter={(value) => `$${(value / 1000000).toFixed(1)}M`} />
-                  <Tooltip 
+                  <Tooltip
                     formatter={(value) => formatCurrency(value)}
                     contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white' }}
                     itemStyle={{ color: 'white' }}
@@ -1090,7 +1099,7 @@ const DashboardCarteraPage = () => {
               </ResponsiveContainer>
             )}
           </div>
-          
+
           <div className="glass-panel" style={{ display: exportFormat === 'l' ? 'none' : 'block', padding: '25px', borderRadius: '12px', marginTop: '20px' }}>
             <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Detalle Histórico (Últimos 12 Meses)</h2>
             {filteredEvolutionData.length === 0 ? (
@@ -1110,7 +1119,7 @@ const DashboardCarteraPage = () => {
                   </thead>
                   <tbody>
                     {[...filteredEvolutionData].reverse().map((row, idx) => (
-                      <tr key={idx} style={{ 
+                      <tr key={idx} style={{
                         borderBottom: '1px solid rgba(255,255,255,0.05)',
                         transition: 'background-color 0.2s',
                       }} className="table-row-hover">
@@ -1155,20 +1164,20 @@ const DashboardCarteraPage = () => {
                   />
                   <Legend wrapperStyle={{ paddingTop: '20px' }} />
                   {evolutionUniqueDueños.map((dueño, index) => (
-                    <Bar 
+                    <Bar
                       isAnimationActive={!isExporting}
-                      key={dueño} 
-                      dataKey={`ownerRaw_${dueño}`} 
-                      name={dueño} 
-                      stackId="a" 
-                      fill={CHART_COLORS[index % CHART_COLORS.length]} 
+                      key={dueño}
+                      dataKey={`ownerRaw_${dueño}`}
+                      name={dueño}
+                      stackId="a"
+                      fill={CHART_COLORS[index % CHART_COLORS.length]}
                     >
-                      <LabelList 
-                        dataKey={`owner_${dueño}`} 
-                        position="inside" 
-                        fill="#fff" 
-                        formatter={(val) => val > 5 ? `${val.toFixed(1)}%` : ''} 
-                        style={{ fontSize: 12, fontWeight: 'bold' }} 
+                      <LabelList
+                        dataKey={`owner_${dueño}`}
+                        position="inside"
+                        fill="#fff"
+                        formatter={(val) => val > 5 ? `${val.toFixed(1)}%` : ''}
+                        style={{ fontSize: 12, fontWeight: 'bold' }}
                       />
                     </Bar>
                   ))}
@@ -1176,7 +1185,7 @@ const DashboardCarteraPage = () => {
               </ResponsiveContainer>
             )}
           </div>
-          
+
           <div className="glass-panel" style={{ display: exportFormat === 'l' ? 'none' : 'block', padding: '25px', borderRadius: '12px', marginTop: '20px' }}>
             <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Detalle por Período y Dueño</h2>
             {composicionTableRows.length === 0 ? (
@@ -1214,41 +1223,41 @@ const DashboardCarteraPage = () => {
       )}
 
       {(activeTab === 'periodo' || isExporting) && (
-          <div id="export-tab-periodo">
-            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', marginBottom: '30px', height: '400px' }}>
-              <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Proyección de Vencimientos</h2>
-              {periodData.length === 0 ? (
-                <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>No hay vencimientos futuros registrados.</p>
-              ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={periodData}
-                    margin={{ top: 10, right: 30, left: 20, bottom: 25 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                    <XAxis dataKey="Periodo" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)' }} />
-                    <YAxis stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)' }} tickFormatter={(value) => `$${(value / 1000000).toFixed(1)}M`} />
-                    <Tooltip 
-                      formatter={(value) => formatCurrency(value)}
-                      contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white' }}
-                      itemStyle={{ color: 'white' }}
-                    />
-                    <Legend wrapperStyle={{ paddingTop: '20px' }} />
-                    <Bar isAnimationActive={!isExporting} dataKey="Capital" stackId="a" fill="var(--color-capital)" name="Capital" />
-                    <Bar isAnimationActive={!isExporting} dataKey="Interés" stackId="a" fill="var(--color-interes)" name="Interés" />
-                    <Bar isAnimationActive={!isExporting} dataKey="IVA" stackId="a" fill="var(--color-iva)" name="IVA" />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
+        <div id="export-tab-periodo">
+          <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', marginBottom: '30px', height: '400px' }}>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Proyección de Vencimientos</h2>
+            {periodData.length === 0 ? (
+              <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>No hay vencimientos futuros registrados.</p>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={periodData}
+                  margin={{ top: 10, right: 30, left: 20, bottom: 25 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                  <XAxis dataKey="Periodo" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)' }} />
+                  <YAxis stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)' }} tickFormatter={(value) => `$${(value / 1000000).toFixed(1)}M`} />
+                  <Tooltip
+                    formatter={(value) => formatCurrency(value)}
+                    contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white' }}
+                    itemStyle={{ color: 'white' }}
+                  />
+                  <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                  <Bar isAnimationActive={!isExporting} dataKey="Capital" stackId="a" fill="var(--color-capital)" name="Capital" />
+                  <Bar isAnimationActive={!isExporting} dataKey="Interés" stackId="a" fill="var(--color-interes)" name="Interés" />
+                  <Bar isAnimationActive={!isExporting} dataKey="IVA" stackId="a" fill="var(--color-iva)" name="IVA" />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
 
-            <div className="glass-panel" style={{ display: exportFormat === 'l' ? 'none' : 'block', padding: '25px', borderRadius: '12px' }}>
-              <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Detalle por Período (Actual y Futuros)</h2>
-              {periodData.length === 0 ? (
-                <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>No hay vencimientos futuros registrados.</p>
-              ) : (
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <div className="glass-panel" style={{ display: exportFormat === 'l' ? 'none' : 'block', padding: '25px', borderRadius: '12px' }}>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Detalle por Período (Actual y Futuros)</h2>
+            {periodData.length === 0 ? (
+              <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>No hay vencimientos futuros registrados.</p>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', textAlign: 'left' }}>
                       <th style={{ padding: '8px 10px', color: 'var(--text-secondary)', fontWeight: '500', fontSize: '0.95rem' }}>Período</th>
@@ -1261,7 +1270,7 @@ const DashboardCarteraPage = () => {
                   </thead>
                   <tbody>
                     {periodData.map((row, idx) => (
-                      <tr key={idx} style={{ 
+                      <tr key={idx} style={{
                         borderBottom: '1px solid rgba(255,255,255,0.05)',
                         transition: 'background-color 0.2s',
                         fontSize: '0.9rem'
@@ -1276,10 +1285,10 @@ const DashboardCarteraPage = () => {
                     ))}
                   </tbody>
                 </table>
-                </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
+        </div>
       )}
 
       {(activeTab === 'estados' || isExporting) && (
@@ -1307,7 +1316,7 @@ const DashboardCarteraPage = () => {
                         <Cell key={`cell-${index}`} fill={entry.fill} />
                       ))}
                     </Pie>
-                    <Tooltip 
+                    <Tooltip
                       formatter={(value) => formatCurrency(value)}
                       contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white' }}
                       itemStyle={{ color: 'white' }}
@@ -1321,11 +1330,11 @@ const DashboardCarteraPage = () => {
             <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', flex: '2 1 500px' }}>
               <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Total de Saldos agrupados por Estado del Crédito (Capital + Interés)</h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '15px' }}>
-                <div style={{ 
-                  background: 'rgba(0,0,0,0.2)', 
-                  border: `1px solid var(--text-primary)40`, 
-                  borderLeft: `4px solid var(--text-primary)`, 
-                  borderRadius: '8px', 
+                <div style={{
+                  background: 'rgba(0,0,0,0.2)',
+                  border: `1px solid var(--text-primary)40`,
+                  borderLeft: `4px solid var(--text-primary)`,
+                  borderRadius: '8px',
                   padding: '15px 20px',
                   display: 'flex',
                   flexDirection: 'column',
@@ -1336,11 +1345,11 @@ const DashboardCarteraPage = () => {
                   <span style={{ fontSize: '1.3rem', fontWeight: 'bold', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{formatCurrency(estadosList.reduce((acc, curr) => acc + curr.Total, 0))}</span>
                 </div>
                 {estadosList.map((d, idx) => (
-                  <div key={idx} style={{ 
-                    background: 'rgba(0,0,0,0.2)', 
-                    border: `1px solid ${d.fill}40`, 
-                    borderLeft: `4px solid ${d.fill}`, 
-                    borderRadius: '8px', 
+                  <div key={idx} style={{
+                    background: 'rgba(0,0,0,0.2)',
+                    border: `1px solid ${d.fill}40`,
+                    borderLeft: `4px solid ${d.fill}`,
+                    borderRadius: '8px',
                     padding: '15px 20px',
                     display: 'flex',
                     flexDirection: 'column',
@@ -1372,7 +1381,7 @@ const DashboardCarteraPage = () => {
                   </thead>
                   <tbody>
                     {estadosList.map((row, idx) => (
-                      <tr key={idx} style={{ 
+                      <tr key={idx} style={{
                         borderBottom: '1px solid rgba(255,255,255,0.05)',
                         transition: 'background-color 0.2s',
                       }} className="table-row-hover">
@@ -1400,17 +1409,35 @@ const DashboardCarteraPage = () => {
 
       {(activeTab === 'morosidad' || isExporting) && (
         <div id="export-tab-morosidad">
-          <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', marginBottom: '30px', height: '400px' }}>
-            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Composición de Saldos Vencidos (Mora Real)</h2>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={moraBuckets}
-                margin={{ top: 35, right: 30, left: 20, bottom: 25 }}
+          <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '30px' }}>
+            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', flex: '1 1 400px', minHeight: '400px' }}>
+              <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Distribución de Mora (Inc. Al día)</h2>
+              <ResponsiveContainer width="100%" height={320}>
+                <PieChart>
+                  <Pie data={moraBuckets} dataKey="Total" nameKey="label" cx="50%" cy="50%" innerRadius={60} outerRadius={100} label>
+                    {moraBuckets.map((entry, index) => <Cell key={index} fill={entry.fill} />)}
+                  </Pie>
+                  <Tooltip
+                    formatter={(value) => formatCurrency(value)}
+                    contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white' }}
+                    itemStyle={{ color: 'white' }}
+                  />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            
+            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', flex: '2 1 600px', minHeight: '400px' }}>
+              <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Composición de Saldos Vencidos (Mora Real)</h2>
+              <ResponsiveContainer width="100%" height={320}>
+                <BarChart
+                  data={moraBuckets.filter(b => b.label !== 'Al día')}
+                  margin={{ top: 35, right: 30, left: 20, bottom: 25 }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
                 <XAxis dataKey="label" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)' }} />
                 <YAxis stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)' }} tickFormatter={(value) => `$${(value / 1000000).toFixed(1)}M`} />
-                <Tooltip 
+                <Tooltip
                   formatter={(value) => formatCurrency(value)}
                   contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white' }}
                   itemStyle={{ color: 'white' }}
@@ -1434,44 +1461,45 @@ const DashboardCarteraPage = () => {
                     style={{ fontSize: 11, fontWeight: 'bold' }}
                   />
                 </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
 
           <div className="glass-panel" style={{ display: exportFormat === 'l' ? 'none' : 'block', padding: '25px', borderRadius: '12px', marginBottom: '30px' }}>
             <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Detalle de Cuotas Vencidas (Clasificadas por Días de Mora)</h2>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', textAlign: 'left' }}>
-                  <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500' }}>Días de Morosidad</th>
-                  <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Valor Vencido</th>
-                  <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Valor A Vencer</th>
-                  <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Deuda Total Crédito</th>
-                </tr>
-              </thead>
-              <tbody>
-                {moraBuckets.map((row, idx) => (
-                  <tr key={idx} style={{ 
-                    borderBottom: '1px solid rgba(255,255,255,0.05)',
-                    transition: 'background-color 0.2s',
-                  }} className="table-row-hover">
-                    <td style={{ padding: '15px 10px', fontWeight: '500' }}>{row.label}</td>
-                    <td style={{ padding: '15px 10px', textAlign: 'right', fontFamily: 'monospace', color: 'var(--color-interes)' }}>{formatCurrency(row.Vencido)}</td>
-                    <td style={{ padding: '15px 10px', textAlign: 'right', fontFamily: 'monospace', color: 'var(--color-total)' }}>{formatCurrency(row.AVencer)}</td>
-                    <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--text-primary)' }}>{formatCurrency(row.Total)}</td>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', textAlign: 'left' }}>
+                    <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500' }}>Días de Morosidad</th>
+                    <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Valor Vencido</th>
+                    <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Valor A Vencer</th>
+                    <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Deuda Total Crédito</th>
                   </tr>
-                ))}
-                <tr style={{ backgroundColor: 'rgba(0,0,0,0.2)' }}>
-                  <td style={{ padding: '15px 10px', fontWeight: 'bold' }}>TOTAL MOROSIDAD</td>
-                  <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--color-interes)' }}>{formatCurrency(moraBuckets.reduce((acc, b) => acc + b.Vencido, 0))}</td>
-                  <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--color-total)' }}>{formatCurrency(moraBuckets.reduce((acc, b) => acc + b.AVencer, 0))}</td>
-                  <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--text-primary)' }}>{formatCurrency(moraBuckets.reduce((acc, b) => acc + b.Total, 0))}</td>
-                </tr>
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {moraBuckets.filter(b => b.label !== 'Al día').map((row, idx) => (
+                    <tr key={idx} style={{
+                      borderBottom: '1px solid rgba(255,255,255,0.05)',
+                      transition: 'background-color 0.2s',
+                    }} className="table-row-hover">
+                      <td style={{ padding: '15px 10px', fontWeight: '500' }}>{row.label}</td>
+                      <td style={{ padding: '15px 10px', textAlign: 'right', fontFamily: 'monospace', color: 'var(--color-interes)' }}>{formatCurrency(row.Vencido)}</td>
+                      <td style={{ padding: '15px 10px', textAlign: 'right', fontFamily: 'monospace', color: 'var(--color-total)' }}>{formatCurrency(row.AVencer)}</td>
+                      <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--text-primary)' }}>{formatCurrency(row.Total)}</td>
+                    </tr>
+                  ))}
+                  <tr style={{ backgroundColor: 'rgba(0,0,0,0.2)' }}>
+                    <td style={{ padding: '15px 10px', fontWeight: 'bold' }}>TOTAL MOROSIDAD</td>
+                    <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--color-interes)' }}>{formatCurrency(moraBuckets.filter(b => b.label !== 'Al día').reduce((acc, b) => acc + b.Vencido, 0))}</td>
+                    <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--color-total)' }}>{formatCurrency(moraBuckets.filter(b => b.label !== 'Al día').reduce((acc, b) => acc + b.AVencer, 0))}</td>
+                    <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--text-primary)' }}>{formatCurrency(moraBuckets.filter(b => b.label !== 'Al día').reduce((acc, b) => acc + b.Total, 0))}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
         </div>
       )}
 
@@ -1493,7 +1521,7 @@ const DashboardCarteraPage = () => {
                     itemStyle={{ color: '#fff' }}
                     formatter={(value, name, props) => {
                       if (name === 'Monto Generado') {
-                         return [`$${(value / 1000000).toFixed(2)}M`, name];
+                        return [`$${(value / 1000000).toFixed(2)}M`, name];
                       }
                       const pct = props.payload[`origPct_${name}`];
                       const pctStr = pct ? pct.toFixed(1) : '0.0';
@@ -1504,21 +1532,21 @@ const DashboardCarteraPage = () => {
                   />
                   <Legend wrapperStyle={{ paddingTop: '20px' }} />
                   {colocacionesUniqueOriginadores.map((originador, index) => (
-                    <Bar 
+                    <Bar
                       yAxisId="left"
                       isAnimationActive={!isExporting}
-                      key={originador} 
-                      dataKey={`orig_${originador}`} 
-                      name={originador} 
-                      stackId="a" 
-                      fill={CHART_COLORS[(index + 2) % CHART_COLORS.length]} 
+                      key={originador}
+                      dataKey={`orig_${originador}`}
+                      name={originador}
+                      stackId="a"
+                      fill={CHART_COLORS[(index + 2) % CHART_COLORS.length]}
                     >
-                      <LabelList 
-                        dataKey={`origPct_${originador}`} 
-                        position="inside" 
-                        fill="#fff" 
-                        formatter={(val) => val > 5 ? `${val.toFixed(1)}%` : ''} 
-                        style={{ fontSize: 12, fontWeight: 'bold' }} 
+                      <LabelList
+                        dataKey={`origPct_${originador}`}
+                        position="inside"
+                        fill="#fff"
+                        formatter={(val) => val > 5 ? `${val.toFixed(1)}%` : ''}
+                        style={{ fontSize: 12, fontWeight: 'bold' }}
                       />
                     </Bar>
                   ))}
@@ -1527,7 +1555,7 @@ const DashboardCarteraPage = () => {
               </ResponsiveContainer>
             )}
           </div>
-          
+
           <div className="glass-panel" style={{ display: exportFormat === 'l' ? 'none' : 'block', padding: '25px', borderRadius: '12px', marginTop: '20px', marginBottom: '30px' }}>
             <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Detalle de Originaciones por Período</h2>
             {colocacionesData.length === 0 ? (
