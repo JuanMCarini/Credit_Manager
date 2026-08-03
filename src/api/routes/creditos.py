@@ -308,6 +308,7 @@ def get_creditos_list(fecha_corte: Optional[date] = Query(None, description="Fec
             "Estado": c.estado.value if hasattr(c.estado, 'value') else str(c.estado) if c.estado else "-",
             "Tipo Crédito": c.tipo_credito.value if hasattr(c.tipo_credito, 'value') else str(c.tipo_credito) if c.tipo_credito else "-",
             "Día Vto": c.dia_vencimiento,
+            "ID Tasa Comision": c.comision_id,
             "Saldo en Mora": float(round(saldo_mora, 2)),
             "Días de Mora": dias_mora
         })
@@ -776,6 +777,9 @@ async def importacion_masiva_creditos(
                 archivos_procesados = len(res_wc.get("documentos", {}).get("procesados", []))
                 if res_wc.get("documentos", {}).get("errores"):
                     errores_globales.extend([{"Etapa": "Documentos Web Carga", "Error": err} for err in res_wc["documentos"]["errores"]])
+                
+                if res_wc.get("creditos", {}).get("errores"):
+                    errores_globales.extend([{"Etapa": "Créditos Web Carga", "Error": err} for err in res_wc["creditos"]["errores"]])
                     
                 resumen = {
                     "nuevos_clientes": res_wc.get('clientes', {}).get('nuevos', 0),
