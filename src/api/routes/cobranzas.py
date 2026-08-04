@@ -436,6 +436,7 @@ def get_cobranzas(
     total_min: Optional[float] = None,
     total_max: Optional[float] = None,
     vto_dates: Optional[str] = None,
+    pago_dates: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     from src.database.models.cobranzas import Cobranza
@@ -466,6 +467,9 @@ def get_cobranzas(
     distinct_vto = vto_query.with_entities(Cuota.fecha_vencimiento).filter(Cuota.fecha_vencimiento != None).distinct().all()
     available_vto_dates = [d[0].strftime("%Y-%m-%d") for d in distinct_vto if d[0]]
 
+    distinct_pago = base_query.with_entities(Cobranza.fecha).filter(Cobranza.fecha != None).distinct().all()
+    available_pago_dates = [d[0].strftime("%Y-%m-%d") for d in distinct_pago if d[0]]
+
     query = base_query
     if tipo:
         tipo_list = [t.strip() for t in tipo.split(",")]
@@ -482,6 +486,18 @@ def get_cobranzas(
                 pass
         if vto_list_date:
             query = query.filter(Cuota.fecha_vencimiento.in_(vto_list_date))
+
+    if pago_dates:
+        from datetime import datetime
+        pago_list_str = [d.strip() for d in pago_dates.split(",")]
+        pago_list_date = []
+        for d_str in pago_list_str:
+            try:
+                pago_list_date.append(datetime.strptime(d_str, "%Y-%m-%d").date())
+            except ValueError:
+                pass
+        if pago_list_date:
+            query = query.filter(Cobranza.fecha.in_(pago_list_date))
 
     if capital_min is not None:
         query = query.filter(Cobranza.capital >= capital_min)
@@ -546,7 +562,14 @@ def get_cobranzas(
             "IVA": float(c.iva),
             "Total": float(c.capital + c.interes + c.iva)
         })
-    return {"items": result, "total": total, "available_tipos": available_tipos, "available_vto_dates": available_vto_dates, "global_totals": global_totals}
+    return {
+        "items": result,
+        "total": total,
+        "available_tipos": available_tipos,
+        "available_vto_dates": available_vto_dates,
+        "available_pago_dates": available_pago_dates,
+        "global_totals": global_totals
+    }
 
 @router.delete("/cobranzas/{cobranza_id}")
 def delete_cobranza(cobranza_id: int, db: Session = Depends(get_db)):

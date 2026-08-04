@@ -206,6 +206,15 @@ const Sidebar = () => {
           </NavLink>
         </NavGroup>
 
+        <NavGroup title="Finanzas">
+          <NavLink to="/finanzas" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+            </svg>
+            Liquidación de Comisiones
+          </NavLink>
+        </NavGroup>
+
         <NavGroup title="Configuración">
           <NavLink to="/auxiliares" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
