@@ -81,6 +81,7 @@ const CollectionsListPage = () => {
         ...(f.Total?.min !== undefined && { total_min: f.Total.min }),
         ...(f.Total?.max !== undefined && { total_max: f.Total.max }),
         ...(f.FechaVto && f.FechaVto.length > 0 && { vto_dates: f.FechaVto.join(',') }),
+        ...(f.FechaPago && f.FechaPago.length > 0 && { pago_dates: f.FechaPago.join(',') }),
     };
     
     const res = await axiosClient.get('/api/v1/cobranzas', { params: p });
@@ -109,6 +110,7 @@ const CollectionsListPage = () => {
   const totalItems = data?.total || 0;
   const availableTipos = data?.available_tipos || ['COMUN', 'ANTICIPO', 'CANCELACION ANTICIPADA', 'BONIFICACION POR CANCELACION ANTICIPADA', 'CUOTA NO COMPRADA', 'PENALTY', 'RECURSO', 'AJUSTE'];
   const availableVtoDates = data?.available_vto_dates || [];
+  const availablePagoDates = data?.available_pago_dates || [];
   const totalPages = Math.ceil(totalItems / limit);
 
   const handleFilterChange = (key, value) => {
@@ -465,7 +467,16 @@ const CollectionsListPage = () => {
                       Total Cobrado
                       <ExcelNumberRangeFilter selectedRange={filter.Total} onChange={r => handleFilterChange('Total', r)} />
                     </th>
-                    <th>Fecha Pago</th>
+                    <th>
+                      Fecha Pago
+                      <div style={{ marginTop: '5px' }}>
+                        <ExcelDateFilter 
+                          availableDates={availablePagoDates}
+                          selectedDates={filter.FechaPago || []}
+                          onChange={dates => handleFilterChange('FechaPago', dates)}
+                        />
+                      </div>
+                    </th>
                     <th>Acciones</th>
                   </tr>
                 </thead>

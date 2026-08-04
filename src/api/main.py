@@ -25,6 +25,7 @@ from src.api.routes.liquidaciones import router as liquidaciones_router
 from src.api.routes.papeleria import router as papeleria_router
 from src.api.routes.facturacion import router as facturacion_router
 from src.api.routes.bcra import router as bcra_router
+from src.api.routes.finanzas import router as finanzas_router
 from src.config import API_SETTINGS
 from src.database import Base, engine
 
@@ -96,6 +97,7 @@ app.include_router(liquidaciones_router)
 app.include_router(papeleria_router)
 app.include_router(facturacion_router)
 app.include_router(bcra_router)
+app.include_router(finanzas_router)
 
 # -------------------------------------------------------------------
 # Frontend (Ahora servido por Nginx)
