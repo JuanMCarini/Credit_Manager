@@ -432,7 +432,7 @@ const DashboardCarteraPage = () => {
   const uniqueDueños = ['Todos', ...new Set(data.map(d => d.Dueño || 'Desconocido'))].sort();
   const uniqueOriginadores = ['Todos', ...new Set(data.map(d => d.Originador || 'N/A'))].sort();
 
-  const groupedData = Object.values(grupos);
+  const groupedData = Object.values(grupos).filter(g => Math.abs(g.Total) > 0.01);
   const periodData = Object.values(gruposPeriodo).sort((a, b) => a.Periodo.localeCompare(b.Periodo));
   const estadosList = Object.values(resumenEstados).filter(e => e.Total > 0 || e.Estado !== 'Otro');
 
@@ -509,6 +509,7 @@ const DashboardCarteraPage = () => {
       const matchOriginador = filtroOriginadores.length === 0 || filtroOriginadores.includes(originador);
 
       if (!matchDueño || !matchOriginador) return;
+      if (originador === 'PENALTY') return;
 
       const id = row['ID Credito'];
       if (!id) return;
