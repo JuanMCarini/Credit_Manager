@@ -127,6 +127,11 @@ def descargar_pdfs_masivo(
     fecha_hasta: date = Query(None),
     db: Session = Depends(get_db)
 ):
+    from src.config import get_company_data
+    import os
+    
+    company_data_db = get_company_data(db)
+    
     query = db.query(Factura).options(
         joinedload(Factura.cobranza).joinedload(Cobranza.cuota).joinedload(Cuota.credito)
     )
@@ -156,12 +161,17 @@ def descargar_pdfs_masivo(
             # Header line
             c.line(1*cm, height - 5*cm, width - 1*cm, height - 5*cm)
             
-            # Logo Placeholder
-            c.setStrokeColorRGB(0.8, 0.8, 0.8)
-            c.rect(1.5*cm, height - 4.5*cm, 5*cm, 2.5*cm)
-            c.setFont("Helvetica", 9)
-            c.setFillColorRGB(0.6, 0.6, 0.6)
-            c.drawCentredString(4.0*cm, height - 3.2*cm, "[ESPACIO LOGO]")
+            # Logo
+            logo_path = os.path.join("data", "uploads", "logo.png")
+            if os.path.exists(logo_path):
+                c.drawImage(logo_path, 1.5*cm, height - 4.8*cm, width=7.5*cm, height=3.5*cm, preserveAspectRatio=True, anchor='nw')
+            else:
+                # Logo Placeholder
+                c.setStrokeColorRGB(0.8, 0.8, 0.8)
+                c.rect(1.5*cm, height - 4.8*cm, 7.5*cm, 3.5*cm)
+                c.setFont("Helvetica", 9)
+                c.setFillColorRGB(0.6, 0.6, 0.6)
+                c.drawCentredString(5.25*cm, height - 3.2*cm, "[ESPACIO LOGO]")
             
             # Letter (B or C) box
             c.setStrokeColorRGB(0, 0, 0)
@@ -186,14 +196,14 @@ def descargar_pdfs_masivo(
             
             # Company Details (Header Left, below logo)
             c.setFont("Helvetica-Bold", 10)
-            c.drawString(1.5*cm, height - 5.5*cm, f"Razón Social: {COMPANY_DATA.razon_social}")
+            c.drawString(1.5*cm, height - 5.5*cm, f"Razón Social: {company_data_db.razon_social}")
             c.setFont("Helvetica", 9)
-            c.drawString(1.5*cm, height - 6.0*cm, f"Domicilio Comercial: {COMPANY_DATA.domicilio}")
+            c.drawString(1.5*cm, height - 6.0*cm, f"Domicilio Comercial: {company_data_db.domicilio}")
             c.drawString(1.5*cm, height - 6.5*cm, "Condición frente al IVA: Responsable Inscripto")
             
             # Additional company details
             c.setFont("Helvetica-Bold", 10)
-            c_cuit = COMPANY_DATA.cuit
+            c_cuit = company_data_db.cuit
             cuit_formateado = f"{c_cuit[:2]}-{c_cuit[2:10]}-{c_cuit[10:]}" if len(c_cuit) == 11 else c_cuit
             c.drawString(11*cm, height - 5.5*cm, f"CUIT: {cuit_formateado}")
             c.setFont("Helvetica", 9)
@@ -305,7 +315,14 @@ def descargar_pdfs_masivo(
             c.save()
             
             pdf_buffer.seek(0)
-            filename = f"Factura_{f.punto_venta:04d}_{f.nro_comprobante:08d}.pdf"
+            
+            nro_credito_str = ""
+            if f.cobranza and f.cobranza.cuota and f.cobranza.cuota.credito:
+                nro_credito_str = f"_Credito_{f.cobranza.cuota.credito.id}"
+                
+            c_cuil_str = f"_CUIL_{f.cuit_cliente}" if f.cuit_cliente else ""
+            
+            filename = f"Factura_{f.punto_venta:04d}_{f.nro_comprobante:08d}{nro_credito_str}{c_cuil_str}.pdf"
             zip_file.writestr(filename, pdf_buffer.getvalue())
             
     zip_buffer.seek(0)
