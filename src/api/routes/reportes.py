@@ -114,34 +114,63 @@ def get_cobranzas_evolution(
     fecha: Optional[datetime] = Query(None, description="Fecha de corte")
 ) -> List[Dict[str, Any]]:
     try:
+        from src.reports.balances import cuotas_teoricas
         df = cobranzas_recibidas(meses=meses, fecha=fecha)
+        df_teo = cuotas_teoricas(meses=meses, fecha=fecha)
         
-        if df.empty:
+        if df.empty and df_teo.empty:
             return []
 
         df = df.replace({np.nan: None})
+        if not df_teo.empty:
+            df_teo = df_teo.replace({np.nan: None})
 
         # To return the data, we want to group it by "periodo"
         # and nest the details just like balances/evolution does
         results = []
-        for periodo, group in df.groupby("periodo"):
+        
+        # Get all unique periods from both dfs
+        periodos_cobr = set(df["periodo"].unique()) if not df.empty else set()
+        periodos_teo = set(df_teo["periodo"].unique()) if not df_teo.empty else set()
+        all_periodos = sorted(list(periodos_cobr | periodos_teo))
+
+        for periodo in all_periodos:
             detalles = []
-            for _, row in group.iterrows():
-                detalles.append({
-                    "Dueño": str(row.get("Dueño") or "Desconocido"),
-                    "Originador": str(row.get("Originador") or "N/A"),
-                    "capital": float(row.get("capital", 0)),
-                    "interes": float(row.get("interes", 0)),
-                    "iva": float(row.get("iva", 0)),
-                    "total": float(row.get("total", 0)),
-                })
+            teoricos = []
+            
+            if not df.empty and periodo in periodos_cobr:
+                group = df[df["periodo"] == periodo]
+                for _, row in group.iterrows():
+                    detalles.append({
+                        "Dueño": str(row.get("Dueño") or "Desconocido"),
+                        "Originador": str(row.get("Originador") or "N/A"),
+                        "tipo_cobranza": str(row.get("tipo_cobranza") or "COMUN"),
+                        "capital": float(row.get("capital", 0)),
+                        "interes": float(row.get("interes", 0)),
+                        "iva": float(row.get("iva", 0)),
+                        "total": float(row.get("total", 0)),
+                        "recupero_mora": float(row.get("recupero_mora", 0)),
+                    })
+                    
+            if not df_teo.empty and periodo in periodos_teo:
+                group_teo = df_teo[df_teo["periodo"] == periodo]
+                for _, row in group_teo.iterrows():
+                    teoricos.append({
+                        "Dueño": str(row.get("Dueño") or "Desconocido"),
+                        "Originador": str(row.get("Originador") or "N/A"),
+                        "capital": float(row.get("capital", 0)),
+                        "interes": float(row.get("interes", 0)),
+                        "iva": float(row.get("iva", 0)),
+                        "total": float(row.get("total", 0)),
+                        "total_cobr": float(row.get("total_cobr", 0)),
+                    })
             
             results.append({
                 "periodo": periodo,
-                "detalles": detalles
+                "detalles": detalles,
+                "teoricos": teoricos
             })
             
-        results.sort(key=lambda x: x["periodo"])
         return results
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error en evolución de cobranzas: {str(e)}")

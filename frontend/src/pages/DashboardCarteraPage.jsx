@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import axiosClient from '../api/axiosClient';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, LabelList, ComposedChart, Line } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, LabelList, ComposedChart, Line} from 'recharts';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 const formatCurrency = (value) => {
@@ -98,7 +98,14 @@ const DashboardCarteraPage = () => {
   const [cobranzasEvolutionData, setCobranzasEvolutionData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [fechaCorte, setFechaCorte] = useState(new Date().toISOString().split('T')[0]);
+  const [fechaCorte, setFechaCorte] = useState(() => {
+    const today = new Date();
+    const lastDay = new Date(today.getFullYear(), today.getMonth(), 0);
+    const yyyy = lastDay.getFullYear();
+    const mm = String(lastDay.getMonth() + 1).padStart(2, '0');
+    const dd = String(lastDay.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  });
   const [tasaDescuento, setTasaDescuento] = useState(0);
   const [tasaDescuentoStr, setTasaDescuentoStr] = useState("0 %");
   const [activeTab, setActiveTab] = useState('total'); // 'total' or 'periodo'
@@ -507,15 +514,19 @@ const DashboardCarteraPage = () => {
 
   const filteredCobranzasEvolutionData = useMemo(() => {
     if (!cobranzasEvolutionData) return [];
-    
     return cobranzasEvolutionData.map(month => {
       let capital = 0;
       let interes = 0;
       let iva = 0;
       let total = 0;
+      let recuperoMora = 0;
       const ownerRaw = {};
       const origRaw = {};
+      const tipoRaw = {};
       
+      let totalTeorico = 0;
+      let totalMismoPeriodo = 0;
+
       if (month.detalles) {
         month.detalles.forEach(d => {
           const dueño = String(d.Dueño || 'Desconocido').trim().toUpperCase();
@@ -529,15 +540,35 @@ const DashboardCarteraPage = () => {
             interes += d.interes;
             iva += d.iva;
             total += d.total;
+            recuperoMora += d.recupero_mora || 0;
             
             const dueñoRawStr = String(d.Dueño || 'Desconocido').trim();
             const origRawStr = String(d.Originador || 'N/A').trim();
+            const tipoRawStr = String(d.tipo_cobranza || 'COMUN').trim();
             
             if (!ownerRaw[dueñoRawStr]) ownerRaw[dueñoRawStr] = 0;
             ownerRaw[dueñoRawStr] += d.total;
             
             if (!origRaw[origRawStr]) origRaw[origRawStr] = 0;
             origRaw[origRawStr] += d.total;
+            
+            if (!tipoRaw[tipoRawStr]) tipoRaw[tipoRawStr] = 0;
+            tipoRaw[tipoRawStr] += d.total;
+          }
+        });
+      }
+
+      if (month.teoricos) {
+        month.teoricos.forEach(t => {
+          const dueño = String(t.Dueño || 'Desconocido').trim().toUpperCase();
+          const originador = String(t.Originador || 'N/A').trim().toUpperCase();
+
+          const matchDueño = filtroDueños.length === 0 || filtroDueños.some(f => String(f).trim().toUpperCase() === dueño);
+          const matchOriginador = filtroOriginadores.length === 0 || filtroOriginadores.some(f => String(f).trim().toUpperCase() === originador);
+
+          if (matchDueño && matchOriginador) {
+            totalTeorico += t.total;
+            totalMismoPeriodo += t.total_cobr || 0;
           }
         });
       }
@@ -547,7 +578,10 @@ const DashboardCarteraPage = () => {
         capital,
         interes,
         iva,
-        total
+        total,
+        totalTeorico,
+        totalMismoPeriodo,
+        recuperoMora
       };
 
       Object.keys(ownerRaw).forEach(owner => {
@@ -555,6 +589,9 @@ const DashboardCarteraPage = () => {
       });
       Object.keys(origRaw).forEach(orig => {
         monthData[`origRaw_${orig}`] = origRaw[orig];
+      });
+      Object.keys(tipoRaw).forEach(tipo => {
+        monthData[`tipoRaw_${tipo}`] = tipoRaw[tipo];
       });
 
       return monthData;
@@ -569,6 +606,16 @@ const DashboardCarteraPage = () => {
       });
     });
     return Array.from(origs).sort();
+  }, [filteredCobranzasEvolutionData]);
+
+  const cobranzasUniqueTipos = useMemo(() => {
+    const tipos = new Set();
+    filteredCobranzasEvolutionData.forEach(month => {
+      Object.keys(month).forEach(key => {
+        if (key.startsWith('tipoRaw_')) tipos.add(key.replace('tipoRaw_', ''));
+      });
+    });
+    return Array.from(tipos).sort();
   }, [filteredCobranzasEvolutionData]);
 
   const colocacionesData = useMemo(() => {
@@ -810,6 +857,32 @@ const DashboardCarteraPage = () => {
         smallSumPercent: smallSumTotal / totalMora
       };
     });
+  }, [moraBuckets]);
+
+  const moraKPIs = useMemo(() => {
+    let totalVencido = 0;
+    let totalAVencer = 0;
+    let moraTemprana = 0;
+    let moraDura = 0;
+
+    moraBuckets.forEach(b => {
+      if (b.label !== 'Al día') {
+        totalVencido += b.Vencido;
+        totalAVencer += b.AVencer;
+        if (b.max <= 90) {
+          moraTemprana += b.Vencido;
+        } else {
+          moraDura += b.Vencido;
+        }
+      }
+    });
+    
+    return {
+      totalVencido,
+      totalAVencer,
+      moraTemprana,
+      moraDura
+    };
   }, [moraBuckets]);
 
   const smallBucketsFootnote = useMemo(() => {
@@ -1575,8 +1648,8 @@ const DashboardCarteraPage = () => {
       )}
 
       {(activeTab === 'cobranzas' || isExporting) && (
-        <div id="export-tab-cobranzas">
-          <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', marginBottom: '30px', height: '400px' }}>
+        <div id="export-tab-cobranzas" style={{ display: 'grid', gridTemplateColumns: isExporting ? 'repeat(auto-fit, minmax(450px, 1fr))' : '1fr', gap: '25px', marginBottom: '30px' }}>
+          <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', height: '400px' }}>
             <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Evolución de Cobranzas (Últimos 12 Meses)</h2>
             {filteredCobranzasEvolutionData.length === 0 ? (
               <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>Cargando evolución de cobranzas...</p>
@@ -1617,44 +1690,111 @@ const DashboardCarteraPage = () => {
             )}
           </div>
 
-          <div className="glass-panel" style={{ display: exportFormat === 'l' ? 'none' : 'block', padding: '25px', borderRadius: '12px', marginTop: '20px' }}>
-            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Detalle de Cobranzas por Originador</h2>
+          
+          <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', height: '400px' }}>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Cobranzas por Tipo</h2>
             {filteredCobranzasEvolutionData.length === 0 ? (
               <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>No hay datos de cobranzas disponibles.</p>
             ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', textAlign: 'left' }}>
-                      <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500' }}>Período</th>
-                      <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Total</th>
-                      {cobranzasUniqueOriginadores.map((originador, index) => (
-                        <th key={index} style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>
-                          {originador}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[...filteredCobranzasEvolutionData].reverse().map((row, idx) => (
-                      <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', transition: 'background-color 0.2s' }} className="table-row-hover">
-                        <td style={{ padding: '15px 10px', fontWeight: '500' }}>{row.periodo}</td>
-                        <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--color-total)' }}>
-                          {formatCurrency(row.total)}
-                        </td>
-                        {cobranzasUniqueOriginadores.map(originador => {
-                          const val = row[`origRaw_${originador}`] || 0;
-                          return (
-                            <td key={originador} style={{ padding: '15px 10px', textAlign: 'right', fontFamily: 'monospace' }}>
-                              {val > 0 ? formatCurrency(val) : '-'}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={filteredCobranzasEvolutionData} margin={{ top: 10, right: 30, left: 20, bottom: 25 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" vertical={false} />
+                  <XAxis dataKey="periodo" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} tickMargin={10} />
+                  <YAxis stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} tickFormatter={(val) => `$${(val / 1000000).toFixed(1)}M`} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.9)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff' }}
+                    itemStyle={{ color: '#fff' }}
+                    formatter={(value, name) => {
+                      const valStr = (value / 1000000).toFixed(1);
+                      return [`$${valStr}M`, name];
+                    }}
+                    labelFormatter={(label) => `Período: ${label}`}
+                  />
+                  <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                  {cobranzasUniqueTipos.map((tipo, index) => (
+                    <Bar
+                      isAnimationActive={!isExporting}
+                      key={tipo}
+                      dataKey={`tipoRaw_${tipo}`}
+                      name={tipo}
+                      stackId="a"
+                      fill={CHART_COLORS[index % CHART_COLORS.length]}
+                    />
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
+          
+          <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', height: '400px' }}>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Real Cobrado vs Caída Teórica</h2>
+            {filteredCobranzasEvolutionData.length === 0 ? (
+              <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>No hay datos disponibles.</p>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={filteredCobranzasEvolutionData} margin={{ top: 10, right: 30, left: 20, bottom: 25 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" vertical={false} />
+                  <XAxis dataKey="periodo" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} tickMargin={10} xAxisId={0} />
+                  <XAxis dataKey="periodo" xAxisId={1} hide />
+                  <YAxis stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} tickFormatter={(val) => `$${(val / 1000000).toFixed(1)}M`} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.9)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff' }}
+                    itemStyle={{ color: '#fff' }}
+                    formatter={(value, name) => {
+                      const valStr = (value / 1000000).toFixed(1);
+                      return [`$${valStr}M`, name];
+                    }}
+                    labelFormatter={(label) => `Período: ${label}`}
+                  />
+                  <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                  <Bar
+                    isAnimationActive={!isExporting}
+                    dataKey="totalTeorico"
+                    name="Caída Teórica"
+                    fill="#ef4444"
+                    xAxisId={0}
+                  />
+                  <Bar
+                    isAnimationActive={!isExporting}
+                    dataKey="totalMismoPeriodo"
+                    name="Total Cobrado"
+                    fill="var(--color-capital)"
+                    xAxisId={1}
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
+          <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', height: '400px' }}>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Recupero de Mora</h2>
+            {filteredCobranzasEvolutionData.length === 0 ? (
+              <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>No hay datos disponibles.</p>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={filteredCobranzasEvolutionData} margin={{ top: 10, right: 30, left: 20, bottom: 25 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" vertical={false} />
+                  <XAxis dataKey="periodo" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} tickMargin={10} />
+                  <YAxis stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} tickFormatter={(val) => `$${(val / 1000000).toFixed(1)}M`} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.9)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff' }}
+                    itemStyle={{ color: '#fff' }}
+                    formatter={(value, name) => {
+                      const valStr = (value / 1000000).toFixed(1);
+                      return [`$${valStr}M`, name];
+                    }}
+                    labelFormatter={(label) => `Período: ${label}`}
+                  />
+                  <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                  <Bar
+                    isAnimationActive={!isExporting}
+                    dataKey="recuperoMora"
+                    name="Recupero de Mora"
+                    fill="#f97316"
+                  />
+                </BarChart>
+              </ResponsiveContainer>
             )}
           </div>
         </div>
@@ -1662,8 +1802,8 @@ const DashboardCarteraPage = () => {
 
       {(activeTab === 'estados' || isExporting) && (
         <div id="export-tab-estados">
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginBottom: '30px' }}>
-            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', flex: '1 1 300px', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isExporting ? 'repeat(auto-fit, minmax(450px, 1fr))' : '1fr', gap: '25px', marginBottom: '30px' }}>
+            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', display: 'flex', flexDirection: 'column' }}>
               <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600', textAlign: 'center' }}>Distribución por Estado</h2>
               <div style={{ flex: 1, minHeight: '250px' }}>
                 <ResponsiveContainer width="100%" height="100%">
@@ -1696,7 +1836,7 @@ const DashboardCarteraPage = () => {
               </div>
             </div>
 
-            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', flex: '2 1 500px' }}>
+            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px' }}>
               <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Saldos por Estado (Cap+Int)</h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '15px' }}>
                 <div style={{
@@ -1778,8 +1918,27 @@ const DashboardCarteraPage = () => {
 
       {(activeTab === 'morosidad' || isExporting) && (
         <div id="export-tab-morosidad">
-          <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '30px' }}>
-            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', flex: '1 1 300px', minHeight: '400px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '30px' }}>
+            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Vencido (Mora)</span>
+              <span style={{ fontSize: '1.8rem', fontWeight: 'bold', color: 'var(--color-interes)' }}>{formatCurrency(moraKPIs.totalVencido)}</span>
+            </div>
+            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.5px' }}>A Vencer (Cartera Morosa)</span>
+              <span style={{ fontSize: '1.8rem', fontWeight: 'bold', color: 'var(--color-total)' }}>{formatCurrency(moraKPIs.totalAVencer)}</span>
+            </div>
+            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Mora Temprana (1-90 días)</span>
+              <span style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#f59e0b' }}>{formatCurrency(moraKPIs.moraTemprana)}</span>
+            </div>
+            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Mora Dura (&gt;90 días)</span>
+              <span style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#ef4444' }}>{formatCurrency(moraKPIs.moraDura)}</span>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: isExporting ? 'repeat(auto-fit, minmax(450px, 1fr))' : '1fr', gap: '25px', marginBottom: '30px' }}>
+            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', minHeight: '400px' }}>
               <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Distribución de Mora (Cap+Int+IVA)</h2>
               <ResponsiveContainer width="100%" height={320}>
                 <PieChart margin={{ top: 10, right: 60, bottom: 10, left: 60 }}>
@@ -1843,7 +2002,7 @@ const DashboardCarteraPage = () => {
               )}
             </div>
             
-            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', flex: '2 1 500px', minHeight: '400px' }}>
+            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', minHeight: '400px' }}>
               <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Saldos Vencidos (Cap+Int+IVA)</h2>
               <ResponsiveContainer width="100%" height={320}>
                 <BarChart

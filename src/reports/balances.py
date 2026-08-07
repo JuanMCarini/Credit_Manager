@@ -230,7 +230,7 @@ def cobranzas_recibidas(meses: int = 12, fecha: datetime | None = None):
     if fecha is None:
         fecha = datetime.today()
         
-    fecha_inicio = fecha - pd.DateOffset(months=meses)
+    fecha_inicio = (fecha - pd.DateOffset(months=meses - 1)).replace(day=1)
     fecha_inicio_str = fecha_inicio.strftime("%Y-%m-%d")
     fecha_fin_str = fecha.strftime("%Y-%m-%d")
     sql_params = {"fecha_inicio": fecha_inicio_str, "fecha_fin": fecha_fin_str}
@@ -289,8 +289,102 @@ def cobranzas_recibidas(meses: int = 12, fecha: datetime | None = None):
     df_cobr["Dueño"] = np.select(conditions, choices, default=company_data.razon_social)
     
     df_cobr['periodo'] = pd.to_datetime(df_cobr['fecha']).dt.strftime('%Y-%m')
-    agrupado = df_cobr.groupby(['periodo', 'Dueño', 'Originador'], dropna=False)[['capital', 'interes', 'iva']].sum().reset_index()
+    
+    # Calculate recupero_mora (payments made after the due date)
+    df_cobr['fecha_vencimiento'] = pd.to_datetime(df_cobr['cuota_id'].map(df_ctas['fecha_vencimiento']))
+    df_cobr['fecha_pago_dt'] = pd.to_datetime(df_cobr['fecha'])
+    df_cobr['es_mora'] = df_cobr['fecha_pago_dt'] > df_cobr['fecha_vencimiento']
+    df_cobr['recupero_mora'] = np.where(df_cobr['es_mora'], df_cobr['capital'] + df_cobr['interes'] + df_cobr['iva'], 0)
+
+    agrupado = df_cobr.groupby(['periodo', 'Dueño', 'Originador', 'tipo_cobranza'], dropna=False)[['capital', 'interes', 'iva', 'recupero_mora']].sum().reset_index()
     
     agrupado['total'] = agrupado['capital'] + agrupado['interes'] + agrupado['iva']
+    
+    return agrupado
+
+def cuotas_teoricas(meses: int = 12, fecha: datetime | None = None):
+    if fecha is None:
+        fecha = datetime.today()
+        
+    fecha_inicio = (fecha - pd.DateOffset(months=meses - 1)).replace(day=1)
+    fecha_inicio_str = fecha_inicio.strftime("%Y-%m-%d")
+    fecha_fin_str = fecha.strftime("%Y-%m-%d")
+    sql_params = {"fecha_inicio": fecha_inicio_str, "fecha_fin": fecha_fin_str}
+
+    # Query only cuotas whose expiration falls in the window
+    df_ctas = pd.read_sql_query(
+        text("SELECT * FROM cuotas WHERE fecha_vencimiento >= :fecha_inicio AND fecha_vencimiento <= :fecha_fin"),
+        engine,
+        params=sql_params,
+        index_col="id",
+    )
+
+    if df_ctas.empty:
+        return pd.DataFrame()
+
+    df_crts = pd.read_sql_query(text("SELECT * FROM creditos"), engine, index_col="id")
+    df_cart = pd.read_sql("carteras", engine, index_col="id")
+    df_socios = pd.read_sql("socios_comerciales", engine, index_col="id")
+    df_op_cart = pd.read_sql_query(text("SELECT * FROM operaciones_cartera"), engine, index_col="cuota_id")
+
+    df_ctas["cartera_id"] = df_ctas["credito_id"].map(df_crts["cartera_id"])
+    df_ctas["socio_originador_id"] = df_ctas["credito_id"].map(df_crts["socio_originador_id"])
+    df_ctas["tipo_credito"] = df_ctas["credito_id"].map(df_crts["tipo_credito"])
+
+    df_ctas["Originador"] = df_ctas["socio_originador_id"].map(df_socios["razon_social"])
+
+    mask_penalty = (
+        (df_ctas["Originador"].isna())
+        & (df_ctas["tipo_credito"] == "PENALTY"))
+    df_ctas.loc[mask_penalty, "Originador"] = "PENALTY"
+
+    df_op_cart = df_op_cart.sort_values(by="fecha_registro")
+    df_op_cart = df_op_cart[~df_op_cart.index.duplicated(keep="last")]
+
+    df_ctas["Dueño_id_tmp"] = df_ctas.index.map(df_op_cart["cartera_id"])
+    df_ctas["tipo_op"] = df_ctas["Dueño_id_tmp"].map(df_cart["tipo_operacion"])
+    df_ctas["comercializada"] = df_ctas.index.map(df_op_cart["cuota_comercializada"])
+    df_ctas["Partner_Name"] = df_ctas["Dueño_id_tmp"].map(df_cart["socio_id"]).map(df_socios["razon_social"])
+
+    company_data = get_company_data()
+
+    conditions = [
+        (df_ctas["tipo_op"].isin(["COMPRA", "RECOMPRA"])) & (df_ctas["comercializada"] == True),
+        (df_ctas["tipo_op"].isin(["COMPRA", "RECOMPRA"])) & (df_ctas["comercializada"] == False),
+        (df_ctas["tipo_op"] == "VENTA") & (df_ctas["comercializada"] == True),
+        (df_ctas["tipo_op"] == "VENTA") & (df_ctas["comercializada"] == False),
+    ]
+    choices = [
+        company_data.razon_social,
+        df_ctas["Partner_Name"],
+        df_ctas["Partner_Name"],
+        company_data.razon_social,
+    ]
+    df_ctas["Dueño"] = np.select(conditions, choices, default=company_data.razon_social)
+    
+    df_ctas['periodo'] = pd.to_datetime(df_ctas['fecha_vencimiento']).dt.strftime('%Y-%m')
+
+    # Calculate real collections for these specific cuotas, up to fecha_corte (fecha_fin)
+    df_cobr_teo = pd.read_sql_query(
+        text("SELECT cuota_id, capital, interes, iva FROM cobranzas WHERE fecha <= :fecha_fin"),
+        engine,
+        params={"fecha_fin": fecha_fin_str}
+    )
+    if not df_cobr_teo.empty:
+        cobr_grouped = df_cobr_teo.groupby('cuota_id')[['capital', 'interes', 'iva']].sum()
+        df_ctas['cobr_capital'] = df_ctas.index.map(cobr_grouped['capital']).fillna(0)
+        df_ctas['cobr_interes'] = df_ctas.index.map(cobr_grouped['interes']).fillna(0)
+        df_ctas['cobr_iva'] = df_ctas.index.map(cobr_grouped['iva']).fillna(0)
+    else:
+        df_ctas['cobr_capital'] = 0
+        df_ctas['cobr_interes'] = 0
+        df_ctas['cobr_iva'] = 0
+
+    agrupado = df_ctas.groupby(['periodo', 'Dueño', 'Originador'], dropna=False)[
+        ['capital', 'interes', 'iva', 'cobr_capital', 'cobr_interes', 'cobr_iva']
+    ].sum().reset_index()
+    
+    agrupado['total'] = agrupado['capital'] + agrupado['interes'] + agrupado['iva']
+    agrupado['total_cobr'] = agrupado['cobr_capital'] + agrupado['cobr_interes'] + agrupado['cobr_iva']
     
     return agrupado
