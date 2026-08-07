@@ -218,3 +218,79 @@ def saldos(
     df.rename_axis(index=renames, inplace=True)
 
     return df
+
+def cobranzas_recibidas(meses: int = 12, fecha: datetime | None = None):
+    """
+    =============================================================================
+    Function: cobranzas_recibidas
+    Description: Generates an optimized historical collections report.
+                 Returns raw numeric DataFrames grouped by period, Owner and Originator.
+    =============================================================================
+    """
+    if fecha is None:
+        fecha = datetime.today()
+        
+    fecha_inicio = fecha - pd.DateOffset(months=meses)
+    fecha_inicio_str = fecha_inicio.strftime("%Y-%m-%d")
+    fecha_fin_str = fecha.strftime("%Y-%m-%d")
+    sql_params = {"fecha_inicio": fecha_inicio_str, "fecha_fin": fecha_fin_str}
+
+    df_cobr = pd.read_sql_query(
+        text("SELECT * FROM cobranzas WHERE fecha >= :fecha_inicio AND fecha <= :fecha_fin"),
+        engine,
+        params=sql_params,
+        index_col="id",
+    )
+
+    if df_cobr.empty:
+        return pd.DataFrame()
+
+    df_ctas = pd.read_sql_query(text("SELECT * FROM cuotas"), engine, index_col="id")
+    df_crts = pd.read_sql_query(text("SELECT * FROM creditos"), engine, index_col="id")
+    df_cart = pd.read_sql("carteras", engine, index_col="id")
+    df_socios = pd.read_sql("socios_comerciales", engine, index_col="id")
+    df_op_cart = pd.read_sql_query(text("SELECT * FROM operaciones_cartera"), engine, index_col="cuota_id")
+
+    df_cobr["credito_id"] = df_cobr["cuota_id"].map(df_ctas["credito_id"])
+    df_cobr["cartera_id"] = df_cobr["credito_id"].map(df_crts["cartera_id"])
+    df_cobr["socio_originador_id"] = df_cobr["credito_id"].map(df_crts["socio_originador_id"])
+    df_cobr["tipo_credito"] = df_cobr["credito_id"].map(df_crts["tipo_credito"])
+
+    df_cobr["socio_id"] = df_cobr["cartera_id"].map(df_cart["socio_id"])
+    df_cobr["Originador"] = df_cobr["socio_originador_id"].map(df_socios["razon_social"])
+
+    mask_penalty = (
+        (df_cobr["Originador"].isna())
+        & (df_cobr["tipo_credito"] == "PENALTY"))
+    df_cobr.loc[mask_penalty, "Originador"] = "PENALTY"
+
+    df_op_cart = df_op_cart.sort_values(by="fecha_registro")
+    df_op_cart = df_op_cart[~df_op_cart.index.duplicated(keep="last")]
+
+    df_cobr["Dueño_id_tmp"] = df_cobr["cuota_id"].map(df_op_cart["cartera_id"])
+    df_cobr["tipo_op"] = df_cobr["Dueño_id_tmp"].map(df_cart["tipo_operacion"])
+    df_cobr["comercializada"] = df_cobr["cuota_id"].map(df_op_cart["cuota_comercializada"])
+    df_cobr["Partner_Name"] = df_cobr["Dueño_id_tmp"].map(df_cart["socio_id"]).map(df_socios["razon_social"])
+
+    company_data = get_company_data()
+
+    conditions = [
+        (df_cobr["tipo_op"].isin(["COMPRA", "RECOMPRA"])) & (df_cobr["comercializada"] == True),
+        (df_cobr["tipo_op"].isin(["COMPRA", "RECOMPRA"])) & (df_cobr["comercializada"] == False),
+        (df_cobr["tipo_op"] == "VENTA") & (df_cobr["comercializada"] == True),
+        (df_cobr["tipo_op"] == "VENTA") & (df_cobr["comercializada"] == False),
+    ]
+    choices = [
+        company_data.razon_social,
+        df_cobr["Partner_Name"],
+        df_cobr["Partner_Name"],
+        company_data.razon_social,
+    ]
+    df_cobr["Dueño"] = np.select(conditions, choices, default=company_data.razon_social)
+    
+    df_cobr['periodo'] = pd.to_datetime(df_cobr['fecha']).dt.strftime('%Y-%m')
+    agrupado = df_cobr.groupby(['periodo', 'Dueño', 'Originador'], dropna=False)[['capital', 'interes', 'iva']].sum().reset_index()
+    
+    agrupado['total'] = agrupado['capital'] + agrupado['interes'] + agrupado['iva']
+    
+    return agrupado
