@@ -7,7 +7,7 @@ import pandas as pd
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
-from src.reports.balances import saldos
+from src.reports.balances import saldos, cobranzas_recibidas
 
 router = APIRouter(prefix="/api/v1/reports", tags=["Reportes"])
 
@@ -107,3 +107,41 @@ def export_saldos_excel(
         return StreamingResponse(output, headers=headers, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generando Excel: {str(e)}")
+
+@router.get("/cobranzas/evolution")
+def get_cobranzas_evolution(
+    meses: int = Query(12, description="Cantidad de meses hacia atrás"),
+    fecha: Optional[datetime] = Query(None, description="Fecha de corte")
+) -> List[Dict[str, Any]]:
+    try:
+        df = cobranzas_recibidas(meses=meses, fecha=fecha)
+        
+        if df.empty:
+            return []
+
+        df = df.replace({np.nan: None})
+
+        # To return the data, we want to group it by "periodo"
+        # and nest the details just like balances/evolution does
+        results = []
+        for periodo, group in df.groupby("periodo"):
+            detalles = []
+            for _, row in group.iterrows():
+                detalles.append({
+                    "Dueño": str(row.get("Dueño") or "Desconocido"),
+                    "Originador": str(row.get("Originador") or "N/A"),
+                    "capital": float(row.get("capital", 0)),
+                    "interes": float(row.get("interes", 0)),
+                    "iva": float(row.get("iva", 0)),
+                    "total": float(row.get("total", 0)),
+                })
+            
+            results.append({
+                "periodo": periodo,
+                "detalles": detalles
+            })
+            
+        results.sort(key=lambda x: x["periodo"])
+        return results
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error en evolución de cobranzas: {str(e)}")
