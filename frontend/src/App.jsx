@@ -24,6 +24,7 @@ import PapeleriaPage from './pages/PapeleriaPage';
 import FacturacionPage from './pages/FacturacionPage';
 import BcraReportsPage from './pages/BcraReportsPage';
 import FinanzasPage from './pages/FinanzasPage';
+import BancosPage from './pages/BancosPage';
 
 function App() {
   return (
@@ -57,6 +58,7 @@ function App() {
             <Route path="reportes/bcra" element={<BcraReportsPage />} />
             <Route path="facturacion" element={<FacturacionPage />} />
             <Route path="finanzas" element={<FinanzasPage />} />
+            <Route path="bancos" element={<BancosPage />} />
             
             {/* Rutas exclusivas Administrador */}
             <Route element={<ProtectedRoute allowedRoles={[]} />}>

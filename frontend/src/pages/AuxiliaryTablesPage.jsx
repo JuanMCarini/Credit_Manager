@@ -4,7 +4,7 @@ import axiosClient from '../api/axiosClient';
 import ExportExcelButton from '../components/ExportExcelButton';
 
 const AuxiliaryTablesPage = () => {
-  const { provincias, empleadores, socios, tasasYComisiones, relaciones, comercializadores, fetchAuxiliares } = useAppStore();
+  const { provincias, empleadores, socios, tasasYComisiones, relaciones, comercializadores, bancos, cuentas, conceptos, fetchAuxiliares } = useAppStore();
   
   const [activeTable, setActiveTable] = useState('socios');
   const [isCreating, setIsCreating] = useState(false);
@@ -33,7 +33,8 @@ const AuxiliaryTablesPage = () => {
     gasto_2_socio_id: { options: socios, valueKey: 'id', labelKey: 'razon_social' },
     socio_id: { options: socios, valueKey: 'id', labelKey: 'razon_social' },
     provincia_id: { options: provincias, valueKey: 'id', labelKey: 'nombre' },
-    id_provincia: { options: provincias, valueKey: 'id', labelKey: 'nombre' }
+    id_provincia: { options: provincias, valueKey: 'id', labelKey: 'nombre' },
+    banco_id: { options: bancos, valueKey: 'id', labelKey: 'nombre_banco' }
   };
 
   const percentFields = [
@@ -49,7 +50,10 @@ const AuxiliaryTablesPage = () => {
     socios: { name: 'Socios Comerciales', data: socios, endpoint: 'socios', schema: ['id', 'razon_social', 'cuit', 'domicilio_legal', 'contacto_nombre', 'mail', 'telefono', 'dia_corte', 'cbu', 'nro_cuenta_bancaria', 'nombre_banco', 'anticipo_vigente'] },
     tasasYComisiones: { name: 'Tasas y Comisiones', data: tasasYComisiones, endpoint: 'tasas_y_comisiones', schema: ['id', 'fecha', 'estado', 'socio_originador_id', 'socio_intermediario_id', 'colocacion_originador', 'colocacion_intermediario', 'cobranza_originador', 'cobranza_intermediario', 'colocacion_propia', 'gasto_1_porcentaje', 'gasto_1_socio_id', 'gasto_2_porcentaje', 'gasto_2_socio_id', 'porcentaje_sellado', 'plazo', 'tna_c_iva'] },
     relaciones: { name: 'Relaciones Mapeadas', data: relaciones, endpoint: 'relaciones', schema: ['id', 'socio_id', 'tabla', 'id_local', 'id_foraneo'] },
-    comercializadores: { name: 'Comercializadores', data: comercializadores, endpoint: 'comercializadores', schema: ['id', 'nombre'] }
+    comercializadores: { name: 'Comercializadores', data: comercializadores, endpoint: 'comercializadores', schema: ['id', 'nombre'] },
+    bancos: { name: 'Bancos', data: bancos, endpoint: 'bancos', basePath: '/api/finanzas', schema: ['id', 'nombre_banco'] },
+    cuentas: { name: 'Cuentas Bancarias', data: cuentas, endpoint: 'cuentas', basePath: '/api/finanzas', schema: ['id', 'nombre', 'banco_id', 'nro', 'cbu', 'alias', 'tipo_cuenta'] },
+    conceptos: { name: 'Conceptos', data: conceptos, endpoint: 'conceptos', basePath: '/api/finanzas', schema: ['id', 'name', 'tipo_movimiento', 'descripcion'] }
   };
 
   const currentTableConfig = tablesMap[activeTable];
@@ -61,7 +65,8 @@ const AuxiliaryTablesPage = () => {
     
     setFeedback(null);
     try {
-      await axiosClient.delete(`/api/v1/auxiliares/${currentTableConfig.endpoint}/${id}`);
+      const basePath = currentTableConfig.basePath || '/api/v1/auxiliares';
+      await axiosClient.delete(`${basePath}/${currentTableConfig.endpoint}/${id}`);
       setFeedback({ type: 'success', message: 'Registro eliminado exitosamente.' });
       await fetchAuxiliares();
     } catch (error) {
@@ -156,10 +161,12 @@ const AuxiliaryTablesPage = () => {
       }
 
       if (isCreating) {
-        await axiosClient.post(`/api/v1/auxiliares/${currentTableConfig.endpoint}`, cleanedData);
+        const basePath = currentTableConfig.basePath || '/api/v1/auxiliares';
+        await axiosClient.post(`${basePath}/${currentTableConfig.endpoint}`, cleanedData);
         setFeedback({ type: 'success', message: 'Registro creado exitosamente.' });
       } else {
-        await axiosClient.put(`/api/v1/auxiliares/${currentTableConfig.endpoint}/${editingRecord.id}`, cleanedData);
+        const basePath = currentTableConfig.basePath || '/api/v1/auxiliares';
+        await axiosClient.put(`${basePath}/${currentTableConfig.endpoint}/${editingRecord.id}`, cleanedData);
         setFeedback({ type: 'success', message: 'Registro actualizado exitosamente.' });
       }
       await fetchAuxiliares();
@@ -194,6 +201,10 @@ const AuxiliaryTablesPage = () => {
     if (col === 'id_provincia' || col === 'provincia_id') {
       const prov = provincias.find(p => p.id === value);
       return prov ? prov.nombre : value;
+    }
+    if (col === 'banco_id') {
+      const banco = bancos.find(b => b.id === value);
+      return banco ? banco.nombre_banco : value;
     }
     if (col === 'es_pasivo') {
       return value ? 'Sí' : 'No';
@@ -511,6 +522,28 @@ const AuxiliaryTablesPage = () => {
                       >
                         <option value="">Seleccione...</option>
                         {estadoOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                      </select>
+                    );
+                  } else if (col === 'tipo_cuenta') {
+                    inputElement = (
+                      <select
+                        value={editFormData[col] ?? ''} 
+                        onChange={(e) => handleEditChange(col, e.target.value)}
+                        className="input-field" required
+                      >
+                        <option value="">Seleccione...</option>
+                        {['Cuenta Corriente', 'Caja de Ahorros', 'Plazo Fijo', 'Fondo Común de Inversión'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                      </select>
+                    );
+                  } else if (col === 'tipo_movimiento') {
+                    inputElement = (
+                      <select
+                        value={editFormData[col] ?? ''} 
+                        onChange={(e) => handleEditChange(col, e.target.value)}
+                        className="input-field" required
+                      >
+                        <option value="">Seleccione...</option>
+                        {["Ingreso", "Egreso", "Suscripción FCI", "Rescate FCI", "Ingresos a plazo fijo", "Egresos de plazo fijo"].map(opt => <option key={opt} value={opt}>{opt}</option>)}
                       </select>
                     );
                   } else if (col === 'fecha') {

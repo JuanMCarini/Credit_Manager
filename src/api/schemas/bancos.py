@@ -1,0 +1,108 @@
+from pydantic import BaseModel, ConfigDict
+from typing import Optional, List
+from datetime import datetime, date
+from src.database.models.finance.bancos import CategoriaMovimiento
+
+# =======================
+# Banco Schemas
+# =======================
+class BancoBase(BaseModel):
+    nombre_banco: str
+
+class BancoCreate(BancoBase):
+    pass
+
+class BancoUpdate(BancoBase):
+    pass
+
+class BancoResponse(BancoBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+# =======================
+# Cuenta Schemas
+# =======================
+class CuentaBase(BaseModel):
+    nombre: str
+    banco_id: int
+    nro: str
+    cbu: str
+    alias: str
+    tipo_cuenta: str
+
+class CuentaCreate(CuentaBase):
+    pass
+
+class CuentaUpdate(BaseModel):
+    nombre: Optional[str] = None
+    banco_id: Optional[int] = None
+    nro: Optional[str] = None
+    cbu: Optional[str] = None
+    alias: Optional[str] = None
+    tipo_cuenta: Optional[str] = None
+
+class CuentaResponse(CuentaBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+    banco: Optional[BancoResponse] = None
+    saldo: Optional[float] = None
+    saldo_fci: Optional[float] = None
+    saldo_plazo_fijo: Optional[float] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+# =======================
+# Concepto Schemas
+# =======================
+class ConceptoBase(BaseModel):
+    name: str
+    tipo_movimiento: CategoriaMovimiento
+    descripcion: Optional[str] = None
+
+class ConceptoCreate(ConceptoBase):
+    pass
+
+class ConceptoUpdate(BaseModel):
+    name: Optional[str] = None
+    tipo_movimiento: Optional[CategoriaMovimiento] = None
+    descripcion: Optional[str] = None
+
+class ConceptoResponse(ConceptoBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+# =======================
+# Movimiento Schemas
+# =======================
+class MovimientoBase(BaseModel):
+    cuenta_id: int
+    fecha: date
+    monto: float
+    concepto_id: int
+    descripcion: Optional[str] = None
+
+class MovimientoCreate(MovimientoBase):
+    pass
+
+class MovimientoUpdate(BaseModel):
+    cuenta_id: Optional[int] = None
+    fecha: Optional[date] = None
+    monto: Optional[float] = None
+    concepto_id: Optional[int] = None
+    descripcion: Optional[str] = None
+
+class MovimientoResponse(MovimientoBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+    concepto: Optional[ConceptoResponse] = None
+    cuenta: Optional[CuentaResponse] = None
+
+    model_config = ConfigDict(from_attributes=True)
