@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from 'react';
 import axiosClient from '../api/axiosClient';
-import { Calendar, DollarSign, Briefcase, Download, Filter } from 'lucide-react';
+import { Calendar, DollarSign, Briefcase, Download, Filter, Landmark } from 'lucide-react';
 
 const FinanzasPage = () => {
   const [mes, setMes] = useState(

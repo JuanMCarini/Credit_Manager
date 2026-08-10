@@ -21,13 +21,13 @@ class Banco(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     # Relación a Cuentas
-    cuentas = relationship("CuentaCorriente", back_populates="banco")
+    cuentas = relationship("Cuenta", back_populates="banco")
 
 class Cuenta(Base):
     __tablename__ = "cuentas"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    nombre = Column(String(20), unique=True, nullable=False)
+    nombre = Column(String(100), unique=True, nullable=False)
     banco_id = Column(Integer, ForeignKey("bancos.id"), nullable=False)
     nro = Column(String(20), unique=False, nullable=False)
     cbu = Column(String(22), nullable=False, unique=True)
@@ -45,9 +45,9 @@ class Cuenta(Base):
         # Sumamos o restamos dependiendo del tipo de movimiento
         total = 0.0
         for mov in self.movimientos:
-            if mov.tipo.name in (CategoriaMovimiento.INGRESO, CategoriaMovimiento.RESCATE_FCI, CategoriaMovimiento.PLAZO_FIJO_EGRESOS):
+            if mov.concepto.tipo_movimiento in (CategoriaMovimiento.INGRESO, CategoriaMovimiento.RESCATE_FCI, CategoriaMovimiento.PLAZO_FIJO_EGRESOS):
                 total += mov.monto
-            elif mov.tipo.name in (CategoriaMovimiento.EGRESO, CategoriaMovimiento.SUSCRIPCION_FCI, CategoriaMovimiento.PLAZO_FIJO_INGRESOS):
+            elif mov.concepto.tipo_movimiento in (CategoriaMovimiento.EGRESO, CategoriaMovimiento.SUSCRIPCION_FCI, CategoriaMovimiento.PLAZO_FIJO_INGRESOS):
                 total -= mov.monto
         return total
 
@@ -56,9 +56,9 @@ class Cuenta(Base):
         # Sumamos o restamos dependiendo del tipo de movimiento
         total = 0.0
         for mov in self.movimientos:
-            if mov.tipo.name == CategoriaMovimiento.RESCATE_FCI:
+            if mov.concepto.tipo_movimiento == CategoriaMovimiento.RESCATE_FCI:
                 total -= mov.monto
-            elif mov.tipo.name == CategoriaMovimiento.SUSCRIPCION_FCI:
+            elif mov.concepto.tipo_movimiento == CategoriaMovimiento.SUSCRIPCION_FCI:
                 total += mov.monto
         return total
 
@@ -67,9 +67,9 @@ class Cuenta(Base):
         # Sumamos o restamos dependiendo del tipo de movimiento
         total = 0.0
         for mov in self.movimientos:
-            if mov.tipo.name == CategoriaMovimiento.PLAZO_FIJO_INGRESOS:
+            if mov.concepto.tipo_movimiento == CategoriaMovimiento.PLAZO_FIJO_INGRESOS:
                 total += mov.monto
-            elif mov.tipo.name == CategoriaMovimiento.PLAZO_FIJO_EGRESOS:
+            elif mov.concepto.tipo_movimiento == CategoriaMovimiento.PLAZO_FIJO_EGRESOS:
                 total -= mov.monto
         return total
 
@@ -77,20 +77,20 @@ class Concepto(Base):
     __tablename__ = "conceptos"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String(20), unique=True, nullable=False)
-    tipo_movimiento = Column(SQLEnum(CategoriaMovimiento), nullable=False, unique=True)
+    name = Column(String(100), unique=True, nullable=False)
+    tipo_movimiento = Column(SQLEnum(CategoriaMovimiento), nullable=False)
     descripcion = Column(String(255), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     # Relación a Movimientos
-    movimiento = relationship("Movimiento", back_populates="tipo")
+    movimientos = relationship("Movimiento", back_populates="concepto")
 
 class Movimiento(Base):
     __tablename__ = "movimientos"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    cuenta_id = Column(Integer, ForeignKey("cuentas_corrientes.id"), nullable=False)
+    cuenta_id = Column(Integer, ForeignKey("cuentas.id"), nullable=False)
     fecha = Column(Date, nullable=False)
     monto = Column(Float, nullable=False)
     concepto_id = Column(Integer, ForeignKey("conceptos.id"), nullable=False)
@@ -99,5 +99,5 @@ class Movimiento(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     # Relaciones
-    tipo = relationship("TipoMovimiento", back_populates="movimientos")
-    cuenta = relationship("CuentaCorriente", back_populates="movimientos")
+    concepto = relationship("Concepto", back_populates="movimientos")
+    cuenta = relationship("Cuenta", back_populates="movimientos")

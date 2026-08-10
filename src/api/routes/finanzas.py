@@ -1,14 +1,23 @@
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException, Path, Body
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import or_
+from sqlalchemy import or_, and_, func
 from datetime import date
 import calendar
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 
 from src.database import get_db
 from src.database.models.creditos import Credito, Cuota
 from src.database.models.cobranzas import Cobranza, TipoCobranzaEnum, Proceso, EstadoProcesoEnum
 from src.database.models.socios import TasaYComision
+
+# Nuevos imports para Bancos
+from src.database.models.finance.bancos import Banco, Cuenta, Concepto, Movimiento, CategoriaMovimiento
+from src.api.schemas.bancos import (
+    BancoCreate, BancoUpdate, BancoResponse,
+    CuentaCreate, CuentaUpdate, CuentaResponse,
+    ConceptoCreate, ConceptoUpdate, ConceptoResponse,
+    MovimientoCreate, MovimientoUpdate, MovimientoResponse
+)
 
 router = APIRouter(
     prefix="/api/finanzas",
@@ -199,3 +208,209 @@ def calcular_cobranza(
     resultado = [res for res in socios_summary.values() if res["total_comisiones"] > 0]
     resultado.sort(key=lambda x: (x["razon_social"], x["fecha"]))
     return resultado
+
+# -------------------------------------------------------------------
+# Bancos
+# -------------------------------------------------------------------
+@router.get("/bancos", response_model=List[BancoResponse])
+def get_bancos(db: Session = Depends(get_db)):
+    return db.query(Banco).all()
+
+@router.post("/bancos", response_model=BancoResponse)
+def create_banco(banco: BancoCreate, db: Session = Depends(get_db)):
+    db_banco = Banco(**banco.model_dump())
+    db.add(db_banco)
+    db.commit()
+    db.refresh(db_banco)
+    return db_banco
+
+@router.put("/bancos/{banco_id}", response_model=BancoResponse)
+def update_banco(banco_id: int, banco: BancoUpdate, db: Session = Depends(get_db)):
+    db_banco = db.query(Banco).filter(Banco.id == banco_id).first()
+    if not db_banco:
+        raise HTTPException(status_code=404, detail="Banco no encontrado")
+    for key, value in banco.model_dump(exclude_unset=True).items():
+        setattr(db_banco, key, value)
+    db.commit()
+    db.refresh(db_banco)
+    return db_banco
+
+@router.delete("/bancos/{banco_id}")
+def delete_banco(banco_id: int, db: Session = Depends(get_db)):
+    db_banco = db.query(Banco).filter(Banco.id == banco_id).first()
+    if not db_banco:
+        raise HTTPException(status_code=404, detail="Banco no encontrado")
+    db.delete(db_banco)
+    db.commit()
+    return {"message": "Banco eliminado correctamente"}
+
+# -------------------------------------------------------------------
+# Cuentas
+# -------------------------------------------------------------------
+@router.get("/cuentas", response_model=List[CuentaResponse])
+def get_cuentas(db: Session = Depends(get_db)):
+    cuentas = db.query(Cuenta).options(joinedload(Cuenta.banco)).all()
+    # Pydantic will pull properties `saldo`, `saldo_fci`, `saldo_plazo_fijo` via from_attributes
+    return cuentas
+
+@router.get("/cuentas/{cuenta_id}/kpis")
+def get_cuenta_kpis(cuenta_id: int, fecha_corte: date = Query(default_factory=date.today), db: Session = Depends(get_db)):
+    cuenta = db.query(Cuenta).filter(Cuenta.id == cuenta_id).first()
+    if not cuenta:
+        raise HTTPException(status_code=404, detail="Cuenta no encontrada")
+    
+    # Calcular a fecha de corte manualmente desde BD
+    movs = db.query(Movimiento).join(Concepto).filter(
+        Movimiento.cuenta_id == cuenta_id,
+        Movimiento.fecha <= fecha_corte
+    ).all()
+    
+    saldo = 0.0
+    saldo_fci = 0.0
+    saldo_pf = 0.0
+    
+    for m in movs:
+        cat = m.concepto.tipo_movimiento
+        
+        # Saldo
+        if cat in (CategoriaMovimiento.INGRESO, CategoriaMovimiento.RESCATE_FCI, CategoriaMovimiento.PLAZO_FIJO_EGRESOS):
+            saldo += m.monto
+        elif cat in (CategoriaMovimiento.EGRESO, CategoriaMovimiento.SUSCRIPCION_FCI, CategoriaMovimiento.PLAZO_FIJO_INGRESOS):
+            saldo -= m.monto
+            
+        # FCI
+        if cat == CategoriaMovimiento.SUSCRIPCION_FCI:
+            saldo_fci += m.monto
+        elif cat == CategoriaMovimiento.RESCATE_FCI:
+            saldo_fci -= m.monto
+            
+        # PF
+        if cat == CategoriaMovimiento.PLAZO_FIJO_INGRESOS:
+            saldo_pf += m.monto
+        elif cat == CategoriaMovimiento.PLAZO_FIJO_EGRESOS:
+            saldo_pf -= m.monto
+
+    return {
+        "saldo": saldo,
+        "saldo_fci": saldo_fci,
+        "saldo_plazo_fijo": saldo_pf,
+        "fecha_corte": fecha_corte
+    }
+
+@router.post("/cuentas", response_model=CuentaResponse)
+def create_cuenta(cuenta: CuentaCreate, db: Session = Depends(get_db)):
+    db_cuenta = Cuenta(**cuenta.model_dump())
+    db.add(db_cuenta)
+    db.commit()
+    db.refresh(db_cuenta)
+    return db_cuenta
+
+@router.put("/cuentas/{cuenta_id}", response_model=CuentaResponse)
+def update_cuenta(cuenta_id: int, cuenta: CuentaUpdate, db: Session = Depends(get_db)):
+    db_cuenta = db.query(Cuenta).filter(Cuenta.id == cuenta_id).first()
+    if not db_cuenta:
+        raise HTTPException(status_code=404, detail="Cuenta no encontrada")
+    for key, value in cuenta.model_dump(exclude_unset=True).items():
+        setattr(db_cuenta, key, value)
+    db.commit()
+    db.refresh(db_cuenta)
+    return db_cuenta
+
+@router.delete("/cuentas/{cuenta_id}")
+def delete_cuenta(cuenta_id: int, db: Session = Depends(get_db)):
+    db_cuenta = db.query(Cuenta).filter(Cuenta.id == cuenta_id).first()
+    if not db_cuenta:
+        raise HTTPException(status_code=404, detail="Cuenta no encontrada")
+    db.delete(db_cuenta)
+    db.commit()
+    return {"message": "Cuenta eliminada correctamente"}
+
+# -------------------------------------------------------------------
+# Conceptos
+# -------------------------------------------------------------------
+@router.get("/conceptos", response_model=List[ConceptoResponse])
+def get_conceptos(db: Session = Depends(get_db)):
+    return db.query(Concepto).all()
+
+@router.post("/conceptos", response_model=ConceptoResponse)
+def create_concepto(concepto: ConceptoCreate, db: Session = Depends(get_db)):
+    db_concepto = Concepto(**concepto.model_dump())
+    db.add(db_concepto)
+    db.commit()
+    db.refresh(db_concepto)
+    return db_concepto
+
+@router.put("/conceptos/{concepto_id}", response_model=ConceptoResponse)
+def update_concepto(concepto_id: int, concepto: ConceptoUpdate, db: Session = Depends(get_db)):
+    db_concepto = db.query(Concepto).filter(Concepto.id == concepto_id).first()
+    if not db_concepto:
+        raise HTTPException(status_code=404, detail="Concepto no encontrado")
+    for key, value in concepto.model_dump(exclude_unset=True).items():
+        setattr(db_concepto, key, value)
+    db.commit()
+    db.refresh(db_concepto)
+    return db_concepto
+
+@router.delete("/conceptos/{concepto_id}")
+def delete_concepto(concepto_id: int, db: Session = Depends(get_db)):
+    db_concepto = db.query(Concepto).filter(Concepto.id == concepto_id).first()
+    if not db_concepto:
+        raise HTTPException(status_code=404, detail="Concepto no encontrado")
+    db.delete(db_concepto)
+    db.commit()
+    return {"message": "Concepto eliminado correctamente"}
+
+# -------------------------------------------------------------------
+# Movimientos
+# -------------------------------------------------------------------
+@router.get("/movimientos", response_model=List[MovimientoResponse])
+def get_movimientos(
+    cuenta_id: Optional[int] = None,
+    fecha_desde: Optional[date] = None,
+    fecha_hasta: Optional[date] = None,
+    concepto_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    query = db.query(Movimiento).options(
+        joinedload(Movimiento.concepto),
+        joinedload(Movimiento.cuenta)
+    )
+    if cuenta_id:
+        query = query.filter(Movimiento.cuenta_id == cuenta_id)
+    if fecha_desde:
+        query = query.filter(Movimiento.fecha >= fecha_desde)
+    if fecha_hasta:
+        query = query.filter(Movimiento.fecha <= fecha_hasta)
+    if concepto_id:
+        query = query.filter(Movimiento.concepto_id == concepto_id)
+        
+    return query.order_by(Movimiento.fecha.desc()).all()
+
+@router.post("/movimientos", response_model=MovimientoResponse)
+def create_movimiento(movimiento: MovimientoCreate, db: Session = Depends(get_db)):
+    db_mov = Movimiento(**movimiento.model_dump())
+    db.add(db_mov)
+    db.commit()
+    db.refresh(db_mov)
+    return db_mov
+
+@router.put("/movimientos/{movimiento_id}", response_model=MovimientoResponse)
+def update_movimiento(movimiento_id: int, movimiento: MovimientoUpdate, db: Session = Depends(get_db)):
+    db_mov = db.query(Movimiento).filter(Movimiento.id == movimiento_id).first()
+    if not db_mov:
+        raise HTTPException(status_code=404, detail="Movimiento no encontrado")
+    for key, value in movimiento.model_dump(exclude_unset=True).items():
+        setattr(db_mov, key, value)
+    db.commit()
+    db.refresh(db_mov)
+    return db_mov
+
+@router.delete("/movimientos/{movimiento_id}")
+def delete_movimiento(movimiento_id: int, db: Session = Depends(get_db)):
+    db_mov = db.query(Movimiento).filter(Movimiento.id == movimiento_id).first()
+    if not db_mov:
+        raise HTTPException(status_code=404, detail="Movimiento no encontrado")
+    db.delete(db_mov)
+    db.commit()
+    return {"message": "Movimiento eliminado correctamente"}
+
