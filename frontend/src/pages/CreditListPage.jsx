@@ -22,7 +22,7 @@ const CreditListPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
   
-  const [filter, setFilter] = useState({ ID: [], IdExterno: '', Originador: '', CUIL: '', Capital: {}, Plazo: '', TNA: '', Estado: [], Fecha: [], TipoCredito: [], SaldoMora: {}, DiasMora: {} });
+  const [filter, setFilter] = useState({ ID: [], IdExterno: '', Originador: '', CUIL: '', Capital: {}, Plazo: '', TNA: '', IdTasa: '', Estado: [], Fecha: [], TipoCredito: [], SaldoMora: {}, DiasMora: {} });
   const [sortConfig, setSortConfig] = useState({ key: 'ID', direction: 'desc' });
   const [showEstadoFilter, setShowEstadoFilter] = useState(false);
   const [showTipoCreditoFilter, setShowTipoCreditoFilter] = useState(false);
@@ -98,6 +98,7 @@ const CreditListPage = () => {
     if (filter.CUIL) result = result.filter(c => c["Cliente CUIL"] && c["Cliente CUIL"].includes(filter.CUIL));
     if (filter.Plazo) result = result.filter(c => String(c.Plazo).includes(filter.Plazo));
     if (filter.TNA) result = result.filter(c => String(c["TNA con IVA"]).includes(filter.TNA));
+    if (filter.IdTasa) result = result.filter(c => c["ID Tasa Comision"] && String(c["ID Tasa Comision"]).includes(filter.IdTasa));
     
     if (excludeKey !== 'TipoCredito' && filter.TipoCredito && filter.TipoCredito.length > 0) {
       result = result.filter(c => filter.TipoCredito.includes(c["Tipo Crédito"]));
@@ -275,6 +276,10 @@ const CreditListPage = () => {
                   TNA <SortIcon columnKey="TNA con IVA" />
                   <input type="text" placeholder="Filtrar..." value={filter.TNA} onChange={e => setFilter({ ...filter, TNA: e.target.value })} onClick={e => e.stopPropagation()} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
                 </th>
+                <th onClick={() => handleSort('ID Tasa Comision')} style={{ cursor: 'pointer' }}>
+                  ID Tasa <SortIcon columnKey="ID Tasa Comision" />
+                  <input type="text" placeholder="Filtrar..." value={filter.IdTasa} onChange={e => setFilter({ ...filter, IdTasa: e.target.value })} onClick={e => e.stopPropagation()} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                </th>
                 <th onClick={() => handleSort('Tipo Crédito')} style={{ cursor: 'pointer' }}>
                   Tipo Crédito <SortIcon columnKey="Tipo Crédito" />
                   <div onClick={e => { e.stopPropagation(); setShowTipoCreditoFilter(!showTipoCreditoFilter); }} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', background: 'rgba(255,255,255,0.1)', border: '1px solid var(--border-color)', borderRadius: '4px', textAlign: 'center', cursor: 'pointer' }}>
@@ -341,7 +346,7 @@ const CreditListPage = () => {
             <tbody>
               {filteredAndSortedCreditos.length === 0 ? (
                 <tr>
-                  <td colSpan="13" className="text-center empty-state" style={{ padding: '40px' }}>
+                  <td colSpan="14" className="text-center empty-state" style={{ padding: '40px' }}>
                     {loading ? "Cargando..." : "No hay créditos para mostrar con los filtros actuales."}
                   </td>
                 </tr>
@@ -355,6 +360,7 @@ const CreditListPage = () => {
                     <td>{formatCurrency(c.Capital)}</td>
                     <td>{c.Plazo}</td>
                     <td>{(c["TNA con IVA"] * 100).toFixed(2)}%</td>
+                    <td>{c["ID Tasa Comision"] || '-'}</td>
                     <td>{c["Tipo Crédito"]}</td>
                     <td>
                        <span className={`status-badge status-${(c.Estado || 'activo').toLowerCase()}`}>
@@ -394,7 +400,7 @@ const CreditListPage = () => {
               <tr>
                 <td colSpan="4" style={{ textAlign: 'right' }}>TOTAL:</td>
                 <td>{formatCurrency(totalCapital)}</td>
-                <td colSpan="4"></td>
+                <td colSpan="5"></td>
                 <td>{formatCurrency(totalMora)}</td>
                 <td colSpan="3"></td>
               </tr>

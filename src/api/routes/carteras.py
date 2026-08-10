@@ -828,3 +828,17 @@ def export_cartera_legajos(cartera_id: int, db: Session = Depends(get_db)):
             zipf.write(errors_path, "errores.txt")
             
     return FileResponse(zip_path, media_type="application/zip", filename=os.path.basename(zip_path))
+
+@router.get("/venta/tna_reciente")
+def get_tna_venta_reciente(fecha: date, db: Session = Depends(get_db)):
+    cartera = db.query(Cartera).filter(
+        Cartera.tipo_operacion == TipoOperacionCartera.VENTA,
+        Cartera.fecha_compra <= fecha
+    ).order_by(Cartera.fecha_compra.desc()).first()
+    
+    tna = 0.0
+    if cartera and cartera.tna_descuento is not None:
+        tna = float(cartera.tna_descuento) * 100
+        
+    return {"tna": tna}
+

@@ -81,6 +81,7 @@ const CollectionsListPage = () => {
         ...(f.Total?.min !== undefined && { total_min: f.Total.min }),
         ...(f.Total?.max !== undefined && { total_max: f.Total.max }),
         ...(f.FechaVto && f.FechaVto.length > 0 && { vto_dates: f.FechaVto.join(',') }),
+        ...(f.FechaPago && f.FechaPago.length > 0 && { pago_dates: f.FechaPago.join(',') }),
     };
     
     const res = await axiosClient.get('/api/v1/cobranzas', { params: p });
@@ -109,6 +110,7 @@ const CollectionsListPage = () => {
   const totalItems = data?.total || 0;
   const availableTipos = data?.available_tipos || ['COMUN', 'ANTICIPO', 'CANCELACION ANTICIPADA', 'BONIFICACION POR CANCELACION ANTICIPADA', 'CUOTA NO COMPRADA', 'PENALTY', 'RECURSO', 'AJUSTE'];
   const availableVtoDates = data?.available_vto_dates || [];
+  const availablePagoDates = data?.available_pago_dates || [];
   const totalPages = Math.ceil(totalItems / limit);
 
   const handleFilterChange = (key, value) => {
@@ -255,6 +257,35 @@ const CollectionsListPage = () => {
     return <span style={{ marginLeft: '5px' }}>{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>;
   };
 
+  const fetchExportData = async (type) => {
+    if (type === 'completa') {
+        const res = await axiosClient.get('/api/v1/cobranzas', { params: { skip: 0, limit: 1000000 } });
+        return res.data.items;
+    } else {
+        const f = { ...debouncedFilter };
+        const p = { 
+            skip: 0, 
+            limit: 1000000,
+            ...(f.ID && { id_cobranza: f.ID }),
+            ...(f.ProcesoID && { proceso_id: f.ProcesoID }),
+            ...(f.CUIL && { cuil: f.CUIL }),
+            ...(f.CreditoID && f.CreditoID.length > 0 && { credito_id: f.CreditoID.join(',') }),
+            ...(f.Tipo && { tipo: f.Tipo }),
+            ...(f.Capital?.min !== undefined && { capital_min: f.Capital.min }),
+            ...(f.Capital?.max !== undefined && { capital_max: f.Capital.max }),
+            ...(f.Interes?.min !== undefined && { interes_min: f.Interes.min }),
+            ...(f.Interes?.max !== undefined && { interes_max: f.Interes.max }),
+            ...(f.IVA?.min !== undefined && { iva_min: f.IVA.min }),
+            ...(f.IVA?.max !== undefined && { iva_max: f.IVA.max }),
+            ...(f.Total?.min !== undefined && { total_min: f.Total.min }),
+            ...(f.Total?.max !== undefined && { total_max: f.Total.max }),
+            ...(f.FechaVto && f.FechaVto.length > 0 && { vto_dates: f.FechaVto.join(',') }),
+        };
+        const res = await axiosClient.get('/api/v1/cobranzas', { params: p });
+        return res.data.items;
+    }
+  };
+
   return (
     <section className="tab-content active" style={{ animation: 'fadeIn 0.4s ease' }}>
       <header className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
@@ -277,6 +308,7 @@ const CollectionsListPage = () => {
                 data={cobranzas} 
                 filteredData={cobranzas} 
                 filename="cobranzas_export" 
+                fetchData={fetchExportData}
               />
             </div>
           )}
@@ -435,7 +467,16 @@ const CollectionsListPage = () => {
                       Total Cobrado
                       <ExcelNumberRangeFilter selectedRange={filter.Total} onChange={r => handleFilterChange('Total', r)} />
                     </th>
-                    <th>Fecha Pago</th>
+                    <th>
+                      Fecha Pago
+                      <div style={{ marginTop: '5px' }}>
+                        <ExcelDateFilter 
+                          availableDates={availablePagoDates}
+                          selectedDates={filter.FechaPago || []}
+                          onChange={dates => handleFilterChange('FechaPago', dates)}
+                        />
+                      </div>
+                    </th>
                     <th>Acciones</th>
                   </tr>
                 </thead>

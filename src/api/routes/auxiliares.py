@@ -183,6 +183,32 @@ def update_aux_record(tabla: str, record_id: int, payload: dict, db: Session = D
         raise HTTPException(status_code=404, detail="Registro no encontrado.")
     
     payload = _parse_aux_payload(payload)
+
+    if tabla == "tasas_y_comisiones":
+        from src.database.models import Credito
+        if db.query(Credito).filter(Credito.comision_id == record_id).first():
+            # Check if any structural field is being changed
+            structural_changes = False
+            for key, value in payload.items():
+                if key not in ("id", "estado") and hasattr(record, key):
+                    current_value = getattr(record, key)
+                    # Convert dates and decimals for comparison if needed, or simply compare string representation
+                    # Float comparison requires care, so we check string representation or float equivalence
+                    if str(current_value) != str(value) and not (isinstance(current_value, float) and float(current_value) == float(value)):
+                        # Some decimals from DB might be Decimals, while payload has floats. We convert both to float if possible.
+                        try:
+                            if float(current_value) != float(value):
+                                structural_changes = True
+                                break
+                        except (TypeError, ValueError):
+                            structural_changes = True
+                            break
+            
+            if structural_changes:
+                raise HTTPException(
+                    status_code=400,
+                    detail="No se pueden editar las condiciones de esta Tasa y Comisión porque existen créditos vinculados. Solo está permitido cambiar su Estado a INACTIVA."
+                )
     try:
         for key, value in payload.items():
             if hasattr(record, key) and key != "id":
@@ -210,6 +236,14 @@ def delete_aux_record(tabla: str, record_id: int, db: Session = Depends(get_db))
     if not record:
         raise HTTPException(status_code=404, detail="Registro no encontrado.")
     
+    if tabla == "tasas_y_comisiones":
+        from src.database.models import Credito
+        if db.query(Credito).filter(Credito.comision_id == record_id).first():
+            raise HTTPException(
+                status_code=400,
+                detail="No se puede eliminar este registro de Tasas y Comisiones porque existen créditos asociados a él."
+            )
+
     try:
         db.delete(record)
         db.commit()

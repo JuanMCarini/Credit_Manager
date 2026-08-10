@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import axiosClient from '../api/axiosClient';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, LabelList, ComposedChart, Line } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, LabelList, ComposedChart, Line} from 'recharts';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 const formatCurrency = (value) => {
   if (value === null || value === undefined) return "$ 0";
-  return new Intl.NumberFormat('es-AR', { 
-    style: 'currency', 
+  return new Intl.NumberFormat('es-AR', {
+    style: 'currency',
     currency: 'ARS',
     minimumFractionDigits: 0,
     maximumFractionDigits: 0
@@ -24,13 +24,13 @@ const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, per
   if (percent < 0.0001) return null; // Ocultar si el porcentaje es 0% para que no se superpongan todas las etiquetas nulas
 
   return (
-    <text 
-      x={x} 
-      y={y} 
-      fill="var(--text-primary)" 
-      textAnchor={x > cx ? 'start' : 'end'} 
-      dominantBaseline="central" 
-      fontSize={16} 
+    <text
+      x={x}
+      y={y}
+      fill="var(--text-primary)"
+      textAnchor={x > cx ? 'start' : 'end'}
+      dominantBaseline="central"
+      fontSize={16}
       fontWeight="bold"
     >
       {`${(percent * 100).toFixed(2)}%`}
@@ -38,12 +38,74 @@ const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, per
   );
 };
 
+const renderCustomizedLabelMora = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, index, payload }) => {
+  const radius = outerRadius + 10;
+  const x = cx + radius * Math.cos(-midAngle * RADIAN);
+  const y = cy + radius * Math.sin(-midAngle * RADIAN);
+
+  if (payload.isSmall && !payload.showSmallSum) return null;
+
+  const displayPercent = payload.showSmallSum ? payload.smallSumPercent : percent;
+  if (isNaN(displayPercent)) return null;
+  const isRightSide = x > cx;
+
+  if (payload.showSmallSum) {
+    return (
+      <g>
+        <text
+          x={x}
+          y={y - 12}
+          fill="var(--text-primary)"
+          textAnchor={isRightSide ? 'start' : 'end'}
+          dominantBaseline="central"
+          fontSize={16}
+          fontWeight="bold"
+        >
+          {`${(displayPercent * 100).toFixed(2)}%`}
+        </text>
+        <text
+          x={x}
+          y={y + 12}
+          fill="var(--text-secondary)"
+          textAnchor={isRightSide ? 'start' : 'end'}
+          dominantBaseline="central"
+          fontSize={10}
+        >
+          (MENORES A 5%)
+        </text>
+      </g>
+    );
+  }
+
+  return (
+    <text
+      x={x}
+      y={y}
+      fill="var(--text-primary)"
+      textAnchor={isRightSide ? 'start' : 'end'}
+      dominantBaseline="central"
+      fontSize={16}
+      fontWeight="bold"
+    >
+      {`${(displayPercent * 100).toFixed(2)}%`}
+    </text>
+  );
+};
+
 const DashboardCarteraPage = () => {
   const [data, setData] = useState([]);
   const [evolutionData, setEvolutionData] = useState([]);
+  const [cobranzasEvolutionData, setCobranzasEvolutionData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [fechaCorte, setFechaCorte] = useState(new Date().toISOString().split('T')[0]);
+  const [fechaCorte, setFechaCorte] = useState(() => {
+    const today = new Date();
+    const lastDay = new Date(today.getFullYear(), today.getMonth(), 0);
+    const yyyy = lastDay.getFullYear();
+    const mm = String(lastDay.getMonth() + 1).padStart(2, '0');
+    const dd = String(lastDay.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  });
   const [tasaDescuento, setTasaDescuento] = useState(0);
   const [tasaDescuentoStr, setTasaDescuentoStr] = useState("0 %");
   const [activeTab, setActiveTab] = useState('total'); // 'total' or 'periodo'
@@ -57,31 +119,31 @@ const DashboardCarteraPage = () => {
   const exportToPDF = async (orientation = 'p') => {
     setIsExporting(true);
     setExportFormat(orientation);
-    
+
     const root = document.documentElement;
     root.style.setProperty('--bg-base', '#ffffff');
     root.style.setProperty('--bg-panel', '#ffffff');
     root.style.setProperty('--text-primary', '#000000');
     root.style.setProperty('--text-secondary', '#333333');
     root.style.setProperty('--border-color', '#dddddd');
-    
+
     root.style.setProperty('--color-capital', '#2E7D32');
     root.style.setProperty('--color-interes', '#F57C00');
     root.style.setProperty('--color-capint', '#0097A7');
     root.style.setProperty('--color-iva', '#7B1FA2');
     root.style.setProperty('--color-total', '#1976D2');
     root.style.setProperty('--color-valoractual', '#C2185B');
-    
+
     setTimeout(async () => {
       try {
         const pdf = new jsPDF(orientation, 'mm', 'a4');
         const pdfWidth = pdf.internal.pageSize.getWidth();
         const pdfHeight = pdf.internal.pageSize.getHeight();
-        
+
         // --- PORTADA ---
         pdf.setFillColor(255, 255, 255);
         pdf.rect(0, 0, pdfWidth, pdfHeight, 'F');
-        
+
         try {
           const img = new Image();
           img.src = '/api/archivos/logo.png';
@@ -89,7 +151,7 @@ const DashboardCarteraPage = () => {
             img.onload = () => resolve();
             img.onerror = () => reject(new Error('Image failed to load'));
           });
-          
+
           const logoWidth = 80;
           const logoHeight = (img.height * logoWidth) / img.width;
           pdf.addImage(img, 'PNG', (pdfWidth - logoWidth) / 2, (pdfHeight / 2) - logoHeight - 20, logoWidth, logoHeight);
@@ -99,11 +161,11 @@ const DashboardCarteraPage = () => {
           pdf.setTextColor(0, 0, 0);
           pdf.text('CreditManager', pdfWidth / 2, pdfHeight / 2 - 20, { align: 'center' });
         }
-        
+
         pdf.setFontSize(24);
         pdf.setTextColor(0, 0, 0);
         pdf.text('Dashboard de Cartera', pdfWidth / 2, pdfHeight / 2 + 10, { align: 'center' });
-        
+
         pdf.setFontSize(12);
         pdf.setTextColor(100, 100, 100);
         const dueñosTextCover = filtroDueños.length > 0 ? filtroDueños.join(', ') : 'Todos';
@@ -112,17 +174,18 @@ const DashboardCarteraPage = () => {
         pdf.text(`TNA: ${tasaDescuento}%`, pdfWidth / 2, pdfHeight / 2 + 32, { align: 'center' });
         pdf.text(`Dueños: ${dueñosTextCover}`, pdfWidth / 2, pdfHeight / 2 + 39, { align: 'center' });
         pdf.text(`Originadores: ${origTextCover}`, pdfWidth / 2, pdfHeight / 2 + 46, { align: 'center' });
-        
+
         pdf.setFontSize(10);
         pdf.text(`Generado el: ${new Date().toLocaleDateString('es-AR')} ${new Date().toLocaleTimeString('es-AR')}`, pdfWidth / 2, pdfHeight - 20, { align: 'center' });
         // --- FIN PORTADA ---
-        
+
         const tabsToExport = [
           { id: 'export-tab-total', title: 'Cartera Total' },
           { id: 'export-tab-evolucion', title: 'Evolución 12 Meses' },
           { id: 'export-tab-composicion', title: 'Composición por Dueño' },
           { id: 'export-tab-periodo', title: 'Detalle por Período' },
           { id: 'export-tab-colocaciones', title: 'Colocaciones' },
+          { id: 'export-tab-cobranzas', title: 'Cobranzas' },
           { id: 'export-tab-estados', title: 'Detalle de Estados' },
           { id: 'export-tab-morosidad', title: 'Análisis de Morosidad' }
         ];
@@ -134,60 +197,60 @@ const DashboardCarteraPage = () => {
             const originalWidth = el.style.width;
             el.style.width = '1100px';
             el.style.maxWidth = '1100px';
-            
+
             await new Promise(resolve => setTimeout(resolve, 150)); // let recharts adjust
 
-            const canvas = await html2canvas(el, { 
-              scale: 2, 
+            const canvas = await html2canvas(el, {
+              scale: 2,
               backgroundColor: '#ffffff',
               windowWidth: 1150
             });
-            
+
             el.style.width = originalWidth;
             el.style.maxWidth = '';
 
             const imgData = canvas.toDataURL('image/png');
-            
+
             const imgProps = pdf.getImageProperties(imgData);
             const ratio = imgProps.width / imgProps.height;
             const margin = 10;
             let width = pdfWidth - margin * 2;
             let height = width / ratio;
-            
+
             const maxPageHeight = pdfHeight - margin * 2 - 20;
             if (height > maxPageHeight) {
               height = maxPageHeight;
               width = height * ratio;
             }
-            
+
             pdf.addPage();
-            
+
             pdf.setFillColor(255, 255, 255);
             pdf.rect(0, 0, pdfWidth, pdfHeight, 'F');
-            
+
             pdf.setFontSize(16);
             pdf.setTextColor(0, 0, 0);
             pdf.text(`Dashboard - ${tabsToExport[i].title}`, margin, 15);
-            
+
             pdf.setFontSize(9);
             pdf.setTextColor(100, 100, 100);
             const dueñosText = filtroDueños.length > 0 ? filtroDueños.join(', ') : 'Todos';
             const origText = filtroOriginadores.length > 0 ? filtroOriginadores.join(', ') : 'Todos';
             const filtrosStr = `Fecha de Corte: ${fechaCorte.split('-').reverse().join('/')} | TNA: ${tasaDescuento}% | Dueños: ${dueñosText} | Originadores: ${origText}`;
             pdf.text(filtrosStr, margin, 22);
-            
+
             pdf.addImage(imgData, 'PNG', margin, 28, width, height);
-            
+
             if (orientation === 'p') {
               pdf.setFontSize(10);
               pdf.setTextColor(150, 150, 150);
               pdf.text(`Página ${pdf.internal.getNumberOfPages()}`, pdfWidth / 2, pdfHeight - 10, { align: 'center' });
             }
-            
+
             pageCount++;
           }
         }
-        
+
         const tipoReporte = orientation === 'p' ? 'Detallado' : 'Grafico';
         pdf.save(`Reporte Cartera - ${tipoReporte} - ${fechaCorte}.pdf`);
       } catch (err) {
@@ -230,7 +293,7 @@ const DashboardCarteraPage = () => {
     const fetchDashboardData = async () => {
       try {
         setLoading(true);
-        const [response, evolutionResponse] = await Promise.all([
+        const [response, evolutionResponse, tnaResponse, cobranzasEvoResponse] = await Promise.all([
           axiosClient.get('/api/v1/reports/balances', {
             params: {
               fecha: fechaCorte,
@@ -239,11 +302,28 @@ const DashboardCarteraPage = () => {
             }
           }),
           axiosClient.get('/api/v1/reports/balances/evolution', {
-            params: { meses: 12, fecha: fechaCorteDate.toISOString() }
+            params: { meses: 12, fecha: fechaCorte }
+          }),
+          axiosClient.get('/api/v1/carteras/venta/tna_reciente', {
+            params: { fecha: fechaCorte }
+          }).catch(err => {
+            console.error("Error fetching recent TNA:", err);
+            return { data: { tna: 0 } };
+          }),
+          axiosClient.get('/api/v1/reports/cobranzas/evolution', {
+            params: { meses: 12, fecha: fechaCorte }
           })
         ]);
+        
         setData(response.data);
         setEvolutionData(evolutionResponse.data);
+        setCobranzasEvolutionData(cobranzasEvoResponse.data);
+
+        if (tnaResponse && tnaResponse.data && tnaResponse.data.tna !== undefined) {
+          const newTna = tnaResponse.data.tna;
+          setTasaDescuento(newTna);
+          setTasaDescuentoStr(`${newTna} %`);
+        }
       } catch (err) {
         console.error("Error cargando dashboard:", err);
         setError("Ocurrió un error al cargar la información del dashboard.");
@@ -274,23 +354,24 @@ const DashboardCarteraPage = () => {
     'MOROSO': { Estado: 'Moroso', Vencido: 0, AVencer: 0, Total: 0, fill: 'var(--color-interes)' },
     'INCOBRABLE': { Estado: 'Incobrable', Vencido: 0, AVencer: 0, Total: 0, fill: 'var(--color-valoractual)' },
     'JUDICIALIZADO': { Estado: 'Judicializado', Vencido: 0, AVencer: 0, Total: 0, fill: 'var(--color-iva)' },
+    'CANCELADO': { Estado: 'Cancelado', Vencido: 0, AVencer: 0, Total: 0, fill: '#9E9E9E' },
     'OTRO': { Estado: 'Otro', Vencido: 0, AVencer: 0, Total: 0, fill: '#607D8B' }
   };
 
   data.forEach(row => {
     const dueño = row.Dueño || 'Desconocido';
     const originador = row.Originador || 'N/A';
-    
+
     const matchDueño = filtroDueños.length === 0 || filtroDueños.includes(dueño);
     const matchOriginador = filtroOriginadores.length === 0 || filtroOriginadores.includes(originador);
-    
+
     if (!matchDueño || !matchOriginador) return;
 
     const cap = row.Capital || 0;
     const int = row['Interés'] || 0;
     const iva = row.IVA || 0;
     const tot = row.Total || 0;
-    
+
     const capCobrado = row['Capital Cobrado'] || 0;
     const intCobrado = row['Interés Cobrado'] || 0;
     const ivaCobrado = row['IVA Cobrado'] || 0;
@@ -325,17 +406,22 @@ const DashboardCarteraPage = () => {
     grupos[key].ValorActual += pv;
     grupos[key].Cobrado += totCobrado;
 
-    const rawEstado = (row.Estado || '').toUpperCase();
+    const rawEstado = (row['Estado Credito'] || row.Estado || '').toUpperCase();
     let normalizedEstado = 'OTRO';
-    if (rawEstado.includes('APROBADO')) normalizedEstado = 'APROBADO';
+    if (rawEstado.includes('APROBADO') || rawEstado.includes('FIRMADO')) normalizedEstado = 'APROBADO';
     else if (rawEstado.includes('ACTIVO') || rawEstado === 'PENDIENTE' || rawEstado === '') normalizedEstado = 'ACTIVO';
     else if (rawEstado.includes('MOROS')) normalizedEstado = 'MOROSO';
     else if (rawEstado.includes('INCOBRABLE')) normalizedEstado = 'INCOBRABLE';
-    else if (rawEstado.includes('JUDICIALIZADO')) normalizedEstado = 'JUDICIALIZADO';
+    else if (rawEstado.includes('JUDICIAL')) normalizedEstado = 'JUDICIALIZADO';
+    else if (rawEstado.includes('CANCELAD')) normalizedEstado = 'CANCELADO';
 
-    const capInt = cap + int;
-    const isVencido = fVto < fechaCorteDate;
+    let capInt = cap + int;
+    if (normalizedEstado === 'CANCELADO') {
+      capInt = cap + int + capCobrado + intCobrado;
+    }
     
+    const isVencido = fVto < fechaCorteDate;
+
     if (isVencido) {
       resumenEstados[normalizedEstado].Vencido += capInt;
     } else {
@@ -359,7 +445,7 @@ const DashboardCarteraPage = () => {
   const uniqueDueños = ['Todos', ...new Set(data.map(d => d.Dueño || 'Desconocido'))].sort();
   const uniqueOriginadores = ['Todos', ...new Set(data.map(d => d.Originador || 'N/A'))].sort();
 
-  const groupedData = Object.values(grupos);
+  const groupedData = Object.values(grupos).filter(g => Math.abs(g.Total) > 0.01);
   const periodData = Object.values(gruposPeriodo).sort((a, b) => a.Periodo.localeCompare(b.Periodo));
   const estadosList = Object.values(resumenEstados).filter(e => e.Total > 0 || e.Estado !== 'Otro');
 
@@ -369,25 +455,25 @@ const DashboardCarteraPage = () => {
       let interes = 0;
       let iva = 0;
       let total = 0;
-      
+
       const ownerCapital = {};
       let totalCapitalForDistribution = 0;
-      
+
       if (month.detalles) {
         month.detalles.forEach(d => {
           const dueño = String(d.Dueño || 'Desconocido').trim().toUpperCase();
           const originador = String(d.Originador || 'N/A').trim().toUpperCase();
-          
+
           const matchDueño = filtroDueños.length === 0 || filtroDueños.some(f => String(f).trim().toUpperCase() === dueño);
           const matchOriginador = filtroOriginadores.length === 0 || filtroOriginadores.some(f => String(f).trim().toUpperCase() === originador);
-          
+
           if (matchDueño && matchOriginador) {
             capital += d.capital;
             interes += d.interes;
             iva += d.iva;
             total += d.total;
           }
-          
+
           if (matchOriginador) {
             const dueñoRaw = String(d.Dueño || 'Desconocido').trim();
             if (!ownerCapital[dueñoRaw]) ownerCapital[dueñoRaw] = 0;
@@ -396,7 +482,7 @@ const DashboardCarteraPage = () => {
           }
         });
       }
-      
+
       const monthData = {
         ...month,
         capital,
@@ -404,12 +490,12 @@ const DashboardCarteraPage = () => {
         iva,
         total
       };
-      
+
       Object.keys(ownerCapital).forEach(owner => {
         monthData[`owner_${owner}`] = totalCapitalForDistribution > 0 ? (ownerCapital[owner] / totalCapitalForDistribution) * 100 : 0;
         monthData[`ownerRaw_${owner}`] = ownerCapital[owner];
       });
-      
+
       return monthData;
     });
   }, [evolutionData, filtroDueños, filtroOriginadores]);
@@ -426,20 +512,127 @@ const DashboardCarteraPage = () => {
     return Array.from(dueños).sort();
   }, [filteredEvolutionData]);
 
+  const filteredCobranzasEvolutionData = useMemo(() => {
+    if (!cobranzasEvolutionData) return [];
+    return cobranzasEvolutionData.map(month => {
+      let capital = 0;
+      let interes = 0;
+      let iva = 0;
+      let total = 0;
+      let recuperoMora = 0;
+      const ownerRaw = {};
+      const origRaw = {};
+      const tipoRaw = {};
+      
+      let totalTeorico = 0;
+      let totalMismoPeriodo = 0;
+
+      if (month.detalles) {
+        month.detalles.forEach(d => {
+          const dueño = String(d.Dueño || 'Desconocido').trim().toUpperCase();
+          const originador = String(d.Originador || 'N/A').trim().toUpperCase();
+
+          const matchDueño = filtroDueños.length === 0 || filtroDueños.some(f => String(f).trim().toUpperCase() === dueño);
+          const matchOriginador = filtroOriginadores.length === 0 || filtroOriginadores.some(f => String(f).trim().toUpperCase() === originador);
+
+          if (matchDueño && matchOriginador) {
+            capital += d.capital;
+            interes += d.interes;
+            iva += d.iva;
+            total += d.total;
+            recuperoMora += d.recupero_mora || 0;
+            
+            const dueñoRawStr = String(d.Dueño || 'Desconocido').trim();
+            const origRawStr = String(d.Originador || 'N/A').trim();
+            const tipoRawStr = String(d.tipo_cobranza || 'COMUN').trim();
+            
+            if (!ownerRaw[dueñoRawStr]) ownerRaw[dueñoRawStr] = 0;
+            ownerRaw[dueñoRawStr] += d.total;
+            
+            if (!origRaw[origRawStr]) origRaw[origRawStr] = 0;
+            origRaw[origRawStr] += d.total;
+            
+            if (!tipoRaw[tipoRawStr]) tipoRaw[tipoRawStr] = 0;
+            tipoRaw[tipoRawStr] += d.total;
+          }
+        });
+      }
+
+      if (month.teoricos) {
+        month.teoricos.forEach(t => {
+          const dueño = String(t.Dueño || 'Desconocido').trim().toUpperCase();
+          const originador = String(t.Originador || 'N/A').trim().toUpperCase();
+
+          const matchDueño = filtroDueños.length === 0 || filtroDueños.some(f => String(f).trim().toUpperCase() === dueño);
+          const matchOriginador = filtroOriginadores.length === 0 || filtroOriginadores.some(f => String(f).trim().toUpperCase() === originador);
+
+          if (matchDueño && matchOriginador) {
+            totalTeorico += t.total;
+            totalMismoPeriodo += t.total_cobr || 0;
+          }
+        });
+      }
+
+      const monthData = {
+        ...month,
+        capital,
+        interes,
+        iva,
+        total,
+        totalTeorico,
+        totalMismoPeriodo,
+        recuperoMora
+      };
+
+      Object.keys(ownerRaw).forEach(owner => {
+        monthData[`ownerRaw_${owner}`] = ownerRaw[owner];
+      });
+      Object.keys(origRaw).forEach(orig => {
+        monthData[`origRaw_${orig}`] = origRaw[orig];
+      });
+      Object.keys(tipoRaw).forEach(tipo => {
+        monthData[`tipoRaw_${tipo}`] = tipoRaw[tipo];
+      });
+
+      return monthData;
+    });
+  }, [cobranzasEvolutionData, filtroDueños, filtroOriginadores]);
+
+  const cobranzasUniqueOriginadores = useMemo(() => {
+    const origs = new Set();
+    filteredCobranzasEvolutionData.forEach(month => {
+      Object.keys(month).forEach(key => {
+        if (key.startsWith('origRaw_')) origs.add(key.replace('origRaw_', ''));
+      });
+    });
+    return Array.from(origs).sort();
+  }, [filteredCobranzasEvolutionData]);
+
+  const cobranzasUniqueTipos = useMemo(() => {
+    const tipos = new Set();
+    filteredCobranzasEvolutionData.forEach(month => {
+      Object.keys(month).forEach(key => {
+        if (key.startsWith('tipoRaw_')) tipos.add(key.replace('tipoRaw_', ''));
+      });
+    });
+    return Array.from(tipos).sort();
+  }, [filteredCobranzasEvolutionData]);
+
   const colocacionesData = useMemo(() => {
     const creditos = {};
     data.forEach(row => {
       const dueño = row.Dueño || 'Desconocido';
       const originador = row.Originador || 'N/A';
-      
+
       const matchDueño = filtroDueños.length === 0 || filtroDueños.includes(dueño);
       const matchOriginador = filtroOriginadores.length === 0 || filtroOriginadores.includes(originador);
-      
+
       if (!matchDueño || !matchOriginador) return;
+      if (originador === 'PENALTY') return;
 
       const id = row['ID Credito'];
       if (!id) return;
-      
+
       if (!creditos[id]) {
         creditos[id] = {
           fechaEmision: row['Fecha Emisión'],
@@ -450,9 +643,9 @@ const DashboardCarteraPage = () => {
         };
       }
       creditos[id].montoOriginal += (row.Capital || 0) + (row['Capital Cobrado'] || 0);
-      creditos[id].montoGenerado += (row.Capital || 0) + (row['Capital Cobrado'] || 0) 
-                                 + (row['Interés'] || 0) + (row['Interés Cobrado'] || 0) 
-                                 + (row.IVA || 0) + (row['IVA Cobrado'] || 0);
+      creditos[id].montoGenerado += (row.Capital || 0) + (row['Capital Cobrado'] || 0)
+        + (row['Interés'] || 0) + (row['Interés Cobrado'] || 0)
+        + (row.IVA || 0) + (row['IVA Cobrado'] || 0);
     });
 
     const periodos = {};
@@ -460,22 +653,22 @@ const DashboardCarteraPage = () => {
       if (!c.fechaEmision) return;
       const d = new Date(c.fechaEmision);
       if (isNaN(d.getTime())) return;
-      
+
       const periodo = c.fechaEmision.substring(0, 7); // 'YYYY-MM'
       if (!periodos[periodo]) {
         periodos[periodo] = { periodo, totalColocado: 0, totalGenerado: 0 };
       }
-      
+
       periodos[periodo].totalColocado += c.montoOriginal;
       periodos[periodo].totalGenerado += c.montoGenerado;
-      
+
       const origKey = `orig_${c.originador}`;
       if (!periodos[periodo][origKey]) periodos[periodo][origKey] = 0;
       periodos[periodo][origKey] += c.montoOriginal;
     });
 
     const allData = Object.values(periodos).sort((a, b) => a.periodo.localeCompare(b.periodo));
-    
+
     allData.forEach(p => {
       Object.keys(p).forEach(k => {
         if (k.startsWith('orig_')) {
@@ -485,19 +678,20 @@ const DashboardCarteraPage = () => {
         }
       });
     });
-    
+
     // Retornamos los últimos 12 periodos con actividad
     return allData.slice(-12);
   }, [data, filtroDueños, filtroOriginadores]);
 
   const moraBuckets = useMemo(() => {
     const buckets = [
-      { label: '1 - 30 días', min: 1, max: 30, Vencido: 0, AVencer: 0, Total: 0 },
-      { label: '31 - 60 días', min: 31, max: 60, Vencido: 0, AVencer: 0, Total: 0 },
-      { label: '61 - 90 días', min: 61, max: 90, Vencido: 0, AVencer: 0, Total: 0 },
-      { label: '91 - 180 días', min: 91, max: 180, Vencido: 0, AVencer: 0, Total: 0 },
-      { label: '181 - 365 días', min: 181, max: 365, Vencido: 0, AVencer: 0, Total: 0 },
-      { label: '> 365 días', min: 366, max: Infinity, Vencido: 0, AVencer: 0, Total: 0 },
+      { label: 'Al día', min: 0, max: 0, Vencido: 0, AVencer: 0, Total: 0, fill: '#4CAF50' },
+      { label: '1 - 30 días', min: 1, max: 30, Vencido: 0, AVencer: 0, Total: 0, fill: '#FFB74D' },
+      { label: '31 - 60 días', min: 31, max: 60, Vencido: 0, AVencer: 0, Total: 0, fill: '#FF9800' },
+      { label: '61 - 90 días', min: 61, max: 90, Vencido: 0, AVencer: 0, Total: 0, fill: '#F57C00' },
+      { label: '91 - 180 días', min: 91, max: 180, Vencido: 0, AVencer: 0, Total: 0, fill: '#E65100' },
+      { label: '181 - 365 días', min: 181, max: 365, Vencido: 0, AVencer: 0, Total: 0, fill: '#D32F2F' },
+      { label: '> 365 días', min: 366, max: Infinity, Vencido: 0, AVencer: 0, Total: 0, fill: '#B71C1C' },
     ];
 
     const creditosMora = {};
@@ -506,22 +700,23 @@ const DashboardCarteraPage = () => {
     // Primer pasada: Calcular la mora (maxDiasMora) a nivel CRÉDITO, sin importar quién sea el dueño
     // de cada cuota. La mora es una propiedad del crédito.
     data.forEach(row => {
-      const rawEstado = (row.Estado || '').toUpperCase();
+      const rawEstado = (row['Estado Credito'] || row.Estado || '').toUpperCase();
       let normalizedEstado = 'OTRO';
-      if (rawEstado.includes('APROBADO')) normalizedEstado = 'APROBADO';
+      if (rawEstado.includes('APROBADO') || rawEstado.includes('FIRMADO')) normalizedEstado = 'APROBADO';
       else if (rawEstado.includes('ACTIVO') || rawEstado === 'PENDIENTE' || rawEstado === '') normalizedEstado = 'ACTIVO';
       else if (rawEstado.includes('MOROS')) normalizedEstado = 'MOROSO';
       else if (rawEstado.includes('INCOBRABLE')) normalizedEstado = 'INCOBRABLE';
-      else if (rawEstado.includes('JUDICIALIZADO')) normalizedEstado = 'JUDICIALIZADO';
+      else if (rawEstado.includes('JUDICIAL')) normalizedEstado = 'JUDICIALIZADO';
+      else if (rawEstado.includes('CANCELAD')) normalizedEstado = 'CANCELADO';
 
-      if (normalizedEstado === 'MOROSO') {
+      if (normalizedEstado === 'MOROSO' || normalizedEstado === 'ACTIVO' || normalizedEstado === 'APROBADO') {
         const id = row['ID Credito'];
         if (!id) return;
-        
+
         if (!creditosMora[id]) {
           creditosMora[id] = { maxDiasMora: 0, totalVencido: 0, totalAVencer: 0, total: 0 };
         }
-        
+
         const fVto = new Date(row['Fecha Vencimiento'] + 'T00:00:00');
         const isVencido = fVto < fechaCorteDate;
         const balanceCuota = (row.Capital || 0) + (row['Interés'] || 0) + (row.IVA || 0);
@@ -529,7 +724,7 @@ const DashboardCarteraPage = () => {
         if (isVencido && balanceCuota > 0) {
           let diasMora = Math.floor((fechaCorteDate - fVto) / (1000 * 60 * 60 * 24));
           if (diasMora < 1) diasMora = 1;
-          
+
           if (diasMora > creditosMora[id].maxDiasMora) {
             creditosMora[id].maxDiasMora = diasMora;
           }
@@ -542,24 +737,25 @@ const DashboardCarteraPage = () => {
     data.forEach(row => {
       const dueño = row.Dueño || 'Desconocido';
       const originador = row.Originador || 'N/A';
-      
+
       const matchDueño = filtroDueños.length === 0 || filtroDueños.includes(dueño);
       const matchOriginador = filtroOriginadores.length === 0 || filtroOriginadores.includes(originador);
-      
+
       if (!matchDueño || !matchOriginador) return;
 
-      const rawEstado = (row.Estado || '').toUpperCase();
+      const rawEstado = (row['Estado Credito'] || row.Estado || '').toUpperCase();
       let normalizedEstado = 'OTRO';
-      if (rawEstado.includes('APROBADO')) normalizedEstado = 'APROBADO';
+      if (rawEstado.includes('APROBADO') || rawEstado.includes('FIRMADO')) normalizedEstado = 'APROBADO';
       else if (rawEstado.includes('ACTIVO') || rawEstado === 'PENDIENTE' || rawEstado === '') normalizedEstado = 'ACTIVO';
       else if (rawEstado.includes('MOROS')) normalizedEstado = 'MOROSO';
       else if (rawEstado.includes('INCOBRABLE')) normalizedEstado = 'INCOBRABLE';
-      else if (rawEstado.includes('JUDICIALIZADO')) normalizedEstado = 'JUDICIALIZADO';
+      else if (rawEstado.includes('JUDICIAL')) normalizedEstado = 'JUDICIALIZADO';
+      else if (rawEstado.includes('CANCELAD')) normalizedEstado = 'CANCELADO';
 
-      if (normalizedEstado === 'MOROSO') {
+      if (normalizedEstado === 'MOROSO' || normalizedEstado === 'ACTIVO' || normalizedEstado === 'APROBADO') {
         const id = row['ID Credito'];
         if (!id || !creditosMora[id]) return;
-        
+
         const fVto = new Date(row['Fecha Vencimiento'] + 'T00:00:00');
         const isVencido = fVto < fechaCorteDate;
         const cuotaValue = (row.Capital || 0) + (row['Interés'] || 0) + (row.IVA || 0);
@@ -574,7 +770,6 @@ const DashboardCarteraPage = () => {
     });
 
     Object.values(creditosMora).forEach(credito => {
-      if (credito.maxDiasMora === 0) return; 
 
       const bucket = buckets.find(b => credito.maxDiasMora >= b.min && credito.maxDiasMora <= b.max);
       if (bucket) {
@@ -603,12 +798,12 @@ const DashboardCarteraPage = () => {
     const rows = [];
     evolutionData.forEach(month => {
       const aggByOwner = {};
-      
+
       if (month.detalles) {
         month.detalles.forEach(d => {
           const originador = String(d.Originador || 'N/A').trim().toUpperCase();
           const matchOriginador = filtroOriginadores.length === 0 || filtroOriginadores.some(f => String(f).trim().toUpperCase() === originador);
-          
+
           if (matchOriginador) {
             const dueño = String(d.Dueño || 'Desconocido').trim();
             if (!aggByOwner[dueño]) {
@@ -621,7 +816,7 @@ const DashboardCarteraPage = () => {
           }
         });
       }
-      
+
       Object.keys(aggByOwner).sort().forEach(owner => {
         rows.push({
           periodo: month.periodo,
@@ -630,9 +825,77 @@ const DashboardCarteraPage = () => {
         });
       });
     });
-    
+
     return rows.reverse();
   }, [evolutionData, filtroOriginadores]);
+
+  const moraBucketsPie = useMemo(() => {
+    const totalMora = moraBuckets.reduce((acc, b) => acc + b.Total, 0);
+    
+    let smallSumTotal = 0;
+    const smallBucketsIndices = [];
+    
+    moraBuckets.forEach((b, idx) => {
+      if (b.Total > 0 && b.Total / totalMora < 0.05) {
+        smallSumTotal += b.Total;
+        smallBucketsIndices.push(idx);
+      }
+    });
+
+    // We designate the LAST small bucket so all previous points are available in refs when it renders
+    const designatedSmallBucketIndex = smallBucketsIndices.length > 0 ? smallBucketsIndices[smallBucketsIndices.length - 1] : -1;
+
+    return moraBuckets.filter(b => b.Total > 0).map((b) => {
+      const originalIdx = moraBuckets.indexOf(b);
+      const isSmall = b.Total / totalMora < 0.05;
+      const showSmallSum = originalIdx === designatedSmallBucketIndex;
+      
+      return {
+        ...b,
+        isSmall,
+        showSmallSum,
+        smallSumPercent: smallSumTotal / totalMora
+      };
+    });
+  }, [moraBuckets]);
+
+  const moraKPIs = useMemo(() => {
+    let totalVencido = 0;
+    let totalAVencer = 0;
+    let moraTemprana = 0;
+    let moraDura = 0;
+
+    moraBuckets.forEach(b => {
+      if (b.label !== 'Al día') {
+        totalVencido += b.Vencido;
+        totalAVencer += b.AVencer;
+        if (b.max <= 90) {
+          moraTemprana += b.Vencido;
+        } else {
+          moraDura += b.Vencido;
+        }
+      }
+    });
+    
+    return {
+      totalVencido,
+      totalAVencer,
+      moraTemprana,
+      moraDura
+    };
+  }, [moraBuckets]);
+
+  const smallBucketsFootnote = useMemo(() => {
+    const totalMora = moraBuckets.reduce((acc, b) => acc + b.Total, 0);
+    const smallBuckets = moraBuckets.filter(b => b.Total > 0 && b.Total / totalMora < 0.05);
+    if (smallBuckets.length > 1) {
+      const sum = smallBuckets.reduce((acc, b) => acc + b.Total, 0);
+      return `El valor ${(sum / totalMora * 100).toFixed(2)}% agrupa las categorías: ${smallBuckets.map(b => b.label).join(', ')}.`;
+    }
+    return '';
+  }, [moraBuckets]);
+
+  const smallSlicesRef = useRef({});
 
   if (loading) {
     return (
@@ -668,16 +931,16 @@ const DashboardCarteraPage = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <label htmlFor="tasaDescuento" style={{ color: 'var(--text-secondary)', fontWeight: '500' }}>TNA Descuento:</label>
-            <input 
-              type="text" 
+            <input
+              type="text"
               id="tasaDescuento"
               value={tasaDescuentoStr}
               onChange={handleTasaChange}
               onBlur={handleTasaBlur}
               onFocus={handleTasaFocus}
-              style={{ 
-                padding: '8px 12px', 
-                borderRadius: '8px', 
+              style={{
+                padding: '8px 12px',
+                borderRadius: '8px',
                 border: '1px solid rgba(255,255,255,0.1)',
                 background: 'rgba(0,0,0,0.2)',
                 color: 'var(--text-primary)',
@@ -688,14 +951,14 @@ const DashboardCarteraPage = () => {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <label htmlFor="fechaCorte" style={{ color: 'var(--text-secondary)', fontWeight: '500' }}>Fecha de Corte:</label>
-            <input 
-              type="date" 
+            <input
+              type="date"
               id="fechaCorte"
               value={fechaCorte}
               onChange={(e) => setFechaCorte(e.target.value)}
-              style={{ 
-                padding: '8px 12px', 
-                borderRadius: '8px', 
+              style={{
+                padding: '8px 12px',
+                borderRadius: '8px',
                 border: '1px solid rgba(255,255,255,0.1)',
                 background: 'rgba(0,0,0,0.2)',
                 color: 'var(--text-primary)',
@@ -704,7 +967,7 @@ const DashboardCarteraPage = () => {
             />
           </div>
           <div style={{ display: 'flex', gap: '10px' }}>
-            <button 
+            <button
               onClick={() => exportToPDF('p')}
               disabled={exportFormat !== null}
               style={{
@@ -723,7 +986,7 @@ const DashboardCarteraPage = () => {
             >
               📄 {exportFormat !== null ? 'Generando...' : 'Reporte Detallado'}
             </button>
-            <button 
+            <button
               onClick={() => exportToPDF('l')}
               disabled={exportFormat !== null}
               style={{
@@ -748,19 +1011,19 @@ const DashboardCarteraPage = () => {
 
       {/* Filtros */}
       <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', flexWrap: 'wrap' }}>
-        
+
         {/* Filtro Dueños Dropdown */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', position: 'relative' }}>
           <label style={{ color: 'var(--text-secondary)', fontWeight: '500' }}>Dueño:</label>
           <div style={{ position: 'relative' }}>
-            <button 
+            <button
               onClick={() => setOpenDueño(!openDueño)}
               style={{ padding: '8px 12px', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', minWidth: '150px', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
             >
               <span>{filtroDueños.length === 0 ? 'Todos' : `${filtroDueños.length} seleccionados`}</span>
               <span style={{ fontSize: '0.8rem', marginLeft: '10px' }}>▼</span>
             </button>
-            
+
             {openDueño && (
               <div className="custom-scrollbar" style={{ position: 'absolute', top: '100%', left: 0, marginTop: '5px', padding: '8px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.2)', maxHeight: '200px', overflowY: 'auto', minWidth: '220px', zIndex: 10, boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', cursor: 'pointer', fontSize: '0.9rem' }}>
@@ -769,13 +1032,13 @@ const DashboardCarteraPage = () => {
                 </label>
                 {uniqueDueños.filter(d => d !== 'Todos').map(d => (
                   <label key={d} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', cursor: 'pointer', fontSize: '0.9rem' }}>
-                    <input 
-                      type="checkbox" 
-                      checked={filtroDueños.includes(d)} 
+                    <input
+                      type="checkbox"
+                      checked={filtroDueños.includes(d)}
                       onChange={(e) => {
                         if (e.target.checked) setFiltroDueños([...filtroDueños, d]);
                         else setFiltroDueños(filtroDueños.filter(item => item !== d));
-                      }} 
+                      }}
                     />
                     <span style={{ opacity: filtroDueños.includes(d) ? 1 : 0.6 }}>{d}</span>
                   </label>
@@ -789,14 +1052,14 @@ const DashboardCarteraPage = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', position: 'relative' }}>
           <label style={{ color: 'var(--text-secondary)', fontWeight: '500' }}>Originador:</label>
           <div style={{ position: 'relative' }}>
-            <button 
+            <button
               onClick={() => setOpenOriginador(!openOriginador)}
               style={{ padding: '8px 12px', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', minWidth: '150px', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
             >
               <span>{filtroOriginadores.length === 0 ? 'Todos' : `${filtroOriginadores.length} seleccionados`}</span>
               <span style={{ fontSize: '0.8rem', marginLeft: '10px' }}>▼</span>
             </button>
-            
+
             {openOriginador && (
               <div className="custom-scrollbar" style={{ position: 'absolute', top: '100%', left: 0, marginTop: '5px', padding: '8px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.2)', maxHeight: '200px', overflowY: 'auto', minWidth: '220px', zIndex: 10, boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', cursor: 'pointer', fontSize: '0.9rem' }}>
@@ -805,13 +1068,13 @@ const DashboardCarteraPage = () => {
                 </label>
                 {uniqueOriginadores.filter(o => o !== 'Todos').map(o => (
                   <label key={o} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', cursor: 'pointer', fontSize: '0.9rem' }}>
-                    <input 
-                      type="checkbox" 
-                      checked={filtroOriginadores.includes(o)} 
+                    <input
+                      type="checkbox"
+                      checked={filtroOriginadores.includes(o)}
                       onChange={(e) => {
                         if (e.target.checked) setFiltroOriginadores([...filtroOriginadores, o]);
                         else setFiltroOriginadores(filtroOriginadores.filter(item => item !== o));
-                      }} 
+                      }}
                     />
                     <span style={{ opacity: filtroOriginadores.includes(o) ? 1 : 0.6 }}>{o}</span>
                   </label>
@@ -825,11 +1088,11 @@ const DashboardCarteraPage = () => {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '15px', marginBottom: '20px' }}>
-        <button 
+        <button
           onClick={() => setActiveTab('total')}
-          style={{ 
-            padding: '10px 20px', 
-            borderRadius: '8px', 
+          style={{
+            padding: '10px 20px',
+            borderRadius: '8px',
             border: 'none',
             background: activeTab === 'total' ? 'var(--color-total)' : 'rgba(255,255,255,0.05)',
             color: activeTab === 'total' ? 'white' : 'var(--text-secondary)',
@@ -840,11 +1103,11 @@ const DashboardCarteraPage = () => {
         >
           Resumen General
         </button>
-        <button 
+        <button
           onClick={() => setActiveTab('evolucion')}
-          style={{ 
-            padding: '10px 20px', 
-            borderRadius: '8px', 
+          style={{
+            padding: '10px 20px',
+            borderRadius: '8px',
             border: 'none',
             background: activeTab === 'evolucion' ? 'var(--color-total)' : 'rgba(255,255,255,0.05)',
             color: activeTab === 'evolucion' ? 'white' : 'var(--text-secondary)',
@@ -855,11 +1118,11 @@ const DashboardCarteraPage = () => {
         >
           Evolución Anual
         </button>
-        <button 
+        <button
           onClick={() => setActiveTab('composicion')}
-          style={{ 
-            padding: '10px 20px', 
-            borderRadius: '8px', 
+          style={{
+            padding: '10px 20px',
+            borderRadius: '8px',
             border: 'none',
             background: activeTab === 'composicion' ? 'var(--color-total)' : 'rgba(255,255,255,0.05)',
             color: activeTab === 'composicion' ? 'white' : 'var(--text-secondary)',
@@ -870,11 +1133,11 @@ const DashboardCarteraPage = () => {
         >
           Por Dueño
         </button>
-        <button 
+        <button
           onClick={() => setActiveTab('periodo')}
-          style={{ 
-            padding: '10px 20px', 
-            borderRadius: '8px', 
+          style={{
+            padding: '10px 20px',
+            borderRadius: '8px',
             border: 'none',
             background: activeTab === 'periodo' ? 'var(--color-total)' : 'rgba(255,255,255,0.05)',
             color: activeTab === 'periodo' ? 'white' : 'var(--text-secondary)',
@@ -885,11 +1148,11 @@ const DashboardCarteraPage = () => {
         >
           Por Período
         </button>
-        <button 
+        <button
           onClick={() => setActiveTab('colocaciones')}
-          style={{ 
-            padding: '10px 20px', 
-            borderRadius: '8px', 
+          style={{
+            padding: '10px 20px',
+            borderRadius: '8px',
             border: 'none',
             background: activeTab === 'colocaciones' ? 'var(--color-total)' : 'rgba(255,255,255,0.05)',
             color: activeTab === 'colocaciones' ? 'white' : 'var(--text-secondary)',
@@ -900,11 +1163,26 @@ const DashboardCarteraPage = () => {
         >
           Colocaciones
         </button>
-        <button 
+        <button
+          onClick={() => setActiveTab('cobranzas')}
+          style={{
+            padding: '10px 20px',
+            borderRadius: '8px',
+            border: 'none',
+            background: activeTab === 'cobranzas' ? 'var(--color-total)' : 'rgba(255,255,255,0.05)',
+            color: activeTab === 'cobranzas' ? 'white' : 'var(--text-secondary)',
+            cursor: 'pointer',
+            fontWeight: '600',
+            transition: 'background 0.2s'
+          }}
+        >
+          Cobranzas
+        </button>
+        <button
           onClick={() => setActiveTab('estados')}
-          style={{ 
-            padding: '10px 20px', 
-            borderRadius: '8px', 
+          style={{
+            padding: '10px 20px',
+            borderRadius: '8px',
             border: 'none',
             background: activeTab === 'estados' ? 'var(--color-total)' : 'rgba(255,255,255,0.05)',
             color: activeTab === 'estados' ? 'white' : 'var(--text-secondary)',
@@ -915,11 +1193,11 @@ const DashboardCarteraPage = () => {
         >
           Estado Cuotas
         </button>
-        <button 
+        <button
           onClick={() => setActiveTab('morosidad')}
-          style={{ 
-            padding: '10px 20px', 
-            borderRadius: '8px', 
+          style={{
+            padding: '10px 20px',
+            borderRadius: '8px',
             border: 'none',
             background: activeTab === 'morosidad' ? 'var(--color-total)' : 'rgba(255,255,255,0.05)',
             color: activeTab === 'morosidad' ? 'white' : 'var(--text-secondary)',
@@ -954,18 +1232,18 @@ const DashboardCarteraPage = () => {
       {(activeTab === 'total' || isExporting) && (
         <div id="export-tab-total">
           {/* KPI Cards */}
-          <div style={{ 
-            display: 'flex', 
+          <div style={{
+            display: 'flex',
             flexWrap: 'wrap',
-            justifyContent: 'center', 
-            gap: '20px', 
-            marginBottom: '30px' 
+            justifyContent: 'center',
+            gap: '20px',
+            marginBottom: '30px'
           }}>
             <div className="glass-panel" style={{ width: '100%', minWidth: '260px', maxWidth: '300px', padding: '20px', borderRadius: '12px', borderTop: '4px solid var(--color-capital)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '10px', transition: 'transform 0.2s', cursor: 'default' }} onMouseOver={e => e.currentTarget.style.transform = 'translateY(-5px)'} onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}>
               <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '1px' }}>Total Capital Activo</span>
               <span style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>{formatCurrency(totalCapital)}</span>
             </div>
-            
+
             <div className="glass-panel" style={{ width: '100%', minWidth: '260px', maxWidth: '300px', padding: '20px', borderRadius: '12px', borderTop: '4px solid var(--color-interes)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '10px', transition: 'transform 0.2s', cursor: 'default' }} onMouseOver={e => e.currentTarget.style.transform = 'translateY(-5px)'} onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}>
               <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '1px' }}>Total Interés</span>
               <span style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>{formatCurrency(totalInteres)}</span>
@@ -1014,7 +1292,7 @@ const DashboardCarteraPage = () => {
                   </thead>
                   <tbody>
                     {groupedData.map((row, idx) => (
-                      <tr key={idx} style={{ 
+                      <tr key={idx} style={{
                         borderBottom: '1px solid rgba(255,255,255,0.05)',
                         transition: 'background-color 0.2s',
                       }} className="table-row-hover">
@@ -1039,7 +1317,7 @@ const DashboardCarteraPage = () => {
       {(activeTab === 'evolucion' || isExporting) && (
         <div id="export-tab-evolucion">
           <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', marginBottom: '30px', height: '400px' }}>
-            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Evolución de la Cartera Total (Últimos 12 Meses)</h2>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Evolución de Cartera (12 Meses)</h2>
             {filteredEvolutionData.length === 0 ? (
               <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>Cargando evolución histórica...</p>
             ) : (
@@ -1050,22 +1328,22 @@ const DashboardCarteraPage = () => {
                 >
                   <defs>
                     <linearGradient id="colorCapital" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="var(--color-capital)" stopOpacity={0.8}/>
-                      <stop offset="95%" stopColor="var(--color-capital)" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="var(--color-capital)" stopOpacity={0.8} />
+                      <stop offset="95%" stopColor="var(--color-capital)" stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="colorInteres" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="var(--color-interes)" stopOpacity={0.8}/>
-                      <stop offset="95%" stopColor="var(--color-interes)" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="var(--color-interes)" stopOpacity={0.8} />
+                      <stop offset="95%" stopColor="var(--color-interes)" stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="colorIva" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="var(--color-iva)" stopOpacity={0.8}/>
-                      <stop offset="95%" stopColor="var(--color-iva)" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="var(--color-iva)" stopOpacity={0.8} />
+                      <stop offset="95%" stopColor="var(--color-iva)" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
                   <XAxis dataKey="periodo" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)' }} />
                   <YAxis stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)' }} tickFormatter={(value) => `$${(value / 1000000).toFixed(1)}M`} />
-                  <Tooltip 
+                  <Tooltip
                     formatter={(value) => formatCurrency(value)}
                     contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white' }}
                     itemStyle={{ color: 'white' }}
@@ -1078,9 +1356,9 @@ const DashboardCarteraPage = () => {
               </ResponsiveContainer>
             )}
           </div>
-          
+
           <div className="glass-panel" style={{ display: exportFormat === 'l' ? 'none' : 'block', padding: '25px', borderRadius: '12px', marginTop: '20px' }}>
-            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Detalle Histórico (Últimos 12 Meses)</h2>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Detalle Histórico (12 Meses)</h2>
             {filteredEvolutionData.length === 0 ? (
               <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>No hay datos históricos disponibles.</p>
             ) : (
@@ -1098,7 +1376,7 @@ const DashboardCarteraPage = () => {
                   </thead>
                   <tbody>
                     {[...filteredEvolutionData].reverse().map((row, idx) => (
-                      <tr key={idx} style={{ 
+                      <tr key={idx} style={{
                         borderBottom: '1px solid rgba(255,255,255,0.05)',
                         transition: 'background-color 0.2s',
                       }} className="table-row-hover">
@@ -1121,7 +1399,7 @@ const DashboardCarteraPage = () => {
       {(activeTab === 'composicion' || isExporting) && (
         <div id="export-tab-composicion">
           <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', marginBottom: '30px' }}>
-            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Composición de la Cartera por Dueño (Capital y Porcentaje)</h2>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Cartera por Dueño (Capital y %)</h2>
             {filteredEvolutionData.length === 0 ? (
               <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>No hay datos disponibles.</p>
             ) : (
@@ -1143,20 +1421,20 @@ const DashboardCarteraPage = () => {
                   />
                   <Legend wrapperStyle={{ paddingTop: '20px' }} />
                   {evolutionUniqueDueños.map((dueño, index) => (
-                    <Bar 
+                    <Bar
                       isAnimationActive={!isExporting}
-                      key={dueño} 
-                      dataKey={`ownerRaw_${dueño}`} 
-                      name={dueño} 
-                      stackId="a" 
-                      fill={CHART_COLORS[index % CHART_COLORS.length]} 
+                      key={dueño}
+                      dataKey={`ownerRaw_${dueño}`}
+                      name={dueño}
+                      stackId="a"
+                      fill={CHART_COLORS[index % CHART_COLORS.length]}
                     >
-                      <LabelList 
-                        dataKey={`owner_${dueño}`} 
-                        position="inside" 
-                        fill="#fff" 
-                        formatter={(val) => val > 5 ? `${val.toFixed(1)}%` : ''} 
-                        style={{ fontSize: 12, fontWeight: 'bold' }} 
+                      <LabelList
+                        dataKey={`owner_${dueño}`}
+                        position="inside"
+                        fill="#fff"
+                        formatter={(val) => val > 5 ? `${val.toFixed(1)}%` : ''}
+                        style={{ fontSize: 12, fontWeight: 'bold' }}
                       />
                     </Bar>
                   ))}
@@ -1164,7 +1442,7 @@ const DashboardCarteraPage = () => {
               </ResponsiveContainer>
             )}
           </div>
-          
+
           <div className="glass-panel" style={{ display: exportFormat === 'l' ? 'none' : 'block', padding: '25px', borderRadius: '12px', marginTop: '20px' }}>
             <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Detalle por Período y Dueño</h2>
             {composicionTableRows.length === 0 ? (
@@ -1202,41 +1480,41 @@ const DashboardCarteraPage = () => {
       )}
 
       {(activeTab === 'periodo' || isExporting) && (
-          <div id="export-tab-periodo">
-            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', marginBottom: '30px', height: '400px' }}>
-              <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Proyección de Vencimientos</h2>
-              {periodData.length === 0 ? (
-                <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>No hay vencimientos futuros registrados.</p>
-              ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={periodData}
-                    margin={{ top: 10, right: 30, left: 20, bottom: 25 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                    <XAxis dataKey="Periodo" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)' }} />
-                    <YAxis stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)' }} tickFormatter={(value) => `$${(value / 1000000).toFixed(1)}M`} />
-                    <Tooltip 
-                      formatter={(value) => formatCurrency(value)}
-                      contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white' }}
-                      itemStyle={{ color: 'white' }}
-                    />
-                    <Legend wrapperStyle={{ paddingTop: '20px' }} />
-                    <Bar isAnimationActive={!isExporting} dataKey="Capital" stackId="a" fill="var(--color-capital)" name="Capital" />
-                    <Bar isAnimationActive={!isExporting} dataKey="Interés" stackId="a" fill="var(--color-interes)" name="Interés" />
-                    <Bar isAnimationActive={!isExporting} dataKey="IVA" stackId="a" fill="var(--color-iva)" name="IVA" />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
+        <div id="export-tab-periodo">
+          <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', marginBottom: '30px', height: '400px' }}>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Proyección de Vencimientos</h2>
+            {periodData.length === 0 ? (
+              <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>No hay vencimientos futuros registrados.</p>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={periodData}
+                  margin={{ top: 10, right: 30, left: 20, bottom: 25 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                  <XAxis dataKey="Periodo" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)' }} />
+                  <YAxis stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)' }} tickFormatter={(value) => `$${(value / 1000000).toFixed(1)}M`} />
+                  <Tooltip
+                    formatter={(value) => formatCurrency(value)}
+                    contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white' }}
+                    itemStyle={{ color: 'white' }}
+                  />
+                  <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                  <Bar isAnimationActive={!isExporting} dataKey="Capital" stackId="a" fill="var(--color-capital)" name="Capital" />
+                  <Bar isAnimationActive={!isExporting} dataKey="Interés" stackId="a" fill="var(--color-interes)" name="Interés" />
+                  <Bar isAnimationActive={!isExporting} dataKey="IVA" stackId="a" fill="var(--color-iva)" name="IVA" />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
 
-            <div className="glass-panel" style={{ display: exportFormat === 'l' ? 'none' : 'block', padding: '25px', borderRadius: '12px' }}>
-              <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Detalle por Período (Actual y Futuros)</h2>
-              {periodData.length === 0 ? (
-                <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>No hay vencimientos futuros registrados.</p>
-              ) : (
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <div className="glass-panel" style={{ display: exportFormat === 'l' ? 'none' : 'block', padding: '25px', borderRadius: '12px' }}>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Detalle por Período (Actual y Futuros)</h2>
+            {periodData.length === 0 ? (
+              <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>No hay vencimientos futuros registrados.</p>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', textAlign: 'left' }}>
                       <th style={{ padding: '8px 10px', color: 'var(--text-secondary)', fontWeight: '500', fontSize: '0.95rem' }}>Período</th>
@@ -1249,7 +1527,7 @@ const DashboardCarteraPage = () => {
                   </thead>
                   <tbody>
                     {periodData.map((row, idx) => (
-                      <tr key={idx} style={{ 
+                      <tr key={idx} style={{
                         borderBottom: '1px solid rgba(255,255,255,0.05)',
                         transition: 'background-color 0.2s',
                         fontSize: '0.9rem'
@@ -1264,202 +1542,9 @@ const DashboardCarteraPage = () => {
                     ))}
                   </tbody>
                 </table>
-                </div>
-              )}
-            </div>
-          </div>
-      )}
-
-      {(activeTab === 'estados' || isExporting) && (
-        <div id="export-tab-estados">
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginBottom: '30px' }}>
-            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', flex: '1 1 300px', display: 'flex', flexDirection: 'column' }}>
-              <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600', textAlign: 'center' }}>Distribución de Saldos por Estado del Crédito</h2>
-              <div style={{ flex: 1, minHeight: '250px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      isAnimationActive={!isExporting}
-                      data={estadosList.filter(e => e.Total > 0)}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={true}
-                      label={renderCustomizedLabel}
-                      innerRadius={60}
-                      outerRadius={80}
-                      paddingAngle={5}
-                      dataKey="Total"
-                      nameKey="Estado"
-                    >
-                      {estadosList.filter(e => e.Total > 0).map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.fill} />
-                      ))}
-                    </Pie>
-                    <Tooltip 
-                      formatter={(value) => formatCurrency(value)}
-                      contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white' }}
-                      itemStyle={{ color: 'white' }}
-                    />
-                    <Legend />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', flex: '2 1 500px' }}>
-              <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Total de Saldos agrupados por Estado del Crédito (Capital + Interés)</h2>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '15px' }}>
-                <div style={{ 
-                  background: 'rgba(0,0,0,0.2)', 
-                  border: `1px solid var(--text-primary)40`, 
-                  borderLeft: `4px solid var(--text-primary)`, 
-                  borderRadius: '8px', 
-                  padding: '15px 20px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '5px',
-                  boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-                }}>
-                  <span style={{ color: 'var(--text-primary)', fontSize: '0.85rem', fontWeight: '700', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Total General</span>
-                  <span style={{ fontSize: '1.3rem', fontWeight: 'bold', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{formatCurrency(estadosList.reduce((acc, curr) => acc + curr.Total, 0))}</span>
-                </div>
-                {estadosList.map((d, idx) => (
-                  <div key={idx} style={{ 
-                    background: 'rgba(0,0,0,0.2)', 
-                    border: `1px solid ${d.fill}40`, 
-                    borderLeft: `4px solid ${d.fill}`, 
-                    borderRadius: '8px', 
-                    padding: '15px 20px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '5px',
-                    boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-                  }}>
-                    <span style={{ color: d.fill, fontSize: '0.85rem', fontWeight: '700', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.Estado}</span>
-                    <span style={{ fontSize: '1.3rem', fontWeight: 'bold', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{formatCurrency(d.Total)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="glass-panel" style={{ display: exportFormat === 'l' ? 'none' : 'block', padding: '25px', borderRadius: '12px' }}>
-            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Detalle de Saldos (Vencidos vs A Vencer) según Estado del Crédito</h2>
-            {estadosList.length === 0 ? (
-              <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>No hay datos disponibles en la cartera activa.</p>
-            ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', textAlign: 'left' }}>
-                      <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500' }}>Estado</th>
-                      <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Vencido</th>
-                      <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>A Vencer</th>
-                      <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {estadosList.map((row, idx) => (
-                      <tr key={idx} style={{ 
-                        borderBottom: '1px solid rgba(255,255,255,0.05)',
-                        transition: 'background-color 0.2s',
-                      }} className="table-row-hover">
-                        <td style={{ padding: '15px 10px', fontWeight: '500', color: row.fill }}>{row.Estado.toUpperCase()}</td>
-                        <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--color-interes)' }}>{formatCurrency(row.Vencido)}</td>
-                        <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--color-total)' }}>{formatCurrency(row.AVencer)}</td>
-                        <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace' }}>{formatCurrency(row.Total)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr style={{ background: 'rgba(255,255,255,0.05)', borderTop: '2px solid rgba(255,255,255,0.2)' }}>
-                      <td style={{ padding: '15px 10px', fontWeight: 'bold', color: 'var(--text-primary)' }}>TOTALES</td>
-                      <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--color-interes)' }}>{formatCurrency(estadosList.reduce((acc, curr) => acc + curr.Vencido, 0))}</td>
-                      <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--color-total)' }}>{formatCurrency(estadosList.reduce((acc, curr) => acc + curr.AVencer, 0))}</td>
-                      <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--text-primary)' }}>{formatCurrency(estadosList.reduce((acc, curr) => acc + curr.Total, 0))}</td>
-                    </tr>
-                  </tfoot>
-                </table>
               </div>
             )}
           </div>
-        </div>
-      )}
-
-      {(activeTab === 'morosidad' || isExporting) && (
-        <div id="export-tab-morosidad">
-          <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', marginBottom: '30px', height: '400px' }}>
-            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Composición de Saldos Vencidos (Mora Real)</h2>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={moraBuckets}
-                margin={{ top: 35, right: 30, left: 20, bottom: 25 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                <XAxis dataKey="label" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)' }} />
-                <YAxis stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)' }} tickFormatter={(value) => `$${(value / 1000000).toFixed(1)}M`} />
-                <Tooltip 
-                  formatter={(value) => formatCurrency(value)}
-                  contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white' }}
-                  itemStyle={{ color: 'white' }}
-                />
-                <Legend wrapperStyle={{ paddingTop: '20px' }} />
-                <Bar isAnimationActive={!isExporting} dataKey="Vencido" fill="var(--color-interes)" name="Valor Vencido" radius={[4, 4, 0, 0]}>
-                  <LabelList
-                    dataKey="Vencido"
-                    position="top"
-                    fill="var(--color-interes)"
-                    formatter={(val) => val > 0 ? `$${(val / 1000000).toFixed(1)}M` : ''}
-                    style={{ fontSize: 11, fontWeight: 'bold' }}
-                  />
-                </Bar>
-                <Bar isAnimationActive={!isExporting} dataKey="AVencer" fill="var(--color-total)" name="Valor A Vencer" radius={[4, 4, 0, 0]}>
-                  <LabelList
-                    dataKey="AVencer"
-                    position="top"
-                    fill="var(--color-total)"
-                    formatter={(val) => val > 0 ? `$${(val / 1000000).toFixed(1)}M` : ''}
-                    style={{ fontSize: 11, fontWeight: 'bold' }}
-                  />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="glass-panel" style={{ display: exportFormat === 'l' ? 'none' : 'block', padding: '25px', borderRadius: '12px', marginBottom: '30px' }}>
-            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Detalle de Cuotas Vencidas (Clasificadas por Días de Mora)</h2>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', textAlign: 'left' }}>
-                  <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500' }}>Días de Morosidad</th>
-                  <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Valor Vencido</th>
-                  <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Valor A Vencer</th>
-                  <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Deuda Total Crédito</th>
-                </tr>
-              </thead>
-              <tbody>
-                {moraBuckets.map((row, idx) => (
-                  <tr key={idx} style={{ 
-                    borderBottom: '1px solid rgba(255,255,255,0.05)',
-                    transition: 'background-color 0.2s',
-                  }} className="table-row-hover">
-                    <td style={{ padding: '15px 10px', fontWeight: '500' }}>{row.label}</td>
-                    <td style={{ padding: '15px 10px', textAlign: 'right', fontFamily: 'monospace', color: 'var(--color-interes)' }}>{formatCurrency(row.Vencido)}</td>
-                    <td style={{ padding: '15px 10px', textAlign: 'right', fontFamily: 'monospace', color: 'var(--color-total)' }}>{formatCurrency(row.AVencer)}</td>
-                    <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--text-primary)' }}>{formatCurrency(row.Total)}</td>
-                  </tr>
-                ))}
-                <tr style={{ backgroundColor: 'rgba(0,0,0,0.2)' }}>
-                  <td style={{ padding: '15px 10px', fontWeight: 'bold' }}>TOTAL MOROSIDAD</td>
-                  <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--color-interes)' }}>{formatCurrency(moraBuckets.reduce((acc, b) => acc + b.Vencido, 0))}</td>
-                  <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--color-total)' }}>{formatCurrency(moraBuckets.reduce((acc, b) => acc + b.AVencer, 0))}</td>
-                  <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--text-primary)' }}>{formatCurrency(moraBuckets.reduce((acc, b) => acc + b.Total, 0))}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
         </div>
       )}
 
@@ -1481,7 +1566,7 @@ const DashboardCarteraPage = () => {
                     itemStyle={{ color: '#fff' }}
                     formatter={(value, name, props) => {
                       if (name === 'Monto Generado') {
-                         return [`$${(value / 1000000).toFixed(2)}M`, name];
+                        return [`$${(value / 1000000).toFixed(2)}M`, name];
                       }
                       const pct = props.payload[`origPct_${name}`];
                       const pctStr = pct ? pct.toFixed(1) : '0.0';
@@ -1492,21 +1577,21 @@ const DashboardCarteraPage = () => {
                   />
                   <Legend wrapperStyle={{ paddingTop: '20px' }} />
                   {colocacionesUniqueOriginadores.map((originador, index) => (
-                    <Bar 
+                    <Bar
                       yAxisId="left"
                       isAnimationActive={!isExporting}
-                      key={originador} 
-                      dataKey={`orig_${originador}`} 
-                      name={originador} 
-                      stackId="a" 
-                      fill={CHART_COLORS[(index + 2) % CHART_COLORS.length]} 
+                      key={originador}
+                      dataKey={`orig_${originador}`}
+                      name={originador}
+                      stackId="a"
+                      fill={CHART_COLORS[(index + 2) % CHART_COLORS.length]}
                     >
-                      <LabelList 
-                        dataKey={`origPct_${originador}`} 
-                        position="inside" 
-                        fill="#fff" 
-                        formatter={(val) => val > 5 ? `${val.toFixed(1)}%` : ''} 
-                        style={{ fontSize: 12, fontWeight: 'bold' }} 
+                      <LabelList
+                        dataKey={`origPct_${originador}`}
+                        position="inside"
+                        fill="#fff"
+                        formatter={(val) => val > 5 ? `${val.toFixed(1)}%` : ''}
+                        style={{ fontSize: 12, fontWeight: 'bold' }}
                       />
                     </Bar>
                   ))}
@@ -1515,7 +1600,7 @@ const DashboardCarteraPage = () => {
               </ResponsiveContainer>
             )}
           </div>
-          
+
           <div className="glass-panel" style={{ display: exportFormat === 'l' ? 'none' : 'block', padding: '25px', borderRadius: '12px', marginTop: '20px', marginBottom: '30px' }}>
             <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Detalle de Originaciones por Período</h2>
             {colocacionesData.length === 0 ? (
@@ -1558,6 +1643,437 @@ const DashboardCarteraPage = () => {
                 </table>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {(activeTab === 'cobranzas' || isExporting) && (
+        <div id="export-tab-cobranzas" style={{ display: 'grid', gridTemplateColumns: isExporting ? 'repeat(auto-fit, minmax(450px, 1fr))' : '1fr', gap: '25px', marginBottom: '30px' }}>
+          <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', height: '400px' }}>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Evolución de Cobranzas (Últimos 12 Meses)</h2>
+            {filteredCobranzasEvolutionData.length === 0 ? (
+              <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>Cargando evolución de cobranzas...</p>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart
+                  data={filteredCobranzasEvolutionData}
+                  margin={{ top: 10, right: 30, left: 20, bottom: 25 }}
+                >
+                  <defs>
+                    <linearGradient id="colorCobrCapital" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="var(--color-capital)" stopOpacity={0.8} />
+                      <stop offset="95%" stopColor="var(--color-capital)" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="colorCobrInteres" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="var(--color-interes)" stopOpacity={0.8} />
+                      <stop offset="95%" stopColor="var(--color-interes)" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="colorCobrIva" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="var(--color-iva)" stopOpacity={0.8} />
+                      <stop offset="95%" stopColor="var(--color-iva)" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                  <XAxis dataKey="periodo" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)' }} />
+                  <YAxis stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)' }} tickFormatter={(value) => `$${(value / 1000000).toFixed(1)}M`} />
+                  <Tooltip
+                    formatter={(value) => formatCurrency(value)}
+                    contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white' }}
+                    itemStyle={{ color: 'white' }}
+                  />
+                  <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                  <Area isAnimationActive={!isExporting} type="monotone" dataKey="capital" stackId="1" stroke="var(--color-capital)" fillOpacity={1} fill="url(#colorCobrCapital)" name="Capital Cobrado" />
+                  <Area isAnimationActive={!isExporting} type="monotone" dataKey="interes" stackId="1" stroke="var(--color-interes)" fillOpacity={1} fill="url(#colorCobrInteres)" name="Interés Cobrado" />
+                  <Area isAnimationActive={!isExporting} type="monotone" dataKey="iva" stackId="1" stroke="var(--color-iva)" fillOpacity={1} fill="url(#colorCobrIva)" name="IVA Cobrado" />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
+          
+          <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', height: '400px' }}>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Cobranzas por Tipo</h2>
+            {filteredCobranzasEvolutionData.length === 0 ? (
+              <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>No hay datos de cobranzas disponibles.</p>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={filteredCobranzasEvolutionData} margin={{ top: 10, right: 30, left: 20, bottom: 25 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" vertical={false} />
+                  <XAxis dataKey="periodo" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} tickMargin={10} />
+                  <YAxis stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} tickFormatter={(val) => `$${(val / 1000000).toFixed(1)}M`} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.9)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff' }}
+                    itemStyle={{ color: '#fff' }}
+                    formatter={(value, name) => {
+                      const valStr = (value / 1000000).toFixed(1);
+                      return [`$${valStr}M`, name];
+                    }}
+                    labelFormatter={(label) => `Período: ${label}`}
+                  />
+                  <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                  {cobranzasUniqueTipos.map((tipo, index) => (
+                    <Bar
+                      isAnimationActive={!isExporting}
+                      key={tipo}
+                      dataKey={`tipoRaw_${tipo}`}
+                      name={tipo}
+                      stackId="a"
+                      fill={CHART_COLORS[index % CHART_COLORS.length]}
+                    />
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
+          
+          <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', height: '400px' }}>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Real Cobrado vs Caída Teórica</h2>
+            {filteredCobranzasEvolutionData.length === 0 ? (
+              <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>No hay datos disponibles.</p>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={filteredCobranzasEvolutionData} margin={{ top: 10, right: 30, left: 20, bottom: 25 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" vertical={false} />
+                  <XAxis dataKey="periodo" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} tickMargin={10} xAxisId={0} />
+                  <XAxis dataKey="periodo" xAxisId={1} hide />
+                  <YAxis stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} tickFormatter={(val) => `$${(val / 1000000).toFixed(1)}M`} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.9)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff' }}
+                    itemStyle={{ color: '#fff' }}
+                    formatter={(value, name) => {
+                      const valStr = (value / 1000000).toFixed(1);
+                      return [`$${valStr}M`, name];
+                    }}
+                    labelFormatter={(label) => `Período: ${label}`}
+                  />
+                  <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                  <Bar
+                    isAnimationActive={!isExporting}
+                    dataKey="totalTeorico"
+                    name="Caída Teórica"
+                    fill="#ef4444"
+                    xAxisId={0}
+                  />
+                  <Bar
+                    isAnimationActive={!isExporting}
+                    dataKey="totalMismoPeriodo"
+                    name="Total Cobrado"
+                    fill="var(--color-capital)"
+                    xAxisId={1}
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
+          <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', height: '400px' }}>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Recupero de Mora</h2>
+            {filteredCobranzasEvolutionData.length === 0 ? (
+              <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>No hay datos disponibles.</p>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={filteredCobranzasEvolutionData} margin={{ top: 10, right: 30, left: 20, bottom: 25 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" vertical={false} />
+                  <XAxis dataKey="periodo" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} tickMargin={10} />
+                  <YAxis stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} tickFormatter={(val) => `$${(val / 1000000).toFixed(1)}M`} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.9)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff' }}
+                    itemStyle={{ color: '#fff' }}
+                    formatter={(value, name) => {
+                      const valStr = (value / 1000000).toFixed(1);
+                      return [`$${valStr}M`, name];
+                    }}
+                    labelFormatter={(label) => `Período: ${label}`}
+                  />
+                  <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                  <Bar
+                    isAnimationActive={!isExporting}
+                    dataKey="recuperoMora"
+                    name="Recupero de Mora"
+                    fill="#f97316"
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+      )}
+
+      {(activeTab === 'estados' || isExporting) && (
+        <div id="export-tab-estados">
+          <div style={{ display: 'grid', gridTemplateColumns: isExporting ? 'repeat(auto-fit, minmax(450px, 1fr))' : '1fr', gap: '25px', marginBottom: '30px' }}>
+            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', display: 'flex', flexDirection: 'column' }}>
+              <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600', textAlign: 'center' }}>Distribución por Estado</h2>
+              <div style={{ flex: 1, minHeight: '250px' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      isAnimationActive={!isExporting}
+                      data={estadosList.filter(e => e.Total > 0)}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={true}
+                      label={renderCustomizedLabel}
+                      innerRadius={60}
+                      outerRadius={80}
+                      paddingAngle={5}
+                      dataKey="Total"
+                      nameKey="Estado"
+                    >
+                      {estadosList.filter(e => e.Total > 0).map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.fill} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(value) => formatCurrency(value)}
+                      contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white' }}
+                      itemStyle={{ color: 'white' }}
+                    />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px' }}>
+              <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Saldos por Estado (Cap+Int)</h2>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '15px' }}>
+                <div style={{
+                  background: 'rgba(0,0,0,0.2)',
+                  border: `1px solid var(--text-primary)40`,
+                  borderLeft: `4px solid var(--text-primary)`,
+                  borderRadius: '8px',
+                  padding: '15px 20px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '5px',
+                  boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                }}>
+                  <span style={{ color: 'var(--text-primary)', fontSize: '0.85rem', fontWeight: '700', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Total General</span>
+                  <span style={{ fontSize: '1.3rem', fontWeight: 'bold', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{formatCurrency(estadosList.reduce((acc, curr) => acc + curr.Total, 0))}</span>
+                </div>
+                {estadosList.map((d, idx) => (
+                  <div key={idx} style={{
+                    background: 'rgba(0,0,0,0.2)',
+                    border: `1px solid ${d.fill}40`,
+                    borderLeft: `4px solid ${d.fill}`,
+                    borderRadius: '8px',
+                    padding: '15px 20px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '5px',
+                    boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                  }}>
+                    <span style={{ color: d.fill, fontSize: '0.85rem', fontWeight: '700', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.Estado}</span>
+                    <span style={{ fontSize: '1.3rem', fontWeight: 'bold', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{formatCurrency(d.Total)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="glass-panel" style={{ display: exportFormat === 'l' ? 'none' : 'block', padding: '25px', borderRadius: '12px' }}>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Saldos Vencidos vs A Vencer (Cap+Int)</h2>
+            {estadosList.length === 0 ? (
+              <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>No hay datos disponibles en la cartera activa.</p>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', textAlign: 'left' }}>
+                      <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500' }}>Estado</th>
+                      <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Vencido</th>
+                      <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>A Vencer</th>
+                      <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {estadosList.map((row, idx) => (
+                      <tr key={idx} style={{
+                        borderBottom: '1px solid rgba(255,255,255,0.05)',
+                        transition: 'background-color 0.2s',
+                      }} className="table-row-hover">
+                        <td style={{ padding: '15px 10px', fontWeight: '500', color: row.fill }}>{row.Estado.toUpperCase()}</td>
+                        <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--color-interes)' }}>{formatCurrency(row.Vencido)}</td>
+                        <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--color-total)' }}>{formatCurrency(row.AVencer)}</td>
+                        <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace' }}>{formatCurrency(row.Total)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ background: 'rgba(255,255,255,0.05)', borderTop: '2px solid rgba(255,255,255,0.2)' }}>
+                      <td style={{ padding: '15px 10px', fontWeight: 'bold', color: 'var(--text-primary)' }}>TOTALES</td>
+                      <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--color-interes)' }}>{formatCurrency(estadosList.reduce((acc, curr) => acc + curr.Vencido, 0))}</td>
+                      <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--color-total)' }}>{formatCurrency(estadosList.reduce((acc, curr) => acc + curr.AVencer, 0))}</td>
+                      <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--text-primary)' }}>{formatCurrency(estadosList.reduce((acc, curr) => acc + curr.Total, 0))}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {(activeTab === 'morosidad' || isExporting) && (
+        <div id="export-tab-morosidad">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '30px' }}>
+            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Vencido (Mora)</span>
+              <span style={{ fontSize: '1.8rem', fontWeight: 'bold', color: 'var(--color-interes)' }}>{formatCurrency(moraKPIs.totalVencido)}</span>
+            </div>
+            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.5px' }}>A Vencer (Cartera Morosa)</span>
+              <span style={{ fontSize: '1.8rem', fontWeight: 'bold', color: 'var(--color-total)' }}>{formatCurrency(moraKPIs.totalAVencer)}</span>
+            </div>
+            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Mora Temprana (1-90 días)</span>
+              <span style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#f59e0b' }}>{formatCurrency(moraKPIs.moraTemprana)}</span>
+            </div>
+            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Mora Dura (&gt;90 días)</span>
+              <span style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#ef4444' }}>{formatCurrency(moraKPIs.moraDura)}</span>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: isExporting ? 'repeat(auto-fit, minmax(450px, 1fr))' : '1fr', gap: '25px', marginBottom: '30px' }}>
+            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', minHeight: '400px' }}>
+              <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Distribución de Mora (Cap+Int+IVA)</h2>
+              <ResponsiveContainer width="100%" height={320}>
+                <PieChart margin={{ top: 10, right: 60, bottom: 10, left: 60 }}>
+                  <Pie 
+                    isAnimationActive={!isExporting}
+                    data={moraBucketsPie} 
+                    dataKey="Total" 
+                    nameKey="label" 
+                    cx="50%" 
+                    cy="50%" 
+                    innerRadius={45} 
+                    outerRadius={70} 
+                    label={renderCustomizedLabelMora} 
+                    labelLine={(props) => {
+                      const { points, payload, index } = props;
+                      if (!points) return null;
+                      
+                      if (payload.isSmall) {
+                        smallSlicesRef.current[index] = points[0];
+                      }
+
+                      if (payload.isSmall && !payload.showSmallSum) return <g></g>;
+                      
+                      if (payload.showSmallSum) {
+                        const elbow = points[1] || points[0];
+                        if (!elbow) return null;
+                        const smallIndices = moraBucketsPie.map((b, i) => b.isSmall ? i : -1).filter(i => i !== -1);
+                        
+                        return (
+                          <g>
+                            <polyline points={points.map(p => `${p.x},${p.y}`).join(' ')} fill="none" stroke="var(--text-secondary)" />
+                            {smallIndices.map(si => {
+                              if (si === index) return null;
+                              const p0 = smallSlicesRef.current[si];
+                              if (!p0) return null;
+                              return (
+                                <line key={`conn-${si}`} x1={p0.x} y1={p0.y} x2={elbow.x} y2={elbow.y} stroke="var(--text-secondary)" strokeDasharray="3 3" />
+                              );
+                            })}
+                          </g>
+                        );
+                      }
+                      
+                      return <polyline points={points.map(p => `${p.x},${p.y}`).join(' ')} fill="none" stroke="var(--text-secondary)" />;
+                    }}
+                  >
+                    {moraBucketsPie.map((entry, index) => <Cell key={index} fill={entry.fill} />)}
+                  </Pie>
+                  <Tooltip
+                    formatter={(value) => formatCurrency(value)}
+                    contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white' }}
+                    itemStyle={{ color: 'white' }}
+                  />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+              {smallBucketsFootnote && (
+                <div style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '10px' }}>
+                  {smallBucketsFootnote}
+                </div>
+              )}
+            </div>
+            
+            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', minHeight: '400px' }}>
+              <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Saldos Vencidos (Cap+Int+IVA)</h2>
+              <ResponsiveContainer width="100%" height={320}>
+                <BarChart
+                  data={moraBuckets.filter(b => b.label !== 'Al día')}
+                  margin={{ top: 35, right: 30, left: 20, bottom: 25 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                <XAxis dataKey="label" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)' }} />
+                <YAxis stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)' }} tickFormatter={(value) => `$${(value / 1000000).toFixed(1)}M`} />
+                <Tooltip
+                  formatter={(value) => formatCurrency(value)}
+                  contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white' }}
+                  itemStyle={{ color: 'white' }}
+                />
+                <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                <Bar isAnimationActive={!isExporting} dataKey="Vencido" fill="var(--color-interes)" name="Valor Vencido" radius={[4, 4, 0, 0]}>
+                  <LabelList
+                    dataKey="Vencido"
+                    position="top"
+                    fill="var(--color-interes)"
+                    formatter={(val) => val > 0 ? `$${(val / 1000000).toFixed(1)}M` : ''}
+                    style={{ fontSize: 11, fontWeight: 'bold' }}
+                  />
+                </Bar>
+                <Bar isAnimationActive={!isExporting} dataKey="AVencer" fill="var(--color-total)" name="Valor A Vencer" radius={[4, 4, 0, 0]}>
+                  <LabelList
+                    dataKey="AVencer"
+                    position="top"
+                    fill="var(--color-total)"
+                    formatter={(val) => val > 0 ? `$${(val / 1000000).toFixed(1)}M` : ''}
+                    style={{ fontSize: 11, fontWeight: 'bold' }}
+                  />
+                </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="glass-panel" style={{ display: exportFormat === 'l' ? 'none' : 'block', padding: '25px', borderRadius: '12px', marginBottom: '30px' }}>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Detalle de Cuotas Vencidas (Clasificadas por Días de Mora)</h2>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', textAlign: 'left' }}>
+                    <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500' }}>Días de Morosidad</th>
+                    <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Valor Vencido</th>
+                    <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Valor A Vencer</th>
+                    <th style={{ padding: '15px 10px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Deuda Total Crédito</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {moraBuckets.filter(b => b.label !== 'Al día').map((row, idx) => (
+                    <tr key={idx} style={{
+                      borderBottom: '1px solid rgba(255,255,255,0.05)',
+                      transition: 'background-color 0.2s',
+                    }} className="table-row-hover">
+                      <td style={{ padding: '15px 10px', fontWeight: '500' }}>{row.label}</td>
+                      <td style={{ padding: '15px 10px', textAlign: 'right', fontFamily: 'monospace', color: 'var(--color-interes)' }}>{formatCurrency(row.Vencido)}</td>
+                      <td style={{ padding: '15px 10px', textAlign: 'right', fontFamily: 'monospace', color: 'var(--color-total)' }}>{formatCurrency(row.AVencer)}</td>
+                      <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--text-primary)' }}>{formatCurrency(row.Total)}</td>
+                    </tr>
+                  ))}
+                  <tr style={{ backgroundColor: 'rgba(0,0,0,0.2)' }}>
+                    <td style={{ padding: '15px 10px', fontWeight: 'bold' }}>TOTAL MOROSIDAD</td>
+                    <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--color-interes)' }}>{formatCurrency(moraBuckets.filter(b => b.label !== 'Al día').reduce((acc, b) => acc + b.Vencido, 0))}</td>
+                    <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--color-total)' }}>{formatCurrency(moraBuckets.filter(b => b.label !== 'Al día').reduce((acc, b) => acc + b.AVencer, 0))}</td>
+                    <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--text-primary)' }}>{formatCurrency(moraBuckets.filter(b => b.label !== 'Al día').reduce((acc, b) => acc + b.Total, 0))}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}

@@ -304,19 +304,57 @@ class CollectionManager:
         for col in ["capital", "interes", "iva"]:
             df_cobr[col] = df_cobr[col].round(2)
 
+        from src.database.models.carteras import Cartera, OperacionCartera, TipoOperacionCartera
+        cuotas_ids = df_cobr.index.tolist()
+        # Querying in descending order so the first record for a cuota_id is the latest one.
+        ops = self.db.query(OperacionCartera.cuota_id, Cartera.iva, Cartera.tipo_operacion).join(
+            Cartera, Cartera.id == OperacionCartera.cartera_id
+        ).filter(OperacionCartera.cuota_id.in_(cuotas_ids)).order_by(OperacionCartera.id.desc()).all()
+        
+        cuota_cartera_map = {}
+        for cuota_id, iva, tipo in ops:
+            if cuota_id not in cuota_cartera_map:
+                cuota_cartera_map[cuota_id] = {"iva": iva, "tipo": tipo}
+
+        tipos_no_facturados = [
+            TipoCobranzaEnum.COMUN.value,
+            TipoCobranzaEnum.ANTICIPO.value,
+            TipoCobranzaEnum.CA.value,
+            TipoCobranzaEnum.PENALTY.value,
+            TipoCobranzaEnum.RECURSO.value
+        ]
+
         records = []
         for row in df_cobr.itertuples():
+            cuota_id = row.Index
+            tipo_val = row.tipo_cobranza
+            
+            facturada = True
+            if tipo_val in tipos_no_facturados:
+                cartera_info = cuota_cartera_map.get(cuota_id)
+                if cartera_info is not None:
+                    iva = cartera_info["iva"]
+                    tipo_op = cartera_info["tipo"]
+                    if tipo_op == TipoOperacionCartera.VENTA:
+                        facturada = True if iva is True else False
+                    else:
+                        facturada = False if iva is True else True
+                else:
+                    facturada = True if tipo_val == TipoCobranzaEnum.RECURSO.value else False
+
             records.append({
-                "cuota_id": row.Index,
+                "cuota_id": cuota_id,
                 "proceso_id": proceso_id,
-                "tipo_cobranza": row.tipo_cobranza,
+                "tipo_cobranza": tipo_val,
                 "capital": row.capital,
                 "interes": row.interes,
                 "iva": row.iva,
                 "fecha": payment_date,
+                "facturada": facturada,
             })
 
-        self.db.bulk_insert_mappings(Cobranza, records)
+        from sqlalchemy import insert
+        self.db.execute(insert(Cobranza), records)
         self.db.flush()
 
         # 2. Identify and update all affected credits dynamically

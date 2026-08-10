@@ -12,6 +12,13 @@ const AuxiliaryTablesPage = () => {
   const [editFormData, setEditFormData] = useState({});
   const [feedback, setFeedback] = useState(null);
   const [columnFilters, setColumnFilters] = useState({});
+  const [sortConfig, setSortConfig] = useState({ key: 'id', direction: 'desc' });
+
+  const handleSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
+    setSortConfig({ key, direction });
+  };
   
   // Advance Adjustment State
   const [adjustingAdvance, setAdjustingAdvance] = useState(null);
@@ -209,6 +216,14 @@ const AuxiliaryTablesPage = () => {
     });
   });
 
+  const sortedData = [...filteredData].sort((a, b) => {
+    let valA = a[sortConfig.key];
+    let valB = b[sortConfig.key];
+    if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+    if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+    return 0;
+  });
+
   return (
     <section className="tab-content active" style={{ animation: 'fadeIn 0.4s ease' }}>
       <header className="section-header">
@@ -269,15 +284,50 @@ const AuxiliaryTablesPage = () => {
                   else if (col === 'id_provincia' || col === 'provincia_id') headerText = 'PROVINCIA';
                   else if (col === 'es_pasivo') headerText = 'ES PASIVO';
                   return (
-                    <th key={col}>
-                      {headerText}
-                      <input 
-                        type="text" 
-                        placeholder="Filtrar..." 
-                        value={columnFilters[col] || ''} 
-                        onChange={(e) => setColumnFilters(prev => ({ ...prev, [col]: e.target.value }))}
-                        style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', boxSizing: 'border-box' }}
-                      />
+                    <th key={col} onClick={() => handleSort(col)} style={{ cursor: 'pointer', verticalAlign: 'top' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}>
+                        {headerText}
+                        <span style={{ fontSize: '10px', opacity: sortConfig.key === col ? 1 : 0.3 }}>
+                          {sortConfig.key === col ? (sortConfig.direction === 'asc' ? '⬆️' : '⬇️') : '↕️'}
+                        </span>
+                      </div>
+                      <div onClick={e => e.stopPropagation()}>
+                        {activeTable === 'tasasYComisiones' && col === 'estado' ? (
+                          <select 
+                            value={columnFilters[col] || ''} 
+                            onChange={(e) => setColumnFilters(prev => ({ ...prev, [col]: e.target.value }))}
+                            style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', boxSizing: 'border-box' }}
+                          >
+                            <option value="">Todos</option>
+                            <option value="ACTIVA">ACTIVA</option>
+                            <option value="INACTIVA">INACTIVA</option>
+                          </select>
+                        ) : activeTable === 'tasasYComisiones' && ['socio_originador_id', 'socio_intermediario_id', 'gasto_1_socio_id', 'gasto_2_socio_id'].includes(col) ? (
+                          <select 
+                            value={columnFilters[col] || ''} 
+                            onChange={(e) => setColumnFilters(prev => ({ ...prev, [col]: e.target.value }))}
+                            style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', boxSizing: 'border-box' }}
+                          >
+                            <option value="">Todos</option>
+                            {socios.map(s => <option key={s.id} value={s.razon_social}>{s.razon_social}</option>)}
+                          </select>
+                        ) : activeTable === 'tasasYComisiones' && col === 'fecha' ? (
+                          <input 
+                            type="date"
+                            value={columnFilters[col] || ''}
+                            onChange={(e) => setColumnFilters(prev => ({ ...prev, [col]: e.target.value }))}
+                            style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', boxSizing: 'border-box' }}
+                          />
+                        ) : (
+                          <input 
+                            type="text" 
+                            placeholder="Filtrar..." 
+                            value={columnFilters[col] || ''} 
+                            onChange={(e) => setColumnFilters(prev => ({ ...prev, [col]: e.target.value }))}
+                            style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', boxSizing: 'border-box' }}
+                          />
+                        )}
+                      </div>
                     </th>
                   );
                 })}
@@ -285,14 +335,14 @@ const AuxiliaryTablesPage = () => {
               </tr>
             </thead>
             <tbody>
-              {filteredData.length === 0 ? (
+              {sortedData.length === 0 ? (
                 <tr>
                   <td colSpan={columns.length + 1} className="text-center empty-state">
                     No hay registros que coincidan con la búsqueda.
                   </td>
                 </tr>
               ) : (
-                filteredData.map((row) => (
+                sortedData.map((row) => (
                   <tr key={row.id}>
                     {columns.map(col => (
                       <td key={col}>{formatCellValue(col, row[col])}</td>
