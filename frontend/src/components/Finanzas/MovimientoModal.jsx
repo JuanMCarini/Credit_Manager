@@ -18,6 +18,7 @@ const MovimientoModal = ({ isOpen, onClose, onSaved, movimiento = null, cuentaId
     cuenta_id: cuentaIdDefault,
     fecha: new Date().toISOString().substring(0, 10),
     monto: '',
+    nro_comprobante: '',
     concepto_id: '',
     descripcion: ''
   });
@@ -41,6 +42,7 @@ const MovimientoModal = ({ isOpen, onClose, onSaved, movimiento = null, cuentaId
           cuenta_id: movimiento.cuenta_id,
           fecha: movimiento.fecha,
           monto: movimiento.monto,
+          nro_comprobante: movimiento.nro_comprobante || '',
           concepto_id: movimiento.concepto_id,
           descripcion: movimiento.descripcion || ''
         });
@@ -49,6 +51,7 @@ const MovimientoModal = ({ isOpen, onClose, onSaved, movimiento = null, cuentaId
           cuenta_id: cuentaIdDefault,
           fecha: new Date().toISOString().substring(0, 10),
           monto: '',
+          nro_comprobante: '',
           concepto_id: '',
           descripcion: ''
         });
@@ -180,7 +183,12 @@ const MovimientoModal = ({ isOpen, onClose, onSaved, movimiento = null, cuentaId
 
           <div>
             <label className="form-label">Monto</label>
-            <input type="number" step="0.01" min="0" name="monto" value={formData.monto} onChange={handleChange} className="form-control" required placeholder="0.00" />
+            <input type="number" step="0.01" name="monto" value={formData.monto} onChange={handleChange} className="form-control" required placeholder="0.00" />
+          </div>
+
+          <div>
+            <label className="form-label">Nro. Comprobante</label>
+            <input type="text" name="nro_comprobante" value={formData.nro_comprobante} onChange={handleChange} className="form-control" placeholder="Opcional" />
           </div>
           
           <div>

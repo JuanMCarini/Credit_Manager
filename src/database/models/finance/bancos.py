@@ -1,5 +1,5 @@
 import enum
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Date, Float, Enum as SQLEnum
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Date, Float, Enum as SQLEnum, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from src.database import Base
@@ -23,6 +23,11 @@ class Banco(Base):
     # Relación a Cuentas
     cuentas = relationship("Cuenta", back_populates="banco")
 
+class TipoMoneda(enum.Enum):
+    PESOS = "Pesos Argentinos $"
+    DOLARES = "Dólares Estadounidenses USD"
+    EUROS = "Euros EUR"
+
 class Cuenta(Base):
     __tablename__ = "cuentas"
 
@@ -33,12 +38,13 @@ class Cuenta(Base):
     cbu = Column(String(22), nullable=False, unique=True)
     alias = Column(String(50), nullable=False, unique=True)
     tipo_cuenta = Column(String(20), nullable=False)
+    moneda = Column(SQLEnum(TipoMoneda), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     # Relaciones
     banco = relationship("Banco", back_populates="cuentas")
-    movimientos = relationship("Movimiento", back_populates="cuenta")
+    movimientos = relationship("Movimiento", back_populates="cuenta", order_by="Movimiento.fecha")
 
     @property
     def saldo(self) -> float:
@@ -60,6 +66,9 @@ class Cuenta(Base):
                 total -= mov.monto
             elif mov.concepto.tipo_movimiento == CategoriaMovimiento.SUSCRIPCION_FCI:
                 total += mov.monto
+
+            total = max(0.0, total)
+
         return total
 
     @property
@@ -71,6 +80,9 @@ class Cuenta(Base):
                 total += mov.monto
             elif mov.concepto.tipo_movimiento == CategoriaMovimiento.PLAZO_FIJO_EGRESOS:
                 total -= mov.monto
+
+            total = max(0.0, total)
+
         return total
 
 class Concepto(Base):
@@ -80,6 +92,7 @@ class Concepto(Base):
     name = Column(String(100), unique=True, nullable=False)
     tipo_movimiento = Column(SQLEnum(CategoriaMovimiento), nullable=False)
     descripcion = Column(String(255), nullable=False)
+    is_system = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
@@ -92,8 +105,9 @@ class Movimiento(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     cuenta_id = Column(Integer, ForeignKey("cuentas.id"), nullable=False)
     fecha = Column(Date, nullable=False)
+    nro_comprobante = Column(String(20), nullable=True)
     monto = Column(Float, nullable=False)
-    concepto_id = Column(Integer, ForeignKey("conceptos.id"), nullable=False)
+    concepto_id = Column(Integer, ForeignKey("conceptos.id"), nullable=True)
     descripcion = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)

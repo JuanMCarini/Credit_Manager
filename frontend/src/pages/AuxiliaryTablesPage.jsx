@@ -52,7 +52,7 @@ const AuxiliaryTablesPage = () => {
     relaciones: { name: 'Relaciones Mapeadas', data: relaciones, endpoint: 'relaciones', schema: ['id', 'socio_id', 'tabla', 'id_local', 'id_foraneo'] },
     comercializadores: { name: 'Comercializadores', data: comercializadores, endpoint: 'comercializadores', schema: ['id', 'nombre'] },
     bancos: { name: 'Bancos', data: bancos, endpoint: 'bancos', basePath: '/api/finanzas', schema: ['id', 'nombre_banco'] },
-    cuentas: { name: 'Cuentas Bancarias', data: cuentas, endpoint: 'cuentas', basePath: '/api/finanzas', schema: ['id', 'nombre', 'banco_id', 'nro', 'cbu', 'alias', 'tipo_cuenta'] },
+    cuentas: { name: 'Cuentas Bancarias', data: cuentas, endpoint: 'cuentas', basePath: '/api/finanzas', schema: ['id', 'nombre', 'banco_id', 'nro', 'cbu', 'alias', 'tipo_cuenta', 'moneda'] },
     conceptos: { name: 'Conceptos', data: conceptos, endpoint: 'conceptos', basePath: '/api/finanzas', schema: ['id', 'name', 'tipo_movimiento', 'descripcion'] }
   };
 
@@ -98,7 +98,9 @@ const AuxiliaryTablesPage = () => {
         } else if (c === 'es_pasivo') {
           emptyForm[c] = false;
         } else if (c === 'fecha') {
-          emptyForm[c] = new Date().toISOString().split('T')[0]; // Default today
+          emptyForm[c] = new Date().toISOString().substring(0, 10);
+        } else if (c === 'moneda') {
+          emptyForm[c] = 'Pesos Argentinos $';
         } else if (c === 'anticipo_vigente') {
           emptyForm[c] = 0;
         } else {
@@ -533,6 +535,17 @@ const AuxiliaryTablesPage = () => {
                       >
                         <option value="">Seleccione...</option>
                         {['Cuenta Corriente', 'Caja de Ahorros', 'Plazo Fijo', 'Fondo Común de Inversión'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                      </select>
+                    );
+                  } else if (col === 'moneda') {
+                    inputElement = (
+                      <select
+                        value={editFormData[col] ?? ''} 
+                        onChange={(e) => handleEditChange(col, e.target.value)}
+                        className="input-field" required
+                      >
+                        <option value="">Seleccione...</option>
+                        {['Pesos Argentinos $', 'Dólares Estadounidenses USD', 'Euros EUR'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
                       </select>
                     );
                   } else if (col === 'tipo_movimiento') {

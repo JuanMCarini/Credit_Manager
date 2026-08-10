@@ -1,8 +1,22 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { DollarSign, Plus, Edit2, Trash2, Calendar, Landmark, Settings } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { DollarSign, Plus, Edit2, Trash2, Calendar, Landmark, Settings, Upload } from 'lucide-react';
 import axiosClient from '../../api/axiosClient';
 import CuentaModal from './CuentaModal';
 import MovimientoModal from './MovimientoModal';
+import ExcelDateFilter from '../ExcelDateFilter';
+import ExcelListFilter from '../ExcelListFilter';
+
+const FilterInput = ({ col, columnFilters, setColumnFilters }) => (
+  <div onClick={e => e.stopPropagation()}>
+    <input 
+      type="text" 
+      placeholder="Filtrar..." 
+      value={columnFilters[col] || ''} 
+      onChange={(e) => setColumnFilters(prev => ({ ...prev, [col]: e.target.value }))}
+      style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', boxSizing: 'border-box', fontWeight: 'normal' }}
+    />
+  </div>
+);
 
 const BancosTab = () => {
   const [cuentas, setCuentas] = useState([]);
@@ -22,6 +36,13 @@ const BancosTab = () => {
   // Filters for Movimientos
   const [filtroDesde, setFiltroDesde] = useState('');
   const [filtroHasta, setFiltroHasta] = useState('');
+  const [columnFilters, setColumnFilters] = useState({});
+
+  // Bulk Edit State
+  const [selectedMovimientoIds, setSelectedMovimientoIds] = useState([]);
+  const [conceptosOptions, setConceptosOptions] = useState([]);
+  const [bulkConceptoId, setBulkConceptoId] = useState('');
+  const [bulkUpdating, setBulkUpdating] = useState(false);
 
   const fetchCuentas = useCallback(async () => {
     try {
@@ -62,6 +83,19 @@ const BancosTab = () => {
     fetchCuentas();
   }, [fetchCuentas]);
 
+  const fetchConceptos = useCallback(async () => {
+    try {
+      const res = await axiosClient.get('/api/finanzas/conceptos');
+      setConceptosOptions(res.data);
+    } catch (err) {
+      console.error(err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchConceptos();
+  }, [fetchConceptos]);
+
   useEffect(() => {
     fetchDashboardData();
   }, [fetchDashboardData]);
@@ -77,6 +111,70 @@ const BancosTab = () => {
   const handleEditMovimiento = (mov) => {
     setEditingMovimiento(mov);
     setIsMovimientoModalOpen(true);
+  };
+
+  const handleSelectAll = (e) => {
+    if (e.target.checked) {
+      setSelectedMovimientoIds(filteredMovimientos.map(m => m.id));
+    } else {
+      setSelectedMovimientoIds([]);
+    }
+  };
+
+  const handleSelectMovimiento = (id) => {
+    setSelectedMovimientoIds(prev => 
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleBulkUpdate = async () => {
+    if (!bulkConceptoId || selectedMovimientoIds.length === 0) return;
+    setBulkUpdating(true);
+    try {
+      await axiosClient.put('/api/finanzas/movimientos/bulk-concepto', {
+        movimiento_ids: selectedMovimientoIds,
+        concepto_id: parseInt(bulkConceptoId)
+      });
+      setSelectedMovimientoIds([]);
+      setBulkConceptoId('');
+      fetchDashboardData();
+    } catch (err) {
+      console.error(err);
+      alert('Error al actualizar los movimientos.');
+    } finally {
+      setBulkUpdating(false);
+    }
+  };
+
+  const fileInputRef = useRef(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file || !selectedCuentaId) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    setIsUploading(true);
+    try {
+      const res = await axiosClient.post(`/api/finanzas/cuentas/${selectedCuentaId}/importar-extracto-bica`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      alert(res.data.message + ". Filas procesadas: " + res.data.filas_procesadas);
+      fetchDashboardData();
+    } catch (err) {
+      console.error(err);
+      alert('Error al subir el archivo: ' + (err.response?.data?.detail || err.message));
+    } finally {
+      setIsUploading(false);
+      // Reset input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
   };
 
   const handleDeleteMovimiento = async (id) => {
@@ -97,6 +195,62 @@ const BancosTab = () => {
       minimumFractionDigits: 2
     }).format(value || 0);
   };
+
+  const uniqueDates = useMemo(() => {
+    return [...new Set(movimientos.map(m => m.fecha))].filter(Boolean).sort();
+  }, [movimientos]);
+
+  const uniqueConceptos = useMemo(() => {
+    return [...new Set(movimientos.map(m => {
+      const cat = m.concepto?.tipo_movimiento || '';
+      const text = `${m.concepto?.name || ''} ${cat}`.trim();
+      return text || '(Vacío)';
+    }))].sort();
+  }, [movimientos]);
+
+  const filteredMovimientos = useMemo(() => {
+    return movimientos.filter(mov => {
+      const cat = mov.concepto?.tipo_movimiento || '';
+      const isIngreso = cat === 'Ingreso' || cat === 'Rescate FCI' || cat === 'Egresos de plazo fijo';
+      let conceptoText = `${mov.concepto?.name || ''} ${cat}`.trim();
+      if (!conceptoText) conceptoText = '(Vacío)';
+
+      if (columnFilters['fecha']?.length > 0 && !columnFilters['fecha'].includes(mov.fecha)) return false;
+      
+      if (columnFilters['concepto']?.length > 0 && !columnFilters['concepto'].includes(conceptoText)) return false;
+      
+      if (columnFilters['nro_comprobante'] && !(mov.nro_comprobante || '-').toLowerCase().includes(columnFilters['nro_comprobante'].toLowerCase())) return false;
+      
+      if (columnFilters['descripcion'] && !(mov.descripcion || '-').toLowerCase().includes(columnFilters['descripcion'].toLowerCase())) return false;
+      
+      if (columnFilters['ingreso']) {
+         if (!isIngreso) return false;
+         if (!formatCurrency(mov.monto).toLowerCase().includes(columnFilters['ingreso'].toLowerCase())) return false;
+      }
+      
+      if (columnFilters['egreso']) {
+         if (isIngreso) return false;
+         if (!formatCurrency(mov.monto).toLowerCase().includes(columnFilters['egreso'].toLowerCase())) return false;
+      }
+      
+      return true;
+    });
+  }, [movimientos, columnFilters]);
+
+  const subtotals = useMemo(() => {
+    let ingresos = 0;
+    let egresos = 0;
+    filteredMovimientos.forEach(mov => {
+      const cat = mov.concepto?.tipo_movimiento;
+      const isIngreso = cat === 'Ingreso' || cat === 'Rescate FCI' || cat === 'Egresos de plazo fijo';
+      if (isIngreso) {
+        ingresos += Number(mov.monto) || 0;
+      } else {
+        egresos += Number(mov.monto) || 0;
+      }
+    });
+    return { ingresos, egresos };
+  }, [filteredMovimientos]);
 
   return (
     <div style={{ animation: 'fadeIn 0.3s ease-in-out' }}>
@@ -203,44 +357,147 @@ const BancosTab = () => {
               value={filtroHasta} 
               onChange={(e) => setFiltroHasta(e.target.value)} 
             />
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              style={{ display: 'none' }} 
+              accept=".xls,.xlsx" 
+              onChange={handleFileUpload} 
+            />
+            <button 
+              className="btn btn-secondary" 
+              onClick={() => fileInputRef.current && fileInputRef.current.click()} 
+              disabled={!selectedCuentaId || isUploading} 
+              style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+            >
+              <Upload size={18} /> {isUploading ? 'Importando...' : 'Importar BICA'}
+            </button>
             <button className="btn btn-primary" onClick={() => { setEditingMovimiento(null); setIsMovimientoModalOpen(true); }} disabled={!selectedCuentaId} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Plus size={18} /> Nuevo Movimiento
             </button>
           </div>
         </div>
 
+        {selectedMovimientoIds.length > 0 && (
+          <div style={{ background: 'var(--surface-color)', border: '1px solid var(--border-color)', padding: '12px 16px', borderRadius: 'var(--radius)', display: 'flex', gap: '16px', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', boxShadow: 'var(--shadow-sm)' }}>
+            <span style={{ fontWeight: '500', color: 'var(--text-color)' }}>{selectedMovimientoIds.length} movimientos seleccionados</span>
+            <select 
+              className="form-control" 
+              value={bulkConceptoId}
+              onChange={e => setBulkConceptoId(e.target.value)}
+              style={{ flex: 1, minWidth: '200px', maxWidth: '400px' }}
+            >
+              <option value="">Seleccione concepto a asignar...</option>
+              {conceptosOptions.map(c => (
+                <option key={c.id} value={c.id}>{c.name} ({c.tipo_movimiento})</option>
+              ))}
+            </select>
+            <button 
+              className="btn btn-primary" 
+              style={{ padding: '6px 12px', fontSize: '13px', width: 'auto' }}
+              onClick={handleBulkUpdate}
+              disabled={!bulkConceptoId || bulkUpdating}
+            >
+              {bulkUpdating ? 'Actualizando...' : 'Aplicar Concepto'}
+            </button>
+            <button 
+              className="btn btn-outline" 
+              style={{ padding: '6px 12px', fontSize: '13px', width: 'auto' }}
+              onClick={() => setSelectedMovimientoIds([])} 
+            >
+              Cancelar
+            </button>
+          </div>
+        )}
+
         <div className="table-responsive">
           <table className="data-table">
             <thead>
               <tr>
-                <th style={{ width: '120px' }}>Fecha</th>
-                <th>Concepto</th>
-                <th>Descripción</th>
-                <th style={{ textAlign: 'right' }}>Ingreso</th>
-                <th style={{ textAlign: 'right' }}>Egreso</th>
-                <th style={{ width: '100px', textAlign: 'center' }}>Acciones</th>
+                <th style={{ width: '40px', textAlign: 'center', verticalAlign: 'top' }}>
+                  <div>
+                    <input 
+                      type="checkbox"
+                      checked={filteredMovimientos.length > 0 && selectedMovimientoIds.length === filteredMovimientos.length}
+                      onChange={handleSelectAll}
+                    />
+                  </div>
+                </th>
+                <th style={{ width: '120px', verticalAlign: 'top' }}>
+                  <div>Fecha</div>
+                  <ExcelDateFilter 
+                    availableDates={uniqueDates}
+                    selectedDates={columnFilters['fecha'] || []}
+                    onChange={(opts) => setColumnFilters(prev => ({ ...prev, fecha: opts }))}
+                  />
+                </th>
+                <th style={{ verticalAlign: 'top' }}>
+                  <div>Concepto</div>
+                  <ExcelListFilter 
+                    availableOptions={uniqueConceptos}
+                    selectedOptions={columnFilters['concepto'] || []}
+                    onChange={(opts) => setColumnFilters(prev => ({ ...prev, concepto: opts }))}
+                    title="Buscar Concepto..."
+                  />
+                </th>
+                <th style={{ verticalAlign: 'top' }}>
+                  <div>Nro. Comp</div>
+                  <FilterInput col="nro_comprobante" columnFilters={columnFilters} setColumnFilters={setColumnFilters} />
+                </th>
+                <th style={{ verticalAlign: 'top' }}>
+                  <div>Descripción</div>
+                  <FilterInput col="descripcion" columnFilters={columnFilters} setColumnFilters={setColumnFilters} />
+                </th>
+                <th style={{ textAlign: 'right', verticalAlign: 'top' }}>
+                  <div>Ingreso</div>
+                  <FilterInput col="ingreso" columnFilters={columnFilters} setColumnFilters={setColumnFilters} />
+                </th>
+                <th style={{ textAlign: 'right', verticalAlign: 'top' }}>
+                  <div>Egreso</div>
+                  <FilterInput col="egreso" columnFilters={columnFilters} setColumnFilters={setColumnFilters} />
+                </th>
+                <th style={{ width: '100px', textAlign: 'center', verticalAlign: 'top' }}>Acciones</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan="6" style={{ textAlign: 'center', padding: '30px' }}><span className="spinner"></span></td>
+                  <td colSpan="7" style={{ textAlign: 'center', padding: '30px' }}><span className="spinner"></span></td>
                 </tr>
-              ) : movimientos.length === 0 ? (
+              ) : filteredMovimientos.length === 0 ? (
                 <tr>
-                  <td colSpan="6" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>No hay movimientos en esta cuenta para los filtros seleccionados.</td>
+                  <td colSpan="8" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>No hay movimientos en esta cuenta para los filtros seleccionados.</td>
                 </tr>
               ) : (
-                movimientos.map((mov) => {
+                filteredMovimientos.map((mov) => {
                   const cat = mov.concepto?.tipo_movimiento;
-                  const isIngreso = cat === 'Ingresos' || cat === 'Rescate FCI' || cat === 'Plazo Fijo - Egresos';
+                  const isIngreso = cat === 'Ingreso' || cat === 'Rescate FCI' || cat === 'Egresos de plazo fijo';
+                  const isUnclassified = !mov.concepto || mov.concepto.name.includes('NO CLASIFICADO');
+                  
+                  let rowStyle = {};
+                  if (selectedMovimientoIds.includes(mov.id)) {
+                    rowStyle = { backgroundColor: 'rgba(var(--primary-rgb), 0.05)' };
+                  } else if (isUnclassified) {
+                    rowStyle = { backgroundColor: 'rgba(245, 158, 11, 0.05)' }; // Subtle warning background
+                  }
+
                   return (
-                    <tr key={mov.id}>
+                    <tr key={mov.id} style={rowStyle}>
+                      <td style={{ textAlign: 'center' }}>
+                        <input 
+                          type="checkbox"
+                          checked={selectedMovimientoIds.includes(mov.id)}
+                          onChange={() => handleSelectMovimiento(mov.id)}
+                        />
+                      </td>
                       <td>{mov.fecha}</td>
                       <td>
-                        <div style={{ fontWeight: '500' }}>{mov.concepto?.name}</div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{cat}</div>
+                        <div style={{ fontWeight: '500', color: isUnclassified ? 'var(--warning)' : 'inherit' }}>
+                          {mov.concepto?.name || 'Sin Clasificar'}
+                        </div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{cat || '-'}</div>
                       </td>
+                      <td>{mov.nro_comprobante || '-'}</td>
                       <td>{mov.descripcion || '-'}</td>
                       <td style={{ textAlign: 'right', color: isIngreso ? 'var(--success-color)' : 'inherit', fontWeight: isIngreso ? 'bold' : 'normal' }}>
                         {isIngreso ? formatCurrency(mov.monto) : '-'}
@@ -263,6 +520,20 @@ const BancosTab = () => {
                 })
               )}
             </tbody>
+            {filteredMovimientos.length > 0 && (
+              <tfoot style={{ backgroundColor: 'var(--surface-color)', borderTop: '2px solid var(--border-color)' }}>
+                <tr>
+                  <td colSpan="5" style={{ textAlign: 'right', padding: '16px', fontWeight: 'bold' }}>Subtotales filtrados:</td>
+                  <td style={{ textAlign: 'right', color: 'var(--success-color)', padding: '16px', fontWeight: 'bold' }}>
+                    {formatCurrency(subtotals.ingresos)}
+                  </td>
+                  <td style={{ textAlign: 'right', color: 'var(--danger-color)', padding: '16px', fontWeight: 'bold' }}>
+                    {formatCurrency(subtotals.egresos)}
+                  </td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       </div>
