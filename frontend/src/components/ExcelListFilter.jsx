@@ -18,11 +18,24 @@ const ExcelListFilter = ({ availableOptions, selectedOptions, onChange, title = 
     const updatePosition = () => {
       if (isOpen && dropdownRef.current) {
         const rect = dropdownRef.current.getBoundingClientRect();
-        setCoords({
-          left: rect.left,
-          top: rect.bottom + 4,
-          width: Math.max(220, rect.width)
-        });
+        
+        const popupEstimatedHeight = 280; 
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const spaceAbove = rect.top;
+        
+        if (spaceBelow < popupEstimatedHeight && spaceAbove > spaceBelow) {
+          setCoords({
+            left: rect.left,
+            bottom: window.innerHeight - rect.top + 4,
+            width: Math.max(220, rect.width)
+          });
+        } else {
+          setCoords({
+            left: rect.left,
+            top: rect.bottom + 4,
+            width: Math.max(220, rect.width)
+          });
+        }
       }
     };
 
@@ -67,11 +80,12 @@ const ExcelListFilter = ({ availableOptions, selectedOptions, onChange, title = 
 
   const filteredOptions = useMemo(() => {
     const searchLower = search.toLowerCase();
-    const uniqueOptions = [...new Set(availableOptions.filter(opt => opt !== null && opt !== undefined).map(String))];
+    const combinedOptions = [...availableOptions, ...(selectedOptions || [])];
+    const uniqueOptions = [...new Set(combinedOptions.filter(opt => opt !== null && opt !== undefined).map(String))];
     
     if (!searchLower) return uniqueOptions;
     return uniqueOptions.filter(opt => opt.toLowerCase().includes(searchLower));
-  }, [availableOptions, search]);
+  }, [availableOptions, selectedOptions, search]);
 
   const toggleOption = (option) => {
     setLocalSet(prev => {
@@ -99,7 +113,8 @@ const ExcelListFilter = ({ availableOptions, selectedOptions, onChange, title = 
   };
 
   const handleAceptar = () => {
-    const allAvailable = new Set(availableOptions.filter(opt => opt !== null && opt !== undefined).map(String));
+    const combinedOptions = [...availableOptions, ...(selectedOptions || [])];
+    const allAvailable = new Set(combinedOptions.filter(opt => opt !== null && opt !== undefined).map(String));
     
     // If everything available is selected (or nothing to filter from), return empty array to clear filter
     if (localSet.size === allAvailable.size) {
@@ -139,7 +154,10 @@ const ExcelListFilter = ({ availableOptions, selectedOptions, onChange, title = 
         <div 
           ref={popupRef}
           style={{
-            position: 'fixed', top: coords.top, left: coords.left, zIndex: 9999,
+            position: 'fixed', 
+            top: coords.top !== undefined ? coords.top : 'auto', 
+            bottom: coords.bottom !== undefined ? coords.bottom : 'auto',
+            left: coords.left, zIndex: 9999,
             background: 'var(--surface-color)', border: '1px solid var(--border-color)',
             borderRadius: '6px', padding: '8px', width: `${coords.width}px`,
             boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
@@ -201,15 +219,23 @@ const ExcelListFilter = ({ availableOptions, selectedOptions, onChange, title = 
             )}
           </div>
 
-          <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', marginTop: '4px' }}>
+          <div style={{ display: 'flex', gap: '6px', justifyContent: 'space-between', marginTop: '4px' }}>
             <button 
-              onClick={() => setIsOpen(false)}
-              style={{ padding: '4px 8px', fontSize: '12px', background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-color)', cursor: 'pointer', borderRadius: '4px' }}
-            >Cancelar</button>
-            <button 
-              onClick={handleAceptar}
-              style={{ padding: '4px 8px', fontSize: '12px', background: 'var(--primary-color)', border: 'none', color: 'white', borderRadius: '4px', cursor: 'pointer' }}
-            >Aceptar</button>
+              onClick={() => { onChange([]); setIsOpen(false); }}
+              style={{ padding: '4px 8px', fontSize: '12px', background: 'transparent', border: 'none', color: 'var(--danger-color)', cursor: 'pointer', borderRadius: '4px', fontWeight: 'bold' }}
+            >
+              Limpiar
+            </button>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button 
+                onClick={() => setIsOpen(false)}
+                style={{ padding: '4px 8px', fontSize: '12px', background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-color)', cursor: 'pointer', borderRadius: '4px' }}
+              >Cancelar</button>
+              <button 
+                onClick={handleAceptar}
+                style={{ padding: '4px 8px', fontSize: '12px', background: 'var(--primary-color)', border: 'none', color: 'white', borderRadius: '4px', cursor: 'pointer' }}
+              >Aceptar</button>
+            </div>
           </div>
         </div>,
         document.body

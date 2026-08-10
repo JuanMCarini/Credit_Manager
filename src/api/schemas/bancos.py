@@ -1,7 +1,7 @@
 from pydantic import BaseModel, ConfigDict
 from typing import Optional, List
 from datetime import datetime, date
-from src.database.models.finance.bancos import CategoriaMovimiento
+from src.database.models.finance.bancos import CategoriaMovimiento, TipoMoneda
 
 # =======================
 # Banco Schemas
@@ -32,6 +32,7 @@ class CuentaBase(BaseModel):
     cbu: str
     alias: str
     tipo_cuenta: str
+    moneda: TipoMoneda
 
 class CuentaCreate(CuentaBase):
     pass
@@ -43,6 +44,7 @@ class CuentaUpdate(BaseModel):
     cbu: Optional[str] = None
     alias: Optional[str] = None
     tipo_cuenta: Optional[str] = None
+    moneda: Optional[TipoMoneda] = None
 
 class CuentaResponse(CuentaBase):
     id: int
@@ -62,6 +64,7 @@ class ConceptoBase(BaseModel):
     name: str
     tipo_movimiento: CategoriaMovimiento
     descripcion: Optional[str] = None
+    is_system: bool = False
 
 class ConceptoCreate(ConceptoBase):
     pass
@@ -84,8 +87,9 @@ class ConceptoResponse(ConceptoBase):
 class MovimientoBase(BaseModel):
     cuenta_id: int
     fecha: date
+    nro_comprobante: Optional[str] = None
     monto: float
-    concepto_id: int
+    concepto_id: Optional[int] = None
     descripcion: Optional[str] = None
 
 class MovimientoCreate(MovimientoBase):
@@ -94,9 +98,14 @@ class MovimientoCreate(MovimientoBase):
 class MovimientoUpdate(BaseModel):
     cuenta_id: Optional[int] = None
     fecha: Optional[date] = None
+    nro_comprobante: Optional[str] = None
     monto: Optional[float] = None
     concepto_id: Optional[int] = None
     descripcion: Optional[str] = None
+
+class MovimientoBulkConceptoUpdate(BaseModel):
+    movimiento_ids: List[int]
+    concepto_id: int
 
 class MovimientoResponse(MovimientoBase):
     id: int

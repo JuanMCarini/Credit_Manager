@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, HTTPException, Path, Body
+from fastapi import APIRouter, Depends, Query, HTTPException, Path, Body, UploadFile, File
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, and_, func
 from datetime import date
@@ -16,8 +16,9 @@ from src.api.schemas.bancos import (
     BancoCreate, BancoUpdate, BancoResponse,
     CuentaCreate, CuentaUpdate, CuentaResponse,
     ConceptoCreate, ConceptoUpdate, ConceptoResponse,
-    MovimientoCreate, MovimientoUpdate, MovimientoResponse
+    MovimientoCreate, MovimientoUpdate, MovimientoResponse, MovimientoBulkConceptoUpdate
 )
+from src.logic.import_data.bancos.bica import import_extract
 
 router = APIRouter(
     prefix="/api/finanzas",
@@ -263,7 +264,7 @@ def get_cuenta_kpis(cuenta_id: int, fecha_corte: date = Query(default_factory=da
     movs = db.query(Movimiento).join(Concepto).filter(
         Movimiento.cuenta_id == cuenta_id,
         Movimiento.fecha <= fecha_corte
-    ).all()
+    ).order_by(Movimiento.fecha, Movimiento.id).all()
     
     saldo = 0.0
     saldo_fci = 0.0
@@ -283,12 +284,14 @@ def get_cuenta_kpis(cuenta_id: int, fecha_corte: date = Query(default_factory=da
             saldo_fci += m.monto
         elif cat == CategoriaMovimiento.RESCATE_FCI:
             saldo_fci -= m.monto
+        saldo_fci = max(0.0, saldo_fci)
             
         # PF
         if cat == CategoriaMovimiento.PLAZO_FIJO_INGRESOS:
             saldo_pf += m.monto
         elif cat == CategoriaMovimiento.PLAZO_FIJO_EGRESOS:
             saldo_pf -= m.monto
+        saldo_pf = max(0.0, saldo_pf)
 
     return {
         "saldo": saldo,
@@ -325,6 +328,29 @@ def delete_cuenta(cuenta_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"message": "Cuenta eliminada correctamente"}
 
+@router.post("/cuentas/{cuenta_id}/importar-extracto-bica")
+def importar_extracto_bica(
+    cuenta_id: int, 
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    # Verify account exists
+    cuenta = db.query(Cuenta).filter(Cuenta.id == cuenta_id).first()
+    if not cuenta:
+        raise HTTPException(status_code=404, detail="Cuenta no encontrada")
+    
+    if not file.filename.endswith((".xls", ".xlsx")):
+        raise HTTPException(status_code=400, detail="El archivo debe ser Excel (.xlsx o .xls)")
+
+    try:
+        # Pass the spooled temporary file directly to Pandas
+        df = import_extract(file.file, cuenta_id)
+        # Note: import_extract already commits new movimientos
+        return {"message": "Extracto importado exitosamente", "filas_procesadas": len(df)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # -------------------------------------------------------------------
 # Conceptos
 # -------------------------------------------------------------------
@@ -356,6 +382,10 @@ def delete_concepto(concepto_id: int, db: Session = Depends(get_db)):
     db_concepto = db.query(Concepto).filter(Concepto.id == concepto_id).first()
     if not db_concepto:
         raise HTTPException(status_code=404, detail="Concepto no encontrado")
+    
+    if getattr(db_concepto, 'is_system', False):
+        raise HTTPException(status_code=400, detail="No se puede eliminar un concepto de sistema")
+        
     db.delete(db_concepto)
     db.commit()
     return {"message": "Concepto eliminado correctamente"}
@@ -393,6 +423,18 @@ def create_movimiento(movimiento: MovimientoCreate, db: Session = Depends(get_db
     db.commit()
     db.refresh(db_mov)
     return db_mov
+
+@router.put("/movimientos/bulk-concepto")
+def update_movimiento_bulk(data: MovimientoBulkConceptoUpdate, db: Session = Depends(get_db)):
+    concepto = db.query(Concepto).filter(Concepto.id == data.concepto_id).first()
+    if not concepto:
+        raise HTTPException(status_code=404, detail="Concepto no encontrado")
+        
+    updated_count = db.query(Movimiento).filter(Movimiento.id.in_(data.movimiento_ids)).update(
+        {"concepto_id": data.concepto_id}, synchronize_session=False
+    )
+    db.commit()
+    return {"message": f"Se actualizaron {updated_count} movimientos correctamente"}
 
 @router.put("/movimientos/{movimiento_id}", response_model=MovimientoResponse)
 def update_movimiento(movimiento_id: int, movimiento: MovimientoUpdate, db: Session = Depends(get_db)):
