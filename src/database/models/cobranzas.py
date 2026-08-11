@@ -150,20 +150,21 @@ class Cobranza(Base):
 
                 db = Session(bind=context.connection)
 
-                iva = db.query(Cartera.iva).join(
+                result = db.query(Cartera.iva, Cartera.tipo_operacion).join(
                     OperacionCartera, Cartera.id == OperacionCartera.cartera_id
                 ).filter(
                     OperacionCartera.cuota_id == cuota_id
                 ).order_by(
                     OperacionCartera.id.desc()
-                ).limit(1).scalar()
+                ).limit(1).first()
                 
-                if iva is not None:
-                    # Cuota vendida/cedida a un socio
-                    if iva is True:
-                        return False # Fue comprada con IVA -> Se factura
+                if result is not None:
+                    iva, tipo_op = result
+                    from src.database.models.carteras import TipoOperacionCartera
+                    if tipo_op == TipoOperacionCartera.VENTA:
+                        return True if iva is True else False
                     else:
-                        return True  # Fue comprada sin IVA -> No se factura
+                        return False if iva is True else True
                 else:
                     # Cuota propia (no cedida)
                     if tipo_val == TipoCobranzaEnum.RECURSO.value:
