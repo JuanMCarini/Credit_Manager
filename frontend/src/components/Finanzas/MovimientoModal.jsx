@@ -14,10 +14,10 @@ const CategoriaMovimientoOpciones = [
 const MovimientoModal = ({ isOpen, onClose, onSaved, movimiento = null, cuentaIdDefault = '' }) => {
   const [cuentas, setCuentas] = useState([]);
   const [conceptos, setConceptos] = useState([]);
+  const [clasificaciones, setClasificaciones] = useState([]);
   const [formData, setFormData] = useState({
     cuenta_id: cuentaIdDefault,
     fecha: new Date().toISOString().substring(0, 10),
-    monto: '',
     nro_comprobante: '',
     concepto_id: '',
     descripcion: ''
@@ -30,20 +30,22 @@ const MovimientoModal = ({ isOpen, onClose, onSaved, movimiento = null, cuentaId
   const [nuevoConcepto, setNuevoConcepto] = useState({
     name: '',
     tipo_movimiento: 'Ingreso',
-    descripcion: ''
+    descripcion: '',
+    clasificacion_id: ''
   });
 
   useEffect(() => {
     if (isOpen) {
       fetchCuentas();
       fetchConceptos();
+      fetchClasificaciones();
       if (movimiento) {
         setFormData({
           cuenta_id: movimiento.cuenta_id,
           fecha: movimiento.fecha,
           monto: movimiento.monto,
           nro_comprobante: movimiento.nro_comprobante || '',
-          concepto_id: movimiento.concepto_id,
+          concepto_id: movimiento.concepto_id || '',
           descripcion: movimiento.descripcion || ''
         });
       } else {
@@ -57,7 +59,7 @@ const MovimientoModal = ({ isOpen, onClose, onSaved, movimiento = null, cuentaId
         });
       }
       setShowNewConcepto(false);
-      setNuevoConcepto({ name: '', tipo_movimiento: 'Ingreso', descripcion: '' });
+      setNuevoConcepto({ name: '', tipo_movimiento: 'Ingreso', descripcion: '', clasificacion_id: '' });
       setError('');
     }
   }, [isOpen, movimiento, cuentaIdDefault]);
@@ -80,6 +82,15 @@ const MovimientoModal = ({ isOpen, onClose, onSaved, movimiento = null, cuentaId
     }
   };
 
+  const fetchClasificaciones = async () => {
+    try {
+      const res = await axiosClient.get('/api/finanzas/clasificaciones');
+      setClasificaciones(res.data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const handleCreateConcepto = async () => {
     if (!nuevoConcepto.name.trim()) return;
     try {
@@ -88,7 +99,7 @@ const MovimientoModal = ({ isOpen, onClose, onSaved, movimiento = null, cuentaId
       await fetchConceptos();
       setFormData({ ...formData, concepto_id: res.data.id });
       setShowNewConcepto(false);
-      setNuevoConcepto({ name: '', tipo_movimiento: 'Ingreso', descripcion: '' });
+      setNuevoConcepto({ name: '', tipo_movimiento: 'Ingreso', descripcion: '', clasificacion_id: '' });
     } catch (err) {
       console.error(err);
       setError('Error al crear el concepto.');
@@ -98,7 +109,11 @@ const MovimientoModal = ({ isOpen, onClose, onSaved, movimiento = null, cuentaId
   };
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setFormData(prev => {
+      const newData = { ...prev, [name]: value };
+      return newData;
+    });
   };
 
   const handleSubmit = async (e) => {
@@ -157,7 +172,18 @@ const MovimientoModal = ({ isOpen, onClose, onSaved, movimiento = null, cuentaId
               <div style={{ display: 'flex', gap: '8px' }}>
                 <select name="concepto_id" value={formData.concepto_id} onChange={handleChange} className="form-control" required style={{ flex: 1 }}>
                   <option value="">Seleccione un concepto...</option>
-                  {conceptos.map(c => <option key={c.id} value={c.id}>{c.name} ({c.tipo_movimiento})</option>)}
+                  {clasificaciones.map(cl => (
+                    <optgroup key={cl.id} label={cl.name}>
+                      {conceptos
+                        .filter(c => c.clasificacion_id === cl.id)
+                        .map(c => <option key={c.id} value={c.id}>{c.name} ({c.tipo_movimiento})</option>)}
+                    </optgroup>
+                  ))}
+                  <optgroup label="Sin Clasificación">
+                    {conceptos
+                      .filter(c => !c.clasificacion_id)
+                      .map(c => <option key={c.id} value={c.id}>{c.name} ({c.tipo_movimiento})</option>)}
+                  </optgroup>
                 </select>
                 <button type="button" className="btn btn-outline" onClick={() => setShowNewConcepto(true)}>
                   + Nuevo
@@ -170,6 +196,10 @@ const MovimientoModal = ({ isOpen, onClose, onSaved, movimiento = null, cuentaId
                   <input type="text" className="form-control" placeholder="Nombre (Ej: Gastos Varios)" value={nuevoConcepto.name} onChange={(e) => setNuevoConcepto({...nuevoConcepto, name: e.target.value})} />
                   <select className="form-control" value={nuevoConcepto.tipo_movimiento} onChange={(e) => setNuevoConcepto({...nuevoConcepto, tipo_movimiento: e.target.value})}>
                     {CategoriaMovimientoOpciones.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                  </select>
+                  <select className="form-control" value={nuevoConcepto.clasificacion_id} onChange={(e) => setNuevoConcepto({...nuevoConcepto, clasificacion_id: e.target.value})}>
+                    <option value="">Sin Clasificación (Opcional)</option>
+                    {clasificaciones.map(cl => <option key={cl.id} value={cl.id}>{cl.name}</option>)}
                   </select>
                   <input type="text" className="form-control" placeholder="Descripción (Opcional)" value={nuevoConcepto.descripcion} onChange={(e) => setNuevoConcepto({...nuevoConcepto, descripcion: e.target.value})} />
                   <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>

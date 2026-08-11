@@ -17,6 +17,7 @@ class Banco(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     nombre_banco = Column(String(100), nullable=False)
+    parser_type = Column(String(50), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
@@ -91,13 +92,28 @@ class Concepto(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(100), unique=True, nullable=False)
     tipo_movimiento = Column(SQLEnum(CategoriaMovimiento), nullable=False)
-    descripcion = Column(String(255), nullable=False)
+    descripcion = Column(String(255), nullable=True)
     is_system = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
-    # Relación a Movimientos
+    clasificacion_id = Column(Integer, ForeignKey("clasificaciones.id"), nullable=True)
+
+    # Relación a Movimientos y Clasificaciones
     movimientos = relationship("Movimiento", back_populates="concepto")
+    clasificacion = relationship("Clasificacion", back_populates="conceptos")
+
+class Clasificacion(Base):
+    __tablename__ = "clasificaciones"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), nullable=False)
+    descripcion = Column(String(255), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    # Relaciones
+    conceptos = relationship("Concepto", back_populates="clasificacion", cascade="all, delete-orphan")
 
 class Movimiento(Base):
     __tablename__ = "movimientos"

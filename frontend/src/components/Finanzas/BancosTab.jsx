@@ -158,7 +158,7 @@ const BancosTab = () => {
 
     setIsUploading(true);
     try {
-      const res = await axiosClient.post(`/api/finanzas/cuentas/${selectedCuentaId}/importar-extracto-bica`, formData, {
+      const res = await axiosClient.post(`/api/finanzas/cuentas/${selectedCuentaId}/importar-extracto`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
@@ -201,23 +201,33 @@ const BancosTab = () => {
   }, [movimientos]);
 
   const uniqueConceptos = useMemo(() => {
-    return [...new Set(movimientos.map(m => {
-      const cat = m.concepto?.tipo_movimiento || '';
-      const text = `${m.concepto?.name || ''} ${cat}`.trim();
-      return text || '(Vacío)';
-    }))].sort();
+    const list = movimientos.map(m => m.concepto?.name).filter(Boolean);
+    return [...new Set(list)].sort();
+  }, [movimientos]);
+
+  const uniqueClasificaciones = useMemo(() => {
+    const list = movimientos.map(m => m.concepto?.clasificacion?.name).filter(Boolean);
+    return [...new Set(list)].sort();
   }, [movimientos]);
 
   const filteredMovimientos = useMemo(() => {
     return movimientos.filter(mov => {
       const cat = mov.concepto?.tipo_movimiento || '';
       const isIngreso = cat === 'Ingreso' || cat === 'Rescate FCI' || cat === 'Egresos de plazo fijo';
-      let conceptoText = `${mov.concepto?.name || ''} ${cat}`.trim();
-      if (!conceptoText) conceptoText = '(Vacío)';
+      let match = true;
 
       if (columnFilters['fecha']?.length > 0 && !columnFilters['fecha'].includes(mov.fecha)) return false;
       
-      if (columnFilters['concepto']?.length > 0 && !columnFilters['concepto'].includes(conceptoText)) return false;
+      if (columnFilters.concepto && columnFilters.concepto.length > 0) {
+        if (!columnFilters.concepto.includes(mov.concepto?.name)) {
+          match = false;
+        }
+      }
+      if (columnFilters.clasificacion && columnFilters.clasificacion.length > 0) {
+        if (!columnFilters.clasificacion.includes(mov.concepto?.clasificacion?.name)) {
+          match = false;
+        }
+      }
       
       if (columnFilters['nro_comprobante'] && !(mov.nro_comprobante || '-').toLowerCase().includes(columnFilters['nro_comprobante'].toLowerCase())) return false;
       
@@ -233,7 +243,7 @@ const BancosTab = () => {
          if (!formatCurrency(mov.monto).toLowerCase().includes(columnFilters['egreso'].toLowerCase())) return false;
       }
       
-      return true;
+      return match;
     });
   }, [movimientos, columnFilters]);
 
@@ -370,7 +380,7 @@ const BancosTab = () => {
               disabled={!selectedCuentaId || isUploading} 
               style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
             >
-              <Upload size={18} /> {isUploading ? 'Importando...' : 'Importar BICA'}
+              <Upload size={18} /> {isUploading ? 'Importando...' : 'Importar'}
             </button>
             <button className="btn btn-primary" onClick={() => { setEditingMovimiento(null); setIsMovimientoModalOpen(true); }} disabled={!selectedCuentaId} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Plus size={18} /> Nuevo Movimiento
@@ -441,6 +451,15 @@ const BancosTab = () => {
                   />
                 </th>
                 <th style={{ verticalAlign: 'top' }}>
+                  <div>Clasificación</div>
+                  <ExcelListFilter 
+                    availableOptions={uniqueClasificaciones}
+                    selectedOptions={columnFilters['clasificacion'] || []}
+                    onChange={(opts) => setColumnFilters(prev => ({ ...prev, clasificacion: opts }))}
+                    title="Buscar Clasificación..."
+                  />
+                </th>
+                <th style={{ verticalAlign: 'top' }}>
                   <div>Nro. Comp</div>
                   <FilterInput col="nro_comprobante" columnFilters={columnFilters} setColumnFilters={setColumnFilters} />
                 </th>
@@ -462,11 +481,11 @@ const BancosTab = () => {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan="7" style={{ textAlign: 'center', padding: '30px' }}><span className="spinner"></span></td>
+                  <td colSpan="9" style={{ textAlign: 'center', padding: '30px' }}><span className="spinner"></span></td>
                 </tr>
               ) : filteredMovimientos.length === 0 ? (
                 <tr>
-                  <td colSpan="8" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>No hay movimientos en esta cuenta para los filtros seleccionados.</td>
+                  <td colSpan="9" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>No hay movimientos en esta cuenta para los filtros seleccionados.</td>
                 </tr>
               ) : (
                 filteredMovimientos.map((mov) => {
@@ -497,6 +516,7 @@ const BancosTab = () => {
                         </div>
                         <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{cat || '-'}</div>
                       </td>
+                      <td>{mov.concepto?.clasificacion?.name || '-'}</td>
                       <td>{mov.nro_comprobante || '-'}</td>
                       <td>{mov.descripcion || '-'}</td>
                       <td style={{ textAlign: 'right', color: isIngreso ? 'var(--success-color)' : 'inherit', fontWeight: isIngreso ? 'bold' : 'normal' }}>

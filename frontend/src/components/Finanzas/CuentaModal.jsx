@@ -10,7 +10,8 @@ const CuentaModal = ({ isOpen, onClose, onSaved, cuenta = null }) => {
     nro: '',
     cbu: '',
     alias: '',
-    tipo_cuenta: 'Cuenta Corriente'
+    tipo_cuenta: 'Cuenta Corriente',
+    moneda: 'Pesos Argentinos $'
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -18,6 +19,7 @@ const CuentaModal = ({ isOpen, onClose, onSaved, cuenta = null }) => {
   // Nuevo Banco State
   const [showNewBanco, setShowNewBanco] = useState(false);
   const [nuevoBancoNombre, setNuevoBancoNombre] = useState('');
+  const [nuevoBancoParser, setNuevoBancoParser] = useState('none');
 
   useEffect(() => {
     if (isOpen) {
@@ -29,7 +31,8 @@ const CuentaModal = ({ isOpen, onClose, onSaved, cuenta = null }) => {
           nro: cuenta.nro || '',
           cbu: cuenta.cbu || '',
           alias: cuenta.alias || '',
-          tipo_cuenta: cuenta.tipo_cuenta || 'Cuenta Corriente'
+          tipo_cuenta: cuenta.tipo_cuenta || 'Cuenta Corriente',
+          moneda: cuenta.moneda || 'Pesos Argentinos $'
         });
       } else {
         setFormData({
@@ -38,11 +41,13 @@ const CuentaModal = ({ isOpen, onClose, onSaved, cuenta = null }) => {
           nro: '',
           cbu: '',
           alias: '',
-          tipo_cuenta: 'Cuenta Corriente'
+          tipo_cuenta: 'Cuenta Corriente',
+          moneda: 'Pesos Argentinos $'
         });
       }
       setShowNewBanco(false);
       setNuevoBancoNombre('');
+      setNuevoBancoParser('none');
       setError('');
     }
   }, [isOpen, cuenta]);
@@ -61,11 +66,12 @@ const CuentaModal = ({ isOpen, onClose, onSaved, cuenta = null }) => {
     if (!nuevoBancoNombre.trim()) return;
     try {
       setLoading(true);
-      const res = await axiosClient.post('/api/finanzas/bancos', { nombre_banco: nuevoBancoNombre });
+      const res = await axiosClient.post('/api/finanzas/bancos', { nombre_banco: nuevoBancoNombre, parser_type: nuevoBancoParser });
       await fetchBancos();
       setFormData({ ...formData, banco_id: res.data.id });
       setShowNewBanco(false);
       setNuevoBancoNombre('');
+      setNuevoBancoParser('none');
     } catch (err) {
       console.error(err);
       setError('Error al crear el banco.');
@@ -127,8 +133,13 @@ const CuentaModal = ({ isOpen, onClose, onSaved, cuenta = null }) => {
                   {bancos.map(b => <option key={b.id} value={b.id}>{b.nombre_banco}</option>)}
                 </select>
               ) : (
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <input type="text" className="form-control" placeholder="Nombre del nuevo banco" value={nuevoBancoNombre} onChange={(e) => setNuevoBancoNombre(e.target.value)} />
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <input type="text" className="form-control" placeholder="Nombre del nuevo banco" value={nuevoBancoNombre} onChange={(e) => setNuevoBancoNombre(e.target.value)} style={{ flex: 1, minWidth: '150px' }} />
+                  <select className="form-control" value={nuevoBancoParser} onChange={(e) => setNuevoBancoParser(e.target.value)} style={{ width: 'auto' }}>
+                    <option value="none">Sin importación</option>
+                    <option value="bica">Banco Bica</option>
+                    <option value="santander">Banco Santander</option>
+                  </select>
                   <button type="button" className="btn btn-primary" onClick={handleCreateBanco} disabled={loading}>Guardar</button>
                   <button type="button" className="btn btn-outline" onClick={() => setShowNewBanco(false)}>Cancelar</button>
                 </div>
@@ -141,9 +152,19 @@ const CuentaModal = ({ isOpen, onClose, onSaved, cuenta = null }) => {
             )}
           </div>
 
-          <div>
-            <label className="form-label">Nombre de la Cuenta (Referencia)</label>
-            <input type="text" name="nombre" value={formData.nombre} onChange={handleChange} className="form-control" required placeholder="Ej: Galicia Cta. Cte." />
+          <div style={{ display: 'flex', gap: '16px' }}>
+            <div style={{ flex: 2 }}>
+              <label className="form-label">Nombre de la Cuenta (Referencia)</label>
+              <input type="text" name="nombre" value={formData.nombre} onChange={handleChange} className="form-control" required placeholder="Ej: Galicia Cta. Cte." />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label className="form-label">Moneda</label>
+              <select name="moneda" value={formData.moneda} onChange={handleChange} className="form-control" required>
+                <option value="Pesos Argentinos $">Pesos Argentinos $</option>
+                <option value="Dólares Estadounidenses USD">Dólares Estadounidenses USD</option>
+                <option value="Euros EUR">Euros EUR</option>
+              </select>
+            </div>
           </div>
 
           <div style={{ display: 'flex', gap: '16px' }}>

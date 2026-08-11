@@ -11,14 +11,21 @@ from src.database.models.cobranzas import Cobranza, TipoCobranzaEnum, Proceso, E
 from src.database.models.socios import TasaYComision
 
 # Nuevos imports para Bancos
-from src.database.models.finance.bancos import Banco, Cuenta, Concepto, Movimiento, CategoriaMovimiento
+from src.database.models.finance.bancos import Banco, Cuenta, Concepto, Clasificacion, Movimiento, CategoriaMovimiento
 from src.api.schemas.bancos import (
     BancoCreate, BancoUpdate, BancoResponse,
     CuentaCreate, CuentaUpdate, CuentaResponse,
     ConceptoCreate, ConceptoUpdate, ConceptoResponse,
-    MovimientoCreate, MovimientoUpdate, MovimientoResponse, MovimientoBulkConceptoUpdate
+    MovimientoCreate, MovimientoUpdate, MovimientoResponse, MovimientoBulkConceptoUpdate,
+    ClasificacionCreate, ClasificacionUpdate, ClasificacionResponse
 )
-from src.logic.import_data.bancos.bica import import_extract
+from src.logic.import_data.bancos.bica import import_extract as bica_import
+from src.logic.import_data.bancos.santander import import_extract as santander_import
+
+PARSERS = {
+    'bica': bica_import,
+    'santander': santander_import
+}
 
 router = APIRouter(
     prefix="/api/finanzas",
@@ -302,20 +309,30 @@ def get_cuenta_kpis(cuenta_id: int, fecha_corte: date = Query(default_factory=da
 
 @router.post("/cuentas", response_model=CuentaResponse)
 def create_cuenta(cuenta: CuentaCreate, db: Session = Depends(get_db)):
+    from sqlalchemy.exc import IntegrityError
     db_cuenta = Cuenta(**cuenta.model_dump())
     db.add(db_cuenta)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Ya existe una cuenta con ese nombre, CBU o Alias.")
     db.refresh(db_cuenta)
     return db_cuenta
 
 @router.put("/cuentas/{cuenta_id}", response_model=CuentaResponse)
 def update_cuenta(cuenta_id: int, cuenta: CuentaUpdate, db: Session = Depends(get_db)):
+    from sqlalchemy.exc import IntegrityError
     db_cuenta = db.query(Cuenta).filter(Cuenta.id == cuenta_id).first()
     if not db_cuenta:
         raise HTTPException(status_code=404, detail="Cuenta no encontrada")
     for key, value in cuenta.model_dump(exclude_unset=True).items():
         setattr(db_cuenta, key, value)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Ya existe una cuenta con ese nombre, CBU o Alias.")
     db.refresh(db_cuenta)
     return db_cuenta
 
@@ -328,8 +345,8 @@ def delete_cuenta(cuenta_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"message": "Cuenta eliminada correctamente"}
 
-@router.post("/cuentas/{cuenta_id}/importar-extracto-bica")
-def importar_extracto_bica(
+@router.post("/cuentas/{cuenta_id}/importar-extracto")
+def importar_extracto(
     cuenta_id: int, 
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
@@ -342,9 +359,16 @@ def importar_extracto_bica(
     if not file.filename.endswith((".xls", ".xlsx")):
         raise HTTPException(status_code=400, detail="El archivo debe ser Excel (.xlsx o .xls)")
 
+    if not cuenta.banco.parser_type or cuenta.banco.parser_type == 'none':
+        raise HTTPException(status_code=400, detail="El banco de esta cuenta no soporta importación automática de extractos.")
+        
+    parser_func = PARSERS.get(cuenta.banco.parser_type.lower())
+    if not parser_func:
+        raise HTTPException(status_code=400, detail=f"Parser '{cuenta.banco.parser_type}' no está soportado.")
+
     try:
         # Pass the spooled temporary file directly to Pandas
-        df = import_extract(file.file, cuenta_id)
+        df = parser_func(file.file, cuenta_id)
         # Note: import_extract already commits new movimientos
         return {"message": "Extracto importado exitosamente", "filas_procesadas": len(df)}
     except Exception as e:
@@ -391,6 +415,41 @@ def delete_concepto(concepto_id: int, db: Session = Depends(get_db)):
     return {"message": "Concepto eliminado correctamente"}
 
 # -------------------------------------------------------------------
+# Clasificaciones
+# -------------------------------------------------------------------
+@router.get("/clasificaciones", response_model=List[ClasificacionResponse])
+def get_clasificaciones(db: Session = Depends(get_db)):
+    return db.query(Clasificacion).all()
+
+@router.post("/clasificaciones", response_model=ClasificacionResponse)
+def create_clasificacion(clasificacion: ClasificacionCreate, db: Session = Depends(get_db)):
+    db_clasificacion = Clasificacion(**clasificacion.model_dump())
+    db.add(db_clasificacion)
+    db.commit()
+    db.refresh(db_clasificacion)
+    return db_clasificacion
+
+@router.put("/clasificaciones/{clasificacion_id}", response_model=ClasificacionResponse)
+def update_clasificacion(clasificacion_id: int, clasificacion: ClasificacionUpdate, db: Session = Depends(get_db)):
+    db_clasificacion = db.query(Clasificacion).filter(Clasificacion.id == clasificacion_id).first()
+    if not db_clasificacion:
+        raise HTTPException(status_code=404, detail="Clasificacion no encontrada")
+    for key, value in clasificacion.model_dump(exclude_unset=True).items():
+        setattr(db_clasificacion, key, value)
+    db.commit()
+    db.refresh(db_clasificacion)
+    return db_clasificacion
+
+@router.delete("/clasificaciones/{clasificacion_id}")
+def delete_clasificacion(clasificacion_id: int, db: Session = Depends(get_db)):
+    db_clasificacion = db.query(Clasificacion).filter(Clasificacion.id == clasificacion_id).first()
+    if not db_clasificacion:
+        raise HTTPException(status_code=404, detail="Clasificacion no encontrada")
+    db.delete(db_clasificacion)
+    db.commit()
+    return {"message": "Clasificacion eliminada correctamente"}
+
+# -------------------------------------------------------------------
 # Movimientos
 # -------------------------------------------------------------------
 @router.get("/movimientos", response_model=List[MovimientoResponse])
@@ -402,7 +461,7 @@ def get_movimientos(
     db: Session = Depends(get_db)
 ):
     query = db.query(Movimiento).options(
-        joinedload(Movimiento.concepto),
+        joinedload(Movimiento.concepto).joinedload(Concepto.clasificacion),
         joinedload(Movimiento.cuenta)
     )
     if cuenta_id:
@@ -430,8 +489,10 @@ def update_movimiento_bulk(data: MovimientoBulkConceptoUpdate, db: Session = Dep
     if not concepto:
         raise HTTPException(status_code=404, detail="Concepto no encontrado")
         
+    update_data = {"concepto_id": data.concepto_id}
+        
     updated_count = db.query(Movimiento).filter(Movimiento.id.in_(data.movimiento_ids)).update(
-        {"concepto_id": data.concepto_id}, synchronize_session=False
+        update_data, synchronize_session=False
     )
     db.commit()
     return {"message": f"Se actualizaron {updated_count} movimientos correctamente"}

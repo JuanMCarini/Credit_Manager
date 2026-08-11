@@ -11,6 +11,7 @@ const useAppStore = create((set) => ({
   bancos: [],
   cuentas: [],
   conceptos: [],
+  clasificaciones: [],
   
   isLoadingAuxiliares: false,
   error: null,
@@ -21,7 +22,7 @@ const useAppStore = create((set) => ({
   fetchAuxiliares: async () => {
     set({ isLoadingAuxiliares: true, error: null });
     try {
-      const [provRes, empRes, sociosRes, tasasRes, relacionesRes, comerRes, bancosRes, cuentasRes, conceptosRes] = await Promise.all([
+      const [provRes, empRes, sociosRes, tasasRes, relacionesRes, comerRes, bancosRes, cuentasRes, conceptosRes, subRes] = await Promise.all([
         axiosClient.get('/api/v1/auxiliares/provincias').catch(() => ({ data: [] })),
         axiosClient.get('/api/v1/auxiliares/empleadores').catch(() => ({ data: [] })),
         axiosClient.get('/api/v1/auxiliares/socios').catch(() => ({ data: [] })),
@@ -30,7 +31,8 @@ const useAppStore = create((set) => ({
         axiosClient.get('/api/v1/auxiliares/comercializadores').catch(() => ({ data: [] })),
         axiosClient.get('/api/finanzas/bancos').catch(() => ({ data: [] })),
         axiosClient.get('/api/finanzas/cuentas').catch(() => ({ data: [] })),
-        axiosClient.get('/api/finanzas/conceptos').catch(() => ({ data: [] }))
+        axiosClient.get('/api/finanzas/conceptos').catch(() => ({ data: [] })),
+        axiosClient.get('/api/finanzas/clasificaciones').catch(() => ({ data: [] }))
       ]);
 
       set({
@@ -43,6 +45,7 @@ const useAppStore = create((set) => ({
         bancos: bancosRes.data,
         cuentas: cuentasRes.data,
         conceptos: conceptosRes.data,
+        clasificaciones: subRes.data,
         isLoadingAuxiliares: false,
       });
     } catch (error) {

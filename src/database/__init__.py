@@ -43,6 +43,7 @@ from .models import (
     Banco,
     Cuenta,
     Concepto,
+    Clasificacion,
     Movimiento,
     CategoriaMovimiento,
 )
@@ -87,6 +88,7 @@ __all__ = [
     "Banco",
     "Cuenta",
     "Concepto",
+    "Clasificacion",
     "Movimiento",
     "CategoriaMovimiento",
 ]

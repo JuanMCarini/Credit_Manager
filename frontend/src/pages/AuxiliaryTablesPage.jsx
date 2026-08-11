@@ -4,7 +4,7 @@ import axiosClient from '../api/axiosClient';
 import ExportExcelButton from '../components/ExportExcelButton';
 
 const AuxiliaryTablesPage = () => {
-  const { provincias, empleadores, socios, tasasYComisiones, relaciones, comercializadores, bancos, cuentas, conceptos, fetchAuxiliares } = useAppStore();
+  const { provincias, empleadores, socios, tasasYComisiones, relaciones, comercializadores, bancos, cuentas, conceptos, clasificaciones, fetchAuxiliares } = useAppStore();
   
   const [activeTable, setActiveTable] = useState('socios');
   const [isCreating, setIsCreating] = useState(false);
@@ -34,7 +34,9 @@ const AuxiliaryTablesPage = () => {
     socio_id: { options: socios, valueKey: 'id', labelKey: 'razon_social' },
     provincia_id: { options: provincias, valueKey: 'id', labelKey: 'nombre' },
     id_provincia: { options: provincias, valueKey: 'id', labelKey: 'nombre' },
-    banco_id: { options: bancos, valueKey: 'id', labelKey: 'nombre_banco' }
+    banco_id: { options: bancos, valueKey: 'id', labelKey: 'nombre_banco' },
+    concepto_id: { options: conceptos, valueKey: 'id', labelKey: 'name' },
+    clasificacion_id: { options: clasificaciones, valueKey: 'id', labelKey: 'name' }
   };
 
   const percentFields = [
@@ -51,9 +53,10 @@ const AuxiliaryTablesPage = () => {
     tasasYComisiones: { name: 'Tasas y Comisiones', data: tasasYComisiones, endpoint: 'tasas_y_comisiones', schema: ['id', 'fecha', 'estado', 'socio_originador_id', 'socio_intermediario_id', 'colocacion_originador', 'colocacion_intermediario', 'cobranza_originador', 'cobranza_intermediario', 'colocacion_propia', 'gasto_1_porcentaje', 'gasto_1_socio_id', 'gasto_2_porcentaje', 'gasto_2_socio_id', 'porcentaje_sellado', 'plazo', 'tna_c_iva'] },
     relaciones: { name: 'Relaciones Mapeadas', data: relaciones, endpoint: 'relaciones', schema: ['id', 'socio_id', 'tabla', 'id_local', 'id_foraneo'] },
     comercializadores: { name: 'Comercializadores', data: comercializadores, endpoint: 'comercializadores', schema: ['id', 'nombre'] },
-    bancos: { name: 'Bancos', data: bancos, endpoint: 'bancos', basePath: '/api/finanzas', schema: ['id', 'nombre_banco'] },
+    bancos: { name: 'Bancos', data: bancos, endpoint: 'bancos', basePath: '/api/finanzas', schema: ['id', 'nombre_banco', 'parser_type'] },
     cuentas: { name: 'Cuentas Bancarias', data: cuentas, endpoint: 'cuentas', basePath: '/api/finanzas', schema: ['id', 'nombre', 'banco_id', 'nro', 'cbu', 'alias', 'tipo_cuenta', 'moneda'] },
-    conceptos: { name: 'Conceptos', data: conceptos, endpoint: 'conceptos', basePath: '/api/finanzas', schema: ['id', 'name', 'tipo_movimiento', 'descripcion'] }
+    conceptos: { name: 'Conceptos', data: conceptos, endpoint: 'conceptos', basePath: '/api/finanzas', schema: ['id', 'name', 'clasificacion_id', 'tipo_movimiento', 'descripcion'] },
+    clasificaciones: { name: 'Clasificaciones de Conceptos', data: clasificaciones, endpoint: 'clasificaciones', basePath: '/api/finanzas', schema: ['id', 'name', 'descripcion'] }
   };
 
   const currentTableConfig = tablesMap[activeTable];
@@ -208,6 +211,14 @@ const AuxiliaryTablesPage = () => {
       const banco = bancos.find(b => b.id === value);
       return banco ? banco.nombre_banco : value;
     }
+    if (col === 'concepto_id') {
+      const concepto = conceptos.find(c => c.id === value);
+      return concepto ? concepto.name : value;
+    }
+    if (col === 'clasificacion_id') {
+      const clasificacion = clasificaciones.find(c => c.id === value);
+      return clasificacion ? clasificacion.name : value;
+    }
     if (col === 'es_pasivo') {
       return value ? 'Sí' : 'No';
     }
@@ -225,6 +236,11 @@ const AuxiliaryTablesPage = () => {
       const filterValue = columnFilters[col];
       if (!filterValue) return true;
       const val = formatCellValue(col, row[col]);
+      
+      if (col === 'clasificacion_id' && filterValue === 'Sin Clasificar') {
+        return val === '-';
+      }
+      
       return String(val).toLowerCase().includes(filterValue.toLowerCase());
     });
   });
@@ -331,6 +347,16 @@ const AuxiliaryTablesPage = () => {
                             onChange={(e) => setColumnFilters(prev => ({ ...prev, [col]: e.target.value }))}
                             style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', boxSizing: 'border-box' }}
                           />
+                        ) : activeTable === 'conceptos' && col === 'clasificacion_id' ? (
+                          <select 
+                            value={columnFilters[col] || ''} 
+                            onChange={(e) => setColumnFilters(prev => ({ ...prev, [col]: e.target.value }))}
+                            style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', boxSizing: 'border-box' }}
+                          >
+                            <option value="">Todas</option>
+                            <option value="Sin Clasificar">Sin Clasificar</option>
+                            {clasificaciones.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                          </select>
                         ) : (
                           <input 
                             type="text" 
@@ -557,6 +583,18 @@ const AuxiliaryTablesPage = () => {
                       >
                         <option value="">Seleccione...</option>
                         {["Ingreso", "Egreso", "Suscripción FCI", "Rescate FCI", "Ingresos a plazo fijo", "Egresos de plazo fijo"].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                      </select>
+                    );
+                  } else if (col === 'parser_type') {
+                    inputElement = (
+                      <select
+                        value={editFormData[col] ?? ''} 
+                        onChange={(e) => handleEditChange(col, e.target.value)}
+                        className="input-field"
+                      >
+                        <option value="none">Sin importación automática</option>
+                        <option value="bica">Banco Bica</option>
+                        <option value="santander">Banco Santander</option>
                       </select>
                     );
                   } else if (col === 'fecha') {
