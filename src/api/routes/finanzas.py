@@ -262,16 +262,24 @@ def get_cuentas(db: Session = Depends(get_db)):
     return cuentas
 
 @router.get("/cuentas/{cuenta_id}/kpis")
-def get_cuenta_kpis(cuenta_id: int, fecha_corte: date = Query(default_factory=date.today), db: Session = Depends(get_db)):
+def get_cuenta_kpis(
+    cuenta_id: int, 
+    fecha_desde: Optional[date] = None,
+    fecha_hasta: Optional[date] = None,
+    db: Session = Depends(get_db)
+):
     cuenta = db.query(Cuenta).filter(Cuenta.id == cuenta_id).first()
     if not cuenta:
         raise HTTPException(status_code=404, detail="Cuenta no encontrada")
     
-    # Calcular a fecha de corte manualmente desde BD
-    movs = db.query(Movimiento).join(Concepto).filter(
-        Movimiento.cuenta_id == cuenta_id,
-        Movimiento.fecha <= fecha_corte
-    ).order_by(Movimiento.fecha, Movimiento.id).all()
+    # Calcular según rango de fechas manualmente desde BD
+    query = db.query(Movimiento).join(Concepto).filter(Movimiento.cuenta_id == cuenta_id)
+    if fecha_desde:
+        query = query.filter(Movimiento.fecha >= fecha_desde)
+    if fecha_hasta:
+        query = query.filter(Movimiento.fecha <= fecha_hasta)
+        
+    movs = query.order_by(Movimiento.fecha, Movimiento.id).all()
     
     saldo = 0.0
     saldo_fci = 0.0
@@ -304,7 +312,8 @@ def get_cuenta_kpis(cuenta_id: int, fecha_corte: date = Query(default_factory=da
         "saldo": saldo,
         "saldo_fci": saldo_fci,
         "saldo_plazo_fijo": saldo_pf,
-        "fecha_corte": fecha_corte
+        "fecha_desde": fecha_desde,
+        "fecha_hasta": fecha_hasta
     }
 
 @router.post("/cuentas", response_model=CuentaResponse)
@@ -380,7 +389,7 @@ def importar_extracto(
 # -------------------------------------------------------------------
 @router.get("/conceptos", response_model=List[ConceptoResponse])
 def get_conceptos(db: Session = Depends(get_db)):
-    return db.query(Concepto).all()
+    return db.query(Concepto).options(joinedload(Concepto.clasificacion)).all()
 
 @router.post("/conceptos", response_model=ConceptoResponse)
 def create_concepto(concepto: ConceptoCreate, db: Session = Depends(get_db)):

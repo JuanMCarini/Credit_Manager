@@ -36,6 +36,9 @@ def import_extract(
         
     # Limpieza de importe (remueve puntos de miles y cambia coma por punto)
     df["Importe"] = df["Importe"].astype(str).str.replace(".", "", regex=False).str.replace(",", ".", regex=False).astype(float)
+    
+    # Ignoramos filas que no tengan un importe válido (evita errores con NaT)
+    df = df.dropna(subset=["Importe"])
 
     # Ordenar cronológicamente
     df = df.sort_values(by=["Fecha"])
@@ -74,6 +77,10 @@ def import_extract(
                 concepto_id = mapa_conceptos.get("Suscripción FCI")
             elif "Mantenimiento" in transaccion or "Comision" in transaccion:
                 concepto_id = mapa_conceptos.get("Servicio de Cuenta")
+            elif "Iva percepcion rg":
+                concepto_id = mapa_conceptos.get("ARCA - IVA")
+            elif "Impuesto ley 25.413 debito 0,6%":
+                concepto_id = mapa_conceptos.get("ARCA - IVA")
             
             if not concepto_id:
                 if row["Importe"] < 0:
