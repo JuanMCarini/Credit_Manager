@@ -461,12 +461,20 @@ def delete_clasificacion(clasificacion_id: int, db: Session = Depends(get_db)):
 # -------------------------------------------------------------------
 # Movimientos
 # -------------------------------------------------------------------
-@router.get("/movimientos", response_model=List[MovimientoResponse])
+@router.get("/movimientos")
 def get_movimientos(
+    skip: int = 0,
+    limit: int = 1000,
     cuenta_id: Optional[int] = None,
     fecha_desde: Optional[date] = None,
     fecha_hasta: Optional[date] = None,
     concepto_id: Optional[int] = None,
+    concepto_nombre: Optional[str] = None,
+    clasificacion_nombre: Optional[str] = None,
+    nro_comprobante: Optional[str] = None,
+    descripcion: Optional[str] = None,
+    ingreso_str: Optional[str] = None,
+    egreso_str: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     query = db.query(Movimiento).options(
@@ -482,7 +490,43 @@ def get_movimientos(
     if concepto_id:
         query = query.filter(Movimiento.concepto_id == concepto_id)
         
-    return query.order_by(Movimiento.fecha.desc()).all()
+    if nro_comprobante:
+        query = query.filter(Movimiento.nro_comprobante.ilike(f"%{nro_comprobante}%"))
+    if descripcion:
+        query = query.filter(Movimiento.descripcion.ilike(f"%{descripcion}%"))
+        
+    # We apply concept and classification filters by joining if needed, but since we already joinedload, we can do explicit join for filtering if necessary.
+    # To keep it simple, we will fetch and filter in Python since some fields like 'ingreso_str' and 'egreso_str' depend on formatted values.
+    
+    total = query.count()
+    if limit == -1:
+        movs = query.order_by(Movimiento.fecha.desc()).all()
+    else:
+        movs = query.order_by(Movimiento.fecha.desc()).offset(skip).limit(limit).all()
+        
+    res = []
+    for mov in movs:
+        cat = mov.concepto.tipo_movimiento.value if hasattr(mov.concepto.tipo_movimiento, 'value') else mov.concepto.tipo_movimiento
+        is_ingreso = cat in ('Ingreso', 'Rescate FCI', 'Egresos de plazo fijo')
+        
+        if concepto_nombre and concepto_nombre not in (mov.concepto.name or ""):
+            continue
+        if clasificacion_nombre and mov.concepto.clasificacion and clasificacion_nombre not in (mov.concepto.clasificacion.name or ""):
+            continue
+        if ingreso_str:
+            if not is_ingreso:
+                continue
+            if ingreso_str not in str(mov.monto):
+                continue
+        if egreso_str:
+            if is_ingreso:
+                continue
+            if egreso_str not in str(mov.monto):
+                continue
+                
+        res.append(mov)
+
+    return {"items": res, "total": total}
 
 @router.post("/movimientos", response_model=MovimientoResponse)
 def create_movimiento(movimiento: MovimientoCreate, db: Session = Depends(get_db)):

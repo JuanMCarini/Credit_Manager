@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+import { useDebounce } from '../hooks/useDebounce';
 import axiosClient from '../api/axiosClient';
 import ExportExcelButton from '../components/ExportExcelButton';
 import { ChevronDown, Calendar, Users, Layers, Filter } from 'lucide-react';
@@ -129,50 +131,59 @@ const DateRangeFilter = ({ label, desde, setDesde, hasta, setHasta }) => (
 );
 
 const FacturacionPage = () => {
-  const [pendientes, setPendientes] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [procesando, setProcesando] = useState(false);
+  const limit = 1000;
+  const queryClient = useQueryClient();
+
+  const activeFilters = useMemo(() => ({
+    socios: filtroSocios,
+    procesos: filtroProcesos,
+    emisionDesde: filtroFechaEmisionDesde,
+    emisionHasta: filtroFechaEmisionHasta,
+    vtoDesde: filtroFechaVtoDesde,
+    vtoHasta: filtroFechaVtoHasta,
+  }), [filtroSocios, filtroProcesos, filtroFechaEmisionDesde, filtroFechaEmisionHasta, filtroFechaVtoDesde, filtroFechaVtoHasta]);
   
-  // Para los rangos de fecha de descargas
-  const [fechaDesde, setFechaDesde] = useState('');
-  const [fechaHasta, setFechaHasta] = useState('');
+  const debouncedFilter = useDebounce(activeFilters, 500);
 
-  // Fecha para facturar
-  const todayObj = new Date();
-  const maxDateStr = todayObj.toISOString().split('T')[0];
-  const [fechaFacturacion, setFechaFacturacion] = useState(maxDateStr);
-  const [minDateStr, setMinDateStr] = useState(() => {
-    const minD = new Date();
-    minD.setDate(new Date().getDate() - 10);
-    return minD.toISOString().split('T')[0];
-  });
-
-  // Filtros
-  const [filtroSocios, setFiltroSocios] = useState([]);
-  const [filtroFechaEmisionDesde, setFiltroFechaEmisionDesde] = useState('');
-  const [filtroFechaEmisionHasta, setFiltroFechaEmisionHasta] = useState('');
-  const [filtroFechaVtoDesde, setFiltroFechaVtoDesde] = useState('');
-  const [filtroFechaVtoHasta, setFiltroFechaVtoHasta] = useState('');
-  const [filtroProcesos, setFiltroProcesos] = useState([]);
-
-  const formatCurrency = (value) => {
-    return "$ " + new Intl.NumberFormat('es-AR', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(value || 0);
+  const fetchPendientes = async ({ pageParam = 0, queryKey }) => {
+    const [_key, filters] = queryKey;
+    const p = {
+      skip: pageParam * limit,
+      limit: limit,
+      ...(filters.socios && filters.socios.length > 0 && { socios: filters.socios.join(',') }),
+      ...(filters.procesos && filters.procesos.length > 0 && { procesos: filters.procesos.join(',') }),
+      ...(filters.emisionDesde && { fecha_emision_desde: filters.emisionDesde }),
+      ...(filters.emisionHasta && { fecha_emision_hasta: filters.emisionHasta }),
+      ...(filters.vtoDesde && { fecha_vto_desde: filters.vtoDesde }),
+      ...(filters.vtoHasta && { fecha_vto_hasta: filters.vtoHasta }),
+    };
+    const res = await axiosClient.get('/api/v1/facturacion/pendientes', { params: p });
+    return res.data;
   };
 
-  const fetchPendientes = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await axiosClient.get('/api/v1/facturacion/pendientes');
-      setPendientes(res.data);
-    } catch (error) {
-      console.error("Error cargando pendientes:", error);
-    } finally {
-      setLoading(false);
+  const {
+    data,
+    isLoading: loading,
+    isError,
+    error,
+    isFetching,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage
+  } = useInfiniteQuery({
+    queryKey: ['pendientes', debouncedFilter],
+    queryFn: fetchPendientes,
+    getNextPageParam: (lastPage, pages) => {
+       const loadedItems = pages.length * limit;
+       if (loadedItems < lastPage.total) {
+           return pages.length;
+       }
+       return undefined;
     }
-  }, []);
+  });
+
+  const pendientes = useMemo(() => data?.pages.flatMap(page => page.items) || [], [data]);
+  const totalItems = data?.pages[0]?.total || 0;
 
   const fetchUltimaFecha = useCallback(async () => {
     try {
@@ -193,7 +204,6 @@ const FacturacionPage = () => {
   }, []);
 
   useEffect(() => {
-    fetchPendientes();
     fetchUltimaFecha();
     
     // Set default dates to current month
@@ -203,7 +213,7 @@ const FacturacionPage = () => {
     
     setFechaDesde(firstDay.toISOString().split('T')[0]);
     setFechaHasta(lastDay.toISOString().split('T')[0]);
-  }, [fetchPendientes, fetchUltimaFecha]);
+  }, [fetchUltimaFecha]);
 
   const handleProcesar = async () => {
     if (!window.confirm(`¿Estás seguro que deseas procesar la facturación de ${filteredPendientes.length} cobranzas filtradas con fecha ${fechaFacturacion}?`)) return;
@@ -216,7 +226,7 @@ const FacturacionPage = () => {
       };
       const res = await axiosClient.post('/api/v1/facturacion/procesar', payload);
       alert(res.data.message || "Proceso finalizado.");
-      fetchPendientes(); // Refresh list
+      queryClient.invalidateQueries({ queryKey: ['pendientes'] });
       fetchUltimaFecha(); // Refresh ultima fecha
     } catch (error) {
       alert("Error procesando facturas: " + (error.response?.data?.detail || error.message));
@@ -259,22 +269,7 @@ const FacturacionPage = () => {
     return Array.from(procesos).sort();
   }, [pendientes]);
 
-  const filteredPendientes = useMemo(() => {
-    return pendientes.filter(p => {
-      const matchSocio = filtroSocios.length > 0 ? filtroSocios.includes(p.socio_originador) : true;
-      
-      const matchEmisionDesde = filtroFechaEmisionDesde ? p.fecha >= filtroFechaEmisionDesde : true;
-      const matchEmisionHasta = filtroFechaEmisionHasta ? p.fecha <= filtroFechaEmisionHasta : true;
-      
-      const vto = p.vencimiento_cuota || '';
-      const matchVtoDesde = filtroFechaVtoDesde ? vto >= filtroFechaVtoDesde : true;
-      const matchVtoHasta = filtroFechaVtoHasta ? (vto ? vto <= filtroFechaVtoHasta : false) : true;
-      
-      const matchProceso = filtroProcesos.length > 0 ? filtroProcesos.includes(p.proceso_nombre) : true;
-      
-      return matchSocio && matchEmisionDesde && matchEmisionHasta && matchVtoDesde && matchVtoHasta && matchProceso;
-    });
-  }, [pendientes, filtroSocios, filtroFechaEmisionDesde, filtroFechaEmisionHasta, filtroFechaVtoDesde, filtroFechaVtoHasta, filtroProcesos]);
+  const filteredPendientes = pendientes;
 
   const totales = useMemo(() => {
     return filteredPendientes.reduce((acc, p) => ({
@@ -417,11 +412,27 @@ const FacturacionPage = () => {
                     </tr>
                   ))
                 )}
+                {hasNextPage && (
+                  <tr>
+                    <td colSpan="10" style={{ textAlign: 'center', padding: '15px' }}>
+                      <button 
+                        className="btn-primary" 
+                        onClick={() => fetchNextPage()}
+                        disabled={isFetchingNextPage}
+                        style={{ width: 'auto', padding: '8px 20px', margin: '0 auto', display: 'block' }}
+                      >
+                        {isFetchingNextPage ? "Cargando más registros..." : "Mostrar más registros"}
+                      </button>
+                    </td>
+                  </tr>
+                )}
               </tbody>
               {!loading && filteredPendientes.length > 0 && (
                 <tfoot>
                   <tr style={{ background: 'var(--surface-color)', fontWeight: 'bold' }}>
-                    <td colSpan="6" style={{ textAlign: 'right', paddingRight: '20px' }}>TOTALES:</td>
+                    <td colSpan="6" style={{ textAlign: 'right', paddingRight: '20px' }}>
+                      TOTALES (Mostrando {filteredPendientes.length} de {totalItems}):
+                    </td>
                     <td style={{ textAlign: 'right', whiteSpace: 'nowrap', color: 'var(--primary-color)' }}>{formatCurrency(totales.capital)}</td>
                     <td style={{ textAlign: 'right', whiteSpace: 'nowrap', color: 'var(--primary-color)' }}>{formatCurrency(totales.interes)}</td>
                     <td style={{ textAlign: 'right', whiteSpace: 'nowrap', color: 'var(--primary-color)' }}>{formatCurrency(totales.iva)}</td>

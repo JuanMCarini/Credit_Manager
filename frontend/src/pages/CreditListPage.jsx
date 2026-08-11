@@ -1,7 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import { FilterX } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import axiosClient from '../api/axiosClient';
+import { useDebounce } from '../hooks/useDebounce';
 import ClientCCModal from '../components/ClientCCModal';
 import CreditEditEstadoModal from '../components/CreditEditEstadoModal';
 import TransfersModal from '../components/TransfersModal';
@@ -17,12 +19,14 @@ const formatCurrency = (num) => {
 };
 
 const CreditListPage = () => {
-  const [creditos, setCreditos] = useState([]);
-  const [loading, setLoading] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const limit = 1000;
   
   const [filter, setFilter] = useState({ ID: [], IdExterno: '', Originador: '', CUIL: '', Capital: {}, Plazo: '', TNA: '', IdTasa: '', Estado: [], Fecha: [], TipoCredito: [], SaldoMora: {}, DiasMora: {} });
+  const debouncedFilter = useDebounce(filter, 500);
+
   const [sortConfig, setSortConfig] = useState({ key: 'ID', direction: 'desc' });
   const [showEstadoFilter, setShowEstadoFilter] = useState(false);
   const [showTipoCreditoFilter, setShowTipoCreditoFilter] = useState(false);
@@ -39,28 +43,65 @@ const CreditListPage = () => {
     if (cuilParam) setFilter(prev => ({ ...prev, CUIL: cuilParam }));
   }, [location.search]);
 
-  const fetchCreditos = async () => {
-    setLoading(true);
-    try {
-      const res = await axiosClient.get('/api/v1/creditos', { params: { fecha_corte: fechaCorte } });
-      setCreditos(res.data);
-    } catch (error) {
-      alert("Error cargando créditos: " + error.message);
-    } finally {
-      setLoading(false);
-    }
+  const fetchCreditos = async ({ pageParam = 0, queryKey }) => {
+    const [_key, filters, fCorte] = queryKey;
+    const f = { ...filters };
+    const p = {
+      skip: pageParam * limit,
+      limit: limit,
+      fecha_corte: fCorte,
+      ...(f.ID && f.ID.length > 0 && { id: f.ID.join(',') }),
+      ...(f.IdExterno && { id_externo: f.IdExterno }),
+      ...(f.Originador && { originador: f.Originador }),
+      ...(f.CUIL && { cuil: f.CUIL }),
+      ...(f.Plazo && { plazo: f.Plazo }),
+      ...(f.TNA && { tna: f.TNA }),
+      ...(f.IdTasa && { id_tasa: f.IdTasa }),
+      ...(f.Estado && f.Estado.length > 0 && { estado: f.Estado.join(',') }),
+      ...(f.TipoCredito && f.TipoCredito.length > 0 && { tipo_credito: f.TipoCredito.join(',') }),
+      ...(f.Fecha && f.Fecha.length > 0 && { fecha: f.Fecha.join(',') }),
+      ...(f.Capital?.min !== undefined && { capital_min: f.Capital.min }),
+      ...(f.Capital?.max !== undefined && { capital_max: f.Capital.max }),
+      ...(f.SaldoMora?.min !== undefined && { saldo_mora_min: f.SaldoMora.min }),
+      ...(f.SaldoMora?.max !== undefined && { saldo_mora_max: f.SaldoMora.max }),
+      ...(f.DiasMora?.min !== undefined && { dias_mora_min: f.DiasMora.min }),
+      ...(f.DiasMora?.max !== undefined && { dias_mora_max: f.DiasMora.max }),
+    };
+
+    const res = await axiosClient.get('/api/v1/creditos', { params: p });
+    return res.data;
   };
 
-  useEffect(() => {
-    fetchCreditos();
-  }, [fechaCorte]);
+  const {
+    data,
+    isLoading: loading,
+    isError,
+    error,
+    isFetching,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage
+  } = useInfiniteQuery({
+    queryKey: ['creditos', debouncedFilter, fechaCorte],
+    queryFn: fetchCreditos,
+    getNextPageParam: (lastPage, pages) => {
+       const loadedItems = pages.length * limit;
+       if (loadedItems < lastPage.total) {
+           return pages.length;
+       }
+       return undefined;
+    }
+  });
+
+  const creditos = useMemo(() => data?.pages.flatMap(page => page.items) || [], [data]);
+  const totalItems = data?.pages[0]?.total || 0;
 
   const handleDelete = async (id) => {
     if (!window.confirm(`¿Está seguro que desea eliminar el crédito #${id}?`)) return;
     try {
       await axiosClient.delete(`/api/v1/creditos/${id}`);
       alert('Crédito eliminado con éxito.');
-      fetchCreditos();
+      queryClient.invalidateQueries({ queryKey: ['creditos'] });
     } catch (error) {
       alert("Error eliminando crédito: " + error.message);
     }
@@ -88,68 +129,8 @@ const CreditListPage = () => {
     });
   };
 
-  const getFilteredData = (excludeKey = null) => {
-    let result = [...creditos];
-    if (excludeKey !== 'ID' && filter.ID && filter.ID.length > 0) {
-      result = result.filter(c => filter.ID.includes(String(c.ID)));
-    }
-    if (filter.IdExterno) result = result.filter(c => c["ID Externo"] && String(c["ID Externo"]).toLowerCase().includes(filter.IdExterno.toLowerCase()));
-    if (filter.Originador) result = result.filter(c => c["Socio Originador"] && String(c["Socio Originador"]).toLowerCase().includes(filter.Originador.toLowerCase()));
-    if (filter.CUIL) result = result.filter(c => c["Cliente CUIL"] && c["Cliente CUIL"].includes(filter.CUIL));
-    if (filter.Plazo) result = result.filter(c => String(c.Plazo).includes(filter.Plazo));
-    if (filter.TNA) result = result.filter(c => String(c["TNA con IVA"]).includes(filter.TNA));
-    if (filter.IdTasa) result = result.filter(c => c["ID Tasa Comision"] && String(c["ID Tasa Comision"]).includes(filter.IdTasa));
-    
-    if (excludeKey !== 'TipoCredito' && filter.TipoCredito && filter.TipoCredito.length > 0) {
-      result = result.filter(c => filter.TipoCredito.includes(c["Tipo Crédito"]));
-    }
-    
-    if (filter.Capital && typeof filter.Capital === 'object' && Object.keys(filter.Capital).length > 0) {
-      result = result.filter(c => {
-        if (c.Capital === null || c.Capital === undefined) return false;
-        const numVal = Number(c.Capital);
-        if (isNaN(numVal)) return false;
-        if (filter.Capital.min !== undefined && numVal < filter.Capital.min) return false;
-        if (filter.Capital.max !== undefined && numVal > filter.Capital.max) return false;
-        return true;
-      });
-    }
-
-    if (filter.SaldoMora && typeof filter.SaldoMora === 'object' && Object.keys(filter.SaldoMora).length > 0) {
-      result = result.filter(c => {
-        if (c["Saldo en Mora"] === null || c["Saldo en Mora"] === undefined) return false;
-        const numVal = Number(c["Saldo en Mora"]);
-        if (isNaN(numVal)) return false;
-        if (filter.SaldoMora.min !== undefined && numVal < filter.SaldoMora.min) return false;
-        if (filter.SaldoMora.max !== undefined && numVal > filter.SaldoMora.max) return false;
-        return true;
-      });
-    }
-
-    if (filter.DiasMora && typeof filter.DiasMora === 'object' && Object.keys(filter.DiasMora).length > 0) {
-      result = result.filter(c => {
-        if (c["Días de Mora"] === null || c["Días de Mora"] === undefined) return false;
-        const numVal = Number(c["Días de Mora"]);
-        if (isNaN(numVal)) return false;
-        if (filter.DiasMora.min !== undefined && numVal < filter.DiasMora.min) return false;
-        if (filter.DiasMora.max !== undefined && numVal > filter.DiasMora.max) return false;
-        return true;
-      });
-    }
-
-    if (excludeKey !== 'Estado' && filter.Estado && filter.Estado.length > 0) {
-      result = result.filter(c => filter.Estado.includes(c.Estado));
-    }
-    
-    if (excludeKey !== 'Fecha' && filter.Fecha && filter.Fecha.length > 0) {
-      result = result.filter(c => filter.Fecha.includes(c["Fecha Emisión"]));
-    }
-
-    return result;
-  };
-
   const filteredAndSortedCreditos = useMemo(() => {
-    let result = getFilteredData();
+    let result = [...creditos];
     if (sortConfig.key) {
       result.sort((a, b) => {
         let valA = a[sortConfig.key] ?? '';
@@ -162,17 +143,15 @@ const CreditListPage = () => {
       });
     }
     return result;
-  }, [creditos, filter, sortConfig]);
+  }, [creditos, sortConfig]);
 
   const ESTADOS_DISPONIBLES = useMemo(() => {
-    const dataForFilter = getFilteredData('Estado');
-    return [...new Set(dataForFilter.map(c => c.Estado).filter(Boolean))].sort();
-  }, [creditos, filter]);
+    return [...new Set(creditos.map(c => c.Estado).filter(Boolean))].sort();
+  }, [creditos]);
 
   const AVAILABLE_CREDIT_IDS = useMemo(() => {
-    const dataForFilter = getFilteredData('ID');
-    return [...new Set(dataForFilter.map(c => c.ID).filter(Boolean))].sort((a,b)=>a-b).map(String);
-  }, [creditos, filter]);
+    return [...new Set(creditos.map(c => c.ID).filter(Boolean))].sort((a,b)=>a-b).map(String);
+  }, [creditos]);
 
   const AVAILABLE_TIPOS_CREDITO = useMemo(() => {
     return [...new Set(filteredAndSortedCreditos.map(c => c["Tipo Crédito"]).filter(Boolean))].sort();
@@ -212,8 +191,8 @@ const CreditListPage = () => {
               style={{ background: 'transparent', border: 'none', color: 'var(--text-color)', outline: 'none', fontSize: '12px', cursor: 'pointer', colorScheme: 'dark' }}
             />
           </div>
-          <button className="btn-primary" onClick={fetchCreditos} disabled={loading} style={{ width: 'auto' }}>
-            {loading ? "Actualizando..." : "Actualizar Datos"}
+          <button className="btn-primary" onClick={() => queryClient.invalidateQueries({ queryKey: ['creditos'] })} disabled={loading || isFetching} style={{ width: 'auto' }}>
+            {(loading || isFetching) ? "Actualizando..." : "Actualizar Datos"}
           </button>
           <button 
             className="btn-secondary" 
@@ -395,10 +374,26 @@ const CreditListPage = () => {
                   </tr>
                 ))
               )}
+              {hasNextPage && (
+                <tr>
+                  <td colSpan="14" style={{ textAlign: 'center', padding: '15px' }}>
+                    <button 
+                      className="btn-primary" 
+                      onClick={() => fetchNextPage()}
+                      disabled={isFetchingNextPage}
+                      style={{ width: 'auto', padding: '8px 20px', margin: '0 auto', display: 'block' }}
+                    >
+                      {isFetchingNextPage ? "Cargando más registros..." : "Mostrar más registros"}
+                    </button>
+                  </td>
+                </tr>
+              )}
             </tbody>
             <tfoot>
               <tr>
-                <td colSpan="4" style={{ textAlign: 'right' }}>TOTAL:</td>
+                <td colSpan="4" style={{ textAlign: 'right', fontWeight: 'bold' }}>
+                  TOTALES (Mostrando {creditos.length} de {totalItems}):
+                </td>
                 <td>{formatCurrency(totalCapital)}</td>
                 <td colSpan="5"></td>
                 <td>{formatCurrency(totalMora)}</td>

@@ -41,13 +41,14 @@ const DashboardBancosTab = () => {
         axiosClient.get('/api/finanzas/movimientos', {
           params: {
             fecha_desde: fechaDesde || undefined,
-            fecha_hasta: fechaHasta || undefined
+            fecha_hasta: fechaHasta || undefined,
+            limit: -1
           }
         })
       ]);
       
       setKpis(kpisRes.data);
-      setMovimientos(movsRes.data);
+      setMovimientos(movsRes.data.items || movsRes.data);
     } catch (err) {
       console.error(err);
     } finally {
