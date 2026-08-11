@@ -8,6 +8,7 @@ from src.database.models.finance.bancos import CategoriaMovimiento, TipoMoneda
 # =======================
 class BancoBase(BaseModel):
     nombre_banco: str
+    parser_type: Optional[str] = None
 
 class BancoCreate(BancoBase):
     pass
@@ -64,6 +65,7 @@ class ConceptoBase(BaseModel):
     name: str
     tipo_movimiento: CategoriaMovimiento
     descripcion: Optional[str] = None
+    clasificacion_id: Optional[int] = None
     is_system: bool = False
 
 class ConceptoCreate(ConceptoBase):
@@ -73,8 +75,29 @@ class ConceptoUpdate(BaseModel):
     name: Optional[str] = None
     tipo_movimiento: Optional[CategoriaMovimiento] = None
     descripcion: Optional[str] = None
+    clasificacion_id: Optional[int] = None
 
 class ConceptoResponse(ConceptoBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+# =======================
+# Clasificacion Schemas
+# =======================
+class ClasificacionBase(BaseModel):
+    name: str
+    descripcion: Optional[str] = None
+
+class ClasificacionCreate(ClasificacionBase):
+    pass
+
+class ClasificacionUpdate(BaseModel):
+    name: Optional[str] = None
+    descripcion: Optional[str] = None
+
+class ClasificacionResponse(ClasificacionBase):
     id: int
     created_at: datetime
     updated_at: datetime
