@@ -1,6 +1,8 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { FilterX } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+import { useDebounce } from '../hooks/useDebounce';
 import axiosClient from '../api/axiosClient';
 import ClientEditModal from '../components/ClientEditModal';
 import ClientCCModal from '../components/ClientCCModal';
@@ -9,9 +11,13 @@ import ExportExcelButton from '../components/ExportExcelButton';
 import { CreditCard, Eye, Edit, Trash2 } from 'lucide-react';
 
 const ClientListPage = () => {
-  const [clients, setClients] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const limit = 1000;
+
   const [filter, setFilter] = useState({ CUIL: '', Documento: '', Apellido: '', Nombre: '', Estado: [], Mail: '', Teléfono: '' });
+  const debouncedFilter = useDebounce(filter, 500);
+  
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [showEstadoFilter, setShowEstadoFilter] = useState(false);
 
@@ -20,30 +26,55 @@ const ClientListPage = () => {
   const [editCuil, setEditCuil] = useState(null);
   const [ccCuil, setCcCuil] = useState(null);
   const [viewClient, setViewClient] = useState(null);
-  const navigate = useNavigate();
 
-  const fetchClients = async () => {
-    setLoading(true);
-    try {
-      const res = await axiosClient.get('/api/v1/clientes');
-      setClients(res.data);
-    } catch (error) {
-      alert("Error cargando clientes: " + error.message);
-    } finally {
-      setLoading(false);
-    }
+  const fetchClients = async ({ pageParam = 0, queryKey }) => {
+    const [_key, filters] = queryKey;
+    const f = { ...filters };
+    const p = {
+      skip: pageParam * limit,
+      limit: limit,
+      ...(f.CUIL && { cuil: f.CUIL }),
+      ...(f.Documento && { documento: f.Documento }),
+      ...(f.Apellido && { apellido: f.Apellido }),
+      ...(f.Nombre && { nombre: f.Nombre }),
+      ...(f.Estado && f.Estado.length > 0 && { estado: f.Estado.join(',') }),
+      ...(f.Mail && { mail: f.Mail }),
+      ...(f.Teléfono && { telefono: f.Teléfono }),
+    };
+    const res = await axiosClient.get('/api/v1/clientes', { params: p });
+    return res.data;
   };
 
-  useEffect(() => {
-    fetchClients();
-  }, []);
+  const {
+    data,
+    isLoading: loading,
+    isError,
+    error,
+    isFetching,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage
+  } = useInfiniteQuery({
+    queryKey: ['clientes', debouncedFilter],
+    queryFn: fetchClients,
+    getNextPageParam: (lastPage, pages) => {
+       const loadedItems = pages.length * limit;
+       if (loadedItems < lastPage.total) {
+           return pages.length;
+       }
+       return undefined;
+    }
+  });
+
+  const clients = useMemo(() => data?.pages.flatMap(page => page.items) || [], [data]);
+  const totalItems = data?.pages[0]?.total || 0;
 
   const handleDelete = async (cuil) => {
     if (!window.confirm(`¿Está seguro que desea eliminar al cliente con CUIL ${cuil}?`)) return;
     try {
       await axiosClient.delete(`/api/v1/clientes/${cuil}`);
       alert('Cliente eliminado con éxito.');
-      fetchClients();
+      queryClient.invalidateQueries({ queryKey: ['clientes'] });
     } catch (error) {
       alert("Error eliminando cliente: " + error.message);
     }
@@ -59,15 +90,6 @@ const ClientListPage = () => {
 
   const filteredAndSortedClients = useMemo(() => {
     let result = [...clients];
-
-    // Filter
-    if (filter.CUIL) result = result.filter(c => c.CUIL.includes(filter.CUIL));
-    if (filter.Documento) result = result.filter(c => c.Documento.includes(filter.Documento));
-    if (filter.Apellido) result = result.filter(c => c.Apellido && c.Apellido.toLowerCase().includes(filter.Apellido.toLowerCase()));
-    if (filter.Nombre) result = result.filter(c => c.Nombre && c.Nombre.toLowerCase().includes(filter.Nombre.toLowerCase()));
-    if (filter.Estado.length > 0) result = result.filter(c => filter.Estado.includes(c.Estado));
-    if (filter.Mail) result = result.filter(c => c.Mail && c.Mail.toLowerCase().includes(filter.Mail.toLowerCase()));
-    if (filter.Teléfono) result = result.filter(c => c["Teléfono"] && c["Teléfono"].toLowerCase().includes(filter.Teléfono.toLowerCase()));
 
     // Sort
     if (sortConfig.key) {
@@ -109,8 +131,8 @@ const ClientListPage = () => {
           <p>Visualización de la cartera completa de clientes.</p>
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <button className="btn-primary" onClick={fetchClients} disabled={loading} style={{ width: 'auto' }}>
-            {loading ? "Actualizando..." : "Actualizar Datos"}
+          <button className="btn-primary" onClick={() => queryClient.invalidateQueries({ queryKey: ['clientes'] })} disabled={loading || isFetching} style={{ width: 'auto' }}>
+            {(loading || isFetching) ? "Actualizando..." : "Actualizar Datos"}
           </button>
           <button 
             className="btn-secondary" 
@@ -241,7 +263,28 @@ const ClientListPage = () => {
                   </tr>
                 ))
               )}
+              {hasNextPage && (
+                <tr>
+                  <td colSpan="8" style={{ textAlign: 'center', padding: '15px' }}>
+                    <button 
+                      className="btn-primary" 
+                      onClick={() => fetchNextPage()}
+                      disabled={isFetchingNextPage}
+                      style={{ width: 'auto', padding: '8px 20px', margin: '0 auto', display: 'block' }}
+                    >
+                      {isFetchingNextPage ? "Cargando más registros..." : "Mostrar más registros"}
+                    </button>
+                  </td>
+                </tr>
+              )}
             </tbody>
+            <tfoot>
+              <tr>
+                <td colSpan="8" style={{ textAlign: 'right', fontWeight: 'bold' }}>
+                  TOTALES (Mostrando {clients.length} de {totalItems})
+                </td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       </div>

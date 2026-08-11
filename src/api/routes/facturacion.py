@@ -20,11 +20,29 @@ from src.config import COMPANY_DATA
 router = APIRouter(prefix="/api/v1/facturacion", tags=["Facturación"])
 
 @router.get("/pendientes")
-def get_pendientes(db: Session = Depends(get_db)):
-    cobranzas = db.query(Cobranza).options(
+def get_pendientes(
+    skip: int = 0,
+    limit: int = 1000,
+    socios: Optional[str] = None,
+    fecha_emision_desde: Optional[str] = None,
+    fecha_emision_hasta: Optional[str] = None,
+    fecha_vto_desde: Optional[str] = None,
+    fecha_vto_hasta: Optional[str] = None,
+    procesos: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    query = db.query(Cobranza).options(
         joinedload(Cobranza.cuota).joinedload(Cuota.credito).joinedload(Credito.socio_originador),
         joinedload(Cobranza.proceso)
-    ).filter(Cobranza.facturada == False).all()
+    ).filter(Cobranza.facturada == False)
+    
+    if fecha_emision_desde:
+        query = query.filter(Cobranza.fecha >= fecha_emision_desde)
+    if fecha_emision_hasta:
+        query = query.filter(Cobranza.fecha <= fecha_emision_hasta)
+
+    # Some filters need to be applied in python or with joins
+    cobranzas = query.order_by(Cobranza.id.desc()).all()
     
     res = []
     for c in cobranzas:
@@ -32,6 +50,23 @@ def get_pendientes(db: Session = Depends(get_db)):
         if c.cuota and c.cuota.credito and c.cuota.credito.socio_originador:
             socio_nombre = c.cuota.credito.socio_originador.razon_social
             
+        if socios:
+            socio_list = socios.split(',')
+            if socio_nombre not in socio_list:
+                continue
+
+        vencimiento_cuota = str(c.cuota.fecha_vencimiento) if c.cuota and c.cuota.fecha_vencimiento else ""
+        if fecha_vto_desde and vencimiento_cuota < fecha_vto_desde:
+            continue
+        if fecha_vto_hasta and vencimiento_cuota and vencimiento_cuota > fecha_vto_hasta:
+            continue
+
+        proceso_nombre = f"Lote #{c.proceso.id} - {c.proceso.tipo.value if hasattr(c.proceso.tipo, 'value') else c.proceso.tipo}" if c.proceso else "Sin Proceso"
+        if procesos:
+            procesos_list = procesos.split(',')
+            if proceso_nombre not in procesos_list:
+                continue
+                
         res.append({
             "id": c.id,
             "cuota_id": c.cuota_id,
@@ -42,11 +77,14 @@ def get_pendientes(db: Session = Depends(get_db)):
             "importe_total": float(c.importe_total),
             "tipo_cobranza": c.tipo_cobranza.value if hasattr(c.tipo_cobranza, 'value') else str(c.tipo_cobranza),
             "socio_originador": socio_nombre,
-            "vencimiento_cuota": str(c.cuota.fecha_vencimiento) if c.cuota and c.cuota.fecha_vencimiento else None,
+            "vencimiento_cuota": vencimiento_cuota or None,
             "proceso_id": c.proceso_id,
-            "proceso_nombre": f"Lote #{c.proceso.id} - {c.proceso.tipo.value if hasattr(c.proceso.tipo, 'value') else c.proceso.tipo}" if c.proceso else "Sin Proceso"
+            "proceso_nombre": proceso_nombre
         })
-    return res
+        
+    total = len(res)
+    items = res[skip : skip + limit]
+    return {"items": items, "total": total}
 
 @router.get("/ultima-fecha")
 def get_ultima_fecha_factura(db: Session = Depends(get_db)):

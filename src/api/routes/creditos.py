@@ -248,17 +248,75 @@ def get_credito_transferencias(credito_id: int, db: Session = Depends(get_db)):
     return result
 
 @router.get("/api/v1/creditos")
-def get_creditos_list(fecha_corte: Optional[date] = Query(None, description="Fecha de corte para calcular mora"), db: Session = Depends(get_db)):
+def get_creditos_list(
+    skip: int = 0,
+    limit: int = 1000,
+    fecha_corte: Optional[date] = Query(None, description="Fecha de corte para calcular mora"),
+    id: Optional[str] = None,
+    id_externo: Optional[str] = None,
+    originador: Optional[str] = None,
+    cuil: Optional[str] = None,
+    plazo: Optional[str] = None,
+    tna: Optional[str] = None,
+    id_tasa: Optional[str] = None,
+    estado: Optional[str] = None,
+    tipo_credito: Optional[str] = None,
+    fecha: Optional[str] = None,
+    capital_min: Optional[float] = None,
+    capital_max: Optional[float] = None,
+    saldo_mora_min: Optional[float] = None,
+    saldo_mora_max: Optional[float] = None,
+    dias_mora_min: Optional[float] = None,
+    dias_mora_max: Optional[float] = None,
+    db: Session = Depends(get_db)
+):
     if fecha_corte is None:
         fecha_corte = date.today()
         
-    creditos = db.query(Credito).options(
+    query = db.query(Credito).options(
         joinedload(Credito.cliente), 
         joinedload(Credito.socio_originador),
         joinedload(Credito.cuotas).joinedload(Cuota.cobranzas)
-    ).all()
+    )
+
+    if id:
+        ids = [int(i.strip()) for i in id.split(",") if i.strip().isdigit()]
+        if ids:
+            query = query.filter(Credito.id.in_(ids))
+    if id_externo:
+        query = query.filter(Credito.id_externo.ilike(f"%{id_externo}%"))
+    if cuil:
+        query = query.filter(Credito.cliente_cuil.like(f"%{cuil}%"))
+    if plazo:
+        plazos = [int(p.strip()) for p in plazo.split(",") if p.strip().isdigit()]
+        if plazos:
+            query = query.filter(Credito.plazo.in_(plazos))
+    if estado:
+        estados = estado.split(",")
+        query = query.filter(Credito.estado.in_(estados))
+    if tipo_credito:
+        tipos = tipo_credito.split(",")
+        query = query.filter(Credito.tipo_credito.in_(tipos))
+    if capital_min is not None:
+        query = query.filter(Credito.capital >= capital_min)
+    if capital_max is not None:
+        query = query.filter(Credito.capital <= capital_max)
+    if fecha:
+        fechas = [f.strip() for f in fecha.split(",")]
+        query = query.filter(Credito.fecha_emision.in_(fechas))
+
+    creditos = query.order_by(Credito.id.desc()).all()
     result = []
+    
     for c in creditos:
+        socio = c.socio_originador.razon_social if c.socio_originador else "-"
+        if originador and originador.lower() not in socio.lower():
+            continue
+        if tna and tna not in str(c.tna_c_iva):
+            continue
+        if id_tasa and id_tasa not in str(c.comision_id):
+            continue
+
         saldo_mora = 0.0
         dias_mora = 0
         min_vencimiento_mora = None
@@ -291,9 +349,19 @@ def get_creditos_list(fecha_corte: Optional[date] = Query(None, description="Fec
             if dias_mora < 0:
                 dias_mora = 0
 
+        saldo_mora_val = float(round(saldo_mora, 2))
+        
+        if saldo_mora_min is not None and saldo_mora_val < saldo_mora_min:
+            continue
+        if saldo_mora_max is not None and saldo_mora_val > saldo_mora_max:
+            continue
+        if dias_mora_min is not None and dias_mora < dias_mora_min:
+            continue
+        if dias_mora_max is not None and dias_mora > dias_mora_max:
+            continue
+
         nombre_cliente = f"{c.cliente.apellido}, {c.cliente.nombre}" if c.cliente else "-"
         origen = c.origen.value if hasattr(c.origen, 'value') else str(c.origen)
-        socio = c.socio_originador.razon_social if c.socio_originador else "-"
         result.append({
             "ID": c.id,
             "ID Externo": c.id_externo or "-",
@@ -309,10 +377,14 @@ def get_creditos_list(fecha_corte: Optional[date] = Query(None, description="Fec
             "Tipo Crédito": c.tipo_credito.value if hasattr(c.tipo_credito, 'value') else str(c.tipo_credito) if c.tipo_credito else "-",
             "Día Vto": c.dia_vencimiento,
             "ID Tasa Comision": c.comision_id,
-            "Saldo en Mora": float(round(saldo_mora, 2)),
+            "Saldo en Mora": saldo_mora_val,
             "Días de Mora": dias_mora
         })
-    return result
+
+    return {
+        "items": result[skip : skip + limit],
+        "total": len(result)
+    }
 
 @router.delete("/api/v1/creditos/{credito_id:int}")
 def delete_credito(credito_id: int, db: Session = Depends(get_db)):

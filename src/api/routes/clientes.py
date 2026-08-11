@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError
@@ -59,11 +59,46 @@ def create_cliente(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("")
-def get_clientes_list(db: Session = Depends(get_db)):
-    clientes = db.query(Cliente).options(
+def get_clientes_list(
+    skip: int = 0,
+    limit: int = 1000,
+    cuil: Optional[str] = None,
+    documento: Optional[str] = None,
+    apellido: Optional[str] = None,
+    nombre: Optional[str] = None,
+    estado: Optional[str] = None,
+    mail: Optional[str] = None,
+    telefono: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    query = db.query(Cliente).options(
         joinedload(Cliente.provincia), 
         joinedload(Cliente.empleador)
-    ).all()
+    )
+
+    if cuil:
+        query = query.filter(Cliente.cuil.like(f"%{cuil}%"))
+    if documento:
+        query = query.filter(Cliente.documento.like(f"%{documento}%"))
+    if apellido:
+        query = query.filter(Cliente.apellido.ilike(f"%{apellido}%"))
+    if nombre:
+        query = query.filter(Cliente.nombre.ilike(f"%{nombre}%"))
+    if estado:
+        estados = estado.split(",")
+        query = query.filter(Cliente.estado.in_(estados))
+    if mail:
+        query = query.filter(Cliente.mail.ilike(f"%{mail}%"))
+    if telefono:
+        query = query.filter(
+            or_(
+                Cliente.telefono.like(f"%{telefono}%"),
+                Cliente.telefono_2.like(f"%{telefono}%")
+            )
+        )
+
+    total = query.count()
+    clientes = query.order_by(Cliente.cuil.desc()).offset(skip).limit(limit).all()
     result = []
     for c in clientes:
         prov = c.provincia.nombre if c.provincia else "-"
@@ -100,7 +135,7 @@ def get_clientes_list(db: Session = Depends(get_db)):
             "Fecha Ingreso": c.fecha_ingreso.strftime("%Y-%m-%d") if c.fecha_ingreso else "-",
             "Remuneración": float(c.remuneracion or 0.0)
         })
-    return result
+    return {"items": result, "total": total}
 
 @router.get("/{cuil}")
 def get_cliente(cuil: str, db: Session = Depends(get_db)):

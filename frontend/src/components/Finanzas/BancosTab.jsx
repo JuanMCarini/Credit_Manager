@@ -5,6 +5,8 @@ import CuentaModal from './CuentaModal';
 import MovimientoModal from './MovimientoModal';
 import ExcelDateFilter from '../ExcelDateFilter';
 import ExcelListFilter from '../ExcelListFilter';
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+import { useDebounce } from '../../hooks/useDebounce';
 
 const FilterInput = ({ col, columnFilters, setColumnFilters }) => (
   <div onClick={e => e.stopPropagation()}>
@@ -19,10 +21,12 @@ const FilterInput = ({ col, columnFilters, setColumnFilters }) => (
 );
 
 const BancosTab = () => {
+  const queryClient = useQueryClient();
+  const limit = 1000;
+
   const [cuentas, setCuentas] = useState([]);
   const [selectedCuentaId, setSelectedCuentaId] = useState('');
   const [kpis, setKpis] = useState({ saldo: 0, saldo_fci: 0, saldo_plazo_fijo: 0 });
-  const [movimientos, setMovimientos] = useState([]);
   const [loading, setLoading] = useState(false);
 
   // Modals state
@@ -55,28 +59,66 @@ const BancosTab = () => {
     }
   }, [selectedCuentaId]);
 
-  const fetchDashboardData = useCallback(async () => {
+  const debouncedColumnFilters = useDebounce(columnFilters, 500);
+
+  const fetchKpis = useCallback(async () => {
     if (!selectedCuentaId) return;
-    setLoading(true);
     try {
-      const [kpiRes, movsRes] = await Promise.all([
-        axiosClient.get(`/api/finanzas/cuentas/${selectedCuentaId}/kpis`, { params: { fecha_desde: filtroDesde || undefined, fecha_hasta: filtroHasta || undefined } }),
-        axiosClient.get('/api/finanzas/movimientos', { 
-          params: { 
-            cuenta_id: selectedCuentaId,
-            fecha_desde: filtroDesde || undefined,
-            fecha_hasta: filtroHasta || undefined
-          } 
-        })
-      ]);
+      const kpiRes = await axiosClient.get(`/api/finanzas/cuentas/${selectedCuentaId}/kpis`, { params: { fecha_desde: filtroDesde || undefined, fecha_hasta: filtroHasta || undefined } });
       setKpis(kpiRes.data);
-      setMovimientos(movsRes.data);
     } catch (err) {
       console.error(err);
-    } finally {
-      setLoading(false);
     }
   }, [selectedCuentaId, filtroDesde, filtroHasta]);
+
+  const fetchMovimientos = async ({ pageParam = 0, queryKey }) => {
+    const [_key, cuentaId, desde, hasta, filters] = queryKey;
+    if (!cuentaId) return { items: [], total: 0 };
+    
+    const p = {
+      skip: pageParam * limit,
+      limit: limit,
+      cuenta_id: cuentaId,
+      fecha_desde: desde || undefined,
+      fecha_hasta: hasta || undefined,
+      ...(filters.nro_comprobante && { nro_comprobante: filters.nro_comprobante }),
+      ...(filters.descripcion && { descripcion: filters.descripcion }),
+      ...(filters.concepto && filters.concepto.length > 0 && { concepto_nombre: filters.concepto.join(',') }),
+      ...(filters.clasificacion && filters.clasificacion.length > 0 && { clasificacion_nombre: filters.clasificacion.join(',') }),
+      ...(filters.ingreso && { ingreso_str: filters.ingreso }),
+      ...(filters.egreso && { egreso_str: filters.egreso }),
+    };
+    
+    // We do local filtering on 'fecha' in the frontend using list filters, so if they pass 'fecha', send it as fecha_desde/hasta
+    // But since the frontend uses it as an ExcelListFilter (specific dates), we can just filter it locally later or send it.
+    // For now, let's just let the endpoint return what it returns, and we can do small local filtering if needed, or pass it to backend.
+    
+    const res = await axiosClient.get('/api/finanzas/movimientos', { params: p });
+    return res.data;
+  };
+
+  const {
+    data,
+    isLoading: isMovsLoading,
+    isFetching,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage
+  } = useInfiniteQuery({
+    queryKey: ['movimientos', selectedCuentaId, filtroDesde, filtroHasta, debouncedColumnFilters],
+    queryFn: fetchMovimientos,
+    enabled: !!selectedCuentaId,
+    getNextPageParam: (lastPage, pages) => {
+       const loadedItems = pages.length * limit;
+       if (loadedItems < (lastPage?.total || 0)) {
+           return pages.length;
+       }
+       return undefined;
+    }
+  });
+
+  const movimientos = useMemo(() => data?.pages.flatMap(page => page.items) || [], [data]);
+  const totalItems = data?.pages[0]?.total || 0;
 
   useEffect(() => {
     fetchCuentas();
@@ -96,8 +138,8 @@ const BancosTab = () => {
   }, [fetchConceptos]);
 
   useEffect(() => {
-    fetchDashboardData();
-  }, [fetchDashboardData]);
+    fetchKpis();
+  }, [fetchKpis]);
 
   const handleEditCuenta = () => {
     const cuenta = cuentas.find(c => c.id == selectedCuentaId);
@@ -163,7 +205,8 @@ const BancosTab = () => {
         }
       });
       alert(res.data.message + ". Filas procesadas: " + res.data.filas_procesadas);
-      fetchDashboardData();
+      fetchKpis();
+      queryClient.invalidateQueries({ queryKey: ['movimientos'] });
     } catch (err) {
       console.error(err);
       alert('Error al subir el archivo: ' + (err.response?.data?.detail || err.message));
@@ -180,7 +223,8 @@ const BancosTab = () => {
     if (!window.confirm("¿Está seguro de que desea eliminar este movimiento?")) return;
     try {
       await axiosClient.delete(`/api/finanzas/movimientos/${id}`);
-      fetchDashboardData();
+      fetchKpis();
+      queryClient.invalidateQueries({ queryKey: ['movimientos'] });
     } catch (err) {
       console.error(err);
       alert('Error al eliminar el movimiento');
@@ -209,42 +253,7 @@ const BancosTab = () => {
     return [...new Set(list)].sort();
   }, [movimientos]);
 
-  const filteredMovimientos = useMemo(() => {
-    return movimientos.filter(mov => {
-      const cat = mov.concepto?.tipo_movimiento || '';
-      const isIngreso = cat === 'Ingreso' || cat === 'Rescate FCI' || cat === 'Egresos de plazo fijo';
-      let match = true;
-
-      if (columnFilters['fecha']?.length > 0 && !columnFilters['fecha'].includes(mov.fecha)) return false;
-      
-      if (columnFilters.concepto && columnFilters.concepto.length > 0) {
-        if (!columnFilters.concepto.includes(mov.concepto?.name)) {
-          match = false;
-        }
-      }
-      if (columnFilters.clasificacion && columnFilters.clasificacion.length > 0) {
-        if (!columnFilters.clasificacion.includes(mov.concepto?.clasificacion?.name)) {
-          match = false;
-        }
-      }
-      
-      if (columnFilters['nro_comprobante'] && !(mov.nro_comprobante || '-').toLowerCase().includes(columnFilters['nro_comprobante'].toLowerCase())) return false;
-      
-      if (columnFilters['descripcion'] && !(mov.descripcion || '-').toLowerCase().includes(columnFilters['descripcion'].toLowerCase())) return false;
-      
-      if (columnFilters['ingreso']) {
-         if (!isIngreso) return false;
-         if (!formatCurrency(mov.monto).toLowerCase().includes(columnFilters['ingreso'].toLowerCase())) return false;
-      }
-      
-      if (columnFilters['egreso']) {
-         if (isIngreso) return false;
-         if (!formatCurrency(mov.monto).toLowerCase().includes(columnFilters['egreso'].toLowerCase())) return false;
-      }
-      
-      return match;
-    });
-  }, [movimientos, columnFilters]);
+  const filteredMovimientos = movimientos;
 
   const subtotals = useMemo(() => {
     let ingresos = 0;
@@ -527,11 +536,25 @@ const BancosTab = () => {
                   )
                 })
               )}
+              {hasNextPage && (
+                <tr>
+                  <td colSpan="9" style={{ textAlign: 'center', padding: '15px' }}>
+                    <button 
+                      className="btn-primary" 
+                      onClick={() => fetchNextPage()}
+                      disabled={isFetchingNextPage}
+                      style={{ width: 'auto', padding: '8px 20px', margin: '0 auto', display: 'block' }}
+                    >
+                      {isFetchingNextPage ? "Cargando más registros..." : "Mostrar más registros"}
+                    </button>
+                  </td>
+                </tr>
+              )}
             </tbody>
             {filteredMovimientos.length > 0 && (
               <tfoot>
                 <tr>
-                  <td colSpan="6" style={{ textAlign: 'right', padding: '16px', fontWeight: 'bold' }}>Subtotales filtrados:</td>
+                  <td colSpan="6" style={{ textAlign: 'right', padding: '16px', fontWeight: 'bold' }}>TOTALES (Mostrando {filteredMovimientos.length} de {totalItems}):</td>
                   <td style={{ textAlign: 'right', color: 'var(--success-color)', padding: '16px', fontWeight: 'bold' }}>
                     {formatCurrency(subtotals.ingresos)}
                   </td>
@@ -556,7 +579,10 @@ const BancosTab = () => {
       <MovimientoModal
         isOpen={isMovimientoModalOpen}
         onClose={() => setIsMovimientoModalOpen(false)}
-        onSaved={fetchDashboardData}
+        onSaved={() => {
+          fetchKpis();
+          queryClient.invalidateQueries({ queryKey: ['movimientos'] });
+        }}
         movimiento={editingMovimiento}
         cuentaIdDefault={selectedCuentaId}
       />
