@@ -526,3 +526,55 @@ def delete_movimiento(movimiento_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"message": "Movimiento eliminado correctamente"}
 
+
+@router.get("/kpis-globales")
+def get_kpis_globales(
+    fecha_desde: Optional[date] = None,
+    fecha_hasta: Optional[date] = None,
+    db: Session = Depends(get_db)
+):
+    query = db.query(Movimiento).join(Concepto)
+    if fecha_desde:
+        query = query.filter(Movimiento.fecha >= fecha_desde)
+    if fecha_hasta:
+        query = query.filter(Movimiento.fecha <= fecha_hasta)
+        
+    movs = query.all()
+    
+    saldo = 0.0
+    saldo_fci = 0.0
+    saldo_pf = 0.0
+    ingresos = 0.0
+    egresos = 0.0
+    
+    for m in movs:
+        cat = m.concepto.tipo_movimiento
+        
+        if cat in (CategoriaMovimiento.INGRESO, CategoriaMovimiento.RESCATE_FCI, CategoriaMovimiento.PLAZO_FIJO_EGRESOS):
+            saldo += m.monto
+            ingresos += m.monto
+        elif cat in (CategoriaMovimiento.EGRESO, CategoriaMovimiento.SUSCRIPCION_FCI, CategoriaMovimiento.PLAZO_FIJO_INGRESOS):
+            saldo -= m.monto
+            egresos += m.monto
+            
+        if cat == CategoriaMovimiento.SUSCRIPCION_FCI:
+            saldo_fci += m.monto
+        elif cat == CategoriaMovimiento.RESCATE_FCI:
+            saldo_fci -= m.monto
+            
+        if cat == CategoriaMovimiento.PLAZO_FIJO_INGRESOS:
+            saldo_pf += m.monto
+        elif cat == CategoriaMovimiento.PLAZO_FIJO_EGRESOS:
+            saldo_pf -= m.monto
+
+    return {
+        "saldo": saldo,
+        "saldo_fci": max(0.0, saldo_fci),
+        "saldo_plazo_fijo": max(0.0, saldo_pf),
+        "ingresos_periodo": ingresos,
+        "egresos_periodo": egresos,
+        "flujo_neto": ingresos - egresos,
+        "fecha_desde": fecha_desde,
+        "fecha_hasta": fecha_hasta
+    }
+
