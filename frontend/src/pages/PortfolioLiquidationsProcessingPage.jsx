@@ -24,7 +24,7 @@ const PortfolioLiquidationsProcessingPage = () => {
     nro_cuota: '',
     fecha_vencimiento: [],
     cartera_id: '',
-    tipo_liquidacion: ''
+    tipo_liquidacion: []
   });
 
   useEffect(() => {
@@ -125,7 +125,7 @@ const PortfolioLiquidationsProcessingPage = () => {
       (filters.nro_cuota === '' || String(item.nro_cuota).includes(filters.nro_cuota)) &&
       (filters.fecha_vencimiento.length === 0 || filters.fecha_vencimiento.includes(item.fecha_vencimiento)) &&
       (filters.cartera_id === '' || String(item.cartera_id).includes(filters.cartera_id)) &&
-      (filters.tipo_liquidacion === '' || item.tipo_liquidacion === filters.tipo_liquidacion)
+      (filters.tipo_liquidacion.length === 0 || filters.tipo_liquidacion.includes(item.tipo_liquidacion))
     );
   }) : [];
 
@@ -219,7 +219,7 @@ const PortfolioLiquidationsProcessingPage = () => {
             <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
               <button 
                 className="btn-secondary" 
-                onClick={() => setFilters({ credito_id: [], nro_cuota: '', fecha_vencimiento: [], cartera_id: '', tipo_liquidacion: '' })}
+                onClick={() => setFilters({ credito_id: [], nro_cuota: '', fecha_vencimiento: [], cartera_id: '', tipo_liquidacion: [] })}
                 title="Limpiar todos los filtros"
                 style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '100%', padding: '0 12px' }}
               >
@@ -277,10 +277,16 @@ const PortfolioLiquidationsProcessingPage = () => {
                   <th>Cobranza ID</th>
                   <th>
                     Tipo Liquidación
-                    <select value={filters.tipo_liquidacion} onChange={(e) => handleFilterChange(e, 'tipo_liquidacion')} style={{ display: 'block', width: '100%', marginTop: '4px', padding: '4px', fontSize: '0.8rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-primary)', borderRadius: '4px' }}>
-                      <option value="">Todos</option>
-                      {uniqueTipos.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
+                    {uniqueTipos.length > 0 && (
+                      <div style={{ marginTop: '5px' }}>
+                        <ExcelListFilter 
+                          availableOptions={uniqueTipos}
+                          selectedOptions={filters.tipo_liquidacion}
+                          onChange={(newTypes) => setFilters(prev => ({ ...prev, tipo_liquidacion: newTypes }))}
+                          title="Filtrar Tipos..."
+                        />
+                      </div>
+                    )}
                   </th>
                   <th>
                     Crédito ID
