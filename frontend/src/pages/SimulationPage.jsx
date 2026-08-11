@@ -149,7 +149,7 @@ const SimulationPage = () => {
                 )}
               </tbody>
               {cuotas.length > 0 && (
-                <tfoot style={{ background: 'rgba(255, 255, 255, 0.05)', fontWeight: 'bold' }}>
+                <tfoot>
                   <tr>
                     <td colSpan="2" style={{ textAlign: 'right' }}>TOTALES:</td>
                     <td>{formatCurrency(totals.capital)}</td>

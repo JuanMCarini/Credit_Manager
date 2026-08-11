@@ -532,7 +532,7 @@ const CollectionsListPage = () => {
                     ))
                   )}
                 </tbody>
-                <tfoot style={{ background: 'rgba(255, 255, 255, 0.05)', fontWeight: 'bold' }}>
+                <tfoot>
                   {(() => {
                     let loteRow = null;
                     

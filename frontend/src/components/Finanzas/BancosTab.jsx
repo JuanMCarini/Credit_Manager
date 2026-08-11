@@ -529,7 +529,7 @@ const BancosTab = () => {
               )}
             </tbody>
             {filteredMovimientos.length > 0 && (
-              <tfoot style={{ backgroundColor: 'var(--surface-color)', borderTop: '2px solid var(--border-color)' }}>
+              <tfoot>
                 <tr>
                   <td colSpan="6" style={{ textAlign: 'right', padding: '16px', fontWeight: 'bold' }}>Subtotales filtrados:</td>
                   <td style={{ textAlign: 'right', color: 'var(--success-color)', padding: '16px', fontWeight: 'bold' }}>

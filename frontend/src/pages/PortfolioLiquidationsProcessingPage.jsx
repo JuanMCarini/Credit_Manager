@@ -348,7 +348,7 @@ const PortfolioLiquidationsProcessingPage = () => {
                   ))
                 )}
               </tbody>
-              <tfoot style={{ position: 'sticky', bottom: 0, zIndex: 10, backgroundColor: 'var(--bg-panel)', fontWeight: 'bold' }}>
+              <tfoot>
                 <tr>
                   <td colSpan="7" style={{ textAlign: 'right' }}>Totales:</td>
                   <td>{formatMoney(totalCapital)}</td>

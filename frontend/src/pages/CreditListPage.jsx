@@ -396,7 +396,7 @@ const CreditListPage = () => {
                 ))
               )}
             </tbody>
-            <tfoot style={{ background: 'rgba(255, 255, 255, 0.05)', fontWeight: 'bold' }}>
+            <tfoot>
               <tr>
                 <td colSpan="4" style={{ textAlign: 'right' }}>TOTAL:</td>
                 <td>{formatCurrency(totalCapital)}</td>

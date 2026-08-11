@@ -417,7 +417,7 @@ const BalancesPage = () => {
                 )}
               </tbody>
               {filteredAndSortedResults.length > 0 && (
-                <tfoot style={{ background: 'rgba(255, 255, 255, 0.05)', fontWeight: 'bold' }}>
+                <tfoot>
                   <tr>
                     <td colSpan={columns.length - 4} style={{ textAlign: 'right' }}>TOTALES VISIBLES:</td>
                     <td>{formatCurrency(totals.capital)}</td>

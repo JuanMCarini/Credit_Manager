@@ -842,7 +842,7 @@ const PortfolioOriginationPage = () => {
                           )
                         ))}
                       </tbody>
-                      <tfoot style={{ position: 'sticky', bottom: 0, zIndex: 10, background: 'var(--bg-panel)', boxShadow: '0 -2px 4px rgba(0,0,0,0.2)' }}>
+                      <tfoot>
                         <tr>
                           <td colSpan={tipoOperacion === 'VENTA' ? 4 : 3} style={{ textAlign: 'right', padding: '12px', fontWeight: 'bold' }}>Totales:</td>
                           <td style={{ textAlign: 'right', padding: '12px', fontWeight: 'bold' }}>${totalMonto.toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
@@ -1070,7 +1070,7 @@ const PortfolioOriginationPage = () => {
                           )
                         ))}
                       </tbody>
-                      <tfoot style={{ position: 'sticky', bottom: 0, zIndex: 10, background: 'var(--bg-panel)', boxShadow: '0 -2px 4px rgba(0,0,0,0.2)' }}>
+                      <tfoot>
                         <tr>
                           <td colSpan={3} style={{ textAlign: 'right', padding: '12px', fontWeight: 'bold' }}>Totales:</td>
                           <td style={{ textAlign: 'right', padding: '12px', fontWeight: 'bold' }}>${totalCap.toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
@@ -1191,7 +1191,7 @@ const PortfolioOriginationPage = () => {
                           );
                         })}
                       </tbody>
-                      <tfoot style={{ position: 'sticky', bottom: 0, zIndex: 10, background: 'var(--bg-panel)', boxShadow: '0 -2px 4px rgba(0,0,0,0.2)' }}>
+                      <tfoot>
                         <tr>
                           <td style={{ textAlign: 'right', padding: '12px', fontWeight: 'bold' }}>Totales:</td>
                           <td style={{ textAlign: 'right', padding: '12px', fontWeight: 'bold' }}>{totalCuotas}</td>
