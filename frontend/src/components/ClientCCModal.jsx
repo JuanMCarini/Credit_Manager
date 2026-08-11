@@ -449,7 +449,7 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '', i
                   })
                 )}
               </tbody>
-              <tfoot style={{ position: 'sticky', bottom: 0, zIndex: 10, background: 'var(--bg-panel)', boxShadow: '0 -2px 4px rgba(0,0,0,0.2)', fontWeight: 'bold' }}>
+              <tfoot>
                 <tr>
                   <td colSpan="4" style={{ textAlign: 'right' }}>TOTALES:</td>
                   <td>{formatCurrency(totals.capital)}</td>

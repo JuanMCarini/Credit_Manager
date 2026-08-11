@@ -80,6 +80,8 @@ body {
     border-top: none;
     border-bottom: none;
     border-left: none;
+    height: 100vh;
+    overflow-y: auto;
 }
 
 .main-content {
@@ -387,6 +389,16 @@ input:focus, select:focus {
     z-index: 20;
 }
 
+.data-table tfoot {
+    position: sticky;
+    bottom: 0;
+    z-index: 10;
+    background-color: #0B0E14;
+    font-weight: bold;
+    white-space: nowrap;
+    box-shadow: 0 -1px 0 var(--border-color);
+}
+
 .data-table tr:last-child td {
     border-bottom: none;
 }
@@ -554,4 +566,23 @@ input:focus, select:focus {
 
 .animate-shimmer {
   animation: shimmer 1.5s infinite;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.25);
 }
