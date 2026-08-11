@@ -7,7 +7,7 @@ const BancosPage = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
 
   return (
-    <div className="page-container" style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto' }}>
+    <div className="page-container" style={{ padding: '24px', margin: '0 auto' }}>
       <header className="page-header" style={{ marginBottom: '32px' }}>
         <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '28px', fontWeight: 'bold' }}>
           <Landmark size={32} color="var(--primary-color)" />

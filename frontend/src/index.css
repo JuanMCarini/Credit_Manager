@@ -346,7 +346,8 @@ input:focus, select:focus {
 .table-responsive {
     overflow-x: auto;
     overflow-y: auto;
-    max-height: calc(100vh - 250px);
+    max-height: calc(100vh - 100px);
+    min-height: 50vh;
     border-radius: var(--radius-md);
     border: 1px solid var(--border-color);
 }

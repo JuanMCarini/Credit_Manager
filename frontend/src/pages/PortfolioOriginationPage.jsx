@@ -369,7 +369,7 @@ const PortfolioOriginationPage = () => {
         <p>Ingrese los datos para registrar una nueva venta o compra de cartera.</p>
       </header>
 
-      <div className="glass-panel" style={{ maxWidth: '800px', margin: '0 auto', padding: '32px' }}>
+      <div className="glass-panel" style={{ margin: '0 auto', padding: '32px' }}>
         <div className="form-group" style={{ marginBottom: '32px' }}>
           <label style={{ fontSize: '1.1em', marginBottom: '8px' }}>Seleccione el Tipo de Operación</label>
           <select value={tipoOperacion} onChange={(e) => { setTipoOperacion(e.target.value); setFeedback({type: '', message: ''}); }} className="input-field" style={{ fontSize: '1.1em', padding: '12px' }}>
@@ -539,7 +539,7 @@ const PortfolioOriginationPage = () => {
           backdropFilter: 'blur(4px)'
         }}>
           <div className="glass-panel" style={{
-            width: '100%', maxWidth: '500px', padding: '32px', position: 'relative',
+            width: '100%', padding: '32px', position: 'relative',
             maxHeight: '90vh', overflowY: 'auto'
           }}>
             <button onClick={() => setShowNewSocioModal(false)} className="btn-secondary" style={{
@@ -597,7 +597,7 @@ const PortfolioOriginationPage = () => {
           backdropFilter: 'blur(8px)'
         }}>
           <div className="glass-panel" style={{
-            width: '100%', maxWidth: '1200px', height: '95vh', display: 'flex', flexDirection: 'column', position: 'relative'
+            width: '100%', height: '95vh', display: 'flex', flexDirection: 'column', position: 'relative'
           }}>
             <button onClick={() => setShowPreviewModal(false)} className="btn-secondary" style={{
               position: 'absolute', top: '16px', right: '16px', padding: '4px 12px', zIndex: 10
