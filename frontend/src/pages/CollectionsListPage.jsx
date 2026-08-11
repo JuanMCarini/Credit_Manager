@@ -1,7 +1,7 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { FilterX } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import axiosClient from '../api/axiosClient';
 import { useDebounce } from '../hooks/useDebounce';
 import ExcelDateFilter from '../components/ExcelDateFilter';
@@ -24,8 +24,7 @@ const CollectionsListPage = () => {
   const [activeTab, setActiveTab] = useState(initialProcesoId ? 'cobranzas' : 'cobranzas');
 
   // --- COBRANZAS STATE ---
-  const [page, setPage] = useState(0);
-  const limit = 50;
+  const limit = 1000;
   
   const [filter, setFilter] = useState({ 
     ID: '', 
@@ -61,11 +60,11 @@ const CollectionsListPage = () => {
   const AVAILABLE_FECHAS = useMemo(() => [...new Set(procesos.map(p => p["Fecha Ejecución"]).filter(Boolean))], [procesos]);
 
   // --- COBRANZAS FETCH ---
-  const fetchCobranzas = async ({ queryKey }) => {
-    const [_key, pageIndex, filters] = queryKey;
+  const fetchCobranzas = async ({ pageParam = 0, queryKey }) => {
+    const [_key, filters] = queryKey;
     const f = { ...filters };
     const p = { 
-        skip: pageIndex * limit, 
+        skip: pageParam * limit, 
         limit: limit,
         ...(f.ID && { id_cobranza: f.ID }),
         ...(f.ProcesoID && { proceso_id: f.ProcesoID }),
@@ -88,9 +87,25 @@ const CollectionsListPage = () => {
     return res.data;
   };
 
-  const { data, isLoading, isError, error, isFetching } = useQuery({
-    queryKey: ['cobranzas', page, debouncedFilter],
+  const { 
+    data, 
+    isLoading, 
+    isError, 
+    error, 
+    isFetching,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage
+  } = useInfiniteQuery({
+    queryKey: ['cobranzas', debouncedFilter],
     queryFn: fetchCobranzas,
+    getNextPageParam: (lastPage, pages) => {
+       const loadedItems = pages.length * limit;
+       if (loadedItems < lastPage.total) {
+           return pages.length;
+       }
+       return undefined;
+    }
   });
 
   const { data: procesosData } = useQuery({
@@ -101,21 +116,19 @@ const CollectionsListPage = () => {
     }
   });
 
-  const AVAILABLE_CREDIT_IDS = useMemo(() => {
-    if (!data || !data.items) return [];
-    return [...new Set(data.items.map(c => c["Credito ID"]).filter(Boolean))].sort((a,b)=>a-b).map(String);
-  }, [data]);
+  const cobranzas = useMemo(() => data?.pages.flatMap(page => page.items) || [], [data]);
 
-  const cobranzas = data?.items || [];
-  const totalItems = data?.total || 0;
-  const availableTipos = data?.available_tipos || ['COMUN', 'ANTICIPO', 'CANCELACION ANTICIPADA', 'BONIFICACION POR CANCELACION ANTICIPADA', 'CUOTA NO COMPRADA', 'PENALTY', 'RECURSO', 'AJUSTE'];
-  const availableVtoDates = data?.available_vto_dates || [];
-  const availablePagoDates = data?.available_pago_dates || [];
-  const totalPages = Math.ceil(totalItems / limit);
+  const AVAILABLE_CREDIT_IDS = useMemo(() => {
+    return [...new Set(cobranzas.map(c => c["Credito ID"]).filter(Boolean))].sort((a,b)=>a-b).map(String);
+  }, [cobranzas]);
+
+  const totalItems = data?.pages[0]?.total || 0;
+  const availableTipos = data?.pages[0]?.available_tipos || ['COMUN', 'ANTICIPO', 'CANCELACION ANTICIPADA', 'BONIFICACION POR CANCELACION ANTICIPADA', 'CUOTA NO COMPRADA', 'PENALTY', 'RECURSO', 'AJUSTE'];
+  const availableVtoDates = data?.pages[0]?.available_vto_dates || [];
+  const availablePagoDates = data?.pages[0]?.available_pago_dates || [];
 
   const handleFilterChange = (key, value) => {
     setFilter(prev => ({ ...prev, [key]: value }));
-    setPage(0);
   };
 
   const handleDeleteCobranza = async (id) => {
@@ -132,8 +145,8 @@ const CollectionsListPage = () => {
   };
 
   const totals = useMemo(() => {
-    if (data?.global_totals) {
-      return data.global_totals;
+    if (data?.pages?.[0]?.global_totals) {
+      return data.pages[0].global_totals;
     }
     return cobranzas.reduce((acc, curr) => ({
       capital: acc.capital + (curr.Capital || 0),
@@ -369,8 +382,8 @@ const CollectionsListPage = () => {
             </div>
             <div style={{ flex: 1 }}>
                 <p style={{ fontSize: '12px', opacity: 0.7 }}>
-                  Mostrando página {page + 1} de {totalPages || 1}. Total: {totalItems} registros. 
-                  {isFetching && <span style={{ marginLeft: '10px', color: 'var(--accent-primary)' }}>Actualizando...</span>}
+                  Mostrando {cobranzas.length} de {totalItems} registros.
+                  {(isFetching || isFetchingNextPage) && <span style={{ marginLeft: '10px', color: 'var(--accent-primary)' }}>Actualizando...</span>}
                 </p>
             </div>
           </div>
@@ -531,6 +544,20 @@ const CollectionsListPage = () => {
                       </tr>
                     ))
                   )}
+                  {hasNextPage && (
+                    <tr>
+                      <td colSpan="13" style={{ textAlign: 'center', padding: '15px' }}>
+                        <button 
+                          className="btn-primary" 
+                          onClick={() => fetchNextPage()}
+                          disabled={isFetchingNextPage}
+                          style={{ width: 'auto', padding: '8px 20px', margin: '0 auto', display: 'block' }}
+                        >
+                          {isFetchingNextPage ? "Cargando más registros..." : "Mostrar más registros"}
+                        </button>
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
                 <tfoot>
                   {(() => {
@@ -572,26 +599,6 @@ const CollectionsListPage = () => {
               </table>
             </div>
             
-            {/* Paginación */}
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '15px', gap: '10px' }}>
-              <button 
-                className="btn-secondary" 
-                onClick={() => setPage(old => Math.max(old - 1, 0))}
-                disabled={page === 0}
-                style={{ width: 'auto', padding: '5px 15px' }}
-              >
-                Anterior
-              </button>
-              <span>Página {page + 1} de {totalPages || 1}</span>
-              <button 
-                className="btn-secondary" 
-                onClick={() => setPage(old => (old + 1 < totalPages ? old + 1 : old))}
-                disabled={page + 1 >= totalPages || totalPages === 0}
-                style={{ width: 'auto', padding: '5px 15px' }}
-              >
-                Siguiente
-              </button>
-            </div>
           </div>
         </>
       )}
@@ -691,7 +698,6 @@ const CollectionsListPage = () => {
                         <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
                           <button className="btn-secondary" onClick={() => {
                             setFilter(prev => ({ ...prev, ProcesoID: String(p.ID) }));
-                            setPage(0);
                             setActiveTab('cobranzas');
                           }} style={{ padding: '4px 8px', fontSize: '14px' }} title="Ver Cobranzas del Lote">
                             👁️
