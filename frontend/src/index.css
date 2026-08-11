@@ -364,11 +364,15 @@ input:focus, select:focus {
     border-bottom: 1px solid var(--border-color);
 }
 
+.data-table th {
+    text-align: center;
+}
+
 .data-table th input, .data-table th select {
     background-color: var(--surface-color) !important;
 }
 
-.data-table th:first-child, .data-table td:first-child {
+.data-table td:first-child {
     text-align: left;
 }
 
