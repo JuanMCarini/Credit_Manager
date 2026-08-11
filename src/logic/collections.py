@@ -165,7 +165,7 @@ class CollectionManager:
                 raise ValueError(f"⚠️ '{identificador}' is not a valid identifier type.")
 
         # 3. Ejecución final
-        df = pd.read_sql(query.statement, self.db.get_bind(), index_col="id")
+        df = pd.read_sql(query.statement, self.db.connection(), index_col="id")
 
         return df
 
@@ -195,7 +195,7 @@ class CollectionManager:
 
         # 2. Extraction of historical collections via SQLAlchemy Core API
         stmt = select(Cobranza).where(Cobranza.cuota_id.in_(cuotas_ids))
-        df_cobr = pd.read_sql(stmt, self.db.get_bind(), index_col="cuota_id")
+        df_cobr = pd.read_sql(stmt, self.db.connection(), index_col="cuota_id")
 
         # 3. Grouping and data crossing (Vectorized)
         df_cobr_sum = df_cobr.groupby("cuota_id")[["capital", "interes", "iva"]].sum()
@@ -781,7 +781,7 @@ class CollectionManager:
             # 2. Reading existing advances and adding to the available amount
             anticipos = pd.read_sql(
                 query_anticipos.statement,
-                self.db.get_bind(),
+                self.db.connection(),
                 index_col="id",
             )
 
@@ -853,6 +853,40 @@ class CollectionManager:
         except Exception as e:
             self.db.rollback()
             raise RuntimeError(f"Error processing partner resources: {e}")
+
+    def _get_last_canceled_credit(self, identificador: str, id_val: int | str):
+        from src.database.models import Credito, Cliente, Cartera, TipoCredito, EstadoCredito, SocioComercial
+        query = self.db.query(Credito).filter(
+            Credito.tipo_credito != TipoCredito.PENALTY.value,
+            Credito.estado == EstadoCredito.CANCELADO.value
+        )
+        match identificador:
+            case "CREDITO_ID":
+                val_id = int(float(id_val))
+                query = query.filter(Credito.id == val_id)
+            case "ID_EXTERNO":
+                val_id = str(int(float(id_val)))
+                query = query.filter(Credito.id_externo == val_id)
+            case "CLIENTE_CUIL":
+                val_id = str(int(float(id_val)))
+                query = query.filter(Credito.cliente_cuil == val_id)
+            case "CLIENTE_DNI":
+                val_id = str(int(float(id_val)))
+                query = query.join(Cliente).filter(Cliente.documento == val_id)
+            case "PROVEEDOR_CUIT":
+                val_id = str(int(float(id_val)))
+                query = (
+                    query.join(Cartera, Credito.cartera_id == Cartera.id)
+                    .join(SocioComercial, Cartera.socio_id == SocioComercial.id)
+                    .filter(SocioComercial.cuit == val_id)
+                )
+            case "CARTERA_ID":
+                val_id = int(float(id_val))
+                query = query.filter(Credito.cartera_id == val_id)
+            case _:
+                return None
+                
+        return query.order_by(Credito.id.desc()).first()
 
     def process_massive_collection(
         self,
@@ -943,7 +977,40 @@ class CollectionManager:
                 if not new_cobr.empty:
                     lista_cobranzas.append(new_cobr)
                 else:
-                    problems.append(row[ident])
+                    last_credit = self._get_last_canceled_credit(identificador, row[ident])
+                    if last_credit:
+                        pm = PenaltyManager(self.db)
+                        penalty_credito, penalty_cuota = pm.generate_penalty_credit(
+                            credito_origen_id=last_credit.id,
+                            monto_punitorio=row["monto"],
+                            fecha_emision=payment_date,
+                            fecha_vencimiento=vto_date,
+                            tasa_iva=0.21,
+                            commit=False
+                        )
+                        df_penalty = pd.DataFrame(
+                            {
+                                "credito_id": [penalty_credito.id],
+                                "nro_cuota": [penalty_cuota.nro_cuota],
+                                "fecha_vencimiento": [pd.Timestamp(penalty_cuota.fecha_vencimiento)],
+                                "capital": [penalty_cuota.capital],
+                                "interes": [penalty_cuota.interes],
+                                "iva": [penalty_cuota.iva],
+                                "tipo_cobranza": [TipoCobranzaEnum.PENALTY.value],
+                                "total": [round(penalty_cuota.capital + penalty_cuota.interes + penalty_cuota.iva, 2)],
+                            },
+                            index=[penalty_cuota.id]
+                        )
+                        new_cobr_penalty = self._persist_collections(
+                            df_penalty, 
+                            payment_date, 
+                            proceso_id=p_id, 
+                            commit=False,
+                            descripcion=f"{identificador}: {row[ident]}"
+                        )
+                        lista_cobranzas.append(new_cobr_penalty)
+                    else:
+                        problems.append(row[ident])
 
             if problems:
                 self.db.rollback()
