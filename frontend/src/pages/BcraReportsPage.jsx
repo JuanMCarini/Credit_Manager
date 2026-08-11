@@ -77,7 +77,7 @@ const BcraReportsPage = () => {
         <p>Genere los archivos del Régimen Informativo BCRA 00006 - PNFC o exporte un reporte normal aplicando los filtros deseados.</p>
       </header>
 
-      <div className="glass-panel form-container" style={{ maxWidth: '900px', margin: '0 auto', padding: '32px' }}>
+      <div className="glass-panel form-container" style={{ margin: '0 auto', padding: '32px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', marginBottom: '32px' }}>
           
           <div className="form-group">
