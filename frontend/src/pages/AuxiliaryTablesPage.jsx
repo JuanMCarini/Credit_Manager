@@ -285,7 +285,7 @@ const AuxiliaryTablesPage = () => {
           </select>
         </div>
 
-        <div className="glass-panel" style={{ overflowX: 'auto', maxHeight: 'calc(100vh - 280px)', overflowY: 'auto' }}>
+        <div className="glass-panel">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
             <h3 style={{ margin: 0, fontFamily: 'var(--font-heading)' }}>Registros de {currentTableConfig.name}</h3>
             <div style={{ display: 'flex', gap: '12px' }}>
@@ -300,117 +300,119 @@ const AuxiliaryTablesPage = () => {
             </div>
           </div>
           
-          <table className="data-table">
-            <thead>
-              <tr>
-                {columns.map(col => {
-                  let headerText = col.toUpperCase().replace(/_/g, ' ');
-                  if (col === 'socio_comercial_id') headerText = 'SOCIO ORIGINADOR ASOCIADO';
-                  else if (col === 'socio_originador_id') headerText = 'SOCIO ORIGINADOR';
-                  else if (col === 'socio_intermediario_id') headerText = 'SOCIO INTERMEDIARIO';
-                  else if (col === 'gasto_1_socio_id') headerText = 'GASTO 1 SOCIO';
-                  else if (col === 'gasto_2_socio_id') headerText = 'GASTO 2 SOCIO';
-                  else if (col === 'id_provincia' || col === 'provincia_id') headerText = 'PROVINCIA';
-                  else if (col === 'es_pasivo') headerText = 'ES PASIVO';
-                  return (
-                    <th key={col} onClick={() => handleSort(col)} style={{ cursor: 'pointer', verticalAlign: 'top' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}>
-                        {headerText}
-                        <span style={{ fontSize: '10px', opacity: sortConfig.key === col ? 1 : 0.3 }}>
-                          {sortConfig.key === col ? (sortConfig.direction === 'asc' ? '⬆️' : '⬇️') : '↕️'}
-                        </span>
-                      </div>
-                      <div onClick={e => e.stopPropagation()}>
-                        {activeTable === 'tasasYComisiones' && col === 'estado' ? (
-                          <select 
-                            value={columnFilters[col] || ''} 
-                            onChange={(e) => setColumnFilters(prev => ({ ...prev, [col]: e.target.value }))}
-                            style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', boxSizing: 'border-box' }}
-                          >
-                            <option value="">Todos</option>
-                            <option value="ACTIVA">ACTIVA</option>
-                            <option value="INACTIVA">INACTIVA</option>
-                          </select>
-                        ) : activeTable === 'tasasYComisiones' && ['socio_originador_id', 'socio_intermediario_id', 'gasto_1_socio_id', 'gasto_2_socio_id'].includes(col) ? (
-                          <select 
-                            value={columnFilters[col] || ''} 
-                            onChange={(e) => setColumnFilters(prev => ({ ...prev, [col]: e.target.value }))}
-                            style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', boxSizing: 'border-box' }}
-                          >
-                            <option value="">Todos</option>
-                            {socios.map(s => <option key={s.id} value={s.razon_social}>{s.razon_social}</option>)}
-                          </select>
-                        ) : activeTable === 'tasasYComisiones' && col === 'fecha' ? (
-                          <input 
-                            type="date"
-                            value={columnFilters[col] || ''}
-                            onChange={(e) => setColumnFilters(prev => ({ ...prev, [col]: e.target.value }))}
-                            style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', boxSizing: 'border-box' }}
-                          />
-                        ) : activeTable === 'conceptos' && col === 'clasificacion_id' ? (
-                          <select 
-                            value={columnFilters[col] || ''} 
-                            onChange={(e) => setColumnFilters(prev => ({ ...prev, [col]: e.target.value }))}
-                            style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', boxSizing: 'border-box' }}
-                          >
-                            <option value="">Todas</option>
-                            <option value="Sin Clasificar">Sin Clasificar</option>
-                            {clasificaciones.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                          </select>
-                        ) : (
-                          <input 
-                            type="text" 
-                            placeholder="Filtrar..." 
-                            value={columnFilters[col] || ''} 
-                            onChange={(e) => setColumnFilters(prev => ({ ...prev, [col]: e.target.value }))}
-                            style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', boxSizing: 'border-box' }}
-                          />
-                        )}
-                      </div>
-                    </th>
-                  );
-                })}
-                <th style={{textAlign: 'center', verticalAlign: 'top'}}>ACCIONES</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedData.length === 0 ? (
+          <div className="table-responsive">
+            <table className="data-table">
+              <thead>
                 <tr>
-                  <td colSpan={columns.length + 1} className="text-center empty-state">
-                    No hay registros que coincidan con la búsqueda.
-                  </td>
+                  {columns.map(col => {
+                    let headerText = col.toUpperCase().replace(/_/g, ' ');
+                    if (col === 'socio_comercial_id') headerText = 'SOCIO ORIGINADOR ASOCIADO';
+                    else if (col === 'socio_originador_id') headerText = 'SOCIO ORIGINADOR';
+                    else if (col === 'socio_intermediario_id') headerText = 'SOCIO INTERMEDIARIO';
+                    else if (col === 'gasto_1_socio_id') headerText = 'GASTO 1 SOCIO';
+                    else if (col === 'gasto_2_socio_id') headerText = 'GASTO 2 SOCIO';
+                    else if (col === 'id_provincia' || col === 'provincia_id') headerText = 'PROVINCIA';
+                    else if (col === 'es_pasivo') headerText = 'ES PASIVO';
+                    return (
+                      <th key={col} onClick={() => handleSort(col)} style={{ cursor: 'pointer', verticalAlign: 'top' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}>
+                          {headerText}
+                          <span style={{ fontSize: '10px', opacity: sortConfig.key === col ? 1 : 0.3 }}>
+                            {sortConfig.key === col ? (sortConfig.direction === 'asc' ? '⬆️' : '⬇️') : '↕️'}
+                          </span>
+                        </div>
+                        <div onClick={e => e.stopPropagation()}>
+                          {activeTable === 'tasasYComisiones' && col === 'estado' ? (
+                            <select 
+                              value={columnFilters[col] || ''} 
+                              onChange={(e) => setColumnFilters(prev => ({ ...prev, [col]: e.target.value }))}
+                              style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', boxSizing: 'border-box' }}
+                            >
+                              <option value="">Todos</option>
+                              <option value="ACTIVA">ACTIVA</option>
+                              <option value="INACTIVA">INACTIVA</option>
+                            </select>
+                          ) : activeTable === 'tasasYComisiones' && ['socio_originador_id', 'socio_intermediario_id', 'gasto_1_socio_id', 'gasto_2_socio_id'].includes(col) ? (
+                            <select 
+                              value={columnFilters[col] || ''} 
+                              onChange={(e) => setColumnFilters(prev => ({ ...prev, [col]: e.target.value }))}
+                              style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', boxSizing: 'border-box' }}
+                            >
+                              <option value="">Todos</option>
+                              {socios.map(s => <option key={s.id} value={s.razon_social}>{s.razon_social}</option>)}
+                            </select>
+                          ) : activeTable === 'tasasYComisiones' && col === 'fecha' ? (
+                            <input 
+                              type="date"
+                              value={columnFilters[col] || ''}
+                              onChange={(e) => setColumnFilters(prev => ({ ...prev, [col]: e.target.value }))}
+                              style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', boxSizing: 'border-box' }}
+                            />
+                          ) : activeTable === 'conceptos' && col === 'clasificacion_id' ? (
+                            <select 
+                              value={columnFilters[col] || ''} 
+                              onChange={(e) => setColumnFilters(prev => ({ ...prev, [col]: e.target.value }))}
+                              style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', boxSizing: 'border-box' }}
+                            >
+                              <option value="">Todas</option>
+                              <option value="Sin Clasificar">Sin Clasificar</option>
+                              {clasificaciones.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                            </select>
+                          ) : (
+                            <input 
+                              type="text" 
+                              placeholder="Filtrar..." 
+                              value={columnFilters[col] || ''} 
+                              onChange={(e) => setColumnFilters(prev => ({ ...prev, [col]: e.target.value }))}
+                              style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', boxSizing: 'border-box' }}
+                            />
+                          )}
+                        </div>
+                      </th>
+                    );
+                  })}
+                  <th style={{textAlign: 'center', verticalAlign: 'top'}}>ACCIONES</th>
                 </tr>
-              ) : (
-                sortedData.map((row) => (
-                  <tr key={row.id}>
-                    {columns.map(col => (
-                      <td key={col}>{formatCellValue(col, row[col])}</td>
-                    ))}
-                    <td>
-                      <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
-                        {activeTable === 'socios' && (
-                          <button className="btn-secondary" style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--success-color)' }} onClick={() => {setAdjustingAdvance(row); setAdvanceAmount(''); setAdvanceDate('');}} title="Ajustar Anticipo">
-                            💲
-                          </button>
-                        )}
-                        {activeTable === 'tasasYComisiones' && (
-                          <button className="btn-secondary" style={{ padding: '4px 8px', fontSize: '14px', color: '#3b82f6' }} onClick={() => openDuplicateModal(row)} title="Duplicar">
-                            📑
-                          </button>
-                        )}
-                        <button className="btn-secondary" style={{ padding: '4px 8px', fontSize: '14px' }} onClick={() => openEditModal(row)} title="Editar">
-                          ✏️
-                        </button>
-                        <button className="btn-secondary" style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--danger-color)' }} onClick={() => handleDelete(row.id)} title="Eliminar">
-                          🗑️
-                        </button>
-                      </div>
+              </thead>
+              <tbody>
+                {sortedData.length === 0 ? (
+                  <tr>
+                    <td colSpan={columns.length + 1} className="text-center empty-state">
+                      No hay registros que coincidan con la búsqueda.
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  sortedData.map((row) => (
+                    <tr key={row.id}>
+                      {columns.map(col => (
+                        <td key={col}>{formatCellValue(col, row[col])}</td>
+                      ))}
+                      <td>
+                        <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
+                          {activeTable === 'socios' && (
+                            <button className="btn-secondary" style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--success-color)' }} onClick={() => {setAdjustingAdvance(row); setAdvanceAmount(''); setAdvanceDate('');}} title="Ajustar Anticipo">
+                              💲
+                            </button>
+                          )}
+                          {activeTable === 'tasasYComisiones' && (
+                            <button className="btn-secondary" style={{ padding: '4px 8px', fontSize: '14px', color: '#3b82f6' }} onClick={() => openDuplicateModal(row)} title="Duplicar">
+                              📑
+                            </button>
+                          )}
+                          <button className="btn-secondary" style={{ padding: '4px 8px', fontSize: '14px' }} onClick={() => openEditModal(row)} title="Editar">
+                            ✏️
+                          </button>
+                          <button className="btn-secondary" style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--danger-color)' }} onClick={() => handleDelete(row.id)} title="Eliminar">
+                            🗑️
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
