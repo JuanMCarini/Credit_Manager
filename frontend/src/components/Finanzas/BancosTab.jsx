@@ -543,7 +543,7 @@ const BancosTab = () => {
             {filteredMovimientos.length > 0 && (
               <tfoot style={{ backgroundColor: 'var(--surface-color)', borderTop: '2px solid var(--border-color)' }}>
                 <tr>
-                  <td colSpan="5" style={{ textAlign: 'right', padding: '16px', fontWeight: 'bold' }}>Subtotales filtrados:</td>
+                  <td colSpan="6" style={{ textAlign: 'right', padding: '16px', fontWeight: 'bold' }}>Subtotales filtrados:</td>
                   <td style={{ textAlign: 'right', color: 'var(--success-color)', padding: '16px', fontWeight: 'bold' }}>
                     {formatCurrency(subtotals.ingresos)}
                   </td>
