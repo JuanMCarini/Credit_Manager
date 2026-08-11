@@ -21,7 +21,6 @@ const FilterInput = ({ col, columnFilters, setColumnFilters }) => (
 const BancosTab = () => {
   const [cuentas, setCuentas] = useState([]);
   const [selectedCuentaId, setSelectedCuentaId] = useState('');
-  const [fechaCorte, setFechaCorte] = useState(new Date().toISOString().substring(0, 10));
   const [kpis, setKpis] = useState({ saldo: 0, saldo_fci: 0, saldo_plazo_fijo: 0 });
   const [movimientos, setMovimientos] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -61,7 +60,7 @@ const BancosTab = () => {
     setLoading(true);
     try {
       const [kpiRes, movsRes] = await Promise.all([
-        axiosClient.get(`/api/finanzas/cuentas/${selectedCuentaId}/kpis`, { params: { fecha_corte: fechaCorte } }),
+        axiosClient.get(`/api/finanzas/cuentas/${selectedCuentaId}/kpis`, { params: { fecha_desde: filtroDesde || undefined, fecha_hasta: filtroHasta || undefined } }),
         axiosClient.get('/api/finanzas/movimientos', { 
           params: { 
             cuenta_id: selectedCuentaId,
@@ -77,7 +76,7 @@ const BancosTab = () => {
     } finally {
       setLoading(false);
     }
-  }, [selectedCuentaId, fechaCorte, filtroDesde, filtroHasta]);
+  }, [selectedCuentaId, filtroDesde, filtroHasta]);
 
   useEffect(() => {
     fetchCuentas();
@@ -292,17 +291,6 @@ const BancosTab = () => {
           </div>
         </div>
 
-        <div style={{ minWidth: '200px' }}>
-          <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Calendar size={16} /> Fecha de Corte (KPIs)
-          </label>
-          <input 
-            type="date" 
-            className="form-control" 
-            value={fechaCorte} 
-            onChange={(e) => setFechaCorte(e.target.value)} 
-          />
-        </div>
       </div>
 
       {/* KPIs */}

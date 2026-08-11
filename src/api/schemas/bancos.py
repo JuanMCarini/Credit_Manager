@@ -59,6 +59,27 @@ class CuentaResponse(CuentaBase):
     model_config = ConfigDict(from_attributes=True)
 
 # =======================
+# Clasificacion Schemas
+# =======================
+class ClasificacionBase(BaseModel):
+    name: str
+    descripcion: Optional[str] = None
+
+class ClasificacionCreate(ClasificacionBase):
+    pass
+
+class ClasificacionUpdate(BaseModel):
+    name: Optional[str] = None
+    descripcion: Optional[str] = None
+
+class ClasificacionResponse(ClasificacionBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+# =======================
 # Concepto Schemas
 # =======================
 class ConceptoBase(BaseModel):
@@ -81,27 +102,7 @@ class ConceptoResponse(ConceptoBase):
     id: int
     created_at: datetime
     updated_at: datetime
-    model_config = ConfigDict(from_attributes=True)
-
-# =======================
-# Clasificacion Schemas
-# =======================
-class ClasificacionBase(BaseModel):
-    name: str
-    descripcion: Optional[str] = None
-
-class ClasificacionCreate(ClasificacionBase):
-    pass
-
-class ClasificacionUpdate(BaseModel):
-    name: Optional[str] = None
-    descripcion: Optional[str] = None
-
-class ClasificacionResponse(ClasificacionBase):
-    id: int
-    created_at: datetime
-    updated_at: datetime
-
+    clasificacion: Optional[ClasificacionResponse] = None
     model_config = ConfigDict(from_attributes=True)
 
 # =======================
