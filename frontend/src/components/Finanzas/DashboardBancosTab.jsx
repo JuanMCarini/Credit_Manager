@@ -6,8 +6,15 @@ import axiosClient from '../../api/axiosClient';
 const COLORS = ['#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#64748b'];
 
 const DashboardBancosTab = () => {
-  const [fechaDesde, setFechaDesde] = useState('');
-  const [fechaHasta, setFechaHasta] = useState('');
+  const getToday = () => new Date().toISOString().split('T')[0];
+  const getLastMonth = () => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 1);
+    return d.toISOString().split('T')[0];
+  };
+
+  const [fechaDesde, setFechaDesde] = useState(getLastMonth());
+  const [fechaHasta, setFechaHasta] = useState(getToday());
   
   const [kpis, setKpis] = useState({
     saldo: 0,
