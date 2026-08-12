@@ -108,7 +108,7 @@ const DashboardCarteraPage = () => {
   });
   const [tasaDescuento, setTasaDescuento] = useState(0);
   const [tasaDescuentoStr, setTasaDescuentoStr] = useState("0 %");
-  const [activeTab, setActiveTab] = useState('total'); // 'total' or 'periodo'
+  const [activeTab, setActiveTab] = useState('situacion_patrimonial'); // 'situacion_patrimonial', 'total', 'periodo', etc.
   const [filtroDueños, setFiltroDueños] = useState([]); // empty means 'Todos'
   const [filtroOriginadores, setFiltroOriginadores] = useState([]); // empty means 'Todos'
   const [openDueño, setOpenDueño] = useState(false);
@@ -180,14 +180,15 @@ const DashboardCarteraPage = () => {
         // --- FIN PORTADA ---
 
         const tabsToExport = [
-          { id: 'export-tab-total', title: 'Cartera Total' },
-          { id: 'export-tab-evolucion', title: 'Evolución 12 Meses' },
-          { id: 'export-tab-composicion', title: 'Composición por Dueño' },
-          { id: 'export-tab-periodo', title: 'Detalle por Período' },
-          { id: 'export-tab-colocaciones', title: 'Colocaciones' },
-          { id: 'export-tab-cobranzas', title: 'Cobranzas' },
-          { id: 'export-tab-estados', title: 'Detalle de Estados' },
-          { id: 'export-tab-morosidad', title: 'Análisis de Morosidad' }
+          { id: 'export-tab-situacion', title: 'Estado de Situación Patrimonial' },
+          { id: 'export-tab-total', title: 'Resumen Cartera' },
+          { id: 'export-tab-evolucion', title: 'Evolución Cartera' },
+          { id: 'export-tab-composicion', title: 'Composición Cartera' },
+          { id: 'export-tab-periodo', title: 'Detalle Cartera' },
+          { id: 'export-tab-colocaciones', title: 'Colocaciones Cartera' },
+          { id: 'export-tab-cobranzas', title: 'Cobranzas Cartera' },
+          { id: 'export-tab-estados', title: 'Estados Cartera' },
+          { id: 'export-tab-morosidad', title: 'Morosidad Cartera' }
         ];
 
         let pageCount = 0;
@@ -897,6 +898,32 @@ const DashboardCarteraPage = () => {
 
   const smallSlicesRef = useRef({});
 
+  const tabKeys = [
+    'situacion_patrimonial',
+    'total',
+    'evolucion',
+    'composicion',
+    'periodo',
+    'colocaciones',
+    'cobranzas',
+    'estados',
+    'morosidad'
+  ];
+
+  const handlePrevTab = () => {
+    const currentIndex = tabKeys.indexOf(activeTab);
+    if (currentIndex > 0) {
+      setActiveTab(tabKeys[currentIndex - 1]);
+    }
+  };
+
+  const handleNextTab = () => {
+    const currentIndex = tabKeys.indexOf(activeTab);
+    if (currentIndex < tabKeys.length - 1) {
+      setActiveTab(tabKeys[currentIndex + 1]);
+    }
+  };
+
   if (loading) {
     return (
       <div className="page-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
@@ -1009,85 +1036,147 @@ const DashboardCarteraPage = () => {
         </div>
       </header>
 
-      {/* Filtros */}
-      <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', flexWrap: 'wrap' }}>
+      {/* Filtros y Navegación */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '20px' }}>
+        
+        {/* Filtros Izquierda */}
+        <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
 
-        {/* Filtro Dueños Dropdown */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', position: 'relative' }}>
-          <label style={{ color: 'var(--text-secondary)', fontWeight: '500' }}>Dueño:</label>
-          <div style={{ position: 'relative' }}>
-            <button
-              onClick={() => setOpenDueño(!openDueño)}
-              style={{ padding: '8px 12px', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', minWidth: '150px', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-            >
-              <span>{filtroDueños.length === 0 ? 'Todos' : `${filtroDueños.length} seleccionados`}</span>
-              <span style={{ fontSize: '0.8rem', marginLeft: '10px' }}>▼</span>
-            </button>
+          {/* Filtro Dueños Dropdown */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', position: 'relative' }}>
+            <label style={{ color: 'var(--text-secondary)', fontWeight: '500' }}>Dueño:</label>
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={() => setOpenDueño(!openDueño)}
+                style={{ padding: '8px 12px', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', minWidth: '150px', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+              >
+                <span>{filtroDueños.length === 0 ? 'Todos' : `${filtroDueños.length} seleccionados`}</span>
+                <span style={{ fontSize: '0.8rem', marginLeft: '10px' }}>▼</span>
+              </button>
 
-            {openDueño && (
-              <div className="custom-scrollbar" style={{ position: 'absolute', top: '100%', left: 0, marginTop: '5px', padding: '8px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.2)', maxHeight: '200px', overflowY: 'auto', minWidth: '220px', zIndex: 10, boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', cursor: 'pointer', fontSize: '0.9rem' }}>
-                  <input type="checkbox" checked={filtroDueños.length === 0} onChange={() => setFiltroDueños([])} />
-                  <span style={{ opacity: filtroDueños.length === 0 ? 1 : 0.6 }}>Todos</span>
-                </label>
-                {uniqueDueños.filter(d => d !== 'Todos').map(d => (
-                  <label key={d} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', cursor: 'pointer', fontSize: '0.9rem' }}>
-                    <input
-                      type="checkbox"
-                      checked={filtroDueños.includes(d)}
-                      onChange={(e) => {
-                        if (e.target.checked) setFiltroDueños([...filtroDueños, d]);
-                        else setFiltroDueños(filtroDueños.filter(item => item !== d));
-                      }}
-                    />
-                    <span style={{ opacity: filtroDueños.includes(d) ? 1 : 0.6 }}>{d}</span>
+              {openDueño && (
+                <div className="custom-scrollbar" style={{ position: 'absolute', top: '100%', left: 0, marginTop: '5px', padding: '8px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.2)', maxHeight: '200px', overflowY: 'auto', minWidth: '220px', zIndex: 10, boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', cursor: 'pointer', fontSize: '0.9rem' }}>
+                    <input type="checkbox" checked={filtroDueños.length === 0} onChange={() => setFiltroDueños([])} />
+                    <span style={{ opacity: filtroDueños.length === 0 ? 1 : 0.6 }}>Todos</span>
                   </label>
-                ))}
-              </div>
-            )}
+                  {uniqueDueños.filter(d => d !== 'Todos').map(d => (
+                    <label key={d} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', cursor: 'pointer', fontSize: '0.9rem' }}>
+                      <input
+                        type="checkbox"
+                        checked={filtroDueños.includes(d)}
+                        onChange={(e) => {
+                          if (e.target.checked) setFiltroDueños([...filtroDueños, d]);
+                          else setFiltroDueños(filtroDueños.filter(item => item !== d));
+                        }}
+                      />
+                      <span style={{ opacity: filtroDueños.includes(d) ? 1 : 0.6 }}>{d}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Filtro Originadores Dropdown */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', position: 'relative' }}>
+            <label style={{ color: 'var(--text-secondary)', fontWeight: '500' }}>Originador:</label>
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={() => setOpenOriginador(!openOriginador)}
+                style={{ padding: '8px 12px', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', minWidth: '150px', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+              >
+                <span>{filtroOriginadores.length === 0 ? 'Todos' : `${filtroOriginadores.length} seleccionados`}</span>
+                <span style={{ fontSize: '0.8rem', marginLeft: '10px' }}>▼</span>
+              </button>
+
+              {openOriginador && (
+                <div className="custom-scrollbar" style={{ position: 'absolute', top: '100%', left: 0, marginTop: '5px', padding: '8px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.2)', maxHeight: '200px', overflowY: 'auto', minWidth: '220px', zIndex: 10, boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', cursor: 'pointer', fontSize: '0.9rem' }}>
+                    <input type="checkbox" checked={filtroOriginadores.length === 0} onChange={() => setFiltroOriginadores([])} />
+                    <span style={{ opacity: filtroOriginadores.length === 0 ? 1 : 0.6 }}>Todos</span>
+                  </label>
+                  {uniqueOriginadores.filter(o => o !== 'Todos').map(o => (
+                    <label key={o} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', cursor: 'pointer', fontSize: '0.9rem' }}>
+                      <input
+                        type="checkbox"
+                        checked={filtroOriginadores.includes(o)}
+                        onChange={(e) => {
+                          if (e.target.checked) setFiltroOriginadores([...filtroOriginadores, o]);
+                          else setFiltroOriginadores(filtroOriginadores.filter(item => item !== o));
+                        }}
+                      />
+                      <span style={{ opacity: filtroOriginadores.includes(o) ? 1 : 0.6 }}>{o}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Filtro Originadores Dropdown */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', position: 'relative' }}>
-          <label style={{ color: 'var(--text-secondary)', fontWeight: '500' }}>Originador:</label>
-          <div style={{ position: 'relative' }}>
-            <button
-              onClick={() => setOpenOriginador(!openOriginador)}
-              style={{ padding: '8px 12px', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', minWidth: '150px', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-            >
-              <span>{filtroOriginadores.length === 0 ? 'Todos' : `${filtroOriginadores.length} seleccionados`}</span>
-              <span style={{ fontSize: '0.8rem', marginLeft: '10px' }}>▼</span>
-            </button>
-
-            {openOriginador && (
-              <div className="custom-scrollbar" style={{ position: 'absolute', top: '100%', left: 0, marginTop: '5px', padding: '8px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.2)', maxHeight: '200px', overflowY: 'auto', minWidth: '220px', zIndex: 10, boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', cursor: 'pointer', fontSize: '0.9rem' }}>
-                  <input type="checkbox" checked={filtroOriginadores.length === 0} onChange={() => setFiltroOriginadores([])} />
-                  <span style={{ opacity: filtroOriginadores.length === 0 ? 1 : 0.6 }}>Todos</span>
-                </label>
-                {uniqueOriginadores.filter(o => o !== 'Todos').map(o => (
-                  <label key={o} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', cursor: 'pointer', fontSize: '0.9rem' }}>
-                    <input
-                      type="checkbox"
-                      checked={filtroOriginadores.includes(o)}
-                      onChange={(e) => {
-                        if (e.target.checked) setFiltroOriginadores([...filtroOriginadores, o]);
-                        else setFiltroOriginadores(filtroOriginadores.filter(item => item !== o));
-                      }}
-                    />
-                    <span style={{ opacity: filtroOriginadores.includes(o) ? 1 : 0.6 }}>{o}</span>
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
+        {/* Navegación Derecha */}
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button
+            onClick={handlePrevTab}
+            disabled={tabKeys.indexOf(activeTab) === 0}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '8px',
+              border: '1px solid rgba(255,255,255,0.1)',
+              background: 'rgba(0,0,0,0.2)',
+              color: tabKeys.indexOf(activeTab) === 0 ? 'rgba(255,255,255,0.3)' : 'white',
+              cursor: tabKeys.indexOf(activeTab) === 0 ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontWeight: 'bold',
+              transition: 'background 0.2s, color 0.2s'
+            }}
+            title="Hoja Anterior"
+          >
+            ←
+          </button>
+          <button
+            onClick={handleNextTab}
+            disabled={tabKeys.indexOf(activeTab) === tabKeys.length - 1}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '8px',
+              border: '1px solid rgba(255,255,255,0.1)',
+              background: 'rgba(0,0,0,0.2)',
+              color: tabKeys.indexOf(activeTab) === tabKeys.length - 1 ? 'rgba(255,255,255,0.3)' : 'white',
+              cursor: tabKeys.indexOf(activeTab) === tabKeys.length - 1 ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontWeight: 'bold',
+              transition: 'background 0.2s, color 0.2s'
+            }}
+            title="Siguiente Hoja"
+          >
+            →
+          </button>
         </div>
-
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: '15px', marginBottom: '20px' }}>
+      <div style={{ display: 'flex', gap: '15px', marginBottom: '20px', flexWrap: 'wrap' }}>
+        <button
+          onClick={() => setActiveTab('situacion_patrimonial')}
+          style={{
+            padding: '10px 20px',
+            borderRadius: '8px',
+            border: 'none',
+            background: activeTab === 'situacion_patrimonial' ? 'var(--color-total)' : 'rgba(255,255,255,0.05)',
+            color: activeTab === 'situacion_patrimonial' ? 'white' : 'var(--text-secondary)',
+            cursor: 'pointer',
+            fontWeight: '600',
+            transition: 'background 0.2s'
+          }}
+        >
+          Estado de Situación Patrimonial
+        </button>
         <button
           onClick={() => setActiveTab('total')}
           style={{
@@ -1101,7 +1190,7 @@ const DashboardCarteraPage = () => {
             transition: 'background 0.2s'
           }}
         >
-          Resumen General
+          Resumen Cartera
         </button>
         <button
           onClick={() => setActiveTab('evolucion')}
@@ -1116,7 +1205,7 @@ const DashboardCarteraPage = () => {
             transition: 'background 0.2s'
           }}
         >
-          Evolución Anual
+          Evolución Cartera
         </button>
         <button
           onClick={() => setActiveTab('composicion')}
@@ -1131,7 +1220,7 @@ const DashboardCarteraPage = () => {
             transition: 'background 0.2s'
           }}
         >
-          Por Dueño
+          Composición Cartera
         </button>
         <button
           onClick={() => setActiveTab('periodo')}
@@ -1146,7 +1235,7 @@ const DashboardCarteraPage = () => {
             transition: 'background 0.2s'
           }}
         >
-          Por Período
+          Detalle Cartera
         </button>
         <button
           onClick={() => setActiveTab('colocaciones')}
@@ -1161,7 +1250,7 @@ const DashboardCarteraPage = () => {
             transition: 'background 0.2s'
           }}
         >
-          Colocaciones
+          Colocaciones Cartera
         </button>
         <button
           onClick={() => setActiveTab('cobranzas')}
@@ -1176,7 +1265,7 @@ const DashboardCarteraPage = () => {
             transition: 'background 0.2s'
           }}
         >
-          Cobranzas
+          Cobranzas Cartera
         </button>
         <button
           onClick={() => setActiveTab('estados')}
@@ -1191,7 +1280,7 @@ const DashboardCarteraPage = () => {
             transition: 'background 0.2s'
           }}
         >
-          Estado Cuotas
+          Estados Cartera
         </button>
         <button
           onClick={() => setActiveTab('morosidad')}
@@ -1206,7 +1295,7 @@ const DashboardCarteraPage = () => {
             transition: 'background 0.2s'
           }}
         >
-          Morosidad
+          Morosidad Cartera
         </button>
       </div>
 
@@ -1226,6 +1315,19 @@ const DashboardCarteraPage = () => {
         }}>
           <div>Generando PDF...</div>
           <div style={{ fontSize: '1rem', marginTop: '10px', color: 'var(--text-secondary)' }}>Por favor espere mientras se capturan los gráficos.</div>
+        </div>
+      )}
+
+      {(activeTab === 'situacion_patrimonial' || isExporting) && (
+        <div id="export-tab-situacion">
+          <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', marginBottom: '30px' }}>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Estado de Situación Patrimonial</h2>
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '200px' }}>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem' }}>
+                (Sección en construcción)
+              </p>
+            </div>
+          </div>
         </div>
       )}
 
