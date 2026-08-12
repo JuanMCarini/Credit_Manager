@@ -236,7 +236,7 @@ const DashboardBancosTab = () => {
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={ingresosData} layout="vertical" margin={{ top: 10, right: 30, left: 20, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="var(--border-color)" />
-                      <XAxis type="number" tickFormatter={(val) => `$${(val/1000).toFixed(0)}k`} style={{ fontSize: '12px' }} />
+                      <XAxis type="number" tickFormatter={(val) => `$${(val/1000000).toLocaleString('es-AR', { maximumFractionDigits: 1 })}M`} style={{ fontSize: '12px' }} />
                       <YAxis type="category" dataKey="name" width={140} style={{ fontSize: '12px' }} />
                       <Tooltip content={renderCustomTooltip} />
                       <Bar dataKey="value" radius={[0, 4, 4, 0]}>
@@ -261,7 +261,7 @@ const DashboardBancosTab = () => {
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={egresosData} layout="vertical" margin={{ top: 10, right: 30, left: 20, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="var(--border-color)" />
-                      <XAxis type="number" tickFormatter={(val) => `$${(val/1000).toFixed(0)}k`} style={{ fontSize: '12px' }} />
+                      <XAxis type="number" tickFormatter={(val) => `$${(val/1000000).toLocaleString('es-AR', { maximumFractionDigits: 1 })}M`} style={{ fontSize: '12px' }} />
                       <YAxis type="category" dataKey="name" width={140} style={{ fontSize: '12px' }} />
                       <Tooltip content={renderCustomTooltip} />
                       <Bar dataKey="value" radius={[0, 4, 4, 0]}>

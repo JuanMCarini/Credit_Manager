@@ -1,12 +1,13 @@
 import { useState, useCallback, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
-import { FileText, Users, Plus, Download, Edit, Trash2, CreditCard } from 'lucide-react';
+import { FileText, Users, Plus, Download, Edit, Trash2, CreditCard, PieChart } from 'lucide-react';
 import ComprobanteModal from '../components/Finanzas/ComprobanteModal';
 import ProveedorModal from '../components/Finanzas/ProveedorModal';
 import CancelacionModal from '../components/Finanzas/CancelacionModal';
+import DashboardComprobantesTab from '../components/Finanzas/DashboardComprobantesTab';
 
 const ComprobantesPage = () => {
-  const [activeTab, setActiveTab] = useState('comprobantes');
+  const [activeTab, setActiveTab] = useState('resumen');
 
   const [comprobantes, setComprobantes] = useState([]);
   const [proveedores, setProveedores] = useState([]);
@@ -114,6 +115,24 @@ const ComprobantesPage = () => {
 
       <div style={{ display: 'flex', gap: '16px', borderBottom: '1px solid var(--border-color)', marginBottom: '24px' }}>
         <button
+          onClick={() => setActiveTab('resumen')}
+          style={{
+            padding: '12px 24px',
+            background: 'none',
+            border: 'none',
+            borderBottom: activeTab === 'resumen' ? '3px solid var(--primary-color)' : '3px solid transparent',
+            color: activeTab === 'resumen' ? 'var(--primary-color)' : 'var(--text-muted)',
+            fontWeight: activeTab === 'resumen' ? '600' : '400',
+            cursor: 'pointer',
+            fontSize: '16px',
+            transition: 'all 0.2s',
+            display: 'flex', alignItems: 'center', gap: '8px'
+          }}
+        >
+          <PieChart size={18} />
+          Resumen
+        </button>
+        <button
           onClick={() => setActiveTab('comprobantes')}
           style={{
             padding: '12px 24px',
@@ -152,6 +171,10 @@ const ComprobantesPage = () => {
       </div>
 
       {error && <div className="alert alert-error" style={{ marginBottom: '16px' }}>{error}</div>}
+
+      {activeTab === 'resumen' && (
+        <DashboardComprobantesTab comprobantes={comprobantes} />
+      )}
 
       {activeTab === 'comprobantes' && (
         <div className="card">
