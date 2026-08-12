@@ -43,6 +43,8 @@ class Proveedor(Base):
     # Relaciones
     comprobantes = relationship("Comprobante", back_populates="proveedor")
     provincia = relationship("Provincia")
+    concepto_id = Column(Integer, ForeignKey("conceptos.id"), nullable=True)
+    concepto = relationship("Concepto")
 
 class TipoComprobante(enum.Enum):
     A = "A"
@@ -51,8 +53,10 @@ class TipoComprobante(enum.Enum):
     E = "E"
     M = "M"
     TICKET = "TICKET"
-    NOTA_DEBITO = "NOTA_DEBITO"
-    NOTA_CREDITO = "NOTA_CREDITO"
+    NOTA_DEBITO_A = "NOTA_DEBITO_A"
+    NOTA_DEBITO_B = "NOTA_DEBITO_B"
+    NOTA_CREDITO_A = "NOTA_CREDITO_A"
+    NOTA_CREDITO_B = "NOTA_CREDITO_B"
     RECIBO = "RECIBO"
 
 class Comprobante(Base):
@@ -66,6 +70,8 @@ class Comprobante(Base):
     
     # Relaciones
     proveedor = relationship("Proveedor", back_populates="comprobantes")
+    concepto_id = Column(Integer, ForeignKey("conceptos.id"), nullable=True)
+    concepto = relationship("Concepto")
     fecha_contable = Column(Date, nullable=False)
     fecha_emision = Column(Date, nullable=False)
     fecha_vencimiento = Column(Date, nullable=True)
@@ -89,33 +95,18 @@ class Comprobante(Base):
         UniqueConstraint('proveedor_id', 'tipo_comprobante', 'punto_venta', 'numero_comprobante', name='uix_comprobante_unico'),
     )
 
-    @validates('importe_total')
-    def calcular_total(self, key, value):
-        """Calcula el importe total sumando todos los conceptos."""
-        self.importe_total = round(
-            (self.importe_no_gravado or 0) +
-            (self.importe_exento or 0) +
-            (self.neto_gravado_21 or 0) +
-            (self.neto_gravado_105 or 0) +
-            (self.neto_gravado_27 or 0) +
-            (self.iva_21 or 0) +
-            (self.iva_105 or 0) +
-            (self.iva_27 or 0) +
-            (self.percepcion_iva or 0) +
-            (self.percepcion_iibb or 0) +
-            (self.percepcion_ganancias or 0) +
-            (self.otros_impuestos or 0), 2
-        )
-
     @validates('neto_gravado_21', 'neto_gravado_105', 'neto_gravado_27')
     def calcular_iva_automatico(self, key, value):
+        from decimal import Decimal
         if value is not None:
+            # Ensure value is a Decimal
+            val = Decimal(str(value))
             if key == 'neto_gravado_21':
-                self.iva_21 = round(value * 0.21, 2)
+                self.iva_21 = round(val * Decimal('0.21'), 2)
             elif key == 'neto_gravado_105':
-                self.iva_105 = round(value * 0.105, 2)
+                self.iva_105 = round(val * Decimal('0.105'), 2)
             elif key == 'neto_gravado_27':
-                self.iva_27 = round(value * 0.27, 2)
+                self.iva_27 = round(val * Decimal('0.27'), 2)
         return value
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -123,17 +114,45 @@ class Comprobante(Base):
 
     # Estado del comprobante
     importe_cancelado = Column(Numeric(12, 2), nullable=False, default=0.0)
-    estado = Column(SQLEnum('pendiente', 'pagado', 'parcial'), nullable=False, default='pendiente')
+    fecha_cancelacion = Column(Date, nullable=True)
+    estado = Column(SQLEnum('pendiente', 'pagado', 'parcial', name='estado_comprobante_enum'), nullable=False, default='pendiente')
 
-    @validates('importe_cancelado')
+    @validates('importe_cancelado', 'importe_total')
     def calcular_estado(self, key, value):
-        if value is not None:
-            if value >= self.importe_total:
-                self.estado = 'pagado'
-            elif value > 0:
-                self.estado = 'parcial'
+        # We need both values to determine status
+        # Since this is a validator for BOTH keys, one is updated by `value` and the other is `self.X`
+        cancelado = value if key == 'importe_cancelado' else getattr(self, 'importe_cancelado', 0)
+        total = value if key == 'importe_total' else getattr(self, 'importe_total', 0)
+        
+        cancelado = cancelado or 0
+        total = total or 0
+        
+        if total > 0 and cancelado >= total:
+            self.estado = 'pagado'
+        elif cancelado > 0:
+            self.estado = 'parcial'
         else:
             self.estado = 'pendiente'
+            
+        return value
 
-    # Fecha Pago
-    fecha_cancelacion = Column(Date, nullable=True)
+    # Archivo Adjunto (PDF)
+    archivo_pdf = Column(String(255), nullable=True)
+
+    # Relación a cancelaciones (pagos parciales)
+    cancelaciones = relationship("CancelacionComprobante", back_populates="comprobante", cascade="all, delete-orphan")
+
+
+class CancelacionComprobante(Base):
+    __tablename__ = "cancelaciones_comprobante"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    comprobante_id = Column(ForeignKey("comprobantes.id", ondelete="CASCADE"), nullable=False)
+    importe = Column(Numeric(12, 2), nullable=False)
+    fecha_cancelacion = Column(Date, nullable=False)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    # Relaciones
+    comprobante = relationship("Comprobante", back_populates="cancelaciones")

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-const CurrencyInput = ({ value, onChange, placeholder, required, disabled }) => {
+const CurrencyInput = ({ value, onChange, name, className, placeholder, required, disabled, readOnly, style }) => {
   const [displayValue, setDisplayValue] = useState('');
   const [isFocused, setIsFocused] = useState(false);
 
@@ -8,7 +8,7 @@ const CurrencyInput = ({ value, onChange, placeholder, required, disabled }) => 
     if (val === '' || val === null || val === undefined) return '';
     const parsed = parseFloat(String(val).replace(',', '.'));
     if (isNaN(parsed)) return val;
-    return new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(parsed);
+    return '$ ' + new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(parsed);
   };
 
   useEffect(() => {
@@ -56,20 +56,31 @@ const CurrencyInput = ({ value, onChange, placeholder, required, disabled }) => 
     
     // Pass standard float string to parent
     const floatStr = filtered.replace(',', '.');
-    onChange(floatStr);
+    
+    if (onChange) {
+      onChange(floatStr, {
+        target: {
+          name: name,
+          value: floatStr
+        }
+      });
+    }
   };
 
   return (
     <input
       type="text"
+      name={name}
+      className={className || "form-control"}
       value={displayValue}
       onChange={handleChange}
       onFocus={handleFocus}
       onBlur={handleBlur}
-      placeholder={placeholder || "0,00"}
+      placeholder={placeholder || "$ 0,00"}
       required={required}
       disabled={disabled}
-      style={{ textAlign: 'right' }}
+      readOnly={readOnly}
+      style={{ textAlign: 'right', ...style }}
     />
   );
 };

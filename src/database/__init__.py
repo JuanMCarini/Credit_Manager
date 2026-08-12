@@ -46,6 +46,8 @@ from .models import (
     Clasificacion,
     Movimiento,
     CategoriaMovimiento,
+    Proveedor,
+    Comprobante,
 )
 
 # Import events to register SQLAlchemy event listeners
@@ -91,4 +93,6 @@ __all__ = [
     "Clasificacion",
     "Movimiento",
     "CategoriaMovimiento",
+    "Proveedor",
+    "Comprobante",
 ]

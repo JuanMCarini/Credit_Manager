@@ -9,6 +9,7 @@ from .papeleria import DocumentoPapeleria, DocumentoVariable
 from .repet import RepetPerson, RepetEntity, RepetAuditLog
 from .facturacion import Factura
 from .finance.bancos import Banco, Cuenta, Concepto, Clasificacion, Movimiento, CategoriaMovimiento
+from .finance.comprobantes import Proveedor, Comprobante
 
 
 __all__ = [
@@ -19,5 +20,6 @@ __all__ = [
     "TipoProcesoEnum", "EstadoProcesoEnum", "Proceso", "TipoCobranzaEnum", "Cobranza", "TipoLiquidacionEnum", "LiquidacionCuotaCedida",
     "TipoRolEnum", "Rol", "Usuario", "RegistroAuditoria", "Transferencia", "DocumentoLegajo",
     "DocumentoPapeleria", "DocumentoVariable", "RepetPerson", "RepetEntity", "RepetAuditLog", "Factura",
-    "Banco", "Cuenta", "Concepto", "Clasificacion", "Movimiento", "CategoriaMovimiento"
+    "Banco", "Cuenta", "Concepto", "Clasificacion", "Movimiento", "CategoriaMovimiento",
+    "Proveedor", "Comprobante"
 ]
