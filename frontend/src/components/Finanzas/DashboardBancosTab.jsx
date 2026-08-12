@@ -7,13 +7,13 @@ const COLORS = ['#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'
 
 const DashboardBancosTab = () => {
   const getToday = () => new Date().toISOString().split('T')[0];
-  const getLastMonth = () => {
+  const getFirstDayOfMonth = () => {
     const d = new Date();
-    d.setMonth(d.getMonth() - 1);
+    d.setDate(1);
     return d.toISOString().split('T')[0];
   };
 
-  const [fechaDesde, setFechaDesde] = useState(getLastMonth());
+  const [fechaDesde, setFechaDesde] = useState(getFirstDayOfMonth());
   const [fechaHasta, setFechaHasta] = useState(getToday());
   
   const [kpis, setKpis] = useState({

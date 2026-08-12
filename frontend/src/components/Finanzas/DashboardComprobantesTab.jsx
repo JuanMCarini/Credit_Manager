@@ -6,13 +6,13 @@ const COLORS = ['#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'
 
 const DashboardComprobantesTab = ({ comprobantes }) => {
   const getToday = () => new Date().toISOString().split('T')[0];
-  const getLastMonth = () => {
+  const getFirstDayOfMonth = () => {
     const d = new Date();
-    d.setMonth(d.getMonth() - 1);
+    d.setDate(1);
     return d.toISOString().split('T')[0];
   };
 
-  const [fechaDesde, setFechaDesde] = useState(getLastMonth());
+  const [fechaDesde, setFechaDesde] = useState(getFirstDayOfMonth());
   const [fechaHasta, setFechaHasta] = useState(getToday());
 
   // Filtrar comprobantes por fecha de emisión
@@ -155,40 +155,46 @@ const DashboardComprobantesTab = ({ comprobantes }) => {
       </div>
 
       {/* KPIs */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
-        <div className="card" style={{ padding: '20px', borderLeft: '4px solid var(--primary-color)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-            <div style={{ padding: '10px', backgroundColor: 'rgba(14, 165, 233, 0.1)', borderRadius: '12px', color: 'var(--primary-color)' }}>
-              <FileText size={24} />
-            </div>
-            <h3 style={{ fontSize: '14px', color: 'var(--text-muted)', margin: 0, fontWeight: '500' }}>Nuevas Obligaciones</h3>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', marginBottom: '32px' }}>
+        <div className="stat-card" style={{ background: 'var(--surface-color)', padding: '24px', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '20px' }}>
+          <div className="stat-icon" style={{ background: 'rgba(14, 165, 233, 0.1)', color: 'var(--primary-color)', padding: '16px', borderRadius: '50%' }}>
+            <FileText size={32} />
           </div>
-          <div style={{ fontSize: '24px', fontWeight: 'bold' }}>{formatCurrency(nuevasObligaciones)}</div>
+          <div className="stat-content">
+            <p className="stat-label" style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '4px', fontWeight: '500' }}>Nuevas Obligaciones</p>
+            <h3 className="stat-value" style={{ fontSize: '24px', fontWeight: 'bold', margin: 0, color: 'var(--primary-color)' }}>
+              {formatCurrency(nuevasObligaciones)}
+            </h3>
+          </div>
         </div>
 
-        <div className="card" style={{ padding: '20px', borderLeft: '4px solid var(--danger-color)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-            <div style={{ padding: '10px', backgroundColor: 'rgba(239, 68, 68, 0.1)', borderRadius: '12px', color: 'var(--danger-color)' }}>
-              <AlertCircle size={24} />
-            </div>
-            <h3 style={{ fontSize: '14px', color: 'var(--text-muted)', margin: 0, fontWeight: '500' }}>Total Adeudado</h3>
+        <div className="stat-card" style={{ background: 'var(--surface-color)', padding: '24px', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '20px' }}>
+          <div className="stat-icon" style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger-color)', padding: '16px', borderRadius: '50%' }}>
+            <AlertCircle size={32} />
           </div>
-          <div style={{ fontSize: '24px', fontWeight: 'bold' }}>{formatCurrency(totalAdeudado)}</div>
-          {deudaVencida > 0 && (
-            <div style={{ fontSize: '12px', color: 'var(--danger-color)', marginTop: '8px', fontWeight: '500' }}>
-              Incluye {formatCurrency(deudaVencida)} vencidos
-            </div>
-          )}
+          <div className="stat-content">
+            <p className="stat-label" style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '4px', fontWeight: '500' }}>Total Adeudado</p>
+            <h3 className="stat-value" style={{ fontSize: '24px', fontWeight: 'bold', margin: 0, color: 'var(--danger-color)' }}>
+              {formatCurrency(totalAdeudado)}
+            </h3>
+            {deudaVencida > 0 && (
+              <p style={{ fontSize: '12px', color: 'var(--danger-color)', margin: '4px 0 0 0', fontWeight: '500' }}>
+                Incluye {formatCurrency(deudaVencida)} vencidos
+              </p>
+            )}
+          </div>
         </div>
 
-        <div className="card" style={{ padding: '20px', borderLeft: '4px solid var(--success-color)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-            <div style={{ padding: '10px', backgroundColor: 'rgba(16, 185, 129, 0.1)', borderRadius: '12px', color: 'var(--success-color)' }}>
-              <CheckCircle size={24} />
-            </div>
-            <h3 style={{ fontSize: '14px', color: 'var(--text-muted)', margin: 0, fontWeight: '500' }}>Total Pagado</h3>
+        <div className="stat-card" style={{ background: 'var(--surface-color)', padding: '24px', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '20px' }}>
+          <div className="stat-icon" style={{ background: 'rgba(16, 185, 129, 0.1)', color: 'var(--success-color)', padding: '16px', borderRadius: '50%' }}>
+            <CheckCircle size={32} />
           </div>
-          <div style={{ fontSize: '24px', fontWeight: 'bold' }}>{formatCurrency(totalPagado)}</div>
+          <div className="stat-content">
+            <p className="stat-label" style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '4px', fontWeight: '500' }}>Total Pagado</p>
+            <h3 className="stat-value" style={{ fontSize: '24px', fontWeight: 'bold', margin: 0, color: 'var(--success-color)' }}>
+              {formatCurrency(totalPagado)}
+            </h3>
+          </div>
         </div>
       </div>
 

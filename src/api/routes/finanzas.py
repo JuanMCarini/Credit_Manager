@@ -577,29 +577,23 @@ def get_kpis_globales(
     fecha_hasta: Optional[date] = None,
     db: Session = Depends(get_db)
 ):
-    query = db.query(Movimiento).join(Concepto)
-    if fecha_desde:
-        query = query.filter(Movimiento.fecha >= fecha_desde)
+    # 1. Saldos Acumulados (ignorando fecha_desde)
+    query_saldos = db.query(Movimiento).join(Concepto)
     if fecha_hasta:
-        query = query.filter(Movimiento.fecha <= fecha_hasta)
+        query_saldos = query_saldos.filter(Movimiento.fecha <= fecha_hasta)
         
-    movs = query.all()
+    movs_saldos = query_saldos.all()
     
     saldo = 0.0
     saldo_fci = 0.0
     saldo_pf = 0.0
-    ingresos = 0.0
-    egresos = 0.0
     
-    for m in movs:
+    for m in movs_saldos:
         cat = m.concepto.tipo_movimiento
-        
         if cat in (CategoriaMovimiento.INGRESO, CategoriaMovimiento.RESCATE_FCI, CategoriaMovimiento.PLAZO_FIJO_EGRESOS):
             saldo += m.monto
-            ingresos += m.monto
         elif cat in (CategoriaMovimiento.EGRESO, CategoriaMovimiento.SUSCRIPCION_FCI, CategoriaMovimiento.PLAZO_FIJO_INGRESOS):
             saldo -= m.monto
-            egresos += m.monto
             
         if cat == CategoriaMovimiento.SUSCRIPCION_FCI:
             saldo_fci += m.monto
@@ -610,6 +604,25 @@ def get_kpis_globales(
             saldo_pf += m.monto
         elif cat == CategoriaMovimiento.PLAZO_FIJO_EGRESOS:
             saldo_pf -= m.monto
+
+    # 2. Flujo del Período (aplicando fecha_desde y fecha_hasta)
+    query_flujo = db.query(Movimiento).join(Concepto)
+    if fecha_desde:
+        query_flujo = query_flujo.filter(Movimiento.fecha >= fecha_desde)
+    if fecha_hasta:
+        query_flujo = query_flujo.filter(Movimiento.fecha <= fecha_hasta)
+        
+    movs_flujo = query_flujo.all()
+    
+    ingresos = 0.0
+    egresos = 0.0
+    
+    for m in movs_flujo:
+        cat = m.concepto.tipo_movimiento
+        if cat in (CategoriaMovimiento.INGRESO, CategoriaMovimiento.RESCATE_FCI, CategoriaMovimiento.PLAZO_FIJO_EGRESOS):
+            ingresos += m.monto
+        elif cat in (CategoriaMovimiento.EGRESO, CategoriaMovimiento.SUSCRIPCION_FCI, CategoriaMovimiento.PLAZO_FIJO_INGRESOS):
+            egresos += m.monto
 
     return {
         "saldo": saldo,
