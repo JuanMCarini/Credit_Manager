@@ -29,7 +29,7 @@ class Proveedor(Base):
     nro_documento = Column(String(11), unique=True, nullable=False)
     personeria = Column(SQLEnum(Personeria), nullable=False)
     provincia_id = Column(ForeignKey("provincias.id"), nullable=False)
-    localidad_id = Column(ForeignKey("localidades.id"), nullable=True)
+    localidad = Column(String(100), nullable=True)
     domicilio = Column(String(255), nullable=True)
     piso = Column(String(10), nullable=True)
     depto = Column(String(10), nullable=True)
@@ -43,7 +43,6 @@ class Proveedor(Base):
     # Relaciones
     comprobantes = relationship("Comprobante", back_populates="proveedor")
     provincia = relationship("Provincia")
-    localidad = relationship("Localidad")
 
 class TipoComprobante(enum.Enum):
     A = "A"
@@ -85,15 +84,13 @@ class Comprobante(Base):
     percepcion_ganancias = Column(Numeric(12, 2), default=0.0)
     otros_impuestos = Column(Numeric(12, 2), default=0.0)
     importe_total = Column(Numeric(12, 2), nullable=False, default=0.0)
-    
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     __table_args__ = (
         UniqueConstraint('proveedor_id', 'tipo_comprobante', 'punto_venta', 'numero_comprobante', name='uix_comprobante_unico'),
     )
 
-    def calcular_total(self):
+    @validates('importe_total')
+    def calcular_total(self, key, value):
         """Calcula el importe total sumando todos los conceptos."""
         self.importe_total = round(
             (self.importe_no_gravado or 0) +
@@ -120,3 +117,23 @@ class Comprobante(Base):
             elif key == 'neto_gravado_27':
                 self.iva_27 = round(value * 0.27, 2)
         return value
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    # Estado del comprobante
+    importe_cancelado = Column(Numeric(12, 2), nullable=False, default=0.0)
+    estado = Column(SQLEnum('pendiente', 'pagado', 'parcial'), nullable=False, default='pendiente')
+
+    @validates('importe_cancelado')
+    def calcular_estado(self, key, value):
+        if value is not None:
+            if value >= self.importe_total:
+                self.estado = 'pagado'
+            elif value > 0:
+                self.estado = 'parcial'
+        else:
+            self.estado = 'pendiente'
+
+    # Fecha Pago
+    fecha_cancelacion = Column(Date, nullable=True)
