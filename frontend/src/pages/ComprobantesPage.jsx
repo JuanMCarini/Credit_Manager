@@ -8,6 +8,62 @@ import DashboardComprobantesTab from '../components/Finanzas/DashboardComprobant
 import PlanPagoForm from '../components/Finanzas/PlanPagoForm';
 import CancelacionesListModal from '../components/Finanzas/CancelacionesListModal';
 
+const MultiSelectDropdown = ({ options, selectedValues, onChange, placeholder }) => {
+  const [isOpen, setIsOpen] = useState(false);
+
+  // Cierra al hacer click afuera (opcional, pero por simplicidad usamos onMouseLeave o un overlay)
+  
+  const handleToggle = (val, e) => {
+    e.stopPropagation();
+    if (selectedValues.includes(val)) {
+      onChange(selectedValues.filter(v => v !== val));
+    } else {
+      onChange([...selectedValues, val]);
+    }
+  };
+
+  return (
+    <div style={{ position: 'relative', width: '100%', marginTop: '5px' }} onMouseLeave={() => setIsOpen(false)}>
+      <div 
+        onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); }}
+        style={{ 
+          padding: '4px', border: '1px solid var(--border-color)', borderRadius: '4px', 
+          cursor: 'pointer', fontSize: '12px', minHeight: '24px', 
+          backgroundColor: 'var(--surface-color)', textAlign: 'left',
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+        }}
+      >
+        {selectedValues.length === 0 ? placeholder : `${selectedValues.length} seleccionados`}
+      </div>
+      {isOpen && (
+        <div style={{ 
+          position: 'absolute', top: '100%', left: 0, width: 'max-content', minWidth: '100%', 
+          maxHeight: '150px', overflowY: 'auto', backgroundColor: 'var(--surface-color)', 
+          border: '1px solid var(--border-color)', borderRadius: '4px', zIndex: 10, 
+          boxShadow: '0 4px 6px rgba(0,0,0,0.1)' 
+        }}>
+          {options.map(opt => (
+            <div 
+              key={opt} 
+              onClick={(e) => handleToggle(opt, e)} 
+              style={{ 
+                padding: '6px', fontSize: '12px', display: 'flex', alignItems: 'center', 
+                gap: '6px', cursor: 'pointer', borderBottom: '1px solid var(--background-color)',
+                fontWeight: 'normal', color: 'var(--text-color)', textAlign: 'left'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--background-color)'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            >
+              <input type="checkbox" checked={selectedValues.includes(opt)} readOnly style={{ margin: 0 }} />
+              {String(opt).toUpperCase()}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const ComprobantesPage = () => {
   const [activeTab, setActiveTab] = useState('resumen');
 
@@ -30,7 +86,7 @@ const ComprobantesPage = () => {
   const [selectedProveedor, setSelectedProveedor] = useState(null);
   const [selectedPlan, setSelectedPlan] = useState(null);
 
-  const [comprobanteFilter, setComprobanteFilter] = useState({ proveedor: '', numero: '', concepto: '', estado: '' });
+  const [comprobanteFilter, setComprobanteFilter] = useState({ proveedor: [], numero: '', concepto: [], estado: [] });
   const [comprobanteSort, setComprobanteSort] = useState({ key: 'fecha_emision', direction: 'desc' });
   const [planFilter, setPlanFilter] = useState({ id_origen: '', proveedor: '' });
   const [planSort, setPlanSort] = useState({ key: 'fecha', direction: 'desc' });
@@ -54,8 +110,8 @@ const ComprobantesPage = () => {
 
   const filteredAndSortedComprobantes = useMemo(() => {
     let result = [...comprobantes];
-    if (comprobanteFilter.proveedor) {
-      result = result.filter(c => (c.proveedor?.razon_social || '').toLowerCase().includes(comprobanteFilter.proveedor.toLowerCase()));
+    if (comprobanteFilter.proveedor && comprobanteFilter.proveedor.length > 0) {
+      result = result.filter(c => comprobanteFilter.proveedor.includes(c.proveedor?.razon_social));
     }
     if (comprobanteFilter.numero) {
       result = result.filter(c => {
@@ -63,10 +119,10 @@ const ComprobantesPage = () => {
          return numStr.toLowerCase().includes(comprobanteFilter.numero.toLowerCase());
       });
     }
-    if (comprobanteFilter.concepto) {
-      result = result.filter(c => (c.concepto?.name || '').toLowerCase().includes(comprobanteFilter.concepto.toLowerCase()));
+    if (comprobanteFilter.concepto && comprobanteFilter.concepto.length > 0) {
+      result = result.filter(c => comprobanteFilter.concepto.includes(c.concepto?.name));
     }
-    if (comprobanteFilter.estado) {
+    if (comprobanteFilter.estado && comprobanteFilter.estado.length > 0) {
       result = result.filter(c => {
         let st = c.estado;
         if (c.estado !== 'pagado' && c.fecha_vencimiento) {
@@ -75,7 +131,7 @@ const ComprobantesPage = () => {
           today.setHours(0, 0, 0, 0);
           if (venc < today) st = 'vencido';
         }
-        return st.toLowerCase().includes(comprobanteFilter.estado.toLowerCase());
+        return comprobanteFilter.estado.includes(st.toLowerCase());
       });
     }
     if (comprobanteSort.key) {
@@ -156,6 +212,74 @@ const ComprobantesPage = () => {
     return <span style={{ marginLeft: '5px' }}>{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>;
   };
 
+  const uniqueProveedores = useMemo(() => {
+    let result = [...comprobantes];
+    if (comprobanteFilter.numero) {
+      result = result.filter(c => `${c.tipo_comprobante} ${String(c.punto_venta).padStart(4, '0')}-${String(c.numero_comprobante).padStart(8, '0')}`.toLowerCase().includes(comprobanteFilter.numero.toLowerCase()));
+    }
+    if (comprobanteFilter.concepto && comprobanteFilter.concepto.length > 0) {
+      result = result.filter(c => comprobanteFilter.concepto.includes(c.concepto?.name));
+    }
+    if (comprobanteFilter.estado && comprobanteFilter.estado.length > 0) {
+      result = result.filter(c => {
+        let st = c.estado;
+        if (c.estado !== 'pagado' && c.fecha_vencimiento) {
+          const today = new Date();
+          const venc = new Date(c.fecha_vencimiento + 'T00:00:00');
+          today.setHours(0, 0, 0, 0);
+          if (venc < today) st = 'vencido';
+        }
+        return comprobanteFilter.estado.includes(st.toLowerCase());
+      });
+    }
+    return [...new Set(result.map(c => c.proveedor?.razon_social).filter(Boolean))].sort();
+  }, [comprobantes, comprobanteFilter.numero, comprobanteFilter.concepto, comprobanteFilter.estado]);
+
+  const uniqueConceptos = useMemo(() => {
+    let result = [...comprobantes];
+    if (comprobanteFilter.proveedor && comprobanteFilter.proveedor.length > 0) {
+      result = result.filter(c => comprobanteFilter.proveedor.includes(c.proveedor?.razon_social));
+    }
+    if (comprobanteFilter.numero) {
+      result = result.filter(c => `${c.tipo_comprobante} ${String(c.punto_venta).padStart(4, '0')}-${String(c.numero_comprobante).padStart(8, '0')}`.toLowerCase().includes(comprobanteFilter.numero.toLowerCase()));
+    }
+    if (comprobanteFilter.estado && comprobanteFilter.estado.length > 0) {
+      result = result.filter(c => {
+        let st = c.estado;
+        if (c.estado !== 'pagado' && c.fecha_vencimiento) {
+          const today = new Date();
+          const venc = new Date(c.fecha_vencimiento + 'T00:00:00');
+          today.setHours(0, 0, 0, 0);
+          if (venc < today) st = 'vencido';
+        }
+        return comprobanteFilter.estado.includes(st.toLowerCase());
+      });
+    }
+    return [...new Set(result.map(c => c.concepto?.name).filter(Boolean))].sort();
+  }, [comprobantes, comprobanteFilter.proveedor, comprobanteFilter.numero, comprobanteFilter.estado]);
+  
+  const uniqueEstados = useMemo(() => {
+    let result = [...comprobantes];
+    if (comprobanteFilter.proveedor && comprobanteFilter.proveedor.length > 0) {
+      result = result.filter(c => comprobanteFilter.proveedor.includes(c.proveedor?.razon_social));
+    }
+    if (comprobanteFilter.numero) {
+      result = result.filter(c => `${c.tipo_comprobante} ${String(c.punto_venta).padStart(4, '0')}-${String(c.numero_comprobante).padStart(8, '0')}`.toLowerCase().includes(comprobanteFilter.numero.toLowerCase()));
+    }
+    if (comprobanteFilter.concepto && comprobanteFilter.concepto.length > 0) {
+      result = result.filter(c => comprobanteFilter.concepto.includes(c.concepto?.name));
+    }
+    return [...new Set(result.map(c => {
+        let st = c.estado;
+        if (c.estado !== 'pagado' && c.fecha_vencimiento) {
+          const today = new Date();
+          const venc = new Date(c.fecha_vencimiento + 'T00:00:00');
+          today.setHours(0, 0, 0, 0);
+          if (venc < today) st = 'vencido';
+        }
+        return st;
+    }))].sort();
+  }, [comprobantes, comprobanteFilter.proveedor, comprobanteFilter.numero, comprobanteFilter.concepto]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -368,7 +492,12 @@ const ComprobantesPage = () => {
                   <th onClick={() => handleSortComprobante('fecha_vencimiento')} style={{ textAlign: 'center', cursor: 'pointer' }}>Vencimiento <SortIcon sortConfig={comprobanteSort} columnKey="fecha_vencimiento" /></th>
                   <th onClick={() => handleSortComprobante('proveedor')} style={{ textAlign: 'center', cursor: 'pointer' }}>
                     Proveedor <SortIcon sortConfig={comprobanteSort} columnKey="proveedor" />
-                    <input type="text" placeholder="Filtrar..." value={comprobanteFilter.proveedor} onChange={e => setComprobanteFilter({ ...comprobanteFilter, proveedor: e.target.value })} onClick={e => e.stopPropagation()} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                    <MultiSelectDropdown 
+                      options={uniqueProveedores} 
+                      selectedValues={comprobanteFilter.proveedor} 
+                      onChange={val => setComprobanteFilter({ ...comprobanteFilter, proveedor: val })} 
+                      placeholder="Todos" 
+                    />
                   </th>
                   <th onClick={() => handleSortComprobante('numero')} style={{ textAlign: 'center', cursor: 'pointer' }}>
                     Comprobante <SortIcon sortConfig={comprobanteSort} columnKey="numero" />
@@ -376,13 +505,23 @@ const ComprobantesPage = () => {
                   </th>
                   <th onClick={() => handleSortComprobante('concepto')} style={{ textAlign: 'center', cursor: 'pointer' }}>
                     Concepto <SortIcon sortConfig={comprobanteSort} columnKey="concepto" />
-                    <input type="text" placeholder="Filtrar..." value={comprobanteFilter.concepto} onChange={e => setComprobanteFilter({ ...comprobanteFilter, concepto: e.target.value })} onClick={e => e.stopPropagation()} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                    <MultiSelectDropdown 
+                      options={uniqueConceptos} 
+                      selectedValues={comprobanteFilter.concepto} 
+                      onChange={val => setComprobanteFilter({ ...comprobanteFilter, concepto: val })} 
+                      placeholder="Todos" 
+                    />
                   </th>
                   <th onClick={() => handleSortComprobante('importe_total')} style={{ textAlign: 'center', cursor: 'pointer' }}>Total <SortIcon sortConfig={comprobanteSort} columnKey="importe_total" /></th>
                   <th onClick={() => handleSortComprobante('saldo')} style={{ textAlign: 'center', cursor: 'pointer' }}>Saldo <SortIcon sortConfig={comprobanteSort} columnKey="saldo" /></th>
                   <th onClick={() => handleSortComprobante('estado_calc')} style={{ textAlign: 'center', cursor: 'pointer' }}>
                     Estado <SortIcon sortConfig={comprobanteSort} columnKey="estado_calc" />
-                    <input type="text" placeholder="Filtrar..." value={comprobanteFilter.estado} onChange={e => setComprobanteFilter({ ...comprobanteFilter, estado: e.target.value })} onClick={e => e.stopPropagation()} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                    <MultiSelectDropdown 
+                      options={uniqueEstados} 
+                      selectedValues={comprobanteFilter.estado} 
+                      onChange={val => setComprobanteFilter({ ...comprobanteFilter, estado: val })} 
+                      placeholder="Todos" 
+                    />
                   </th>
                   <th style={{ textAlign: 'center' }}>PDF</th>
                   <th style={{ textAlign: 'center' }}>Acciones</th>
