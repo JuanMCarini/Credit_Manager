@@ -124,8 +124,7 @@ class Comprobante(Base):
     # Estado del comprobante
     importe_cancelado = Column(Numeric(12, 2), nullable=False, default=0.0)
     fecha_cancelacion = Column(Date, nullable=True)
-    estado = Column(SQLEnum(EstadoComprobante), nullable=False, default=EstadoComprobante.PENDIENTE)
-
+    estado = Column(SQLEnum(EstadoComprobante, values_callable=lambda obj: [e.value for e in obj]), nullable=False, default=EstadoComprobante.PENDIENTE)
     @validates('importe_cancelado', 'importe_total')
     def calcular_estado(self, key, value):
         # We need both values to determine status

@@ -564,16 +564,15 @@ const ComprobantesPage = () => {
                         <td style={{ textAlign: 'right', fontWeight: 'bold' }}>{formatCurrency(p.valor_cuota)}</td>
                         <td style={{ textAlign: 'center' }}>{(p.tna * 100).toFixed(2)}%</td>
                         <td style={{ textAlign: 'center' }}>
-                          {p.cuotas_pendientes && p.cuotas_pendientes.length > 0 ? (
-                            <button className="btn-secondary" onClick={() => togglePlanExpand(p.id)} style={{ padding: '2px 6px', fontSize: '12px' }}>
-                              {expandedPlanes[p.id] ? 'Ocultar' : `Ver (${p.cuotas_pendientes.length})`}
-                            </button>
-                          ) : (
-                            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>0</span>
-                          )}
+                          {p.cuotas_pendientes ? p.cuotas_pendientes.length : 0}
                         </td>
                         <td style={{ textAlign: 'center' }}>
                           <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                            {p.cuotas_pendientes && p.cuotas_pendientes.length > 0 && (
+                              <button className="btn-secondary" onClick={() => togglePlanExpand(p.id)} style={{ padding: '4px 8px', fontSize: '14px' }} title={expandedPlanes[p.id] ? "Ocultar Cuotas" : "Ver Cuotas"}>
+                                👁️
+                              </button>
+                            )}
                             <button className="btn-secondary" onClick={() => handleOpenPlanModal(p)} style={{ padding: '4px 8px', fontSize: '14px' }} title="Editar">
                               ✏️
                             </button>

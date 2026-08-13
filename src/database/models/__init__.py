@@ -8,8 +8,8 @@ from .creditos import Transferencia, DocumentoLegajo
 from .papeleria import DocumentoPapeleria, DocumentoVariable
 from .repet import RepetPerson, RepetEntity, RepetAuditLog
 from .facturacion import Factura
-from .finance.bancos import Banco, Cuenta, Concepto, Clasificacion, Movimiento, CategoriaMovimiento, EstadoComprobante
-from .finance.comprobantes import Proveedor, Comprobante
+from .finance.bancos import Banco, Cuenta, Concepto, Clasificacion, Movimiento, CategoriaMovimiento
+from .finance.comprobantes import Proveedor, Comprobante, EstadoComprobante
 from .finance.planes import Plan, SistemaMatematico, Denominador
 
 

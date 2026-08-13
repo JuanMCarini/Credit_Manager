@@ -5,7 +5,7 @@ from typing import List
 
 from src.database.connection import get_db
 from src.database.models.finance.planes import Plan
-from src.database.models.finance.comprobantes import Comprobante, TipoComprobante
+from src.database.models.finance.comprobantes import Comprobante, TipoComprobante, EstadoComprobante
 from dateutil.relativedelta import relativedelta
 import datetime
 from src.api.schemas.planes import PlanCreate, PlanResponse
@@ -43,7 +43,7 @@ def delete_plan(plan_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Plan no encontrado")
         
     for comp in plan.cuotas:
-        if comp.estado != 'pendiente' or comp.importe_cancelado > 0:
+        if comp.estado != EstadoComprobante.PENDIENTE or comp.importe_cancelado > 0:
             raise HTTPException(status_code=400, detail="No se puede eliminar el plan porque tiene comprobantes con pagos registrados.")
             
     db.delete(plan)
@@ -63,7 +63,7 @@ def update_plan(plan_id: int, plan_in: PlanCreate, db: Session = Depends(get_db)
             raise HTTPException(status_code=400, detail="Ya existe un plan con ese ID Origen")
 
     for comp in plan.cuotas:
-        if comp.estado != 'pendiente' or comp.importe_cancelado > 0:
+        if comp.estado != EstadoComprobante.PENDIENTE or comp.importe_cancelado > 0:
             raise HTTPException(status_code=400, detail="No se puede modificar el plan porque tiene comprobantes con pagos registrados.")
 
     # Update plan fields
