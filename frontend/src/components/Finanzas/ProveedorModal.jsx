@@ -138,6 +138,7 @@ const ProveedorModal = ({ isOpen, onClose, onSave, proveedor = null, conceptos =
                 <option value="MONOTRIBUTISTA">Monotributista</option>
                 <option value="EXENTO">Exento</option>
                 <option value="IVA NO ALCANZADO">IVA No Alcanzado</option>
+                <option value="ORGANISMO ESTATAL">Organismo Estatal</option>
               </select>
             </div>
           </div>

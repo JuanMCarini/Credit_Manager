@@ -10,6 +10,7 @@ class CategoriaImpositiva(enum.Enum):
     MONOTRIBUTISTA = "MONOTRIBUTISTA"
     EXENTO = "EXENTO"
     IVA_NO_ALCANZADO = "IVA NO ALCANZADO"
+    ESTATAL = "ORGANISMO ESTATAL"
 
 class TipoDocumento(enum.Enum):
     CUIT = "CUIT"
@@ -58,6 +59,7 @@ class TipoComprobante(enum.Enum):
     NOTA_CREDITO_A = "NOTA_CREDITO_A"
     NOTA_CREDITO_B = "NOTA_CREDITO_B"
     RECIBO = "RECIBO"
+    CUOTA = "CUOTA"
 
 class Comprobante(Base):
     __tablename__ = "comprobantes"
@@ -72,6 +74,8 @@ class Comprobante(Base):
     proveedor = relationship("Proveedor", back_populates="comprobantes")
     concepto_id = Column(Integer, ForeignKey("conceptos.id"), nullable=True)
     concepto = relationship("Concepto")
+    plan_pago_id = Column(Integer, ForeignKey("planes.id"), nullable=True)
+    plan_pago = relationship("Plan", back_populates="cuotas")
     fecha_contable = Column(Date, nullable=False)
     fecha_emision = Column(Date, nullable=False)
     fecha_vencimiento = Column(Date, nullable=True)

@@ -1,10 +1,11 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import axiosClient from '../api/axiosClient';
 import { FileText, Users, Plus, Download, Edit, Trash2, CreditCard, PieChart } from 'lucide-react';
 import ComprobanteModal from '../components/Finanzas/ComprobanteModal';
 import ProveedorModal from '../components/Finanzas/ProveedorModal';
 import CancelacionModal from '../components/Finanzas/CancelacionModal';
 import DashboardComprobantesTab from '../components/Finanzas/DashboardComprobantesTab';
+import PlanPagoForm from '../components/Finanzas/PlanPagoForm';
 
 const ComprobantesPage = () => {
   const [activeTab, setActiveTab] = useState('resumen');
@@ -12,29 +13,157 @@ const ComprobantesPage = () => {
   const [comprobantes, setComprobantes] = useState([]);
   const [proveedores, setProveedores] = useState([]);
   const [conceptos, setConceptos] = useState([]);
+  const [planes, setPlanes] = useState([]);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  
   // Modals state
   const [isComprobanteModalOpen, setIsComprobanteModalOpen] = useState(false);
   const [isProveedorModalOpen, setIsProveedorModalOpen] = useState(false);
   const [isCancelacionModalOpen, setIsCancelacionModalOpen] = useState(false);
+  const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
   const [selectedComprobante, setSelectedComprobante] = useState(null);
   const [selectedProveedor, setSelectedProveedor] = useState(null);
+  const [selectedPlan, setSelectedPlan] = useState(null);
+
+  const [comprobanteFilter, setComprobanteFilter] = useState({ proveedor: '', numero: '', concepto: '', estado: '' });
+  const [comprobanteSort, setComprobanteSort] = useState({ key: 'fecha_emision', direction: 'desc' });
+  const [planFilter, setPlanFilter] = useState({ id_origen: '', proveedor: '' });
+  const [planSort, setPlanSort] = useState({ key: 'fecha', direction: 'desc' });
+  
+  const handleSortComprobante = (key) => {
+    let direction = 'asc';
+    if (comprobanteSort.key === key && comprobanteSort.direction === 'asc') direction = 'desc';
+    setComprobanteSort({ key, direction });
+  };
+  
+  const handleSortPlan = (key) => {
+    let direction = 'asc';
+    if (planSort.key === key && planSort.direction === 'asc') direction = 'desc';
+    setPlanSort({ key, direction });
+  };
+
+  const filteredAndSortedComprobantes = useMemo(() => {
+    let result = [...comprobantes];
+    if (comprobanteFilter.proveedor) {
+      result = result.filter(c => (c.proveedor?.razon_social || '').toLowerCase().includes(comprobanteFilter.proveedor.toLowerCase()));
+    }
+    if (comprobanteFilter.numero) {
+      result = result.filter(c => {
+         const numStr = `${c.tipo_comprobante} ${String(c.punto_venta).padStart(4, '0')}-${String(c.numero_comprobante).padStart(8, '0')}`;
+         return numStr.toLowerCase().includes(comprobanteFilter.numero.toLowerCase());
+      });
+    }
+    if (comprobanteFilter.concepto) {
+      result = result.filter(c => (c.concepto?.name || '').toLowerCase().includes(comprobanteFilter.concepto.toLowerCase()));
+    }
+    if (comprobanteFilter.estado) {
+      result = result.filter(c => {
+        let st = c.estado;
+        if (c.estado !== 'pagado' && c.fecha_vencimiento) {
+          const today = new Date();
+          const venc = new Date(c.fecha_vencimiento + 'T00:00:00');
+          today.setHours(0, 0, 0, 0);
+          if (venc < today) st = 'vencido';
+        }
+        return st.toLowerCase().includes(comprobanteFilter.estado.toLowerCase());
+      });
+    }
+    if (comprobanteSort.key) {
+      result.sort((a, b) => {
+        let valA = a[comprobanteSort.key] || '';
+        let valB = b[comprobanteSort.key] || '';
+        
+        if (comprobanteSort.key === 'proveedor') {
+            valA = a.proveedor?.razon_social || '';
+            valB = b.proveedor?.razon_social || '';
+        } else if (comprobanteSort.key === 'concepto') {
+            valA = a.concepto?.name || '';
+            valB = b.concepto?.name || '';
+        } else if (comprobanteSort.key === 'numero') {
+            valA = `${a.tipo_comprobante} ${String(a.punto_venta).padStart(4, '0')}-${String(a.numero_comprobante).padStart(8, '0')}`;
+            valB = `${b.tipo_comprobante} ${String(b.punto_venta).padStart(4, '0')}-${String(b.numero_comprobante).padStart(8, '0')}`;
+        } else if (comprobanteSort.key === 'estado_calc') {
+            const getEst = (c) => {
+                let st = c.estado;
+                if (c.estado !== 'pagado' && c.fecha_vencimiento) {
+                  const today = new Date();
+                  const venc = new Date(c.fecha_vencimiento + 'T00:00:00');
+                  today.setHours(0, 0, 0, 0);
+                  if (venc < today) st = 'vencido';
+                }
+                return st;
+            };
+            valA = getEst(a);
+            valB = getEst(b);
+        } else if (comprobanteSort.key === 'saldo') {
+            valA = Math.max(0, parseFloat(a.importe_total) - parseFloat(a.importe_cancelado || 0));
+            valB = Math.max(0, parseFloat(b.importe_total) - parseFloat(b.importe_cancelado || 0));
+        }
+
+        if (typeof valA === 'string') valA = valA.toLowerCase();
+        if (typeof valB === 'string') valB = valB.toLowerCase();
+        
+        if (valA < valB) return comprobanteSort.direction === 'asc' ? -1 : 1;
+        if (valA > valB) return comprobanteSort.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+    return result;
+  }, [comprobantes, comprobanteFilter, comprobanteSort]);
+
+  const filteredAndSortedPlanes = useMemo(() => {
+    let result = [...planes];
+    if (planFilter.id_origen) {
+      result = result.filter(p => (p.id_origen || '').toLowerCase().includes(planFilter.id_origen.toLowerCase()));
+    }
+    if (planFilter.proveedor) {
+      result = result.filter(p => (p.proveedor?.razon_social || p.proveedor_id || '').toLowerCase().includes(planFilter.proveedor.toLowerCase()));
+    }
+    if (planSort.key) {
+      result.sort((a, b) => {
+        let valA = a[planSort.key] || '';
+        let valB = b[planSort.key] || '';
+        
+        if (planSort.key === 'proveedor') {
+            valA = a.proveedor?.razon_social || a.proveedor_id || '';
+            valB = b.proveedor?.razon_social || b.proveedor_id || '';
+        }
+
+        if (typeof valA === 'string') valA = valA.toLowerCase();
+        if (typeof valB === 'string') valB = valB.toLowerCase();
+        
+        if (valA < valB) return planSort.direction === 'asc' ? -1 : 1;
+        if (valA > valB) return planSort.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+    return result;
+  }, [planes, planFilter, planSort]);
+
+
+  const SortIcon = ({ sortConfig, columnKey }) => {
+    if (sortConfig.key !== columnKey) return <span style={{ opacity: 0.3, marginLeft: '5px' }}>↕</span>;
+    return <span style={{ marginLeft: '5px' }}>{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>;
+  };
+
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const [resComp, resProv, resConceptos] = await Promise.all([
+      const [resComp, resProv, resConceptos, resPlanes] = await Promise.all([
         axiosClient.get('/api/finanzas/comprobantes'),
         axiosClient.get('/api/finanzas/proveedores'),
-        axiosClient.get('/api/finanzas/conceptos')
+        axiosClient.get('/api/finanzas/conceptos'),
+        axiosClient.get('/api/finanzas/planes')
       ]);
       setComprobantes(resComp.data);
       setProveedores(resProv.data);
       setConceptos(resConceptos.data);
+      setPlanes(resPlanes.data);
     } catch (err) {
       console.error(err);
       setError('Error al cargar los datos.');
@@ -65,6 +194,11 @@ const ComprobantesPage = () => {
     setIsProveedorModalOpen(true);
   };
 
+  const handleOpenPlanModal = (plan = null) => {
+    setSelectedPlan(plan);
+    setIsPlanModalOpen(true);
+  };
+
   const handleOpenCancelacionModal = (comp) => {
     setSelectedComprobante(comp);
     setIsCancelacionModalOpen(true);
@@ -87,6 +221,16 @@ const ComprobantesPage = () => {
       fetchData();
     } catch (err) {
       alert(err.response?.data?.detail || "Error al eliminar el proveedor.");
+    }
+  };
+
+  const handleDeletePlan = async (id) => {
+    if (!window.confirm("¿Está seguro de eliminar este plan de pago? Se eliminarán todas las cuotas asociadas.")) return;
+    try {
+      await axiosClient.delete(`/api/finanzas/planes/${id}`);
+      fetchData();
+    } catch (err) {
+      alert(err.response?.data?.detail || "Error al eliminar el plan.");
     }
   };
 
@@ -168,6 +312,24 @@ const ComprobantesPage = () => {
           <Users size={18} />
           Proveedores
         </button>
+        <button
+          onClick={() => setActiveTab('planes')}
+          style={{
+            padding: '12px 24px',
+            background: 'none',
+            border: 'none',
+            borderBottom: activeTab === 'planes' ? '3px solid var(--primary-color)' : '3px solid transparent',
+            color: activeTab === 'planes' ? 'var(--primary-color)' : 'var(--text-muted)',
+            fontWeight: activeTab === 'planes' ? '600' : '400',
+            cursor: 'pointer',
+            fontSize: '16px',
+            transition: 'all 0.2s',
+            display: 'flex', alignItems: 'center', gap: '8px'
+          }}
+        >
+          <CreditCard size={18} />
+          Planes de Pago
+        </button>
       </div>
 
       {error && <div className="alert alert-error" style={{ marginBottom: '16px' }}>{error}</div>}
@@ -187,26 +349,41 @@ const ComprobantesPage = () => {
 
           <div className="table-responsive">
             <table className="data-table">
+              
               <thead>
                 <tr>
-                  <th style={{ textAlign: 'center' }}>Fecha Emisión</th>
-                  <th style={{ textAlign: 'center' }}>Proveedor</th>
-                  <th style={{ textAlign: 'center' }}>Comprobante</th>
-                  <th style={{ textAlign: 'center' }}>Concepto</th>
-                  <th style={{ textAlign: 'center' }}>Total</th>
-                  <th style={{ textAlign: 'center' }}>Saldo</th>
-                  <th style={{ textAlign: 'center' }}>Estado</th>
+                  <th onClick={() => handleSortComprobante('fecha_emision')} style={{ textAlign: 'center', cursor: 'pointer' }}>Fecha Emisión <SortIcon sortConfig={comprobanteSort} columnKey="fecha_emision" /></th>
+                  <th onClick={() => handleSortComprobante('fecha_vencimiento')} style={{ textAlign: 'center', cursor: 'pointer' }}>Vencimiento <SortIcon sortConfig={comprobanteSort} columnKey="fecha_vencimiento" /></th>
+                  <th onClick={() => handleSortComprobante('proveedor')} style={{ textAlign: 'center', cursor: 'pointer' }}>
+                    Proveedor <SortIcon sortConfig={comprobanteSort} columnKey="proveedor" />
+                    <input type="text" placeholder="Filtrar..." value={comprobanteFilter.proveedor} onChange={e => setComprobanteFilter({ ...comprobanteFilter, proveedor: e.target.value })} onClick={e => e.stopPropagation()} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                  </th>
+                  <th onClick={() => handleSortComprobante('numero')} style={{ textAlign: 'center', cursor: 'pointer' }}>
+                    Comprobante <SortIcon sortConfig={comprobanteSort} columnKey="numero" />
+                    <input type="text" placeholder="Filtrar..." value={comprobanteFilter.numero} onChange={e => setComprobanteFilter({ ...comprobanteFilter, numero: e.target.value })} onClick={e => e.stopPropagation()} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                  </th>
+                  <th onClick={() => handleSortComprobante('concepto')} style={{ textAlign: 'center', cursor: 'pointer' }}>
+                    Concepto <SortIcon sortConfig={comprobanteSort} columnKey="concepto" />
+                    <input type="text" placeholder="Filtrar..." value={comprobanteFilter.concepto} onChange={e => setComprobanteFilter({ ...comprobanteFilter, concepto: e.target.value })} onClick={e => e.stopPropagation()} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                  </th>
+                  <th onClick={() => handleSortComprobante('importe_total')} style={{ textAlign: 'center', cursor: 'pointer' }}>Total <SortIcon sortConfig={comprobanteSort} columnKey="importe_total" /></th>
+                  <th onClick={() => handleSortComprobante('saldo')} style={{ textAlign: 'center', cursor: 'pointer' }}>Saldo <SortIcon sortConfig={comprobanteSort} columnKey="saldo" /></th>
+                  <th onClick={() => handleSortComprobante('estado_calc')} style={{ textAlign: 'center', cursor: 'pointer' }}>
+                    Estado <SortIcon sortConfig={comprobanteSort} columnKey="estado_calc" />
+                    <input type="text" placeholder="Filtrar..." value={comprobanteFilter.estado} onChange={e => setComprobanteFilter({ ...comprobanteFilter, estado: e.target.value })} onClick={e => e.stopPropagation()} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                  </th>
                   <th style={{ textAlign: 'center' }}>PDF</th>
                   <th style={{ textAlign: 'center' }}>Acciones</th>
                 </tr>
               </thead>
+
               <tbody>
                 {loading ? (
-                  <tr><td colSpan="9" style={{ textAlign: 'center', padding: '20px' }}>Cargando...</td></tr>
-                ) : comprobantes.length === 0 ? (
-                  <tr><td colSpan="9" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>No hay comprobantes cargados.</td></tr>
+                  <tr><td colSpan="10" style={{ textAlign: 'center', padding: '20px' }}>Cargando...</td></tr>
+                ) : filteredAndSortedComprobantes.length === 0 ? (
+                  <tr><td colSpan="10" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>No hay comprobantes cargados.</td></tr>
                 ) : (
-                  comprobantes.map(c => {
+                  filteredAndSortedComprobantes.map(c => {
                     let displayEstado = c.estado;
                     if (c.estado !== 'pagado' && c.fecha_vencimiento) {
                       const today = new Date();
@@ -224,7 +401,8 @@ const ComprobantesPage = () => {
 
                     return (
                       <tr key={c.id} style={rowStyle}>
-                        <td>{c.fecha_emision}</td>
+                        <td style={{ textAlign: 'center' }}>{c.fecha_emision}</td>
+                        <td style={{ textAlign: 'center' }}>{c.fecha_vencimiento || '-'}</td>
                         <td>{c.proveedor?.razon_social}</td>
                         <td style={{ textAlign: 'center' }}>{c.tipo_comprobante} {String(c.punto_venta).padStart(4, '0')}-{String(c.numero_comprobante).padStart(8, '0')}</td>
                         <td>{c.concepto?.name || '-'}</td>
@@ -320,6 +498,73 @@ const ComprobantesPage = () => {
         </div>
       )}
 
+      {activeTab === 'planes' && (
+        <div className="card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: '600', margin: 0 }}>Listado de Planes de Pago</h3>
+            <button className="btn btn-primary" onClick={() => handleOpenPlanModal()} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Plus size={18} /> Nuevo Plan
+            </button>
+          </div>
+
+          <div className="table-responsive">
+            <table className="data-table">
+              
+              <thead>
+                <tr>
+                  <th onClick={() => handleSortPlan('id_origen')} style={{ textAlign: 'center', cursor: 'pointer' }}>
+                    ID Origen <SortIcon sortConfig={planSort} columnKey="id_origen" />
+                    <input type="text" placeholder="Filtrar..." value={planFilter.id_origen} onChange={e => setPlanFilter({ ...planFilter, id_origen: e.target.value })} onClick={e => e.stopPropagation()} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                  </th>
+                  <th onClick={() => handleSortPlan('fecha')} style={{ textAlign: 'center', cursor: 'pointer' }}>Fecha <SortIcon sortConfig={planSort} columnKey="fecha" /></th>
+                  <th onClick={() => handleSortPlan('proveedor')} style={{ textAlign: 'center', cursor: 'pointer' }}>
+                    Proveedor <SortIcon sortConfig={planSort} columnKey="proveedor" />
+                    <input type="text" placeholder="Filtrar..." value={planFilter.proveedor} onChange={e => setPlanFilter({ ...planFilter, proveedor: e.target.value })} onClick={e => e.stopPropagation()} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                  </th>
+                  <th onClick={() => handleSortPlan('capital')} style={{ textAlign: 'center', cursor: 'pointer' }}>Capital <SortIcon sortConfig={planSort} columnKey="capital" /></th>
+                  <th onClick={() => handleSortPlan('anticipo')} style={{ textAlign: 'center', cursor: 'pointer' }}>Anticipo <SortIcon sortConfig={planSort} columnKey="anticipo" /></th>
+                  <th onClick={() => handleSortPlan('plazo')} style={{ textAlign: 'center', cursor: 'pointer' }}>Cuotas <SortIcon sortConfig={planSort} columnKey="plazo" /></th>
+                  <th onClick={() => handleSortPlan('valor_cuota')} style={{ textAlign: 'center', cursor: 'pointer' }}>Valor Cuota <SortIcon sortConfig={planSort} columnKey="valor_cuota" /></th>
+                  <th onClick={() => handleSortPlan('tna')} style={{ textAlign: 'center', cursor: 'pointer' }}>TNA <SortIcon sortConfig={planSort} columnKey="tna" /></th>
+                  <th style={{ textAlign: 'center' }}>Acciones</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan="9" style={{ textAlign: 'center', padding: '20px' }}>Cargando...</td></tr>
+                ) : filteredAndSortedPlanes.length === 0 ? (
+                  <tr><td colSpan="9" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>No hay planes cargados.</td></tr>
+                ) : (
+                  filteredAndSortedPlanes.map(p => (
+                    <tr key={p.id}>
+                      <td style={{ textAlign: 'center' }}>{p.id_origen}</td>
+                      <td style={{ textAlign: 'center' }}>{p.fecha}</td>
+                      <td>{p.proveedor?.razon_social || p.proveedor_id}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 'bold' }}>{formatCurrency(p.capital)}</td>
+                      <td style={{ textAlign: 'right' }}>{formatCurrency(p.anticipo)}</td>
+                      <td style={{ textAlign: 'center' }}>{p.plazo}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 'bold' }}>{formatCurrency(p.valor_cuota)}</td>
+                      <td style={{ textAlign: 'center' }}>{(p.tna * 100).toFixed(2)}%</td>
+                      <td style={{ textAlign: 'center' }}>
+                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                          <button className="btn-secondary" onClick={() => handleOpenPlanModal(p)} style={{ padding: '4px 8px', fontSize: '14px' }} title="Editar">
+                            ✏️
+                          </button>
+                          <button className="btn-secondary" onClick={() => handleDeletePlan(p.id)} style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--danger-color)' }} title="Eliminar">
+                            🗑️
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       <ComprobanteModal 
         isOpen={isComprobanteModalOpen} 
         onClose={() => setIsComprobanteModalOpen(false)} 
@@ -346,6 +591,15 @@ const ComprobantesPage = () => {
         onClose={() => setIsCancelacionModalOpen(false)}
         onSave={() => { setIsCancelacionModalOpen(false); fetchData(); }}
         comprobante={selectedComprobante}
+      />
+
+      <PlanPagoForm
+        isOpen={isPlanModalOpen}
+        onClose={() => setIsPlanModalOpen(false)}
+        proveedores={proveedores}
+        conceptos={conceptos}
+        editPlan={selectedPlan}
+        onSave={() => { setIsPlanModalOpen(false); fetchData(); }}
       />
     </div>
   );
