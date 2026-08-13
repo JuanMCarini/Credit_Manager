@@ -137,5 +137,7 @@ class MovimientoResponse(MovimientoBase):
     updated_at: datetime
     concepto: Optional[ConceptoResponse] = None
     cuenta: Optional[CuentaResponse] = None
+    monto_asignado: Optional[float] = 0.0
+    saldo_disponible: Optional[float] = 0.0
 
     model_config = ConfigDict(from_attributes=True)

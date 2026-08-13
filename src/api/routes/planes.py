@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import select, and_
 from typing import List
 
@@ -33,7 +33,7 @@ def create_plan(plan_in: PlanCreate, db: Session = Depends(get_db)):
 
 @router.get("", response_model=List[PlanResponse])
 def get_planes(db: Session = Depends(get_db)):
-    planes = db.execute(select(Plan)).scalars().all()
+    planes = db.execute(select(Plan).options(selectinload(Plan.cuotas))).scalars().all()
     return planes
 
 @router.delete("/{plan_id}", status_code=status.HTTP_204_NO_CONTENT)

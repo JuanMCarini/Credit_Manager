@@ -185,14 +185,15 @@ def create_cancelacion(
     db_cancelacion = CancelacionComprobante(
         comprobante_id=comprobante_id,
         importe=cancelacion.importe,
-        fecha_cancelacion=cancelacion.fecha_cancelacion
+        fecha_cancelacion=cancelacion.fecha_cancelacion,
+        movimiento_id=cancelacion.movimiento_id
     )
     
     db.add(db_cancelacion)
     
     # Update importe_cancelado of parent Comprobante
     current_cancelado = db_comprobante.importe_cancelado or Decimal('0.0')
-    db_comprobante.importe_cancelado = current_cancelado + cancelacion.importe
+    db_comprobante.importe_cancelado = current_cancelado + Decimal(str(cancelacion.importe))
     
     try:
         db.commit()
@@ -205,7 +206,72 @@ def create_cancelacion(
     db.refresh(db_cancelacion)
     return db_cancelacion
 
+
+@router.get("/comprobantes/{comprobante_id}/cancelaciones", response_model=List[CancelacionResponse])
+def get_cancelaciones(comprobante_id: int, db: Session = Depends(get_db)):
+    db_comprobante = db.query(Comprobante).filter(Comprobante.id == comprobante_id).first()
+    if not db_comprobante:
+        raise HTTPException(status_code=404, detail="Comprobante no encontrado")
+        
+    from sqlalchemy.orm import joinedload
+    from src.database.models.finance.bancos import Movimiento
+    cancelaciones = db.query(CancelacionComprobante)\
+        .options(joinedload(CancelacionComprobante.movimiento).joinedload(Movimiento.cuenta))\
+        .filter(CancelacionComprobante.comprobante_id == comprobante_id)\
+        .order_by(CancelacionComprobante.fecha_cancelacion.desc())\
+        .all()
+        
+    for c in cancelaciones:
+        if c.movimiento and getattr(c.movimiento, 'cuenta', None):
+            c.movimiento_info = {
+                "id": c.movimiento.id,
+                "cuenta_nombre": c.movimiento.cuenta.nombre
+            }
+            
+    return cancelaciones
+
+@router.put("/cancelaciones/{cancelacion_id}", response_model=CancelacionResponse)
+def update_cancelacion(cancelacion_id: int, cancelacion: CancelacionCreate, db: Session = Depends(get_db)):
+    db_cancelacion = db.query(CancelacionComprobante).filter(CancelacionComprobante.id == cancelacion_id).first()
+    if not db_cancelacion:
+        raise HTTPException(status_code=404, detail="Cancelación no encontrada")
+    
+    db_comprobante = db.query(Comprobante).filter(Comprobante.id == db_cancelacion.comprobante_id).first()
+    
+    # Update importe_cancelado of parent Comprobante
+    from decimal import Decimal
+    current_cancelado = db_comprobante.importe_cancelado or Decimal('0.0')
+    current_cancelado = current_cancelado - Decimal(str(db_cancelacion.importe)) + Decimal(str(cancelacion.importe))
+    db_comprobante.importe_cancelado = current_cancelado
+    
+    db_cancelacion.importe = cancelacion.importe
+    db_cancelacion.fecha_cancelacion = cancelacion.fecha_cancelacion
+    if hasattr(cancelacion, 'movimiento_id'):
+        db_cancelacion.movimiento_id = cancelacion.movimiento_id
+    
+    db.commit()
+    db.refresh(db_cancelacion)
+    return db_cancelacion
+
+@router.delete("/cancelaciones/{cancelacion_id}")
+def delete_cancelacion(cancelacion_id: int, db: Session = Depends(get_db)):
+    db_cancelacion = db.query(CancelacionComprobante).filter(CancelacionComprobante.id == cancelacion_id).first()
+    if not db_cancelacion:
+        raise HTTPException(status_code=404, detail="Cancelación no encontrada")
+    
+    db_comprobante = db.query(Comprobante).filter(Comprobante.id == db_cancelacion.comprobante_id).first()
+    
+    # Update importe_cancelado of parent Comprobante
+    from decimal import Decimal
+    current_cancelado = db_comprobante.importe_cancelado or Decimal('0.0')
+    db_comprobante.importe_cancelado = current_cancelado - Decimal(str(db_cancelacion.importe))
+    
+    db.delete(db_cancelacion)
+    db.commit()
+    return {"message": "Cancelación eliminada exitosamente"}
+
 @router.post("/comprobantes/{comprobante_id}/upload")
+
 def upload_comprobante_pdf(
     comprobante_id: int,
     file: UploadFile = File(...),

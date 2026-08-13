@@ -108,6 +108,7 @@ class ComprobanteUpdate(BaseModel):
 class CancelacionBase(BaseModel):
     importe: Decimal
     fecha_cancelacion: date
+    movimiento_id: Optional[int] = None
 
 class CancelacionCreate(CancelacionBase):
     pass
@@ -117,6 +118,7 @@ class CancelacionResponse(CancelacionBase):
     comprobante_id: int
     created_at: datetime
     updated_at: datetime
+    movimiento_info: Optional[dict] = None
 
     model_config = ConfigDict(from_attributes=True)
 

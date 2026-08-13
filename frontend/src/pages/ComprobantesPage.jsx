@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, Fragment } from 'react';
 import axiosClient from '../api/axiosClient';
 import { FileText, Users, Plus, Download, Edit, Trash2, CreditCard, PieChart } from 'lucide-react';
 import ComprobanteModal from '../components/Finanzas/ComprobanteModal';
@@ -6,6 +6,7 @@ import ProveedorModal from '../components/Finanzas/ProveedorModal';
 import CancelacionModal from '../components/Finanzas/CancelacionModal';
 import DashboardComprobantesTab from '../components/Finanzas/DashboardComprobantesTab';
 import PlanPagoForm from '../components/Finanzas/PlanPagoForm';
+import CancelacionesListModal from '../components/Finanzas/CancelacionesListModal';
 
 const ComprobantesPage = () => {
   const [activeTab, setActiveTab] = useState('resumen');
@@ -23,6 +24,7 @@ const ComprobantesPage = () => {
   const [isComprobanteModalOpen, setIsComprobanteModalOpen] = useState(false);
   const [isProveedorModalOpen, setIsProveedorModalOpen] = useState(false);
   const [isCancelacionModalOpen, setIsCancelacionModalOpen] = useState(false);
+  const [isCancelacionesListModalOpen, setIsCancelacionesListModalOpen] = useState(false);
   const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
   const [selectedComprobante, setSelectedComprobante] = useState(null);
   const [selectedProveedor, setSelectedProveedor] = useState(null);
@@ -32,6 +34,11 @@ const ComprobantesPage = () => {
   const [comprobanteSort, setComprobanteSort] = useState({ key: 'fecha_emision', direction: 'desc' });
   const [planFilter, setPlanFilter] = useState({ id_origen: '', proveedor: '' });
   const [planSort, setPlanSort] = useState({ key: 'fecha', direction: 'desc' });
+  const [expandedPlanes, setExpandedPlanes] = useState({});
+
+  const togglePlanExpand = (planId) => {
+    setExpandedPlanes(prev => ({ ...prev, [planId]: !prev[planId] }));
+  };
   
   const handleSortComprobante = (key) => {
     let direction = 'asc';
@@ -202,6 +209,11 @@ const ComprobantesPage = () => {
   const handleOpenCancelacionModal = (comp) => {
     setSelectedComprobante(comp);
     setIsCancelacionModalOpen(true);
+  };
+
+  const handleOpenCancelacionesListModal = (comp) => {
+    setSelectedComprobante(comp);
+    setIsCancelacionesListModalOpen(true);
   };
 
   const handleDeleteComprobante = async (id) => {
@@ -422,6 +434,9 @@ const ComprobantesPage = () => {
                         </td>
                         <td style={{ textAlign: 'center' }}>
                           <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                            <button className="btn-secondary" onClick={() => handleOpenCancelacionesListModal(c)} style={{ padding: '4px 8px', fontSize: '14px' }} title="Ver Historial de Pagos">
+                              📑
+                            </button>
                             {c.estado !== 'pagado' && (
                               <button className="btn-secondary" onClick={() => handleOpenCancelacionModal(c)} style={{ padding: '4px 8px', fontSize: '14px' }} title="Registrar Pago">
                                 💸
@@ -526,6 +541,7 @@ const ComprobantesPage = () => {
                   <th onClick={() => handleSortPlan('plazo')} style={{ textAlign: 'center', cursor: 'pointer' }}>Cuotas <SortIcon sortConfig={planSort} columnKey="plazo" /></th>
                   <th onClick={() => handleSortPlan('valor_cuota')} style={{ textAlign: 'center', cursor: 'pointer' }}>Valor Cuota <SortIcon sortConfig={planSort} columnKey="valor_cuota" /></th>
                   <th onClick={() => handleSortPlan('tna')} style={{ textAlign: 'center', cursor: 'pointer' }}>TNA <SortIcon sortConfig={planSort} columnKey="tna" /></th>
+                  <th style={{ textAlign: 'center' }}>Pendientes</th>
                   <th style={{ textAlign: 'center' }}>Acciones</th>
                 </tr>
               </thead>
@@ -537,26 +553,68 @@ const ComprobantesPage = () => {
                   <tr><td colSpan="9" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>No hay planes cargados.</td></tr>
                 ) : (
                   filteredAndSortedPlanes.map(p => (
-                    <tr key={p.id}>
-                      <td style={{ textAlign: 'center' }}>{p.id_origen}</td>
-                      <td style={{ textAlign: 'center' }}>{p.fecha}</td>
-                      <td>{p.proveedor?.razon_social || p.proveedor_id}</td>
-                      <td style={{ textAlign: 'right', fontWeight: 'bold' }}>{formatCurrency(p.capital)}</td>
-                      <td style={{ textAlign: 'right' }}>{formatCurrency(p.anticipo)}</td>
-                      <td style={{ textAlign: 'center' }}>{p.plazo}</td>
-                      <td style={{ textAlign: 'right', fontWeight: 'bold' }}>{formatCurrency(p.valor_cuota)}</td>
-                      <td style={{ textAlign: 'center' }}>{(p.tna * 100).toFixed(2)}%</td>
-                      <td style={{ textAlign: 'center' }}>
-                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                          <button className="btn-secondary" onClick={() => handleOpenPlanModal(p)} style={{ padding: '4px 8px', fontSize: '14px' }} title="Editar">
-                            ✏️
-                          </button>
-                          <button className="btn-secondary" onClick={() => handleDeletePlan(p.id)} style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--danger-color)' }} title="Eliminar">
-                            🗑️
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
+                    <Fragment key={p.id}>
+                      <tr>
+                        <td style={{ textAlign: 'center' }}>{p.id_origen}</td>
+                        <td style={{ textAlign: 'center' }}>{p.fecha}</td>
+                        <td>{p.proveedor?.razon_social || p.proveedor_id}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 'bold' }}>{formatCurrency(p.capital)}</td>
+                        <td style={{ textAlign: 'right' }}>{formatCurrency(p.anticipo)}</td>
+                        <td style={{ textAlign: 'center' }}>{p.plazo}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 'bold' }}>{formatCurrency(p.valor_cuota)}</td>
+                        <td style={{ textAlign: 'center' }}>{(p.tna * 100).toFixed(2)}%</td>
+                        <td style={{ textAlign: 'center' }}>
+                          {p.cuotas_pendientes && p.cuotas_pendientes.length > 0 ? (
+                            <button className="btn-secondary" onClick={() => togglePlanExpand(p.id)} style={{ padding: '2px 6px', fontSize: '12px' }}>
+                              {expandedPlanes[p.id] ? 'Ocultar' : `Ver (${p.cuotas_pendientes.length})`}
+                            </button>
+                          ) : (
+                            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>0</span>
+                          )}
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                            <button className="btn-secondary" onClick={() => handleOpenPlanModal(p)} style={{ padding: '4px 8px', fontSize: '14px' }} title="Editar">
+                              ✏️
+                            </button>
+                            <button className="btn-secondary" onClick={() => handleDeletePlan(p.id)} style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--danger-color)' }} title="Eliminar">
+                              🗑️
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                      {expandedPlanes[p.id] && p.cuotas_pendientes && p.cuotas_pendientes.length > 0 && (
+                        <tr>
+                          <td colSpan="10" style={{ padding: '10px 20px', backgroundColor: 'var(--background-color)' }}>
+                            <div style={{ padding: '10px', backgroundColor: 'var(--surface-color)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                              <h4 style={{ margin: '0 0 10px 0', fontSize: '14px', color: 'var(--text-color)' }}>Cuotas Pendientes de Cancelar</h4>
+                              <table className="data-table" style={{ width: '100%', fontSize: '13px' }}>
+                                <thead>
+                                  <tr>
+                                    <th>Nro Comprobante</th>
+                                    <th>Vencimiento</th>
+                                    <th style={{ textAlign: 'right' }}>Importe Total</th>
+                                    <th style={{ textAlign: 'right' }}>Cancelado</th>
+                                    <th style={{ textAlign: 'right' }}>Saldo Restante</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {p.cuotas_pendientes.map(cuota => (
+                                    <tr key={cuota.id}>
+                                      <td>{cuota.numero_comprobante}</td>
+                                      <td>{cuota.fecha_vencimiento}</td>
+                                      <td style={{ textAlign: 'right' }}>{formatCurrency(cuota.importe_total)}</td>
+                                      <td style={{ textAlign: 'right' }}>{formatCurrency(cuota.importe_cancelado)}</td>
+                                      <td style={{ textAlign: 'right', fontWeight: 'bold' }}>{formatCurrency(cuota.importe_total - cuota.importe_cancelado)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   ))
                 )}
               </tbody>
@@ -590,6 +648,13 @@ const ComprobantesPage = () => {
         isOpen={isCancelacionModalOpen}
         onClose={() => setIsCancelacionModalOpen(false)}
         onSave={() => { setIsCancelacionModalOpen(false); fetchData(); }}
+        comprobante={selectedComprobante}
+      />
+
+      <CancelacionesListModal
+        isOpen={isCancelacionesListModalOpen}
+        onClose={() => setIsCancelacionesListModalOpen(false)}
+        onSave={() => { fetchData(); }}
         comprobante={selectedComprobante}
       />
 

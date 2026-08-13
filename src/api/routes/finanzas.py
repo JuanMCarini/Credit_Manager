@@ -461,6 +461,9 @@ def delete_clasificacion(clasificacion_id: int, db: Session = Depends(get_db)):
 # -------------------------------------------------------------------
 # Movimientos
 # -------------------------------------------------------------------
+from sqlalchemy import func
+from src.database.models.finance.comprobantes import CancelacionComprobante
+
 @router.get("/movimientos")
 def get_movimientos(
     skip: int = 0,
@@ -525,6 +528,20 @@ def get_movimientos(
                 continue
                 
         res.append(mov)
+
+    if res:
+        mov_ids = [m.id for m in res]
+        cancelaciones_sum = db.query(
+            CancelacionComprobante.movimiento_id, 
+            func.sum(CancelacionComprobante.importe).label("total_asignado")
+        ).filter(CancelacionComprobante.movimiento_id.in_(mov_ids)) \
+         .group_by(CancelacionComprobante.movimiento_id).all()
+         
+        asignados_dict = {c[0]: float(c[1]) for c in cancelaciones_sum}
+        
+        for mov in res:
+            mov.monto_asignado = asignados_dict.get(mov.id, 0.0)
+            mov.saldo_disponible = abs(mov.monto) - mov.monto_asignado
 
     return {"items": res, "total": total}
 

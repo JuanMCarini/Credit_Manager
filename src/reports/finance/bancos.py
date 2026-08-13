@@ -2,8 +2,7 @@ from datetime import date
 import pandas as pd
 
 from src.database import SessionLocal
-from src.database.models.finance.bancos import Movimiento, Concepto, Clasificacion, CategoriaMovimiento
-
+from src.database.models import Movimiento, Concepto, Clasificacion, CategoriaMovimiento
 db = SessionLocal()
 
 query = (

@@ -4,7 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from src.database.models.finance.planes import SistemaMatematico, Denominador
 from src.api.schemas.bancos import ConceptoResponse
-from src.api.schemas.comprobantes import ProveedorResponse
+from src.api.schemas.comprobantes import ProveedorResponse, ComprobanteResponse
 
 class PlanBase(BaseModel):
     id_origen: str
@@ -31,5 +31,6 @@ class PlanResponse(PlanBase):
     
     proveedor: Optional[ProveedorResponse] = None
     concepto: Optional[ConceptoResponse] = None
+    cuotas_pendientes: list[ComprobanteResponse] = []
 
     model_config = ConfigDict(from_attributes=True)

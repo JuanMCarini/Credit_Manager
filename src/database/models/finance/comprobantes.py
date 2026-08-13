@@ -61,6 +61,11 @@ class TipoComprobante(enum.Enum):
     RECIBO = "RECIBO"
     CUOTA = "CUOTA"
 
+class EstadoComprobante(enum.Enum):
+    PENDIENTE = "pendiente"
+    PAGADO = "pagado"
+    PARCIAL = "parcial"
+
 class Comprobante(Base):
     __tablename__ = "comprobantes"
 
@@ -119,7 +124,7 @@ class Comprobante(Base):
     # Estado del comprobante
     importe_cancelado = Column(Numeric(12, 2), nullable=False, default=0.0)
     fecha_cancelacion = Column(Date, nullable=True)
-    estado = Column(SQLEnum('pendiente', 'pagado', 'parcial', name='estado_comprobante_enum'), nullable=False, default='pendiente')
+    estado = Column(SQLEnum(EstadoComprobante), nullable=False, default=EstadoComprobante.PENDIENTE)
 
     @validates('importe_cancelado', 'importe_total')
     def calcular_estado(self, key, value):
@@ -152,6 +157,7 @@ class CancelacionComprobante(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     comprobante_id = Column(ForeignKey("comprobantes.id", ondelete="CASCADE"), nullable=False)
+    movimiento_id = Column(ForeignKey("movimientos.id", ondelete="SET NULL"), nullable=True)
     importe = Column(Numeric(12, 2), nullable=False)
     fecha_cancelacion = Column(Date, nullable=False)
     
@@ -160,3 +166,4 @@ class CancelacionComprobante(Base):
 
     # Relaciones
     comprobante = relationship("Comprobante", back_populates="cancelaciones")
+    movimiento = relationship("Movimiento")

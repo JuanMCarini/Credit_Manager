@@ -53,6 +53,10 @@ class Plan(Base):
     concepto = relationship("Concepto")
     cuotas = relationship("Comprobante", back_populates="plan_pago", cascade="all, delete-orphan")
 
+    @property
+    def cuotas_pendientes(self):
+        return [c for c in self.cuotas if c.estado != 'pagado']
+
 @event.listens_for(Plan, 'after_insert')
 def generar_comprobantes_cuotas(mapper, connection, target):
 

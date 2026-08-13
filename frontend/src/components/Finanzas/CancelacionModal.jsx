@@ -53,12 +53,6 @@ const CancelacionModal = ({ isOpen, onClose, onSave, comprobante }) => {
       return;
     }
 
-    if (payload.importe > remainingBalance + 0.05) { // Adding tiny delta for floating point drift
-      setError(`El importe no puede ser mayor al saldo pendiente ($ ${remainingBalance.toFixed(2)}).`);
-      setLoading(false);
-      return;
-    }
-
     try {
       await axiosClient.post(`/api/finanzas/comprobantes/${comprobante.id}/cancelaciones`, payload);
       onSave(); // Refresh list and close
@@ -81,7 +75,7 @@ const CancelacionModal = ({ isOpen, onClose, onSave, comprobante }) => {
         </div>
         <div>
           {error && <div className="alert alert-error" style={{ marginBottom: '16px', padding: '12px', background: '#ffebee', color: '#c62828', borderRadius: '6px' }}>{error}</div>}
-          
+
           <div style={{ marginBottom: '20px', padding: '12px', backgroundColor: 'var(--surface-color)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
             <p style={{ margin: '0 0 8px 0', fontSize: '14px', color: 'var(--text-muted)' }}>
               Comprobante: <strong>{comprobante.tipo_comprobante} {String(comprobante.punto_venta).padStart(4, '0')}-{String(comprobante.numero_comprobante).padStart(8, '0')}</strong>
@@ -103,24 +97,24 @@ const CancelacionModal = ({ isOpen, onClose, onSave, comprobante }) => {
           <form id="cancelacion-form" onSubmit={handleSubmit}>
             <div style={{ marginBottom: '16px' }}>
               <label className="form-label" style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: '500' }}>Fecha de Pago</label>
-              <input 
-                type="date" 
+              <input
+                type="date"
                 style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)' }}
-                name="fecha_cancelacion" 
-                value={formData.fecha_cancelacion} 
-                onChange={handleDateChange} 
-                required 
+                name="fecha_cancelacion"
+                value={formData.fecha_cancelacion}
+                onChange={handleDateChange}
+                required
               />
             </div>
             <div style={{ marginBottom: '16px' }}>
               <label className="form-label" style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: '500' }}>Importe a Pagar</label>
-              <CurrencyInput 
+              <CurrencyInput
                 style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)' }}
-                className="form-control" 
-                name="importe" 
-                value={formData.importe} 
-                onChange={(val, e) => handleChange(e || { target: { name: 'importe', value: val }})} 
-                required 
+                className="form-control"
+                name="importe"
+                value={formData.importe}
+                onChange={(val, e) => handleChange(e || { target: { name: 'importe', value: val } })}
+                required
               />
             </div>
           </form>

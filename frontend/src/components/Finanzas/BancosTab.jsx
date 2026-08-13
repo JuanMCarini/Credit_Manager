@@ -3,6 +3,7 @@ import { DollarSign, Plus, Edit2, Trash2, Calendar, Landmark, Settings, Upload }
 import axiosClient from '../../api/axiosClient';
 import CuentaModal from './CuentaModal';
 import MovimientoModal from './MovimientoModal';
+import MovimientoPagoModal from './MovimientoPagoModal';
 import ExcelDateFilter from '../ExcelDateFilter';
 import ExcelListFilter from '../ExcelListFilter';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
@@ -35,6 +36,8 @@ const BancosTab = () => {
 
   const [isMovimientoModalOpen, setIsMovimientoModalOpen] = useState(false);
   const [editingMovimiento, setEditingMovimiento] = useState(null);
+  const [isPagoModalOpen, setIsPagoModalOpen] = useState(false);
+  const [selectedPagoMovimiento, setSelectedPagoMovimiento] = useState(null);
 
   // Filters for Movimientos
   const [filtroDesde, setFiltroDesde] = useState('');
@@ -152,6 +155,11 @@ const BancosTab = () => {
   const handleEditMovimiento = (mov) => {
     setEditingMovimiento(mov);
     setIsMovimientoModalOpen(true);
+  };
+
+  const handleOpenPagoModal = (mov) => {
+    setSelectedPagoMovimiento(mov);
+    setIsPagoModalOpen(true);
   };
 
   const handleSelectAll = (e) => {
@@ -524,11 +532,16 @@ const BancosTab = () => {
                       </td>
                       <td style={{ textAlign: 'center' }}>
                         <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                          <button className="btn-icon" onClick={() => handleEditMovimiento(mov)} title="Editar" style={{ color: 'var(--primary-color)', background: 'none', border: 'none', cursor: 'pointer' }}>
-                            <Edit2 size={16} />
+                          {mov.saldo_disponible > 0 && (
+                            <button className="btn-secondary" onClick={() => handleOpenPagoModal(mov)} title={`Imputar Pago (Disponible: ${formatCurrency(mov.saldo_disponible)})`} style={{ padding: '4px 8px', fontSize: '14px' }}>
+                              💸
+                            </button>
+                          )}
+                          <button className="btn-secondary" onClick={() => handleEditMovimiento(mov)} title="Editar" style={{ padding: '4px 8px', fontSize: '14px' }}>
+                            ✏️
                           </button>
-                          <button className="btn-icon" onClick={() => handleDeleteMovimiento(mov.id)} title="Eliminar" style={{ color: 'var(--danger-color)', background: 'none', border: 'none', cursor: 'pointer' }}>
-                            <Trash2 size={16} />
+                          <button className="btn-secondary" onClick={() => handleDeleteMovimiento(mov.id)} title="Eliminar" style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--danger-color)' }}>
+                            🗑️
                           </button>
                         </div>
                       </td>
@@ -585,6 +598,17 @@ const BancosTab = () => {
         }}
         movimiento={editingMovimiento}
         cuentaIdDefault={selectedCuentaId}
+      />
+
+      <MovimientoPagoModal
+        isOpen={isPagoModalOpen}
+        onClose={() => setIsPagoModalOpen(false)}
+        movimiento={selectedPagoMovimiento}
+        onSave={() => {
+          setIsPagoModalOpen(false);
+          fetchKpis();
+          queryClient.invalidateQueries({ queryKey: ['movimientos'] });
+        }}
       />
 
     </div>

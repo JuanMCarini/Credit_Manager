@@ -8,8 +8,9 @@ from .creditos import Transferencia, DocumentoLegajo
 from .papeleria import DocumentoPapeleria, DocumentoVariable
 from .repet import RepetPerson, RepetEntity, RepetAuditLog
 from .facturacion import Factura
-from .finance.bancos import Banco, Cuenta, Concepto, Clasificacion, Movimiento, CategoriaMovimiento
+from .finance.bancos import Banco, Cuenta, Concepto, Clasificacion, Movimiento, CategoriaMovimiento, EstadoComprobante
 from .finance.comprobantes import Proveedor, Comprobante
+from .finance.planes import Plan, SistemaMatematico, Denominador
 
 
 __all__ = [
@@ -20,6 +21,6 @@ __all__ = [
     "TipoProcesoEnum", "EstadoProcesoEnum", "Proceso", "TipoCobranzaEnum", "Cobranza", "TipoLiquidacionEnum", "LiquidacionCuotaCedida",
     "TipoRolEnum", "Rol", "Usuario", "RegistroAuditoria", "Transferencia", "DocumentoLegajo",
     "DocumentoPapeleria", "DocumentoVariable", "RepetPerson", "RepetEntity", "RepetAuditLog", "Factura",
-    "Banco", "Cuenta", "Concepto", "Clasificacion", "Movimiento", "CategoriaMovimiento",
-    "Proveedor", "Comprobante"
+    "Banco", "Cuenta", "Concepto", "Clasificacion", "Movimiento", "CategoriaMovimiento", "EstadoComprobante",
+    "Proveedor", "Comprobante", "Plan", "SistemaMatematico", "Denominador"
 ]
