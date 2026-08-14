@@ -169,7 +169,7 @@ const DashboardCarteraPage = () => {
 
         pdf.setFontSize(24);
         pdf.setTextColor(0, 0, 0);
-        pdf.text('Dashboard de Cartera', pdfWidth / 2, pdfHeight / 2 + 10, { align: 'center' });
+        pdf.text('Dashboard Financiero', pdfWidth / 2, pdfHeight / 2 + 10, { align: 'center' });
 
         pdf.setFontSize(12);
         pdf.setTextColor(100, 100, 100);
@@ -947,6 +947,8 @@ const DashboardCarteraPage = () => {
     });
   }, [espData]);
 
+  const displayedEspPeriods = (isExporting && espPeriods.length > 6) ? espPeriods.slice(-6) : espPeriods;
+
   useEffect(() => {
     if (espPeriods.length >= 2) {
       setComparePeriodA(espPeriods[0]);
@@ -1008,7 +1010,7 @@ const DashboardCarteraPage = () => {
     <div className="page-container" style={{ animation: 'fadeIn 0.5s ease' }}>
       <header className="page-header" style={{ marginBottom: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
         <div>
-          <h1 className="page-title">Dashboard de Cartera</h1>
+          <h1 className="page-title">Dashboard Financiero</h1>
           <p className="page-subtitle">Información general y estado actual de los saldos activos</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
@@ -1451,7 +1453,7 @@ const DashboardCarteraPage = () => {
                         <Legend wrapperStyle={{ paddingTop: '10px' }} />
                         <Bar dataKey="Activo" fill="var(--color-capital)" radius={[4, 4, 0, 0]} />
                         <Bar dataKey="Pasivo" fill="var(--color-valoractual)" radius={[4, 4, 0, 0]} />
-                        <Line type="monotone" dataKey="Patrimonio" stroke="#facc15" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: 'var(--bg-card)' }} activeDot={{ r: 6 }} />
+                        <Line type="monotone" dataKey="Patrimonio" stroke={isExporting ? "#ca8a04" : "#facc15"} strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: 'var(--bg-card)' }} activeDot={{ r: 6 }} />
                       </ComposedChart>
                     </ResponsiveContainer>
                   </div>
@@ -1459,18 +1461,18 @@ const DashboardCarteraPage = () => {
 
                 {/* Tabla Detallada */}
                 <div style={{ overflowX: 'auto' }}>
-                  <h3 style={{ fontSize: '1rem', marginBottom: '15px', color: 'var(--text-secondary)' }}>Detalle Patrimonial</h3>
+                  <h3 style={{ fontSize: '1rem', marginBottom: '15px', color: isExporting ? '#000000' : 'var(--text-secondary)' }}>Detalle Patrimonial</h3>
                   <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                     <thead>
                       <tr style={{ borderBottom: '2px solid rgba(255,255,255,0.1)' }}>
-                        <th style={{ padding: '12px', color: 'var(--text-secondary)', fontWeight: '600' }}>Detalle</th>
-                        {espPeriods.map(p => {
+                        <th style={{ padding: '8px 12px', color: isExporting ? '#000000' : 'var(--text-secondary)', fontWeight: '600', fontSize: '0.85rem', minWidth: '180px' }}>Detalle</th>
+                        {displayedEspPeriods.map(p => {
                           const parts = p.split(' - ');
                           const datePart = parts[0];
                           const tnaPart = parts[1] || '';
                           
                           return (
-                            <th key={p} style={{ padding: '12px', color: 'var(--text-secondary)', fontWeight: '600', textAlign: 'center', verticalAlign: 'bottom' }}>
+                            <th key={p} style={{ padding: '8px 4px', color: isExporting ? '#000000' : 'var(--text-secondary)', fontWeight: '600', textAlign: 'center', verticalAlign: 'bottom', fontSize: '0.85rem' }}>
                               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: '1.2' }}>
                                 <span>{datePart}</span>
                                 {tnaPart && <span style={{ fontSize: '0.8em', opacity: 0.7, fontWeight: 'normal' }}>{tnaPart}</span>}
@@ -1479,7 +1481,7 @@ const DashboardCarteraPage = () => {
                           );
                         })}
                         {espPeriods.length >= 2 && (
-                          <th style={{ padding: '12px', textAlign: 'center', minWidth: '160px' }}>
+                          <th style={{ padding: '8px 4px', textAlign: 'center', minWidth: '130px' }}>
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
                               <span style={{ color: 'var(--color-capital)', fontWeight: 'bold' }}>Variación</span>
                               <div style={{ display: 'flex', gap: '5px', alignItems: 'center', justifyContent: 'center' }}>
@@ -1507,6 +1509,7 @@ const DashboardCarteraPage = () => {
                     <tbody>
                       {(() => {
                         const filteredData = espData.data.filter(row => {
+                          if (isExporting && exportFormat === 'l' && row.Detalle !== "Total") return false;
                           if (row.Categoria === "" && row.Detalle === "Total") return true;
                           return espPeriods.some(p => Math.abs(row[p]) >= 0.01);
                         });
@@ -1514,39 +1517,39 @@ const DashboardCarteraPage = () => {
                         return filteredData.map((row, idx) => {
                           const isTotalGeneral = row.Categoria === "" && row.Detalle === "Total";
                           const isSubTotal = row.Detalle === "Total" && !isTotalGeneral;
-                          const isFirstOfCategory = idx === 0 || filteredData[idx - 1].Categoria !== row.Categoria;
+                          const isFirstOfCategory = (isExporting && exportFormat === 'l') ? false : (idx === 0 || filteredData[idx - 1].Categoria !== row.Categoria);
                           
                           return (
                             <React.Fragment key={idx}>
                             {isFirstOfCategory && row.Categoria !== "" && (
-                              <tr style={{ background: 'rgba(255,255,255,0.08)' }}>
-                                <td colSpan={espPeriods.length >= 2 ? espPeriods.length + 2 : espPeriods.length + 1} style={{ padding: '12px', color: 'var(--text-primary)', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                              <tr style={{ background: isExporting ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.08)' }}>
+                                <td colSpan={displayedEspPeriods.length >= 2 ? displayedEspPeriods.length + 2 : displayedEspPeriods.length + 1} style={{ padding: '10px 12px', color: isExporting ? '#000000' : 'var(--text-primary)', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px', fontSize: '0.85rem' }}>
                                   {row.Categoria}
                                 </td>
                               </tr>
                             )}
                             <tr style={{ 
                               borderBottom: isTotalGeneral ? '2px solid rgba(250, 204, 21, 0.5)' : (isSubTotal ? '2px solid rgba(255,255,255,0.1)' : '1px solid rgba(255,255,255,0.03)'),
-                              background: isTotalGeneral ? 'rgba(250, 204, 21, 0.15)' : (isSubTotal ? 'rgba(255,255,255,0.02)' : 'transparent'),
+                              background: isTotalGeneral ? (isExporting ? '#fef08a' : 'rgba(250, 204, 21, 0.15)') : (isSubTotal ? 'rgba(255,255,255,0.02)' : 'transparent'),
                               fontWeight: isSubTotal || isTotalGeneral ? 'bold' : 'normal',
-                              color: isTotalGeneral ? '#facc15' : 'inherit'
+                              color: isTotalGeneral ? (isExporting ? '#000000' : '#facc15') : 'inherit'
                             }} className={isTotalGeneral ? "" : "table-row-hover"}>
-                              <td style={{ padding: '12px 12px 12px 30px', color: isTotalGeneral ? '#facc15' : 'var(--text-primary)' }}>
-                                {isTotalGeneral ? 'PATRIMONIO NETO' : row.Detalle}
+                              <td style={{ padding: '8px 12px 8px 30px', color: isTotalGeneral ? (isExporting ? '#000000' : '#facc15') : (isExporting ? '#000000' : 'var(--text-primary)'), fontSize: '0.85rem' }}>
+                                {isTotalGeneral ? 'PATRIMONIO NETO' : (isExporting && exportFormat === 'l' && isSubTotal ? `TOTAL ${row.Categoria.toUpperCase()}` : row.Detalle)}
                               </td>
-                              {espPeriods.map(p => (
-                                <td key={p} style={{ padding: '12px', textAlign: 'right', color: isTotalGeneral ? '#facc15' : (row[p] < 0 ? 'var(--color-valoractual)' : 'var(--text-primary)') }}>
+                              {displayedEspPeriods.map(p => (
+                                <td key={p} style={{ padding: '6px 4px', textAlign: 'right', color: isTotalGeneral ? (isExporting ? '#000000' : '#facc15') : (isExporting ? '#000000' : (row[p] < 0 ? 'var(--color-valoractual)' : 'var(--text-primary)')), fontSize: '0.8rem' }}>
                                   {formatCurrency(row[p])}
                                 </td>
                               ))}
                               {espPeriods.length >= 2 && (
-                                <td style={{ padding: '12px', textAlign: 'right', fontWeight: 'bold', background: 'rgba(255,255,255,0.02)' }}>
+                                <td style={{ padding: '6px 4px', textAlign: 'right', fontWeight: 'bold', background: 'rgba(255,255,255,0.02)', fontSize: '0.8rem' }}>
                                   {(() => {
                                     const valA = row[comparePeriodA] || 0;
                                     const valB = row[comparePeriodB] || 0;
                                     const diff = valB - valA;
                                     
-                                    if (diff === 0) return <span style={{ color: isTotalGeneral ? '#facc15' : 'var(--text-secondary)' }}>-</span>;
+                                    if (diff === 0) return <span style={{ color: isTotalGeneral ? (isExporting ? '#000000' : '#facc15') : 'var(--text-secondary)' }}>-</span>;
                                     
                                     const diffColor = diff > 0 ? '#10b981' : '#ef4444';
                                     const pct = valA !== 0 ? ((diff / Math.abs(valA)) * 100).toFixed(1) : null;
