@@ -98,6 +98,7 @@ const DashboardCarteraPage = () => {
   const [cobranzasEvolutionData, setCobranzasEvolutionData] = useState([]);
   const [espData, setEspData] = useState(null);
   const [nPeriodosEsp, setNPeriodosEsp] = useState(2);
+  const [frecuenciaEsp, setFrecuenciaEsp] = useState(1);
   const [comparePeriodA, setComparePeriodA] = useState("");
   const [comparePeriodB, setComparePeriodB] = useState("");
   const [loading, setLoading] = useState(true);
@@ -319,7 +320,7 @@ const DashboardCarteraPage = () => {
             params: { meses: 12, fecha: fechaCorte }
           }),
           axiosClient.get('/api/v1/reports/esp', {
-            params: { fecha: fechaCorte, periodos: nPeriodosEsp, tna_descuento: tasaDescuento / 100 }
+            params: { fecha: fechaCorte, periodos: nPeriodosEsp, salto: frecuenciaEsp, tna_descuento: tasaDescuento / 100 }
           }).catch(err => {
             console.error("Error fetching ESP data:", err);
             return { data: null };
@@ -347,7 +348,7 @@ const DashboardCarteraPage = () => {
     };
 
     fetchDashboardData();
-  }, [fechaCorte, nPeriodosEsp]);
+  }, [fechaCorte, nPeriodosEsp, frecuenciaEsp]);
 
   // Calcular KPIs y agrupaciones
   let totalCapital = 0;
@@ -938,8 +939,12 @@ const DashboardCarteraPage = () => {
   };
 
   const espPeriods = useMemo(() => {
-    if (!espData || !espData.columns) return [];
-    return espData.columns.filter(c => c !== "Categoria" && c !== "Detalle" && c !== "cat_order" && c !== "det_order");
+    if (!espData || !espData.columns || !espData.data) return [];
+    const allPeriods = espData.columns.filter(c => c !== "Categoria" && c !== "Detalle" && c !== "cat_order" && c !== "det_order");
+    
+    return allPeriods.filter(p => {
+      return espData.data.some(row => Math.abs(row[p]) >= 0.01);
+    });
   }, [espData]);
 
   useEffect(() => {
@@ -1374,26 +1379,51 @@ const DashboardCarteraPage = () => {
           <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', marginBottom: '30px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
               <h2 style={{ fontSize: '1.2rem', fontWeight: '600', margin: 0 }}>Estado de Situación Patrimonial</h2>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <label style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Periodos a mostrar:</label>
-                <select
-                  value={nPeriodosEsp}
-                  onChange={(e) => setNPeriodosEsp(Number(e.target.value))}
-                  style={{
-                    padding: '6px 10px',
-                    borderRadius: '6px',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    background: 'rgba(0,0,0,0.2)',
-                    color: 'var(--text-primary)',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <option value={2}>2 meses</option>
-                  <option value={3}>3 meses</option>
-                  <option value={6}>6 meses</option>
-                  <option value={12}>12 meses</option>
-                  <option value={24}>24 meses</option>
-                </select>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <label style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Frecuencia:</label>
+                  <select
+                    value={frecuenciaEsp}
+                    onChange={(e) => setFrecuenciaEsp(Number(e.target.value))}
+                    style={{
+                      padding: '6px 10px',
+                      borderRadius: '6px',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      background: 'rgba(0,0,0,0.2)',
+                      color: 'var(--text-primary)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value={1}>Mensual (1m)</option>
+                    <option value={2}>Bimestral (2m)</option>
+                    <option value={3}>Trimestral (3m)</option>
+                    <option value={6}>Semestral (6m)</option>
+                    <option value={12}>Anual (12m)</option>
+                  </select>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <label style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Periodos:</label>
+                  <select
+                    value={nPeriodosEsp}
+                    onChange={(e) => setNPeriodosEsp(Number(e.target.value))}
+                    style={{
+                      padding: '6px 10px',
+                      borderRadius: '6px',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      background: 'rgba(0,0,0,0.2)',
+                      color: 'var(--text-primary)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value={2}>2</option>
+                    <option value={3}>3</option>
+                    <option value={4}>4</option>
+                    <option value={5}>5</option>
+                    <option value={6}>6</option>
+                    <option value={12}>12</option>
+                    <option value={24}>24</option>
+                  </select>
+                </div>
               </div>
             </div>
             
@@ -1413,7 +1443,7 @@ const DashboardCarteraPage = () => {
                       <ComposedChart data={espChartData} margin={{ top: 20, right: 30, left: 40, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
                         <XAxis dataKey="period" stroke="var(--text-secondary)" tickFormatter={(val) => val.split(' - ')[0]} />
-                        <YAxis stroke="var(--text-secondary)" tickFormatter={(value) => `$ ${new Intl.NumberFormat('es-AR', { notation: 'compact' }).format(value)}`} />
+                        <YAxis width={80} stroke="var(--text-secondary)" tickFormatter={(value) => `$ ${new Intl.NumberFormat('es-AR', { notation: 'compact', compactDisplay: 'short' }).format(value)}`} />
                         <Tooltip
                           contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white' }}
                           formatter={(value) => formatCurrency(value)}
@@ -1475,13 +1505,19 @@ const DashboardCarteraPage = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {espData.data.map((row, idx) => {
-                        const isTotalGeneral = row.Categoria === "" && row.Detalle === "Total";
-                        const isSubTotal = row.Detalle === "Total" && !isTotalGeneral;
-                        const isFirstOfCategory = idx === 0 || espData.data[idx - 1].Categoria !== row.Categoria;
-                        
-                        return (
-                          <React.Fragment key={idx}>
+                      {(() => {
+                        const filteredData = espData.data.filter(row => {
+                          if (row.Categoria === "" && row.Detalle === "Total") return true;
+                          return espPeriods.some(p => Math.abs(row[p]) >= 0.01);
+                        });
+
+                        return filteredData.map((row, idx) => {
+                          const isTotalGeneral = row.Categoria === "" && row.Detalle === "Total";
+                          const isSubTotal = row.Detalle === "Total" && !isTotalGeneral;
+                          const isFirstOfCategory = idx === 0 || filteredData[idx - 1].Categoria !== row.Categoria;
+                          
+                          return (
+                            <React.Fragment key={idx}>
                             {isFirstOfCategory && row.Categoria !== "" && (
                               <tr style={{ background: 'rgba(255,255,255,0.08)' }}>
                                 <td colSpan={espPeriods.length >= 2 ? espPeriods.length + 2 : espPeriods.length + 1} style={{ padding: '12px', color: 'var(--text-primary)', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px' }}>
@@ -1490,16 +1526,16 @@ const DashboardCarteraPage = () => {
                               </tr>
                             )}
                             <tr style={{ 
-                              borderBottom: isTotalGeneral ? 'none' : (isSubTotal ? '2px solid rgba(255,255,255,0.1)' : '1px solid rgba(255,255,255,0.03)'),
-                              background: isTotalGeneral ? 'var(--color-total)' : (isSubTotal ? 'rgba(255,255,255,0.02)' : 'transparent'),
+                              borderBottom: isTotalGeneral ? '2px solid rgba(250, 204, 21, 0.5)' : (isSubTotal ? '2px solid rgba(255,255,255,0.1)' : '1px solid rgba(255,255,255,0.03)'),
+                              background: isTotalGeneral ? 'rgba(250, 204, 21, 0.15)' : (isSubTotal ? 'rgba(255,255,255,0.02)' : 'transparent'),
                               fontWeight: isSubTotal || isTotalGeneral ? 'bold' : 'normal',
-                              color: isTotalGeneral ? 'white' : 'inherit'
+                              color: isTotalGeneral ? '#facc15' : 'inherit'
                             }} className={isTotalGeneral ? "" : "table-row-hover"}>
-                              <td style={{ padding: '12px 12px 12px 30px', color: isTotalGeneral ? 'white' : 'var(--text-primary)' }}>
+                              <td style={{ padding: '12px 12px 12px 30px', color: isTotalGeneral ? '#facc15' : 'var(--text-primary)' }}>
                                 {isTotalGeneral ? 'PATRIMONIO NETO' : row.Detalle}
                               </td>
                               {espPeriods.map(p => (
-                                <td key={p} style={{ padding: '12px', textAlign: 'right', color: isTotalGeneral ? 'white' : (row[p] < 0 ? 'var(--color-valoractual)' : 'var(--text-primary)') }}>
+                                <td key={p} style={{ padding: '12px', textAlign: 'right', color: isTotalGeneral ? '#facc15' : (row[p] < 0 ? 'var(--color-valoractual)' : 'var(--text-primary)') }}>
                                   {formatCurrency(row[p])}
                                 </td>
                               ))}
@@ -1510,9 +1546,9 @@ const DashboardCarteraPage = () => {
                                     const valB = row[comparePeriodB] || 0;
                                     const diff = valB - valA;
                                     
-                                    if (diff === 0) return <span style={{ color: isTotalGeneral ? 'white' : 'var(--text-secondary)' }}>-</span>;
+                                    if (diff === 0) return <span style={{ color: isTotalGeneral ? '#facc15' : 'var(--text-secondary)' }}>-</span>;
                                     
-                                    const diffColor = isTotalGeneral ? 'white' : (diff > 0 ? '#10b981' : '#ef4444');
+                                    const diffColor = diff > 0 ? '#10b981' : '#ef4444';
                                     const pct = valA !== 0 ? ((diff / Math.abs(valA)) * 100).toFixed(1) : null;
                                     
                                     return (
@@ -1531,7 +1567,8 @@ const DashboardCarteraPage = () => {
                             </tr>
                           </React.Fragment>
                         );
-                      })}
+                      });
+                      })()}
                     </tbody>
                   </table>
                 </div>

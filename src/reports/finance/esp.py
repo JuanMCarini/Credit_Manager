@@ -6,7 +6,7 @@ import src.reports.balances as balances
 import src.reports.finance.comprobantes as comprobantes
 import src.reports.finance.cartera as cartera
 
-def reporte(fecha_corte: str | date, n_periodos: int = 2, tna_descuento: float = 0.0) -> pd.DataFrame:
+def reporte(fecha_corte: str | date, n_periodos: int = 2, salto_meses: int = 1, tna_descuento: float = 0.0) -> pd.DataFrame:
     
     df_comp = comprobantes.df_comprobantes.copy ()
     df_pagos = comprobantes.df_pagos.copy()
@@ -15,9 +15,9 @@ def reporte(fecha_corte: str | date, n_periodos: int = 2, tna_descuento: float =
     fecha_corte = pd.to_datetime(fecha_corte).date()
 
     datos = []
-    for i in reversed(range(n_periodos)):
+    for i in range(n_periodos - 1, -1, -1):
 
-        fecha = fecha_corte - relativedelta(months=i)       
+        fecha = fecha_corte - relativedelta(months=i * salto_meses)       
 
         filtro_cartera = df_carteras["fecha_compra"] <= pd.to_datetime(fecha)
         tna_series = df_carteras.loc[filtro_cartera, "tna_descuento"]

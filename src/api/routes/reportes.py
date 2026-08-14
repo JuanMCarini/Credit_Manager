@@ -179,6 +179,7 @@ def get_cobranzas_evolution(
 def get_esp(
     fecha: Optional[datetime] = Query(None, description="Fecha de corte para el cálculo. Por defecto es hoy."),
     periodos: int = Query(2, description="Cantidad de periodos a mostrar"),
+    salto: int = Query(1, description="Salto en meses entre periodos"),
     tna_descuento: float = Query(0.0, description="Tasa Nominal Anual por defecto si no hay carteras previas")
 ) -> Dict[str, Any]:
     """
@@ -189,7 +190,7 @@ def get_esp(
         if fecha is None:
             fecha = datetime.today()
         
-        df = reporte(fecha_corte=fecha, n_periodos=periodos, tna_descuento=tna_descuento)
+        df = reporte(fecha_corte=fecha, n_periodos=periodos, salto_meses=salto, tna_descuento=tna_descuento)
         
         # Reset MultiIndex to convert to records
         df = df.reset_index()
