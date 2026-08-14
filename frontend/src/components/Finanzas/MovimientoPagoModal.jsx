@@ -21,7 +21,16 @@ const MovimientoPagoModal = ({ isOpen, onClose, onSave, movimiento }) => {
     setFetching(true);
     try {
       const res = await axiosClient.get('/api/finanzas/comprobantes');
-      const data = res.data.filter(c => c.estado !== 'pagado').sort((a, b) => {
+      const data = res.data.filter(c => {
+        const montoMov = parseFloat(movimiento.monto);
+        if (montoMov < 0) {
+          // If negative movement, we can select any comprobante that has importe_cancelado > 0
+          return parseFloat(c.importe_cancelado || 0) > 0;
+        } else {
+          // If positive movement, we can only select comprobantes that are not fully paid
+          return c.estado !== 'pagado';
+        }
+      }).sort((a, b) => {
         const dateA = a.fecha_vencimiento ? new Date(a.fecha_vencimiento) : new Date(8640000000000000); // Max date if no vencimiento
         const dateB = b.fecha_vencimiento ? new Date(b.fecha_vencimiento) : new Date(8640000000000000);
         return dateA - dateB;
@@ -74,11 +83,22 @@ const MovimientoPagoModal = ({ isOpen, onClose, onSave, movimiento }) => {
       for (const c of selected) {
         if (remainingSaldo <= 0) break;
 
-        const saldoComprobante = Math.max(0, parseFloat(c.importe_total) - parseFloat(c.importe_cancelado || 0));
-        // If remainingSaldo is greater than saldoComprobante, pay saldoComprobante, else pay remainingSaldo
-        const amountToPay = Math.min(remainingSaldo, saldoComprobante);
+        let amountToPay = 0;
+        const montoMov = parseFloat(movimiento.monto);
         
-        // If saldoComprobante is 0 but we selected it anyway? It shouldn't be in the list, but just in case.
+        if (montoMov < 0) {
+          // Si el movimiento es negativo, estamos revirtiendo pagos.
+          // El límite es lo que ya se pagó (importe_cancelado)
+          const amountPaid = parseFloat(c.importe_cancelado || 0);
+          amountToPay = Math.min(remainingSaldo, amountPaid);
+        } else {
+          // Si es positivo, estamos pagando el comprobante.
+          // El límite es el saldo pendiente.
+          const saldoComprobante = Math.max(0, parseFloat(c.importe_total) - parseFloat(c.importe_cancelado || 0));
+          amountToPay = Math.min(remainingSaldo, saldoComprobante);
+        }
+        
+        // If we found an amount to pay/revert
         if (amountToPay > 0) {
           const payload = {
             importe: amountToPay,

@@ -95,7 +95,11 @@ def create_comprobante(comprobante: ComprobanteCreate, db: Session = Depends(get
         ])
         
     if db_comprobante.tipo_comprobante in [TipoComprobante.A, TipoComprobante.M, TipoComprobante.NOTA_DEBITO_A, TipoComprobante.NOTA_CREDITO_A]:
-        db_comprobante.importe_total = _calc_total(db_comprobante)
+        calculado = _calc_total(db_comprobante)
+        if comprobante.importe_total is not None and abs(comprobante.importe_total - calculado) <= Decimal('1.00'):
+            db_comprobante.importe_total = comprobante.importe_total
+        else:
+            db_comprobante.importe_total = calculado
     else:
         db_comprobante.importe_total = comprobante.importe_total or Decimal('0.0')
     
@@ -123,7 +127,7 @@ def update_comprobante(comprobante_id: int, comprobante: ComprobanteUpdate, db: 
         
     from decimal import Decimal
     if db_comprobante.tipo_comprobante in [TipoComprobante.A, TipoComprobante.M, TipoComprobante.NOTA_DEBITO_A, TipoComprobante.NOTA_CREDITO_A]:
-        db_comprobante.importe_total = sum([
+        calculado = sum([
             db_comprobante.importe_no_gravado or Decimal('0.0'),
             db_comprobante.importe_exento or Decimal('0.0'),
             db_comprobante.neto_gravado_21 or Decimal('0.0'),
@@ -137,6 +141,10 @@ def update_comprobante(comprobante_id: int, comprobante: ComprobanteUpdate, db: 
             db_comprobante.percepcion_ganancias or Decimal('0.0'),
             db_comprobante.otros_impuestos or Decimal('0.0')
         ])
+        if comprobante.importe_total is not None and abs(comprobante.importe_total - calculado) <= Decimal('1.00'):
+            db_comprobante.importe_total = comprobante.importe_total
+        else:
+            db_comprobante.importe_total = calculado
     else:
         if comprobante.importe_total is not None:
             db_comprobante.importe_total = comprobante.importe_total
@@ -182,9 +190,19 @@ def create_cancelacion(
     if not db_comprobante:
         raise HTTPException(status_code=404, detail="Comprobante no encontrado")
         
+    # Ajustar el signo del importe según el movimiento bancario si existe
+    importe_cancelacion = Decimal(str(cancelacion.importe))
+    if cancelacion.movimiento_id:
+        from src.database.models.finance.bancos import Movimiento
+        mov = db.query(Movimiento).filter(Movimiento.id == cancelacion.movimiento_id).first()
+        if mov and mov.monto < 0:
+            importe_cancelacion = -abs(importe_cancelacion)
+        else:
+            importe_cancelacion = abs(importe_cancelacion)
+            
     db_cancelacion = CancelacionComprobante(
         comprobante_id=comprobante_id,
-        importe=cancelacion.importe,
+        importe=importe_cancelacion,
         fecha_cancelacion=cancelacion.fecha_cancelacion,
         movimiento_id=cancelacion.movimiento_id
     )
@@ -193,7 +211,7 @@ def create_cancelacion(
     
     # Update importe_cancelado of parent Comprobante
     current_cancelado = db_comprobante.importe_cancelado or Decimal('0.0')
-    db_comprobante.importe_cancelado = current_cancelado + Decimal(str(cancelacion.importe))
+    db_comprobante.importe_cancelado = current_cancelado + importe_cancelacion
     
     try:
         db.commit()
@@ -238,13 +256,24 @@ def update_cancelacion(cancelacion_id: int, cancelacion: CancelacionCreate, db: 
     
     db_comprobante = db.query(Comprobante).filter(Comprobante.id == db_cancelacion.comprobante_id).first()
     
-    # Update importe_cancelado of parent Comprobante
+    # Ajustar el signo del importe según el movimiento bancario si existe
     from decimal import Decimal
+    importe_cancelacion = Decimal(str(cancelacion.importe))
+    mov_id = cancelacion.movimiento_id if hasattr(cancelacion, 'movimiento_id') else db_cancelacion.movimiento_id
+    if mov_id:
+        from src.database.models.finance.bancos import Movimiento
+        mov = db.query(Movimiento).filter(Movimiento.id == mov_id).first()
+        if mov and mov.monto < 0:
+            importe_cancelacion = -abs(importe_cancelacion)
+        else:
+            importe_cancelacion = abs(importe_cancelacion)
+            
+    # Update importe_cancelado of parent Comprobante
     current_cancelado = db_comprobante.importe_cancelado or Decimal('0.0')
-    current_cancelado = current_cancelado - Decimal(str(db_cancelacion.importe)) + Decimal(str(cancelacion.importe))
+    current_cancelado = current_cancelado - Decimal(str(db_cancelacion.importe)) + importe_cancelacion
     db_comprobante.importe_cancelado = current_cancelado
     
-    db_cancelacion.importe = cancelacion.importe
+    db_cancelacion.importe = importe_cancelacion
     db_cancelacion.fecha_cancelacion = cancelacion.fecha_cancelacion
     if hasattr(cancelacion, 'movimiento_id'):
         db_cancelacion.movimiento_id = cancelacion.movimiento_id

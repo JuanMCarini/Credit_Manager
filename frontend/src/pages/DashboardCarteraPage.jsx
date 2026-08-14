@@ -96,6 +96,10 @@ const DashboardCarteraPage = () => {
   const [data, setData] = useState([]);
   const [evolutionData, setEvolutionData] = useState([]);
   const [cobranzasEvolutionData, setCobranzasEvolutionData] = useState([]);
+  const [espData, setEspData] = useState(null);
+  const [nPeriodosEsp, setNPeriodosEsp] = useState(2);
+  const [comparePeriodA, setComparePeriodA] = useState("");
+  const [comparePeriodB, setComparePeriodB] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [fechaCorte, setFechaCorte] = useState(() => {
@@ -294,7 +298,7 @@ const DashboardCarteraPage = () => {
     const fetchDashboardData = async () => {
       try {
         setLoading(true);
-        const [response, evolutionResponse, tnaResponse, cobranzasEvoResponse] = await Promise.all([
+        const [response, evolutionResponse, tnaResponse, cobranzasEvoResponse, espResponse] = await Promise.all([
           axiosClient.get('/api/v1/reports/balances', {
             params: {
               fecha: fechaCorte,
@@ -313,12 +317,21 @@ const DashboardCarteraPage = () => {
           }),
           axiosClient.get('/api/v1/reports/cobranzas/evolution', {
             params: { meses: 12, fecha: fechaCorte }
+          }),
+          axiosClient.get('/api/v1/reports/esp', {
+            params: { fecha: fechaCorte, periodos: nPeriodosEsp, tna_descuento: tasaDescuento / 100 }
+          }).catch(err => {
+            console.error("Error fetching ESP data:", err);
+            return { data: null };
           })
         ]);
         
         setData(response.data);
         setEvolutionData(evolutionResponse.data);
         setCobranzasEvolutionData(cobranzasEvoResponse.data);
+        if (espResponse && espResponse.data) {
+          setEspData(espResponse.data);
+        }
 
         if (tnaResponse && tnaResponse.data && tnaResponse.data.tna !== undefined) {
           const newTna = tnaResponse.data.tna;
@@ -334,7 +347,7 @@ const DashboardCarteraPage = () => {
     };
 
     fetchDashboardData();
-  }, [fechaCorte]);
+  }, [fechaCorte, nPeriodosEsp]);
 
   // Calcular KPIs y agrupaciones
   let totalCapital = 0;
@@ -924,6 +937,44 @@ const DashboardCarteraPage = () => {
     }
   };
 
+  const espPeriods = useMemo(() => {
+    if (!espData || !espData.columns) return [];
+    return espData.columns.filter(c => c !== "Categoria" && c !== "Detalle" && c !== "cat_order" && c !== "det_order");
+  }, [espData]);
+
+  useEffect(() => {
+    if (espPeriods.length >= 2) {
+      setComparePeriodA(espPeriods[0]);
+      setComparePeriodB(espPeriods[espPeriods.length - 1]);
+    } else if (espPeriods.length === 1) {
+      setComparePeriodA(espPeriods[0]);
+      setComparePeriodB(espPeriods[0]);
+    } else {
+      setComparePeriodA("");
+      setComparePeriodB("");
+    }
+  }, [espPeriods]);
+
+  const espChartData = useMemo(() => {
+    if (!espData || !espData.data) return [];
+    return espPeriods.map(period => {
+      let activo = 0;
+      let pasivo = 0;
+      let patrimonio = 0;
+      espData.data.forEach(row => {
+        if (row.Detalle === "Total") {
+          if (row.Categoria === "") {
+            patrimonio = row[period] || 0;
+          }
+          return; // Avoid double counting
+        }
+        if (row.Categoria === "Activos") activo += (row[period] || 0);
+        if (row.Categoria === "Pasivos") pasivo += Math.abs(row[period] || 0); // Convert to positive for charting
+      });
+      return { period, Activo: activo, Pasivo: pasivo, Patrimonio: patrimonio };
+    });
+  }, [espData, espPeriods]);
+
   if (loading) {
     return (
       <div className="page-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
@@ -1321,12 +1372,171 @@ const DashboardCarteraPage = () => {
       {(activeTab === 'situacion_patrimonial' || isExporting) && (
         <div id="export-tab-situacion">
           <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', marginBottom: '30px' }}>
-            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Estado de Situación Patrimonial</h2>
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '200px' }}>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem' }}>
-                (Sección en construcción)
-              </p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
+              <h2 style={{ fontSize: '1.2rem', fontWeight: '600', margin: 0 }}>Estado de Situación Patrimonial</h2>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <label style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Periodos a mostrar:</label>
+                <select
+                  value={nPeriodosEsp}
+                  onChange={(e) => setNPeriodosEsp(Number(e.target.value))}
+                  style={{
+                    padding: '6px 10px',
+                    borderRadius: '6px',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    background: 'rgba(0,0,0,0.2)',
+                    color: 'var(--text-primary)',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value={2}>2 meses</option>
+                  <option value={3}>3 meses</option>
+                  <option value={6}>6 meses</option>
+                  <option value={12}>12 meses</option>
+                  <option value={24}>24 meses</option>
+                </select>
+              </div>
             </div>
+            
+            {!espData || !espData.data ? (
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '200px' }}>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem' }}>
+                  No hay datos disponibles para el Estado de Situación Patrimonial.
+                </p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
+                {/* Gráfico Comparativo Activo vs Pasivo */}
+                <div>
+                  <h3 style={{ fontSize: '1rem', marginBottom: '15px', color: 'var(--text-secondary)' }}>Evolución Activo vs Pasivo</h3>
+                  <div style={{ height: 300, width: '100%' }}>
+                    <ResponsiveContainer>
+                      <ComposedChart data={espChartData} margin={{ top: 20, right: 30, left: 40, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                        <XAxis dataKey="period" stroke="var(--text-secondary)" tickFormatter={(val) => val.split(' - ')[0]} />
+                        <YAxis stroke="var(--text-secondary)" tickFormatter={(value) => `$ ${new Intl.NumberFormat('es-AR', { notation: 'compact' }).format(value)}`} />
+                        <Tooltip
+                          contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white' }}
+                          formatter={(value) => formatCurrency(value)}
+                        />
+                        <Legend wrapperStyle={{ paddingTop: '10px' }} />
+                        <Bar dataKey="Activo" fill="var(--color-capital)" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="Pasivo" fill="var(--color-valoractual)" radius={[4, 4, 0, 0]} />
+                        <Line type="monotone" dataKey="Patrimonio" stroke="#facc15" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: 'var(--bg-card)' }} activeDot={{ r: 6 }} />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Tabla Detallada */}
+                <div style={{ overflowX: 'auto' }}>
+                  <h3 style={{ fontSize: '1rem', marginBottom: '15px', color: 'var(--text-secondary)' }}>Detalle Patrimonial</h3>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '2px solid rgba(255,255,255,0.1)' }}>
+                        <th style={{ padding: '12px', color: 'var(--text-secondary)', fontWeight: '600' }}>Detalle</th>
+                        {espPeriods.map(p => {
+                          const parts = p.split(' - ');
+                          const datePart = parts[0];
+                          const tnaPart = parts[1] || '';
+                          
+                          return (
+                            <th key={p} style={{ padding: '12px', color: 'var(--text-secondary)', fontWeight: '600', textAlign: 'center', verticalAlign: 'bottom' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: '1.2' }}>
+                                <span>{datePart}</span>
+                                {tnaPart && <span style={{ fontSize: '0.8em', opacity: 0.7, fontWeight: 'normal' }}>{tnaPart}</span>}
+                              </div>
+                            </th>
+                          );
+                        })}
+                        {espPeriods.length >= 2 && (
+                          <th style={{ padding: '12px', textAlign: 'center', minWidth: '160px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
+                              <span style={{ color: 'var(--color-capital)', fontWeight: 'bold' }}>Variación</span>
+                              <div style={{ display: 'flex', gap: '5px', alignItems: 'center', justifyContent: 'center' }}>
+                                <select 
+                                  value={comparePeriodA} 
+                                  onChange={(e) => setComparePeriodA(e.target.value)}
+                                  style={{ padding: '2px 4px', fontSize: '0.8rem', background: 'rgba(0,0,0,0.3)', color: 'var(--text-secondary)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '4px' }}
+                                >
+                                  {espPeriods.map(p => <option key={p} value={p}>{p.split(' ')[0]}</option>)}
+                                </select>
+                                <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>vs</span>
+                                <select 
+                                  value={comparePeriodB} 
+                                  onChange={(e) => setComparePeriodB(e.target.value)}
+                                  style={{ padding: '2px 4px', fontSize: '0.8rem', background: 'rgba(0,0,0,0.3)', color: 'var(--text-primary)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '4px' }}
+                                >
+                                  {espPeriods.map(p => <option key={p} value={p}>{p.split(' ')[0]}</option>)}
+                                </select>
+                              </div>
+                            </div>
+                          </th>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {espData.data.map((row, idx) => {
+                        const isTotalGeneral = row.Categoria === "" && row.Detalle === "Total";
+                        const isSubTotal = row.Detalle === "Total" && !isTotalGeneral;
+                        const isFirstOfCategory = idx === 0 || espData.data[idx - 1].Categoria !== row.Categoria;
+                        
+                        return (
+                          <React.Fragment key={idx}>
+                            {isFirstOfCategory && row.Categoria !== "" && (
+                              <tr style={{ background: 'rgba(255,255,255,0.08)' }}>
+                                <td colSpan={espPeriods.length >= 2 ? espPeriods.length + 2 : espPeriods.length + 1} style={{ padding: '12px', color: 'var(--text-primary)', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                                  {row.Categoria}
+                                </td>
+                              </tr>
+                            )}
+                            <tr style={{ 
+                              borderBottom: isTotalGeneral ? 'none' : (isSubTotal ? '2px solid rgba(255,255,255,0.1)' : '1px solid rgba(255,255,255,0.03)'),
+                              background: isTotalGeneral ? 'var(--color-total)' : (isSubTotal ? 'rgba(255,255,255,0.02)' : 'transparent'),
+                              fontWeight: isSubTotal || isTotalGeneral ? 'bold' : 'normal',
+                              color: isTotalGeneral ? 'white' : 'inherit'
+                            }} className={isTotalGeneral ? "" : "table-row-hover"}>
+                              <td style={{ padding: '12px 12px 12px 30px', color: isTotalGeneral ? 'white' : 'var(--text-primary)' }}>
+                                {isTotalGeneral ? 'PATRIMONIO NETO' : row.Detalle}
+                              </td>
+                              {espPeriods.map(p => (
+                                <td key={p} style={{ padding: '12px', textAlign: 'right', color: isTotalGeneral ? 'white' : (row[p] < 0 ? 'var(--color-valoractual)' : 'var(--text-primary)') }}>
+                                  {formatCurrency(row[p])}
+                                </td>
+                              ))}
+                              {espPeriods.length >= 2 && (
+                                <td style={{ padding: '12px', textAlign: 'right', fontWeight: 'bold', background: 'rgba(255,255,255,0.02)' }}>
+                                  {(() => {
+                                    const valA = row[comparePeriodA] || 0;
+                                    const valB = row[comparePeriodB] || 0;
+                                    const diff = valB - valA;
+                                    
+                                    if (diff === 0) return <span style={{ color: isTotalGeneral ? 'white' : 'var(--text-secondary)' }}>-</span>;
+                                    
+                                    const diffColor = isTotalGeneral ? 'white' : (diff > 0 ? '#10b981' : '#ef4444');
+                                    const pct = valA !== 0 ? ((diff / Math.abs(valA)) * 100).toFixed(1) : null;
+                                    
+                                    return (
+                                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: '1.2' }}>
+                                        <span style={{ color: diffColor }}>{diff > 0 ? '+' : ''}{formatCurrency(diff)}</span>
+                                        {pct && (
+                                          <span style={{ fontSize: '0.75rem', color: diffColor, opacity: 0.8 }}>
+                                            {diff > 0 ? '+' : ''}{pct}%
+                                          </span>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
+                                </td>
+                              )}
+                            </tr>
+                          </React.Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -135,11 +135,11 @@ class Comprobante(Base):
         total = total or 0
         
         if total > 0 and cancelado >= total:
-            self.estado = 'pagado'
+            self.estado = EstadoComprobante.PAGADO
         elif cancelado > 0:
-            self.estado = 'parcial'
+            self.estado = EstadoComprobante.PARCIAL
         else:
-            self.estado = 'pendiente'
+            self.estado = EstadoComprobante.PENDIENTE
             
         return value
 

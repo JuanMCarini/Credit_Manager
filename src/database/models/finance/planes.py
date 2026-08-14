@@ -55,7 +55,8 @@ class Plan(Base):
 
     @property
     def cuotas_pendientes(self):
-        return [c for c in self.cuotas if c.estado != 'pagado']
+        from src.database.models.finance.comprobantes import EstadoComprobante
+        return [c for c in self.cuotas if c.estado != EstadoComprobante.PAGADO]
 
 @event.listens_for(Plan, 'after_insert')
 def generar_comprobantes_cuotas(mapper, connection, target):

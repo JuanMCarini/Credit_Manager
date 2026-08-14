@@ -174,3 +174,30 @@ def get_cobranzas_evolution(
         return results
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error en evolución de cobranzas: {str(e)}")
+
+@router.get("/esp")
+def get_esp(
+    fecha: Optional[datetime] = Query(None, description="Fecha de corte para el cálculo. Por defecto es hoy."),
+    periodos: int = Query(2, description="Cantidad de periodos a mostrar"),
+    tna_descuento: float = Query(0.0, description="Tasa Nominal Anual por defecto si no hay carteras previas")
+) -> Dict[str, Any]:
+    """
+    Genera el reporte de Estado de Situación Patrimonial (ESP).
+    """
+    try:
+        from src.reports.finance.esp import reporte
+        if fecha is None:
+            fecha = datetime.today()
+        
+        df = reporte(fecha_corte=fecha, n_periodos=periodos, tna_descuento=tna_descuento)
+        
+        # Reset MultiIndex to convert to records
+        df = df.reset_index()
+        df = df.replace({np.nan: None})
+        
+        return {
+            "columns": df.columns.tolist(),
+            "data": df.to_dict(orient="records")
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error en reporte ESP: {str(e)}")
