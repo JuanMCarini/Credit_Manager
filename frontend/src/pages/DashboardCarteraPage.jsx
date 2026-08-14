@@ -189,7 +189,7 @@ const DashboardCarteraPage = () => {
           { id: 'export-tab-total', title: 'Resumen Cartera' },
           { id: 'export-tab-evolucion', title: 'Evolución Cartera' },
           { id: 'export-tab-composicion', title: 'Composición Cartera' },
-          { id: 'export-tab-periodo', title: 'Detalle Cartera' },
+          { id: 'export-tab-periodo', title: 'Caída de Cuotas' },
           { id: 'export-tab-colocaciones', title: 'Colocaciones Cartera' },
           { id: 'export-tab-cobranzas', title: 'Cobranzas Cartera' },
           { id: 'export-tab-estados', title: 'Estados Cartera' },
@@ -444,9 +444,9 @@ const DashboardCarteraPage = () => {
     }
     resumenEstados[normalizedEstado].Total += capInt;
 
-    // Agrupar por periodo (vencimientos futuros y el actual)
-    const vtoYearMonth = fVtoStr.substring(0, 7);
-    if (vtoYearMonth >= corteYearMonth) {
+    // Agrupar por periodo (vencimientos futuros estrictamente posteriores a la fecha de corte)
+    if (fVto > fechaCorteDate) {
+      const vtoYearMonth = fVtoStr.substring(0, 7);
       if (!gruposPeriodo[vtoYearMonth]) {
         gruposPeriodo[vtoYearMonth] = { Periodo: vtoYearMonth, Capital: 0, 'Interés': 0, IVA: 0, Total: 0 };
       }
@@ -1293,7 +1293,7 @@ const DashboardCarteraPage = () => {
             transition: 'background 0.2s'
           }}
         >
-          Detalle Cartera
+          Caída de Cuotas
         </button>
         <button
           onClick={() => setActiveTab('colocaciones')}
@@ -1668,6 +1668,60 @@ const DashboardCarteraPage = () => {
 
       {(activeTab === 'evolucion' || isExporting) && (
         <div id="export-tab-evolucion">
+          <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '20px' }}>
+            {(() => {
+              const len = filteredEvolutionData.length;
+              const lastEvol = len > 0 ? filteredEvolutionData[len - 1] : { capital: 0, interes: 0, iva: 0, total: 0 };
+              const prevEvol = len > 1 ? filteredEvolutionData[len - 2] : { capital: 0, interes: 0, iva: 0, total: 0 };
+              
+              const calcGrowth = (curr, prev) => {
+                const diff = curr - prev;
+                if (diff === 0 || prev === 0) return { diff: 0, pct: 0, color: 'var(--text-secondary)', sign: '' };
+                const pct = (diff / Math.abs(prev)) * 100;
+                return {
+                  diff,
+                  pct,
+                  color: diff > 0 ? '#10b981' : '#ef4444',
+                  sign: diff > 0 ? '+' : ''
+                };
+              };
+
+              const growths = {
+                total: calcGrowth(lastEvol.total, prevEvol.total),
+                capital: calcGrowth(lastEvol.capital, prevEvol.capital),
+                interes: calcGrowth(lastEvol.interes, prevEvol.interes),
+                iva: calcGrowth(lastEvol.iva, prevEvol.iva)
+              };
+
+              const renderKPI = (title, growth, borderColor) => (
+                <div className="glass-panel" style={{ flex: 1, minWidth: '200px', padding: '20px', borderRadius: '12px', borderTop: `4px solid ${borderColor}`, textAlign: 'center' }}>
+                  <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '10px' }}>CRECIMIENTO {title}</div>
+                  <div style={{ color: growth.color, fontSize: '1.8rem', fontWeight: 'bold' }}>
+                    {growth.diff === 0 ? '-' : `${growth.sign}${formatCurrency(growth.diff)}`}
+                  </div>
+                  {len > 1 && growth.diff !== 0 && (
+                    <div style={{ color: growth.color, fontSize: '0.85rem', marginTop: '8px', fontWeight: '500' }}>
+                      {growth.sign}{growth.pct.toFixed(1)}% vs mes anterior
+                    </div>
+                  )}
+                  {len <= 1 && (
+                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '8px' }}>
+                      Sin datos previos
+                    </div>
+                  )}
+                </div>
+              );
+
+              return (
+                <>
+                  {renderKPI('TOTAL', growths.total, 'var(--color-total)')}
+                  {renderKPI('CAPITAL', growths.capital, 'var(--color-capital)')}
+                  {renderKPI('INTERÉS', growths.interes, 'var(--color-interes)')}
+                  {renderKPI('IVA', growths.iva, 'var(--color-iva)')}
+                </>
+              );
+            })()}
+          </div>
           <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', marginBottom: '30px', height: '400px' }}>
             <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Evolución de Cartera (12 Meses)</h2>
             {filteredEvolutionData.length === 0 ? (
@@ -1750,6 +1804,18 @@ const DashboardCarteraPage = () => {
 
       {(activeTab === 'composicion' || isExporting) && (
         <div id="export-tab-composicion">
+          <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '20px' }}>
+            {(() => {
+              const lastPeriod = filteredEvolutionData.length > 0 ? filteredEvolutionData[filteredEvolutionData.length - 1].periodo : null;
+              const currentOwnersRows = composicionTableRows.filter(r => r.periodo === lastPeriod && r.dueño !== 'Total');
+              return currentOwnersRows.map(row => (
+                <div key={row.dueño} className="glass-panel" style={{ flex: 1, minWidth: '200px', padding: '20px', borderRadius: '12px', borderTop: '4px solid var(--color-capital)', textAlign: 'center' }}>
+                  <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '10px', textTransform: 'uppercase' }}>{row.dueño}</div>
+                  <div style={{ color: 'var(--text-primary)', fontSize: '1.5rem', fontWeight: 'bold' }}>{formatCurrency(row.total)}</div>
+                </div>
+              ));
+            })()}
+          </div>
           <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', marginBottom: '30px' }}>
             <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Cartera por Dueño (Capital y %)</h2>
             {filteredEvolutionData.length === 0 ? (
@@ -1833,6 +1899,31 @@ const DashboardCarteraPage = () => {
 
       {(activeTab === 'periodo' || isExporting) && (
         <div id="export-tab-periodo">
+          <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '20px' }}>
+            {(() => {
+              const proxVenc = periodData.length > 0 ? periodData[0] : { Capital: 0, Interés: 0, IVA: 0, Total: 0 };
+              return (
+                <>
+                  <div className="glass-panel" style={{ flex: 1, minWidth: '200px', padding: '20px', borderRadius: '12px', borderTop: '4px solid var(--color-total)', textAlign: 'center' }}>
+                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '10px' }}>TOTAL PRÓXIMO VENCIMIENTO</div>
+                    <div style={{ color: 'var(--text-primary)', fontSize: '1.8rem', fontWeight: 'bold' }}>{formatCurrency(proxVenc.Total)}</div>
+                  </div>
+                  <div className="glass-panel" style={{ flex: 1, minWidth: '200px', padding: '20px', borderRadius: '12px', borderTop: '4px solid var(--color-capital)', textAlign: 'center' }}>
+                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '10px' }}>CAPITAL PRÓXIMO VENCIMIENTO</div>
+                    <div style={{ color: 'var(--text-primary)', fontSize: '1.8rem', fontWeight: 'bold' }}>{formatCurrency(proxVenc.Capital)}</div>
+                  </div>
+                  <div className="glass-panel" style={{ flex: 1, minWidth: '200px', padding: '20px', borderRadius: '12px', borderTop: '4px solid var(--color-interes)', textAlign: 'center' }}>
+                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '10px' }}>INTERÉS PRÓXIMO VENCIMIENTO</div>
+                    <div style={{ color: 'var(--text-primary)', fontSize: '1.8rem', fontWeight: 'bold' }}>{formatCurrency(proxVenc['Interés'] || proxVenc.Interes || 0)}</div>
+                  </div>
+                  <div className="glass-panel" style={{ flex: 1, minWidth: '200px', padding: '20px', borderRadius: '12px', borderTop: '4px solid var(--color-iva)', textAlign: 'center' }}>
+                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '10px' }}>IVA PRÓXIMO VENCIMIENTO</div>
+                    <div style={{ color: 'var(--text-primary)', fontSize: '1.8rem', fontWeight: 'bold' }}>{formatCurrency(proxVenc.IVA)}</div>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
           <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', marginBottom: '30px', height: '400px' }}>
             <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Proyección de Vencimientos</h2>
             {periodData.length === 0 ? (
@@ -1902,6 +1993,17 @@ const DashboardCarteraPage = () => {
 
       {(activeTab === 'colocaciones' || isExporting) && (
         <div id="export-tab-colocaciones">
+          <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '20px' }}>
+            {colocacionesUniqueOriginadores.map((originador, index) => {
+              const totalColocado = colocacionesData.reduce((acc, row) => acc + (row[`orig_${originador}`] || 0), 0);
+              return (
+                <div key={originador} className="glass-panel" style={{ flex: 1, minWidth: '200px', padding: '20px', borderRadius: '12px', borderTop: `4px solid ${CHART_COLORS[(index + 2) % CHART_COLORS.length]}`, textAlign: 'center' }}>
+                  <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '10px', textTransform: 'uppercase' }}>{originador}</div>
+                  <div style={{ color: 'var(--text-primary)', fontSize: '1.5rem', fontWeight: 'bold' }}>{formatCurrency(totalColocado)}</div>
+                </div>
+              );
+            })}
+          </div>
           <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', marginBottom: '30px' }}>
             <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Volumen de Colocaciones (Capital Vendido por Período)</h2>
             {colocacionesData.length === 0 ? (
