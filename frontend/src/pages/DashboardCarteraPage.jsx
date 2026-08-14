@@ -136,8 +136,16 @@ const DashboardCarteraPage = () => {
     root.style.setProperty('--color-interes', '#F57C00');
     root.style.setProperty('--color-capint', '#0097A7');
     root.style.setProperty('--color-iva', '#7B1FA2');
-    root.style.setProperty('--color-total', '#1976D2');
-    root.style.setProperty('--color-valoractual', '#C2185B');
+    root.style.setProperty('--color-total', '#2196F3');
+    root.style.setProperty('--color-valoractual', '#E91E63');
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const mainContent = document.querySelector('.main-content');
+    const originalMainOverflow = mainContent ? mainContent.style.overflow : '';
+    if (mainContent) {
+      mainContent.style.overflow = 'visible';
+    }
 
     setTimeout(async () => {
       try {
@@ -220,14 +228,21 @@ const DashboardCarteraPage = () => {
             const imgProps = pdf.getImageProperties(imgData);
             const ratio = imgProps.width / imgProps.height;
             const margin = 10;
-            let width = pdfWidth - margin * 2;
+            const availableWidth = pdfWidth - margin * 2;
+            const maxImageHeight = pdfHeight - margin * 2 - 30; // 30 for titles and footer
+            
+            let width = availableWidth;
             let height = width / ratio;
 
-            const maxPageHeight = pdfHeight - margin * 2 - 20;
-            if (height > maxPageHeight) {
-              height = maxPageHeight;
+            if (height > maxImageHeight) {
+              height = maxImageHeight;
               width = height * ratio;
             }
+
+            // Calcular posiciones para centrar vertical y horizontalmente
+            const totalBlockHeight = 20 + height; // 20 es el espacio que ocupan los titulos
+            const startY = Math.max(15, (pdfHeight - totalBlockHeight) / 2 + 5); 
+            const offsetX = (availableWidth - width) / 2;
 
             pdf.addPage();
 
@@ -236,16 +251,16 @@ const DashboardCarteraPage = () => {
 
             pdf.setFontSize(16);
             pdf.setTextColor(0, 0, 0);
-            pdf.text(`Dashboard - ${tabsToExport[i].title}`, margin, 15);
+            pdf.text(`Dashboard - ${tabsToExport[i].title}`, margin, startY);
 
             pdf.setFontSize(9);
             pdf.setTextColor(100, 100, 100);
             const dueñosText = filtroDueños.length > 0 ? filtroDueños.join(', ') : 'Todos';
             const origText = filtroOriginadores.length > 0 ? filtroOriginadores.join(', ') : 'Todos';
             const filtrosStr = `Fecha de Corte: ${fechaCorte.split('-').reverse().join('/')} | TNA: ${tasaDescuento}% | Dueños: ${dueñosText} | Originadores: ${origText}`;
-            pdf.text(filtrosStr, margin, 22);
+            pdf.text(filtrosStr, margin, startY + 7);
 
-            pdf.addImage(imgData, 'PNG', margin, 28, width, height);
+            pdf.addImage(imgData, 'PNG', margin + offsetX, startY + 13, width, height);
 
             if (orientation === 'p') {
               pdf.setFontSize(10);
@@ -678,8 +693,11 @@ const DashboardCarteraPage = () => {
       periodos[periodo].totalGenerado += c.montoGenerado;
 
       const origKey = `orig_${c.originador}`;
+      const origGenKey = `origGen_${c.originador}`;
       if (!periodos[periodo][origKey]) periodos[periodo][origKey] = 0;
+      if (!periodos[periodo][origGenKey]) periodos[periodo][origGenKey] = 0;
       periodos[periodo][origKey] += c.montoOriginal;
+      periodos[periodo][origGenKey] += c.montoGenerado;
     });
 
     const allData = Object.values(periodos).sort((a, b) => a.periodo.localeCompare(b.periodo));
@@ -1451,9 +1469,9 @@ const DashboardCarteraPage = () => {
                           formatter={(value) => formatCurrency(value)}
                         />
                         <Legend wrapperStyle={{ paddingTop: '10px' }} />
-                        <Bar dataKey="Activo" fill="var(--color-capital)" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="Pasivo" fill="var(--color-valoractual)" radius={[4, 4, 0, 0]} />
-                        <Line type="monotone" dataKey="Patrimonio" stroke={isExporting ? "#ca8a04" : "#facc15"} strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: 'var(--bg-card)' }} activeDot={{ r: 6 }} />
+                        <Bar isAnimationActive={!isExporting} dataKey="Activo" fill="var(--color-capital)" radius={[4, 4, 0, 0]} />
+                        <Bar isAnimationActive={!isExporting} dataKey="Pasivo" fill="var(--color-valoractual)" radius={[4, 4, 0, 0]} />
+                        <Line isAnimationActive={!isExporting} type="monotone" dataKey="Patrimonio" stroke={isExporting ? "#ca8a04" : "#facc15"} strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: 'var(--bg-card)' }} activeDot={{ r: 6 }} />
                       </ComposedChart>
                     </ResponsiveContainer>
                   </div>
@@ -1932,10 +1950,19 @@ const DashboardCarteraPage = () => {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={periodData}
-                  margin={{ top: 10, right: 30, left: 20, bottom: 25 }}
+                  margin={{ top: 10, right: 30, left: 20, bottom: isExporting ? 45 : 25 }}
+                  barCategoryGap="20%"
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                  <XAxis dataKey="Periodo" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)' }} />
+                  <XAxis 
+                    dataKey="Periodo" 
+                    stroke="var(--text-secondary)" 
+                    tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} 
+                    interval={isExporting ? 0 : 'preserveEnd'} 
+                    angle={isExporting ? -45 : 0} 
+                    textAnchor={isExporting ? 'end' : 'middle'} 
+                    height={isExporting ? 60 : 30}
+                  />
                   <YAxis stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)' }} tickFormatter={(value) => `$${(value / 1000000).toFixed(1)}M`} />
                   <Tooltip
                     formatter={(value) => formatCurrency(value)}
@@ -1993,24 +2020,14 @@ const DashboardCarteraPage = () => {
 
       {(activeTab === 'colocaciones' || isExporting) && (
         <div id="export-tab-colocaciones">
-          <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '20px' }}>
-            {colocacionesUniqueOriginadores.map((originador, index) => {
-              const totalColocado = colocacionesData.reduce((acc, row) => acc + (row[`orig_${originador}`] || 0), 0);
-              return (
-                <div key={originador} className="glass-panel" style={{ flex: 1, minWidth: '200px', padding: '20px', borderRadius: '12px', borderTop: `4px solid ${CHART_COLORS[(index + 2) % CHART_COLORS.length]}`, textAlign: 'center' }}>
-                  <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '10px', textTransform: 'uppercase' }}>{originador}</div>
-                  <div style={{ color: 'var(--text-primary)', fontSize: '1.5rem', fontWeight: 'bold' }}>{formatCurrency(totalColocado)}</div>
-                </div>
-              );
-            })}
-          </div>
-          <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', marginBottom: '30px' }}>
-            <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Volumen de Colocaciones (Capital Vendido por Período)</h2>
-            {colocacionesData.length === 0 ? (
-              <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>No hay datos de originación en este rango.</p>
-            ) : (
-              <ResponsiveContainer width="100%" height={400}>
-                <ComposedChart data={colocacionesData} margin={{ top: 10, right: 30, left: 20, bottom: 25 }}>
+          <div style={{ display: 'flex', gap: '20px', flexWrap: 'nowrap', marginBottom: '30px' }}>
+            <div className="glass-panel" style={{ flex: 3, minWidth: '0', padding: '25px', borderRadius: '12px' }}>
+              <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', fontWeight: '600' }}>Volumen de Colocaciones (Capital Vendido por Período)</h2>
+              {colocacionesData.length === 0 ? (
+                <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>No hay datos de originación en este rango.</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={400}>
+                  <ComposedChart data={colocacionesData} margin={{ top: 10, right: 30, left: 20, bottom: 25 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" vertical={false} />
                   <XAxis dataKey="periodo" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} tickMargin={10} />
                   <YAxis yAxisId="left" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} tickFormatter={(val) => `$${(val / 1000000).toFixed(1)}M`} />
@@ -2052,7 +2069,34 @@ const DashboardCarteraPage = () => {
                   <Line isAnimationActive={!isExporting} yAxisId="right" type="monotone" dataKey="totalGenerado" stroke="var(--color-total)" strokeWidth={3} name="Monto Generado" dot={{ r: 4 }} activeDot={{ r: 6 }} />
                 </ComposedChart>
               </ResponsiveContainer>
-            )}
+              )}
+            </div>
+            
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '15px', minWidth: '250px', justifyContent: 'center' }}>
+              <div style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '5px' }}>
+                Último período {colocacionesData.length > 0 ? `(${colocacionesData[colocacionesData.length - 1].periodo})` : ''}
+              </div>
+              {colocacionesUniqueOriginadores.map((originador, index) => {
+                const ultimoPeriodo = colocacionesData.length > 0 ? colocacionesData[colocacionesData.length - 1] : {};
+                const totalColocado = ultimoPeriodo[`orig_${originador}`] || 0;
+                const totalGenerado = ultimoPeriodo[`origGen_${originador}`] || 0;
+                return (
+                  <div key={originador} className="glass-panel" style={{ padding: '20px', borderRadius: '12px', borderLeft: `4px solid ${CHART_COLORS[(index + 2) % CHART_COLORS.length]}` }}>
+                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '8px', textTransform: 'uppercase' }}>{originador}</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                      <div>
+                        <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Capital: </span>
+                        <span style={{ color: 'var(--color-capital)', fontSize: '1.1rem', fontWeight: 'bold' }}>{formatCurrency(totalColocado)}</span>
+                      </div>
+                      <div>
+                        <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Monto Total: </span>
+                        <span style={{ color: 'var(--color-total)', fontSize: '1.1rem', fontWeight: 'bold' }}>{formatCurrency(totalGenerado)}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           <div className="glass-panel" style={{ display: exportFormat === 'l' ? 'none' : 'block', padding: '25px', borderRadius: '12px', marginTop: '20px', marginBottom: '30px' }}>
@@ -2373,19 +2417,19 @@ const DashboardCarteraPage = () => {
       {(activeTab === 'morosidad' || isExporting) && (
         <div id="export-tab-morosidad">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '30px' }}>
-            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '10px' }}>
               <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Vencido (Mora)</span>
               <span style={{ fontSize: '1.8rem', fontWeight: 'bold', color: 'var(--color-interes)' }}>{formatCurrency(moraKPIs.totalVencido)}</span>
             </div>
-            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '10px' }}>
               <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.5px' }}>A Vencer (Cartera Morosa)</span>
               <span style={{ fontSize: '1.8rem', fontWeight: 'bold', color: 'var(--color-total)' }}>{formatCurrency(moraKPIs.totalAVencer)}</span>
             </div>
-            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '10px' }}>
               <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Mora Temprana (1-90 días)</span>
               <span style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#f59e0b' }}>{formatCurrency(moraKPIs.moraTemprana)}</span>
             </div>
-            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div className="glass-panel" style={{ padding: '25px', borderRadius: '12px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '10px' }}>
               <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Mora Dura (&gt;90 días)</span>
               <span style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#ef4444' }}>{formatCurrency(moraKPIs.moraDura)}</span>
             </div>
