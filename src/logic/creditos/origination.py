@@ -16,7 +16,7 @@ from src.database.models import (
     TipoCredito,
     Transferencia,
 )
-from src.logic.amortization import AmortizationEngine
+from src.logic.creditos.amortization import AmortizationEngine
 
 
 class LoanOriginator:

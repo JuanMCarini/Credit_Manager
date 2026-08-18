@@ -972,7 +972,7 @@ def _generar_pdf_for_credito(credito: Credito, db: Session) -> str:
 
     import tempfile
     from pypdf import PdfWriter
-    from src.logic.legajos import process_document
+    from src.logic.creditos.legajos import process_document
 
     merger = PdfWriter()
     temp_files = []
@@ -1050,7 +1050,7 @@ def generar_papeleria_cartera(cartera_id: int, formato: str = 'pdf', db: Session
         raise HTTPException(status_code=400, detail="No hay documentos de papelería de ventas de cartera configurados para este socio (o genéricos).")
         
     import tempfile
-    from src.logic.legajos import process_document, process_docx
+    from src.logic.creditos.legajos import process_document, process_docx
     from pypdf import PdfWriter
     
     has_pythoncom = False

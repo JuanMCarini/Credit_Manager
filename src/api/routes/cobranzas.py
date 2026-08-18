@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import desc
 
 from src.database import get_db
-from src.logic.collections import CollectionManager
+from src.logic.creditos.collections import CollectionManager
 from src.api.schemas.cobranzas import CobranzaIndividual, CobranzaMasiva, CobranzaRecurso, ProcesoUpdate
 from src.api.dependencies.auth import get_current_user
 from src.database.models.auth import Usuario, RegistroAuditoria
@@ -260,7 +260,7 @@ def pagar_proceso_liquidaciones(
 ):
     from src.database.models.cobranzas import Proceso, EstadoProcesoEnum, TipoProcesoEnum, LiquidacionCuotaCedida, TipoLiquidacionEnum
     from src.database.models.socios import AnticiposSinAplicar
-    from src.logic.settlements import SettlementManager
+    from src.logic.creditos.settlements import SettlementManager
     from sqlalchemy import func
     
     proceso = db.query(Proceso).filter(Proceso.id == proceso_id).first()

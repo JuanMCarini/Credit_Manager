@@ -29,7 +29,7 @@ from src.database.models import (  # noqa: E402
     TipoProcesoEnum,
     EstadoProcesoEnum,
 )
-from src.logic.penalties import PenaltyManager  # noqa: E402
+from src.logic.creditos.penalties import PenaltyManager  # noqa: E402
 from src.utils.dates import normalize_date  # noqa: E402
 from src.utils.files import select_file
 

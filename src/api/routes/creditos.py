@@ -15,8 +15,8 @@ from PIL import Image
 from src.database import get_db, Credito, Transferencia
 from src.database.models import EstadoCredito, Cuota, DocumentoLegajo, EstadoCuota
 from src.api.schemas.creditos import CreditoCreate, CreditoEstadoUpdate, DocumentoLegajoOut
-from src.logic.origination import LoanOriginator
-from src.logic.amortization import AmortizationEngine
+from src.logic.creditos.origination import LoanOriginator
+from src.logic.creditos.amortization import AmortizationEngine
 
 router = APIRouter(tags=["Créditos"])
 
@@ -689,8 +689,8 @@ import importlib
 import traceback
 import tempfile
 import zipfile
-from src.logic.import_data import quota
-from src.logic.import_data.web_carga import importar_datos_web_carga, ImportValidationError
+from src.logic.creditos.import_data import quota
+from src.logic.creditos.import_data.web_carga import importar_datos_web_carga, ImportValidationError
 from src.database.models import Relacion
 from src.database.models.socios import SocioComercial
 

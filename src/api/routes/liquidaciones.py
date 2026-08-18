@@ -10,7 +10,7 @@ from src.api.schemas.liquidaciones import (
     LiquidacionPreviewResponse,
     CompradorResponse
 )
-from src.logic.settlements import SettlementManager
+from src.logic.creditos.settlements import SettlementManager
 import math
 
 router = APIRouter(prefix="/api/v1/liquidaciones", tags=["liquidaciones"])
