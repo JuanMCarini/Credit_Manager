@@ -8,6 +8,7 @@ El frontend proporciona una interfaz gráfica moderna e interactiva para consumi
 
 - **Dashboard de Cartera**: Análisis interactivo del estado global de la cartera. Incluye gráficos de evolución, composición por dueño, proyección de vencimientos, estados de morosidad y exportación optimizada a PDF (formatos Detallado y Gráfico).
 - **Dashboard de Clientes (Ficha Individual)**: Vista integral de la situación de cada cliente. Permite visualizar datos de contacto, filtrar por uno o múltiples créditos asociados y consultar en tiempo real los KPIs financieros (Saldo Total, Monto en Mora, Cuotas Vencidas).
+- **Gestión de Configuración Centralizada**: Panel en Tablas Auxiliares para administrar dinámicamente los datos de la Empresa Administradora y sus Socios Comerciales, con sincronización automática en caliente con el archivo `.env` del backend.
 - **Listados y Búsquedas**: Herramientas rápidas de paginación y búsqueda para navegar a través del padrón de clientes y listado completo de créditos, con redirección directa a la ficha analítica de cada uno.
 
 ## Tecnologías

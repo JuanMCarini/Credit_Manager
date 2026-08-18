@@ -10,7 +10,7 @@ Sistema de gestión de carteras de créditos, motores de amortización financier
 * **Gestión de Punitorios (Penalties)**: Generación automática de créditos independientes de tipo punitorio a partir del excedente o sobrante del cobro de un cliente, integrando el cobro en una única operación atómica.
 * **Reportes Analíticos Optimizados**: Generación rápida de reportes de saldos de cartera (`saldos()`). Utiliza técnicas de *SQL push-down* para delegar el filtrado al motor SQLite y vectorización lógica en Pandas para evitar saturar la memoria RAM.
 * **Arquitectura de Datos ORM**: Modelado relacional estructurado con SQLAlchemy. Registra operaciones granulares de la cartera (Compra, Venta y Recompra de carteras con o sin recurso).
-* **Configuración Validada**: Gestión centralizada y fuertemente tipada de variables de entorno mediante Pydantic y Pydantic-Settings.
+* **Configuración Validada y Dinámica**: Gestión centralizada mediante Pydantic y un archivo `.env`. Los datos de la empresa principal se auto-inicializan en la base de datos al arrancar y se sincronizan bidireccionalmente: si se editan desde la interfaz web, el archivo `.env` se actualiza automáticamente en caliente.
 * **API Web**: Endpoints desarrollados con FastAPI para realizar simulaciones de cuotas de crédito en tiempo real y consultar reportes de saldos de cartera en formato JSON.
 * **Dashboards Analíticos Avanzados**: Interfaces interactivas (React) para visualizar el estado global de la cartera y la ficha individual de cada cliente. Incluye filtrado dinámico, cálculo de KPIs en tiempo real (mora, capital, intereses) y exportación gráfica a PDF (vertical y apaisado) para reportes gerenciales.
 
@@ -103,11 +103,14 @@ pip install -r requirements.txt
 ```
 
 ### 4. Configurar Variables de Entorno
-Crea un archivo `.env` en la raíz del proyecto basándote en la configuración de la empresa o los valores requeridos. Ejemplo:
+Crea un archivo `.env` en la raíz del proyecto basándote en la plantilla `.env.example`. 
+Ejemplo de valores:
 ```env
-ADMINISTRADORA_NAME="YOYO S.A."
-ADMINISTRADORA_CUIT="30713257880"
+COMPANY_RAZON_SOCIAL="Empresa Ficticia S.A."
+COMPANY_CUIT=30000000000
+COMPANY_DIA_CORTE=28
 ```
+*(Nota: Si omites estos valores, el sistema usará datos por defecto. Posteriormente podrás editarlos desde la sección de Socios Comerciales en la interfaz web y este archivo se actualizará automáticamente).*
 
 ### 5. (Opcional) Despliegue con Docker
 Puedes levantar el sistema completo usando Docker Compose:
