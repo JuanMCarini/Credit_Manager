@@ -103,17 +103,37 @@ pip install -r requirements.txt
 ```
 
 ### 4. Configure Environment Variables
-Create a `.env` file in the root of the project based on the company's configuration or required values. Example:
+Create a `.env` file in the root of the project based on the `.env.example` template. 
+Example of values:
 ```env
-ADMINISTRADORA_NAME="YOYO S.A."
-ADMINISTRADORA_CUIT="30713257880"
+COMPANY_RAZON_SOCIAL="Empresa Ficticia S.A."
+COMPANY_CUIT=30000000000
+COMPANY_DIA_CORTE=28
 ```
+*(Note: If you omit these values, the system will use default data. You can later edit them from the Commercial Partners section in the web interface and this file will be updated automatically).*
 
 ### 5. (Optional) Deployment with Docker
 You can spin up the entire system using Docker Compose:
 ```bash
-docker-compose up -d
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 ```
+
+#### 🏗️ Running multiple instances (Multi-Tenant)
+The Docker deployment architecture is parameterized so you can run multiple independent copies of the system on the same computer. To start a new instance for another company:
+1. Clone/copy the project to another folder.
+2. Edit the `.env` file of that new folder by adjusting the Docker block with a project name and host ports that are not in use:
+   ```env
+   COMPOSE_PROJECT_NAME=credit_manager_company2
+   HOST_PORT_DB=5434
+   HOST_PORT_BACKEND=8001
+   HOST_PORT_FRONTEND=81
+   HOST_PORT_FRONTEND_DEV=5174
+   ```
+3. **⚠️ Important for CORS:** If you changed the frontend port (e.g. to `5174`), you must obligatorily add it to the list of allowed origins in the `.env` so the frontend can communicate with the backend of its instance:
+   ```env
+   API_ALLOWED_ORIGINS=["http://localhost:5174","http://127.0.0.1:5174"]
+   ```
+4. Start the instance normally with `docker-compose`. Each system will have its own fully isolated database.
 
 ## 🚀 Usage and Execution
 

@@ -4,10 +4,13 @@ Este es el cliente web para el sistema **Credit Manager**, desarrollado con [Rea
 
 ## Características Principales
 
-El frontend proporciona una interfaz gráfica moderna e interactiva para consumir la API de Credit Manager, incluyendo:
+El frontend proporciona una interfaz gráfica moderna e interactiva para consumir la API de Credit Manager, incluyendo módulos avanzados para la gestión financiera completa:
 
+- **Autenticación y Roles**: Sistema de login seguro con control de acceso basado en roles (Administrador, Auditor, Operador de Cobranzas, Oficial de Crédito).
 - **Dashboard de Cartera**: Análisis interactivo del estado global de la cartera. Incluye gráficos de evolución, composición por dueño, proyección de vencimientos, estados de morosidad y exportación optimizada a PDF (formatos Detallado y Gráfico).
 - **Dashboard de Clientes (Ficha Individual)**: Vista integral de la situación de cada cliente. Permite visualizar datos de contacto, filtrar por uno o múltiples créditos asociados y consultar en tiempo real los KPIs financieros (Saldo Total, Monto en Mora, Cuotas Vencidas).
+- **Gestión de Cobranzas y Comprobantes**: Interfaz para registrar cobros y emitir comprobantes, interactuando con el motor de cobranzas atómico del backend.
+- **Facturación, Liquidaciones y Planes**: Módulos para administrar la emisión de facturas, liquidaciones periódicas y creación de planes de financiación.
 - **Gestión de Configuración Centralizada**: Panel en Tablas Auxiliares para administrar dinámicamente los datos de la Empresa Administradora y sus Socios Comerciales, con sincronización automática en caliente con el archivo `.env` del backend.
 - **Listados y Búsquedas**: Herramientas rápidas de paginación y búsqueda para navegar a través del padrón de clientes y listado completo de créditos, con redirección directa a la ficha analítica de cada uno.
 
