@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 from src.database.connection import get_db
-from src.database.models.cobranzas import LiquidacionCuotaCedida
+from src.database.models.creditos.cobranzas import LiquidacionCuotaCedida
 from src.database.models import SocioComercial, Cartera, TipoOperacionCartera
 from src.api.schemas.liquidaciones import (
     LiquidacionResponse,

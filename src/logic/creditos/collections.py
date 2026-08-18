@@ -304,7 +304,7 @@ class CollectionManager:
         for col in ["capital", "interes", "iva"]:
             df_cobr[col] = df_cobr[col].round(2)
 
-        from src.database.models.carteras import Cartera, OperacionCartera, TipoOperacionCartera
+        from src.database.models.creditos.carteras import Cartera, OperacionCartera, TipoOperacionCartera
         cuotas_ids = df_cobr.index.tolist()
         # Querying in descending order so the first record for a cuota_id is the latest one.
         ops = self.db.query(OperacionCartera.cuota_id, Cartera.iva, Cartera.tipo_operacion).join(
@@ -738,7 +738,7 @@ class CollectionManager:
         """
 
         from src.database.models import TipoCobranzaEnum
-        from src.database.models.carteras import EstadoCartera
+        from src.database.models.creditos.carteras import EstadoCartera
 
         payment_date = normalize_date(payment_date)
         id_tipo = identificador.upper()

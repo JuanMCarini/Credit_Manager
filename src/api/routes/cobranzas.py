@@ -48,8 +48,8 @@ def procesar_cobranza_individual(
         tipo_cob_solicitado = datos.tipo_cobranza or "COMUN"
         
         if not datos.anticipada and proceso_id and tipo_cob_solicitado in ["COMUN", "AJUSTE"]:
-            from src.database.models.cobranzas import Cobranza, TipoCobranzaEnum
-            from src.database.models.creditos import Credito, Cuota
+            from src.database.models.creditos.cobranzas import Cobranza, TipoCobranzaEnum
+            from src.database.models.creditos.creditos import Credito, Cuota
             
             cobranzas = db.query(Cobranza).filter(Cobranza.proceso_id == proceso_id).all()
             for cob in cobranzas:
@@ -189,7 +189,7 @@ def procesar_cobranza_recurso(
 
 @router.get("/procesos")
 def get_procesos(db: Session = Depends(get_db)):
-    from src.database.models.cobranzas import Proceso, Cobranza
+    from src.database.models.creditos.cobranzas import Proceso, Cobranza
     from sqlalchemy import func
     
     procesos = db.query(Proceso).order_by(desc(Proceso.fecha_ejecucion)).all()
@@ -229,7 +229,7 @@ def get_procesos(db: Session = Depends(get_db)):
 
 @router.put("/procesos/{proceso_id}")
 def update_proceso(proceso_id: int, data: ProcesoUpdate, db: Session = Depends(get_db)):
-    from src.database.models.cobranzas import Proceso, EstadoProcesoEnum
+    from src.database.models.creditos.cobranzas import Proceso, EstadoProcesoEnum
     proceso = db.query(Proceso).filter(Proceso.id == proceso_id).first()
     if not proceso:
         raise HTTPException(status_code=404, detail="Proceso no encontrado")
@@ -258,7 +258,7 @@ def pagar_proceso_liquidaciones(
     data: PagoProcesoRequest, 
     db: Session = Depends(get_db)
 ):
-    from src.database.models.cobranzas import Proceso, EstadoProcesoEnum, TipoProcesoEnum, LiquidacionCuotaCedida, TipoLiquidacionEnum
+    from src.database.models.creditos.cobranzas import Proceso, EstadoProcesoEnum, TipoProcesoEnum, LiquidacionCuotaCedida, TipoLiquidacionEnum
     from src.database.models.socios import AnticiposSinAplicar
     from src.logic.creditos.settlements import SettlementManager
     from sqlalchemy import func
@@ -356,12 +356,12 @@ def pagar_proceso_liquidaciones(
 
 @router.delete("/procesos/{proceso_id}")
 def delete_proceso(proceso_id: int, db: Session = Depends(get_db)):
-    from src.database.models.cobranzas import Proceso, Cobranza
+    from src.database.models.creditos.cobranzas import Proceso, Cobranza
     proceso = db.query(Proceso).options(joinedload(Proceso.cobranzas).joinedload(Cobranza.liquidaciones)).filter(Proceso.id == proceso_id).first()
     if not proceso:
         raise HTTPException(status_code=404, detail="Proceso no encontrado")
         
-    from src.database.models.cobranzas import TipoProcesoEnum, LiquidacionCuotaCedida, EstadoProcesoEnum
+    from src.database.models.creditos.cobranzas import TipoProcesoEnum, LiquidacionCuotaCedida, EstadoProcesoEnum
     
     if proceso.estado == EstadoProcesoEnum.COMPLETADO:
         raise HTTPException(status_code=400, detail="No se puede eliminar un proceso que ya está COMPLETADO.")
@@ -378,8 +378,8 @@ def delete_proceso(proceso_id: int, db: Session = Depends(get_db)):
             )
         
     try:
-        from src.database.models.creditos import TipoCredito
-        from src.database.models.cobranzas import TipoCobranzaEnum
+        from src.database.models.creditos.creditos import TipoCredito
+        from src.database.models.creditos.cobranzas import TipoCobranzaEnum
         
         if is_liquidacion:
             db.query(LiquidacionCuotaCedida).filter(LiquidacionCuotaCedida.proceso_id == proceso_id).delete(synchronize_session=False)
@@ -439,7 +439,7 @@ def get_cobranzas(
     pago_dates: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    from src.database.models.cobranzas import Cobranza
+    from src.database.models.creditos.cobranzas import Cobranza
     from src.database.models import Cuota, Credito
     
     base_query = db.query(Cobranza).options(joinedload(Cobranza.cuota).joinedload(Cuota.credito))
@@ -573,7 +573,7 @@ def get_cobranzas(
 
 @router.delete("/cobranzas/{cobranza_id}")
 def delete_cobranza(cobranza_id: int, db: Session = Depends(get_db)):
-    from src.database.models.cobranzas import Cobranza
+    from src.database.models.creditos.cobranzas import Cobranza
     cobranza = db.query(Cobranza).filter(Cobranza.id == cobranza_id).first()
     if not cobranza:
         raise HTTPException(status_code=404, detail="Cobranza no encontrada")
@@ -609,7 +609,7 @@ def delete_cobranza(cobranza_id: int, db: Session = Depends(get_db)):
 
 @router.put("/cobranzas/{cobranza_id}")
 def modificar_cobranza(cobranza_id: int, datos: CobranzaIndividual, db: Session = Depends(get_db)):
-    from src.database.models.cobranzas import Cobranza
+    from src.database.models.creditos.cobranzas import Cobranza
     cobranza = db.query(Cobranza).filter(Cobranza.id == cobranza_id).first()
     if not cobranza:
         raise HTTPException(status_code=404, detail="Cobranza no encontrada")

@@ -171,7 +171,7 @@ class Cliente(Base):
         return value
 
     def actualizar_estado(self) -> str:
-        from src.database.models.creditos import EstadoCredito
+        from src.database.models.creditos.creditos import EstadoCredito
         
         creditos_cli = self.creditos
         if not creditos_cli:

@@ -1,13 +1,13 @@
-from .clientes import SexoEnum, EstadoClienteEnum, Empleador, Provincia, Cliente
+from .creditos.clientes import SexoEnum, EstadoClienteEnum, Empleador, Provincia, Cliente
 from .socios import SocioComercial, AnticiposSinAplicar, Relacion, EstadoComisionEnum, TasaYComision, PoliticaCrediticia, Comercializador
-from .creditos import OrigenCredito, EstadoCredito, TipoCredito, Credito, EstadoCuota, EstadoCuotaCedida, Cuota
-from .carteras import TipoOperacionCartera, EstadoCartera, Cartera, OperacionCartera
-from .cobranzas import TipoProcesoEnum, EstadoProcesoEnum, Proceso, TipoCobranzaEnum, Cobranza, TipoLiquidacionEnum, LiquidacionCuotaCedida
+from .creditos.creditos import OrigenCredito, EstadoCredito, TipoCredito, Credito, EstadoCuota, EstadoCuotaCedida, Cuota
+from .creditos.carteras import TipoOperacionCartera, EstadoCartera, Cartera, OperacionCartera
+from .creditos.cobranzas import TipoProcesoEnum, EstadoProcesoEnum, Proceso, TipoCobranzaEnum, Cobranza, TipoLiquidacionEnum, LiquidacionCuotaCedida
 from .auth import TipoRolEnum, Rol, Usuario, RegistroAuditoria
-from .creditos import Transferencia, DocumentoLegajo
-from .papeleria import DocumentoPapeleria, DocumentoVariable
-from .repet import RepetPerson, RepetEntity, RepetAuditLog
-from .facturacion import Factura
+from .creditos.creditos import Transferencia, DocumentoLegajo
+from .creditos.papeleria import DocumentoPapeleria, DocumentoVariable
+from .creditos.repet import RepetPerson, RepetEntity, RepetAuditLog
+from .creditos.facturacion import Factura
 from .finance.bancos import Banco, Cuenta, Concepto, Clasificacion, Movimiento, CategoriaMovimiento
 from .finance.comprobantes import Proveedor, Comprobante, EstadoComprobante
 from .finance.planes import Plan, SistemaMatematico, Denominador

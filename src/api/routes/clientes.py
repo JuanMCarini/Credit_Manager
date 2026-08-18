@@ -5,7 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy import or_
 
 from src.database import get_db, Cliente, Credito, Cuota
-from src.database.models.clientes import Referido
+from src.database.models.creditos.clientes import Referido
 from src.api.schemas.clientes import ClienteCreate
 
 router = APIRouter(prefix="/api/v1/clientes", tags=["Clientes"])

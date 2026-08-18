@@ -12,7 +12,7 @@ import pandas as pd
 import numpy as np
 from src.database import engine, SessionLocal, Credito, Cuota, EstadoCuota
 from src.database import TipoCobranzaEnum, Cobranza
-from src.database.models.cobranzas import Proceso, TipoProcesoEnum
+from src.database.models.creditos.cobranzas import Proceso, TipoProcesoEnum
 
     # --- A. OPTIMIZED QUOTA LOAD AND MERGE ---
 from src.imports.cql.read import CQLData

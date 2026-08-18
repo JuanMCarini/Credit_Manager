@@ -6,8 +6,8 @@ import calendar
 from typing import Dict, Any, List, Optional
 
 from src.database import get_db
-from src.database.models.creditos import Credito, Cuota
-from src.database.models.cobranzas import Cobranza, TipoCobranzaEnum, Proceso, EstadoProcesoEnum
+from src.database.models.creditos.creditos import Credito, Cuota
+from src.database.models.creditos.cobranzas import Cobranza, TipoCobranzaEnum, Proceso, EstadoProcesoEnum
 from src.database.models.socios import TasaYComision
 
 # Nuevos imports para Bancos

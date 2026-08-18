@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
-from src.database.models.cobranzas import Cobranza
-from src.database.models.facturacion import Factura
+from src.database.models.creditos.cobranzas import Cobranza
+from src.database.models.creditos.facturacion import Factura
 from src.services.arca_service import ArcaService
 import logging
 

@@ -1,7 +1,7 @@
 from typing import Optional, List
 from datetime import date
 from pydantic import BaseModel, Field
-from src.database.models.clientes import SexoEnum, EstadoClienteEnum
+from src.database.models.creditos.clientes import SexoEnum, EstadoClienteEnum
 
 class ReferidoCreate(BaseModel):
     nombre: str = Field(..., max_length=100)

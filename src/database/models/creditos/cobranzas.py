@@ -146,7 +146,7 @@ class Cobranza(Base):
             cuota_id = context.current_parameters.get("cuota_id")
             if cuota_id is not None and context.connection is not None:
                 from sqlalchemy.orm import Session
-                from src.database.models.carteras import Cartera, OperacionCartera
+                from src.database.models.creditos.carteras import Cartera, OperacionCartera
 
                 db = Session(bind=context.connection)
 
@@ -160,7 +160,7 @@ class Cobranza(Base):
                 
                 if result is not None:
                     iva, tipo_op = result
-                    from src.database.models.carteras import TipoOperacionCartera
+                    from src.database.models.creditos.carteras import TipoOperacionCartera
                     if tipo_op == TipoOperacionCartera.VENTA:
                         return True if iva is True else False
                     else:
