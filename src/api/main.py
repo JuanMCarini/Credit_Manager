@@ -68,10 +68,13 @@ def init_main_company():
     except Exception as e:
         print(f"⚠️ Error al inicializar la empresa principal: {e}")
 
+from src.database.seed_admin import seed_admin
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
     init_main_company()
+    seed_admin()
     start_scheduler()
     yield
     # Shutdown
