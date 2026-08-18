@@ -28,6 +28,7 @@ class CompanyConfig(BaseSettings):
     bank_account: str = Field(default="", description="Bank account number")
     bank_name: str = Field(default="", description="Bank name")
     cbu: str = Field(default="", description="CBU")
+    dia_corte: int = Field(default=28, description="Día de corte por defecto para la empresa")
 
     # Configuration for the Pydantic model
     model_config = SettingsConfigDict(
@@ -72,12 +73,62 @@ def get_company_data(db=None) -> CompanyConfig:
                 telefono=socio.telefono or "",
                 bank_account=socio.nro_cuenta_bancaria or "",
                 bank_name=socio.nombre_banco or "",
-                cbu=socio.cbu or ""
+                cbu=socio.cbu or "",
+                dia_corte=socio.dia_corte or 28
             )
         return COMPANY_DATA
     finally:
         if db is None:
             session.close()
+
+def update_company_env(socio):
+    """
+    Sincroniza los datos de un SocioComercial (el principal) hacia el archivo .env
+    y la memoria (COMPANY_DATA).
+    """
+    import os
+    from pathlib import Path
+    
+    # Calcular la ruta raíz absoluta basada en la ubicación de este archivo (src/config.py)
+    root_dir = Path(__file__).resolve().parent.parent
+    env_path = root_dir / ".env"
+    
+    if env_path.exists():
+        with open(env_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+        
+        with open(env_path, "w", encoding="utf-8") as f:
+            for line in lines:
+                if line.startswith("COMPANY_RAZON_SOCIAL="):
+                    f.write(f'COMPANY_RAZON_SOCIAL="{socio.razon_social}"\n')
+                elif line.startswith("COMPANY_CUIT="):
+                    f.write(f'COMPANY_CUIT={socio.cuit}\n')
+                elif line.startswith("COMPANY_DOMICILIO="):
+                    f.write(f'COMPANY_DOMICILIO="{socio.domicilio_legal or ""}"\n')
+                elif line.startswith("COMPANY_EMAIL_CONTACTO="):
+                    f.write(f'COMPANY_EMAIL_CONTACTO="{socio.mail or ""}"\n')
+                elif line.startswith("COMPANY_TELEFONO="):
+                    f.write(f'COMPANY_TELEFONO="{socio.telefono or ""}"\n')
+                elif line.startswith("COMPANY_BANK_ACCOUNT="):
+                    f.write(f'COMPANY_BANK_ACCOUNT="{socio.nro_cuenta_bancaria or ""}"\n')
+                elif line.startswith("COMPANY_BANK_NAME="):
+                    f.write(f'COMPANY_BANK_NAME="{socio.nombre_banco or ""}"\n')
+                elif line.startswith("COMPANY_CBU="):
+                    f.write(f'COMPANY_CBU="{socio.cbu or ""}"\n')
+                elif line.startswith("COMPANY_DIA_CORTE="):
+                    f.write(f'COMPANY_DIA_CORTE={socio.dia_corte or 28}\n')
+                else:
+                    f.write(line)
+                    
+    COMPANY_DATA.razon_social = socio.razon_social
+    COMPANY_DATA.cuit = socio.cuit
+    COMPANY_DATA.domicilio = socio.domicilio_legal or ""
+    COMPANY_DATA.email_contacto = socio.mail or ""
+    COMPANY_DATA.telefono = socio.telefono or ""
+    COMPANY_DATA.bank_account = socio.nro_cuenta_bancaria or ""
+    COMPANY_DATA.bank_name = socio.nombre_banco or ""
+    COMPANY_DATA.cbu = socio.cbu or ""
+    COMPANY_DATA.dia_corte = socio.dia_corte or 28
 
 class APIConfig(BaseSettings):
     """

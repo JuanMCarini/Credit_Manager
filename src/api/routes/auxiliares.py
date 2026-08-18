@@ -215,6 +215,12 @@ def update_aux_record(tabla: str, record_id: int, payload: dict, db: Session = D
                 setattr(record, key, value)
         db.commit()
         db.refresh(record)
+        
+        if tabla == "socios":
+            from src.config import COMPANY_DATA, update_company_env
+            if str(record.cuit) == str(COMPANY_DATA.cuit):
+                update_company_env(record)
+
         return {"status": "success", "id": record.id}
     except TypeError as e:
         db.rollback()

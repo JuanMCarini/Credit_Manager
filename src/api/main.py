@@ -43,10 +43,35 @@ Base.metadata.create_all(bind=engine)
 from src.api.dependencies.auth import enforce_rbac
 from src.api.scheduler import start_scheduler, stop_scheduler
 from fastapi import Depends
+from src.database import SessionLocal
+from src.database.models.socios import SocioComercial
+from src.config import COMPANY_DATA
+
+def init_main_company():
+    try:
+        with SessionLocal() as db:
+            socio = db.query(SocioComercial).filter(SocioComercial.cuit == COMPANY_DATA.cuit).first()
+            if not socio:
+                SocioComercial.create_socio(
+                    razon_social=COMPANY_DATA.razon_social,
+                    cuit=COMPANY_DATA.cuit,
+                    db=db,
+                    domicilio_legal=COMPANY_DATA.domicilio,
+                    mail=COMPANY_DATA.email_contacto,
+                    telefono=COMPANY_DATA.telefono,
+                    cbu=COMPANY_DATA.cbu,
+                    nro_cuenta_bancaria=COMPANY_DATA.bank_account,
+                    nombre_banco=COMPANY_DATA.bank_name,
+                    dia_corte=COMPANY_DATA.dia_corte
+                )
+                print(f"✅ Empresa principal '{COMPANY_DATA.razon_social}' creada automáticamente en la base de datos.")
+    except Exception as e:
+        print(f"⚠️ Error al inicializar la empresa principal: {e}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
+    init_main_company()
     start_scheduler()
     yield
     # Shutdown

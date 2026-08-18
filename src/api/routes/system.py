@@ -77,6 +77,19 @@ def sync_system_states(db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
+from pydantic import BaseModel
+
+class CompanyUpdateSchema(BaseModel):
+    razon_social: str
+    cuit: str
+    domicilio: str | None = None
+    email_contacto: str | None = None
+    telefono: str | None = None
+    nro_cuenta_bancaria: str | None = None
+    nombre_banco: str | None = None
+    cbu: str | None = None
+    dia_corte: int | None = None
+
 @router.get("/company")
 def get_company_info(db: Session = Depends(get_db)):
     from src.config import get_company_data
@@ -89,8 +102,73 @@ def get_company_info(db: Session = Depends(get_db)):
         "telefono": company.telefono,
         "nro_cuenta_bancaria": company.bank_account,
         "nombre_banco": company.bank_name,
-        "cbu": company.cbu
+        "cbu": company.cbu,
+        "dia_corte": company.dia_corte
     }
+
+@router.put("/company")
+def update_company_info(data: CompanyUpdateSchema, db: Session = Depends(get_db)):
+    from src.config import COMPANY_DATA
+    from src.database.models.socios import SocioComercial
+    
+    # 1. Update DB record if exists
+    socio = db.query(SocioComercial).filter(SocioComercial.cuit == COMPANY_DATA.cuit).first()
+    if socio:
+        SocioComercial.update_socio(
+            socio_id=socio.id,
+            db=db,
+            razon_social=data.razon_social,
+            cuit=data.cuit,
+            domicilio_legal=data.domicilio,
+            mail=data.email_contacto,
+            telefono=data.telefono,
+            nro_cuenta_bancaria=data.nro_cuenta_bancaria,
+            nombre_banco=data.nombre_banco,
+            cbu=data.cbu,
+            dia_corte=data.dia_corte or 28
+        )
+        
+    # 2. Update .env file
+    env_path = ".env"
+    if os.path.exists(env_path):
+        with open(env_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+        
+        with open(env_path, "w", encoding="utf-8") as f:
+            for line in lines:
+                if line.startswith("COMPANY_RAZON_SOCIAL="):
+                    f.write(f'COMPANY_RAZON_SOCIAL="{data.razon_social}"\n')
+                elif line.startswith("COMPANY_CUIT="):
+                    f.write(f'COMPANY_CUIT={data.cuit}\n')
+                elif line.startswith("COMPANY_DOMICILIO="):
+                    f.write(f'COMPANY_DOMICILIO="{data.domicilio or ""}"\n')
+                elif line.startswith("COMPANY_EMAIL_CONTACTO="):
+                    f.write(f'COMPANY_EMAIL_CONTACTO="{data.email_contacto or ""}"\n')
+                elif line.startswith("COMPANY_TELEFONO="):
+                    f.write(f'COMPANY_TELEFONO="{data.telefono or ""}"\n')
+                elif line.startswith("COMPANY_BANK_ACCOUNT="):
+                    f.write(f'COMPANY_BANK_ACCOUNT="{data.nro_cuenta_bancaria or ""}"\n')
+                elif line.startswith("COMPANY_BANK_NAME="):
+                    f.write(f'COMPANY_BANK_NAME="{data.nombre_banco or ""}"\n')
+                elif line.startswith("COMPANY_CBU="):
+                    f.write(f'COMPANY_CBU="{data.cbu or ""}"\n')
+                elif line.startswith("COMPANY_DIA_CORTE="):
+                    f.write(f'COMPANY_DIA_CORTE={data.dia_corte or 28}\n')
+                else:
+                    f.write(line)
+                    
+    # 3. Update runtime configuration
+    COMPANY_DATA.razon_social = data.razon_social
+    COMPANY_DATA.cuit = data.cuit
+    COMPANY_DATA.domicilio = data.domicilio or ""
+    COMPANY_DATA.email_contacto = data.email_contacto or ""
+    COMPANY_DATA.telefono = data.telefono or ""
+    COMPANY_DATA.bank_account = data.nro_cuenta_bancaria or ""
+    COMPANY_DATA.bank_name = data.nombre_banco or ""
+    COMPANY_DATA.cbu = data.cbu or ""
+    COMPANY_DATA.dia_corte = data.dia_corte or 28
+    
+    return {"status": "success", "message": "Datos de la empresa actualizados correctamente."}
 
 @router.post("/repet/sync")
 async def sync_repet(db: Session = Depends(get_db)):
