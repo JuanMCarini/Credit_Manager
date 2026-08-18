@@ -45,8 +45,8 @@ const DashboardClientesPage = () => {
     const fetchAllClients = async () => {
       setIsSearching(true);
       try {
-        const res = await axiosClient.get('/api/v1/clientes');
-        setAllClients(res.data);
+        const res = await axiosClient.get('/api/v1/clientes', { params: { limit: 5000 } });
+        setAllClients(res.data.items || res.data);
       } catch (err) {
         console.error("Error cargando lista de clientes:", err);
       } finally {
@@ -58,14 +58,20 @@ const DashboardClientesPage = () => {
 
   // 2. Fetch specific client data when selected
   useEffect(() => {
-    if (!selectedCuil || allClients.length === 0) return;
+    if (!selectedCuil) return;
 
     const fetchClientDashboardData = async () => {
       setLoadingClient(true);
       setClientError(null);
       try {
-        const ccRes = await axiosClient.get(`/api/v1/clientes/${selectedCuil}/cuenta_corriente`);
-        const foundClient = allClients.find(c => c.CUIL === selectedCuil);
+        const [listRes, ccRes] = await Promise.all([
+          axiosClient.get('/api/v1/clientes', { params: { cuil: selectedCuil } }),
+          axiosClient.get(`/api/v1/clientes/${selectedCuil}/cuenta_corriente`)
+        ]);
+        
+        const items = listRes.data.items || listRes.data || [];
+        const foundClient = items.find(c => c.CUIL === selectedCuil) || items[0];
+        
         setClientData(foundClient);
         setCcData(ccRes.data);
         
@@ -84,7 +90,7 @@ const DashboardClientesPage = () => {
       }
     };
     fetchClientDashboardData();
-  }, [selectedCuil, allClients]);
+  }, [selectedCuil, initialCreditoId, initialCuil]);
 
   // Handle outside click for search dropdown
   useEffect(() => {
