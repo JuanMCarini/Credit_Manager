@@ -69,12 +69,22 @@ def init_main_company():
         print(f"⚠️ Error al inicializar la empresa principal: {e}")
 
 from src.database.seed_admin import seed_admin
+from src.database.seed_geography import seed_provincias
+from src.database.seed_conceptos import seed_conceptos
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
     init_main_company()
     seed_admin()
+    
+    try:
+        with SessionLocal() as db:
+            seed_provincias(db)
+            seed_conceptos(db)
+    except Exception as e:
+        print(f"⚠️ Error executing seeds: {e}")
+        
     start_scheduler()
     yield
     # Shutdown
