@@ -3,6 +3,9 @@ import axiosClient from '../api/axiosClient';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, LabelList, ComposedChart, Line} from 'recharts';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
+import { es } from 'date-fns/locale';
 const formatCurrency = (value) => {
   if (value === null || value === undefined) return "$ 0";
   return new Intl.NumberFormat('es-AR', {
@@ -103,6 +106,10 @@ const DashboardCarteraPage = () => {
   const [comparePeriodB, setComparePeriodB] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [fechaCorteDate, setFechaCorteDate] = useState(() => {
+    const today = new Date();
+    return new Date(today.getFullYear(), today.getMonth(), 0);
+  });
   const [fechaCorte, setFechaCorte] = useState(() => {
     const today = new Date();
     const lastDay = new Date(today.getFullYear(), today.getMonth(), 0);
@@ -111,6 +118,17 @@ const DashboardCarteraPage = () => {
     const dd = String(lastDay.getDate()).padStart(2, '0');
     return `${yyyy}-${mm}-${dd}`;
   });
+
+  const handleDateChange = (date) => {
+    setFechaCorteDate(date);
+    if (date) {
+      const yyyy = date.getFullYear();
+      const mm = String(date.getMonth() + 1).padStart(2, '0');
+      const dd = String(date.getDate()).padStart(2, '0');
+      setFechaCorte(`${yyyy}-${mm}-${dd}`);
+    }
+  };
+
   const [tasaDescuento, setTasaDescuento] = useState(0);
   const [tasaDescuentoStr, setTasaDescuentoStr] = useState("0 %");
   const [activeTab, setActiveTab] = useState('situacion_patrimonial'); // 'situacion_patrimonial', 'total', 'periodo', etc.
@@ -375,7 +393,7 @@ const DashboardCarteraPage = () => {
   const grupos = {};
   const gruposPeriodo = {};
   const tna = tasaDescuento / 100;
-  const fechaCorteDate = new Date(fechaCorte + 'T00:00:00'); // Force local midnight
+  const parsedFechaCorteDate = new Date(fechaCorte + 'T00:00:00'); // Force local midnight
   const corteYearMonth = fechaCorte.substring(0, 7);
 
   const resumenEstados = {
@@ -416,7 +434,7 @@ const DashboardCarteraPage = () => {
     // Calcular Valor Actual
     const fVtoStr = row['Fecha Vencimiento'];
     const fVto = new Date(fVtoStr + 'T00:00:00');
-    let diasVto = Math.floor((fVto - fechaCorteDate) / (1000 * 60 * 60 * 24));
+    let diasVto = Math.floor((fVto - parsedFechaCorteDate) / (1000 * 60 * 60 * 24));
     if (diasVto < 0) diasVto = 0;
 
     const flujoTotal = cap + int;
@@ -450,7 +468,7 @@ const DashboardCarteraPage = () => {
       capInt = cap + int + capCobrado + intCobrado;
     }
     
-    const isVencido = fVto < fechaCorteDate;
+    const isVencido = fVto < parsedFechaCorteDate;
 
     if (isVencido) {
       resumenEstados[normalizedEstado].Vencido += capInt;
@@ -460,7 +478,7 @@ const DashboardCarteraPage = () => {
     resumenEstados[normalizedEstado].Total += capInt;
 
     // Agrupar por periodo (vencimientos futuros estrictamente posteriores a la fecha de corte)
-    if (fVto > fechaCorteDate) {
+    if (fVto > parsedFechaCorteDate) {
       const vtoYearMonth = fVtoStr.substring(0, 7);
       if (!gruposPeriodo[vtoYearMonth]) {
         gruposPeriodo[vtoYearMonth] = { Periodo: vtoYearMonth, Capital: 0, 'Interés': 0, IVA: 0, Total: 0 };
@@ -728,7 +746,7 @@ const DashboardCarteraPage = () => {
     ];
 
     const creditosMora = {};
-    const fechaCorteDate = new Date(fechaCorte + 'T00:00:00');
+    const parsedFechaCorteDate = new Date(fechaCorte + 'T00:00:00');
 
     // Primer pasada: Calcular la mora (maxDiasMora) a nivel CRÉDITO, sin importar quién sea el dueño
     // de cada cuota. La mora es una propiedad del crédito.
@@ -751,11 +769,11 @@ const DashboardCarteraPage = () => {
         }
 
         const fVto = new Date(row['Fecha Vencimiento'] + 'T00:00:00');
-        const isVencido = fVto < fechaCorteDate;
+        const isVencido = fVto < parsedFechaCorteDate;
         const balanceCuota = (row.Capital || 0) + (row['Interés'] || 0) + (row.IVA || 0);
 
         if (isVencido && balanceCuota > 0) {
-          let diasMora = Math.floor((fechaCorteDate - fVto) / (1000 * 60 * 60 * 24));
+          let diasMora = Math.floor((parsedFechaCorteDate - fVto) / (1000 * 60 * 60 * 24));
           if (diasMora < 1) diasMora = 1;
 
           if (diasMora > creditosMora[id].maxDiasMora) {
@@ -790,7 +808,7 @@ const DashboardCarteraPage = () => {
         if (!id || !creditosMora[id]) return;
 
         const fVto = new Date(row['Fecha Vencimiento'] + 'T00:00:00');
-        const isVencido = fVto < fechaCorteDate;
+        const isVencido = fVto < parsedFechaCorteDate;
         const cuotaValue = (row.Capital || 0) + (row['Interés'] || 0) + (row.IVA || 0);
 
         if (isVencido) {
@@ -1000,29 +1018,6 @@ const DashboardCarteraPage = () => {
     });
   }, [espData, espPeriods]);
 
-  if (loading) {
-    return (
-      <div className="page-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-        <div className="loading-spinner"></div>
-        <span style={{ marginLeft: '10px' }}>Cargando información de la cartera...</span>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="page-container">
-        <div className="alert error">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="12" y1="8" x2="12" y2="12"></line>
-            <line x1="12" y1="16" x2="12.01" y2="16"></line>
-          </svg>
-          {error}
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="page-container" style={{ animation: 'fadeIn 0.5s ease' }}>
@@ -1054,19 +1049,26 @@ const DashboardCarteraPage = () => {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <label htmlFor="fechaCorte" style={{ color: 'var(--text-secondary)', fontWeight: '500' }}>Fecha de Corte:</label>
-            <input
-              type="date"
+            <DatePicker
               id="fechaCorte"
-              value={fechaCorte}
-              onChange={(e) => setFechaCorte(e.target.value)}
-              style={{
-                padding: '8px 12px',
-                borderRadius: '8px',
-                border: '1px solid rgba(255,255,255,0.1)',
-                background: 'rgba(0,0,0,0.2)',
-                color: 'var(--text-primary)',
-                colorScheme: 'dark'
-              }}
+              selected={fechaCorteDate}
+              onChange={handleDateChange}
+              dateFormat="dd/MM/yyyy"
+              locale={es}
+              customInput={
+                <input
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    background: 'rgba(0,0,0,0.2)',
+                    color: 'var(--text-primary)',
+                    colorScheme: 'dark',
+                    width: '120px',
+                    cursor: 'pointer'
+                  }}
+                />
+              }
             />
           </div>
           <div style={{ display: 'flex', gap: '10px' }}>
@@ -1112,7 +1114,23 @@ const DashboardCarteraPage = () => {
         </div>
       </header>
 
-      {/* Filtros y Navegación */}
+      {loading ? (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '100px 0' }}>
+          <div className="loading-spinner"></div>
+          <span style={{ marginLeft: '10px' }}>Cargando información de la cartera...</span>
+        </div>
+      ) : error ? (
+        <div className="alert error" style={{ marginTop: '20px' }}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+          {error}
+        </div>
+      ) : (
+        <>
+          {/* Filtros y Navegación */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '20px' }}>
         
         {/* Filtros Izquierda */}
@@ -2574,6 +2592,8 @@ const DashboardCarteraPage = () => {
             </div>
           </div>
         </div>
+      )}
+        </>
       )}
 
       <style>{`
