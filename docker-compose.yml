@@ -3,14 +3,13 @@ version: '3.8'
 services:
   db:
     image: postgres:15-alpine
-    container_name: credit_manager_db
     restart: always
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
       POSTGRES_DB: ${DB_NAME:-credit_manager}
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "${HOST_PORT_DB:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -18,10 +17,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.backend
-    container_name: credit_manager_backend
     restart: always
     ports:
-      - "8000:8000"
+      - "${HOST_PORT_BACKEND:-8000}:8000"
     volumes:
       - ./data:/app/data
     depends_on:
@@ -36,10 +34,9 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: credit_manager_frontend
     restart: always
     ports:
-      - "80:80"
+      - "${HOST_PORT_FRONTEND:-80}:80"
     depends_on:
       - backend
 

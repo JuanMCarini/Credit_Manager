@@ -115,8 +115,25 @@ COMPANY_DIA_CORTE=28
 ### 5. (Opcional) Despliegue con Docker
 Puedes levantar el sistema completo usando Docker Compose:
 ```bash
-docker-compose up -d
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 ```
+
+#### 🏗️ Correr múltiples instancias (Multi-Tenant)
+La arquitectura de despliegue en Docker está parametrizada para que puedas correr múltiples copias independientes del sistema en la misma computadora. Para levantar una nueva instancia para otra empresa:
+1. Clona/copia el proyecto a otra carpeta.
+2. Edita el archivo `.env` de esa nueva carpeta ajustando el bloque de Docker con un nombre de proyecto y puertos anfitriones que no estén en uso:
+   ```env
+   COMPOSE_PROJECT_NAME=credit_manager_empresa2
+   HOST_PORT_DB=5434
+   HOST_PORT_BACKEND=8001
+   HOST_PORT_FRONTEND=81
+   HOST_PORT_FRONTEND_DEV=5174
+   ```
+3. **⚠️ Importante para CORS:** Si cambiaste el puerto del frontend (p.ej a `5174`), debes agregarlo obligatoriamente a la lista de orígenes permitidos en el `.env` para que el frontend pueda comunicarse con el backend de su instancia:
+   ```env
+   API_ALLOWED_ORIGINS=["http://localhost:5174","http://127.0.0.1:5174"]
+   ```
+4. Levanta la instancia normalmente con `docker-compose`. Cada sistema tendrá su propia base de datos totalmente aislada.
 
 ## 🚀 Uso y Ejecución
 
