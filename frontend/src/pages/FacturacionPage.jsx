@@ -134,6 +134,26 @@ const FacturacionPage = () => {
   const limit = 1000;
   const queryClient = useQueryClient();
 
+  const [filtroSocios, setFiltroSocios] = useState([]);
+  const [filtroProcesos, setFiltroProcesos] = useState([]);
+  const [filtroFechaEmisionDesde, setFiltroFechaEmisionDesde] = useState('');
+  const [filtroFechaEmisionHasta, setFiltroFechaEmisionHasta] = useState('');
+  const [filtroFechaVtoDesde, setFiltroFechaVtoDesde] = useState('');
+  const [filtroFechaVtoHasta, setFiltroFechaVtoHasta] = useState('');
+  
+  const [procesando, setProcesando] = useState(false);
+  const [fechaFacturacion, setFechaFacturacion] = useState(new Date().toISOString().split('T')[0]);
+  const [minDateStr, setMinDateStr] = useState('');
+  const maxDateStr = new Date().toISOString().split('T')[0];
+  
+  const [fechaDesde, setFechaDesde] = useState('');
+  const [fechaHasta, setFechaHasta] = useState('');
+
+  const formatCurrency = (value) => {
+    if (value === null || value === undefined) return '-';
+    return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(value);
+  };
+
   const activeFilters = useMemo(() => ({
     socios: filtroSocios,
     procesos: filtroProcesos,

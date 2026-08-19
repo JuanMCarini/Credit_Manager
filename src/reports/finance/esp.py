@@ -68,6 +68,11 @@ def reporte(fecha_corte: str | date, n_periodos: int = 2, salto_meses: int = 1, 
         carteras_vendidas -= comprobantes_cobrados
         if round(importe_venta, 0) == round(comprobantes_cobrados, 0):
             venta_cartera_cobradas -= (comprobantes_cobrados - iva_venta)
+        
+        saldo_iva = 0.0
+        
+        datos.append(
+            {"Categoria": "Pasivos", "Detalle": "IVA adeudado", periodo: saldo_iva})
     
         if round(carteras_vendidas, 2) != 0.0:
             datos.append(
