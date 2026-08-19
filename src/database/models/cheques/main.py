@@ -8,6 +8,8 @@ from sqlalchemy import (
     Integer,
     String,
     event,
+    select,
+    func
 )
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship
@@ -88,11 +90,32 @@ class Cheque(Base):
     cliente_cuil = Column(String(11), ForeignKey("clientes.cuil"), nullable=False)
     
     estado = Column(Enum(EstadoCheque), default=EstadoCheque.PENDIENTE)
-
+    
     # Relaciones
     emisor = relationship("OperadorCheque", back_populates="cheques")
     banco = relationship("Banco")
     operaciones = relationship("OperacionCheque", back_populates="cheque")
+
+    @hybrid_property
+    def beneficiario(self):
+        if self.operaciones:
+            ultima_op = max(self.operaciones, key=lambda x: (x.fecha_operacion, x.id))
+            return ultima_op.operador
+        else:
+            return self.emisor
+
+    @beneficiario.expression
+    def beneficiario(cls):
+        # Subconsulta para obtener el CUIT del operador en la última operación
+        ultima_op_subq = (
+            select(OperacionCheque.operador_cuil)
+            .where(OperacionCheque.cheque_id == cls.id)
+            .order_by(OperacionCheque.fecha_operacion.desc(), OperacionCheque.id.desc())
+            .limit(1)
+            .scalar_subquery()
+        )
+        # Retorna el CUIT de la última operación o el CUIT del emisor si no hay operaciones
+        return func.coalesce(ultima_op_subq, cls.emisor_cuit)
 
 class TipoOperacionCheque(enum.Enum):
     COMPRA = "COMPRA"
@@ -152,7 +175,6 @@ class OperacionCheque(Base):
         dias_totales = self.plazo_dias + self.dias_castigo
         if dias_totales <= 0 or self.importe_neto_recibir <= 0:
             return 0.0
-            
         return (float(self.cheque.monto) / float(self.importe_neto_recibir)) ** (1 / dias_totales) - 1
 
     @hybrid_property
