@@ -11,6 +11,7 @@ from .creditos.facturacion import Factura
 from .finance.bancos import Banco, Cuenta, Concepto, Clasificacion, Movimiento, CategoriaMovimiento
 from .finance.comprobantes import Proveedor, Comprobante, EstadoComprobante
 from .finance.planes import Plan, SistemaMatematico, Denominador
+from .finance.posicion_iva import PosicionIva, EstadoPosicionIva
 from .cheques import EstadoCheque, CalificacionEmisor, OperadorCheque, Cheque, TipoOperacionCheque, OperacionCheque
 
 
@@ -23,6 +24,6 @@ __all__ = [
     "TipoRolEnum", "Rol", "Usuario", "RegistroAuditoria", "Transferencia", "DocumentoLegajo",
     "DocumentoPapeleria", "DocumentoVariable", "RepetPerson", "RepetEntity", "RepetAuditLog", "Factura",
     "Banco", "Cuenta", "Concepto", "Clasificacion", "Movimiento", "CategoriaMovimiento", "EstadoComprobante",
-    "Proveedor", "Comprobante", "Plan", "SistemaMatematico", "Denominador",
+    "Proveedor", "Comprobante", "Plan", "SistemaMatematico", "Denominador", "PosicionIva", "EstadoPosicionIva",
     "EstadoCheque", "CalificacionEmisor", "OperadorCheque", "Cheque", "TipoOperacionCheque", "OperacionCheque"
 ]

@@ -22,6 +22,7 @@
     "react-router-dom": "^7.17.0",
     "react-tabulator": "latest",
     "recharts": "^3.10.1",
+    "sweetalert2": "^11.26.25",
     "tabulator-tables": "latest",
     "xlsx": "^0.18.5",
     "zustand": "^5.0.14"

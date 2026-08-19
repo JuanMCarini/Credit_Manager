@@ -266,9 +266,12 @@ const ComprobanteModal = ({ isOpen, onClose, onSave, comprobante = null, proveed
                 <option value="E">E</option>
                 <option value="M">M</option>
                 <option value="TICKET">TICKET</option>
-                <option value="NOTA_DEBITO">NOTA DÉBITO</option>
-                <option value="NOTA_CREDITO">NOTA CRÉDITO</option>
+                <option value="NOTA_DEBITO_A">NOTA DÉBITO A</option>
+                <option value="NOTA_DEBITO_B">NOTA DÉBITO B</option>
+                <option value="NOTA_CREDITO_A">NOTA CRÉDITO A</option>
+                <option value="NOTA_CREDITO_B">NOTA CRÉDITO B</option>
                 <option value="RECIBO">RECIBO</option>
+                <option value="VEP">VEP</option>
               </select>
             </div>
             <div style={{ flex: 1 }}>

@@ -60,6 +60,7 @@ class TipoComprobante(enum.Enum):
     NOTA_CREDITO_B = "NOTA_CREDITO_B"
     RECIBO = "RECIBO"
     CUOTA = "CUOTA"
+    VEP = "VEP"
 
 class EstadoComprobante(enum.Enum):
     PENDIENTE = "pendiente"

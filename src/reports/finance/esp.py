@@ -1,10 +1,18 @@
 from dateutil.relativedelta import relativedelta
 from datetime import date
+from sqlalchemy import select, func
+
 import pandas as pd
+
 import src.reports.finance.bancos as bancos
 import src.reports.balances as balances
 import src.reports.finance.comprobantes as comprobantes
 import src.reports.finance.cartera as cartera
+
+from src.database import SessionLocal
+from src.database.models.finance.posicion_iva import PosicionIva
+from src.database.models.cheques.main import Cheque, OperacionCheque, TipoOperacionCheque
+
 
 def reporte(fecha_corte: str | date, n_periodos: int = 2, salto_meses: int = 1, tna_descuento: float = 0.0) -> pd.DataFrame:
     
@@ -68,11 +76,6 @@ def reporte(fecha_corte: str | date, n_periodos: int = 2, salto_meses: int = 1, 
         carteras_vendidas -= comprobantes_cobrados
         if round(importe_venta, 0) == round(comprobantes_cobrados, 0):
             venta_cartera_cobradas -= (comprobantes_cobrados - iva_venta)
-        
-        saldo_iva = 0.0
-        
-        datos.append(
-            {"Categoria": "Pasivos", "Detalle": "IVA adeudado", periodo: saldo_iva})
     
         if round(carteras_vendidas, 2) != 0.0:
             datos.append(
@@ -80,7 +83,55 @@ def reporte(fecha_corte: str | date, n_periodos: int = 2, salto_meses: int = 1, 
         if venta_cartera_cobradas != 0.0:
             datos.append(
                 {"Categoria": "Pasivos", "Detalle": "Valor Actual de Cartera a Ceder", periodo: venta_cartera_cobradas})
+
+        
+        saldo_iva = 0.0
+        db_session = SessionLocal()
+        try:
+            posicion = db_session.query(PosicionIva).filter(
+                PosicionIva.anio == fecha.year,
+                PosicionIva.mes == fecha.month
+            ).first()
+            if posicion:
+                saldo_iva = float(posicion.saldo_a_pagar)
+
+
+            vendidos_stmt = select(OperacionCheque.cheque_id).filter(
+                OperacionCheque.tipo_operacion == TipoOperacionCheque.VENTA,
+                OperacionCheque.fecha_operacion <= fecha
+            )
+
+            cheques_a_cobrar = db_session.query(func.sum(Cheque.monto)).join(OperacionCheque).filter(
+                OperacionCheque.tipo_operacion == TipoOperacionCheque.COMPRA,
+                OperacionCheque.fecha_operacion <= fecha,
+                Cheque.fecha_pago > fecha,
+                ~Cheque.id.in_(vendidos_stmt)
+            ).scalar()
+
+            cheques_a_pagar = db_session.query(func.sum(Cheque.monto)).join(OperacionCheque).filter(
+                OperacionCheque.tipo_operacion == TipoOperacionCheque.VENTA,
+                OperacionCheque.fecha_operacion <= fecha,
+                Cheque.fecha_pago > fecha,
+                ~Cheque.id.in_(vendidos_stmt)
+            ).scalar()
+
+            cheques_a_cobrar = float(cheques_a_cobrar or 0.0)
+            cheques_a_pagar = float(cheques_a_pagar or 0.0)
+
     
+        finally:
+            db_session.close()
+        
+        datos.append(
+            {"Categoria": "Pasivos", "Detalle": "IVA Adeudado", periodo: saldo_iva})
+
+        datos.append(
+                {"Categoria": "Activos", "Detalle": "Cheques a Cobrar", periodo: cheques_a_cobrar})
+        
+        datos.append(
+                {"Categoria": "Pasivos", "Detalle": "Cheques a Pagar", periodo: cheques_a_pagar})
+    
+
     df = pd.DataFrame(datos)
     df = df.groupby(["Categoria", "Detalle"]).sum()
     df.loc["Pasivos"] *= -1
@@ -91,7 +142,23 @@ def reporte(fecha_corte: str | date, n_periodos: int = 2, salto_meses: int = 1, 
     
     df = df.reset_index()
     df['cat_order'] = df['Categoria'].map({'Activos': 0, 'Pasivos': 1, '': 2}).fillna(3)
-    df['det_order'] = df['Detalle'].apply(lambda x: 1 if x == 'Total' else 0)
+    
+    detalle_order_map = {
+        'Bancos/Caja': 1,
+        'Inversiones (FCI)': 2,
+        'Cheques a Cobrar': 3,
+        'Capital (Cartera Activa)': 4,
+        'Interés (Cartera Activa)': 5,
+        'Ventas de Cartera a Cobrar': 6,
+        'Cheques a Pagar': 1,
+        'Valor Actual de Cartera a Ceder': 2,
+        'IVA Adeudado': 3,
+        'Planes de Ganancias': 4,
+    }
+    
+    # Asignar orden por detalle, o 99 si no está mapeado. 'Total' va siempre al final (100)
+    df['det_order'] = df['Detalle'].map(detalle_order_map).fillna(99)
+    df.loc[df['Detalle'] == 'Total', 'det_order'] = 100
     
     df = df.sort_values(['cat_order', 'det_order', 'Detalle'])
     df = df.drop(columns=['cat_order', 'det_order'])
