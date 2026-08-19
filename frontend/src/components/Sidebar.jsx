@@ -220,14 +220,12 @@ const Sidebar = () => {
             <path d="M6 12h.01M18 12h.01"></path>
           </svg>
         }>
-          <div className="nav-item" style={{ opacity: 0.6, cursor: 'not-allowed' }} title="Módulo en desarrollo">
+          <NavLink to="/cheques" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-              <line x1="12" y1="9" x2="12" y2="13"></line>
-              <line x1="12" y1="17" x2="12.01" y2="17"></line>
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
             </svg>
-            En construcción
-          </div>
+            Operar Cheques
+          </NavLink>
         </NavGroup>
         <NavGroup title="Finanzas">
           <NavLink to="/finanzas" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>

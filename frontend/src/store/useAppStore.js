@@ -5,6 +5,7 @@ const useAppStore = create((set) => ({
   provincias: [],
   empleadores: [],
   socios: [],
+  operadores: [],
   tasasYComisiones: [],
   relaciones: [],
   comercializadores: [],
@@ -22,10 +23,11 @@ const useAppStore = create((set) => ({
   fetchAuxiliares: async () => {
     set({ isLoadingAuxiliares: true, error: null });
     try {
-      const [provRes, empRes, sociosRes, tasasRes, relacionesRes, comerRes, bancosRes, cuentasRes, conceptosRes, subRes] = await Promise.all([
+      const [provRes, empRes, sociosRes, operadoresRes, tasasRes, relacionesRes, comerRes, bancosRes, cuentasRes, conceptosRes, subRes] = await Promise.all([
         axiosClient.get('/api/v1/auxiliares/provincias').catch(() => ({ data: [] })),
         axiosClient.get('/api/v1/auxiliares/empleadores').catch(() => ({ data: [] })),
         axiosClient.get('/api/v1/auxiliares/socios').catch(() => ({ data: [] })),
+        axiosClient.get('/api/cheques/operadores').catch(() => ({ data: [] })),
         axiosClient.get('/api/v1/auxiliares/tasas_y_comisiones').catch(() => ({ data: [] })),
         axiosClient.get('/api/v1/auxiliares/relaciones').catch(() => ({ data: [] })),
         axiosClient.get('/api/v1/auxiliares/comercializadores').catch(() => ({ data: [] })),
@@ -39,6 +41,7 @@ const useAppStore = create((set) => ({
         provincias: provRes.data,
         empleadores: empRes.data,
         socios: sociosRes.data,
+        operadores: operadoresRes.data,
         tasasYComisiones: tasasRes.data,
         relaciones: relacionesRes.data,
         comercializadores: comerRes.data,

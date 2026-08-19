@@ -26,6 +26,7 @@ import BcraReportsPage from './pages/BcraReportsPage';
 import FinanzasPage from './pages/FinanzasPage';
 import BancosPage from './pages/BancosPage';
 import ComprobantesPage from './pages/ComprobantesPage';
+import ChequesPage from './pages/ChequesPage';
 
 function App() {
   return (
@@ -61,6 +62,7 @@ function App() {
             <Route path="finanzas" element={<FinanzasPage />} />
             <Route path="bancos" element={<BancosPage />} />
             <Route path="comprobantes" element={<ComprobantesPage />} />
+            <Route path="cheques" element={<ChequesPage />} />
             
             {/* Rutas exclusivas Administrador */}
             <Route element={<ProtectedRoute allowedRoles={[]} />}>

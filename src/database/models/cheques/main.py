@@ -84,12 +84,12 @@ class Cheque(Base):
     fecha_pago = Column(Date, nullable=False)
     numero = Column(String(20), nullable=False)
     monto = Column(Numeric(15, 2), nullable=False)
-    
+
     emisor_cuit = Column(String(11), ForeignKey("operadores_cheques.cuit"), nullable=False)
     banco_id = Column(Integer, ForeignKey("bancos.id"), nullable=False)
-    cliente_cuil = Column(String(11), ForeignKey("clientes.cuil"), nullable=False)
-    
+
     estado = Column(Enum(EstadoCheque), default=EstadoCheque.PENDIENTE)
+    imagen_path = Column(String(255), nullable=True)
     
     # Relaciones
     emisor = relationship("OperadorCheque", back_populates="cheques")
@@ -136,13 +136,17 @@ class OperacionCheque(Base):
     operador_cuil = Column(String(11), ForeignKey("operadores_cheques.cuit"), nullable=False)
     tipo_operacion = Column(Enum(TipoOperacionCheque), nullable=False)
     tna_descuento = Column(Numeric(15, 10), nullable=False) # tasa nominal anual 130% seria 1.3000
-    plazo_dias = Column(Integer, nullable=False)
     dias_castigo = Column(Integer, nullable=False, default=0)
-    porcentaje_gastos = Column(Numeric(15, 10), nullable=False, default=0.028)
+    porcentaje_gastos = Column(Numeric(15, 10), nullable=False, default=0.025)
 
     # Relaciones
     cheque = relationship("Cheque", back_populates="operaciones")
     operador = relationship("OperadorCheque", back_populates="operaciones")
+
+    @hybrid_property
+    def plazo_dias(self):
+        diff = self.cheque.fecha_pago - self.fecha_operacion
+        return diff.days if diff.days > 0 else 0
 
     @hybrid_property
     def gastos(self):
