@@ -6,8 +6,8 @@ import calendar
 from typing import Dict, Any, List, Optional
 
 from src.database import get_db
-from src.database.models.creditos import Credito, Cuota
-from src.database.models.cobranzas import Cobranza, TipoCobranzaEnum, Proceso, EstadoProcesoEnum
+from src.database.models.creditos.creditos import Credito, Cuota
+from src.database.models.creditos.cobranzas import Cobranza, TipoCobranzaEnum, Proceso, EstadoProcesoEnum
 from src.database.models.socios import TasaYComision
 
 # Nuevos imports para Bancos
@@ -19,8 +19,8 @@ from src.api.schemas.bancos import (
     MovimientoCreate, MovimientoUpdate, MovimientoResponse, MovimientoBulkConceptoUpdate,
     ClasificacionCreate, ClasificacionUpdate, ClasificacionResponse
 )
-from src.logic.import_data.bancos.bica import import_extract as bica_import
-from src.logic.import_data.bancos.santander import import_extract as santander_import
+from src.logic.creditos.import_data.bancos.bica import import_extract as bica_import
+from src.logic.creditos.import_data.bancos.santander import import_extract as santander_import
 
 PARSERS = {
     'bica': bica_import,

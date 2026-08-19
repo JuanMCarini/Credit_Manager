@@ -24,7 +24,7 @@ from src.database.models import (
     TipoCredito,
     TipoOperacionCartera,
 )
-from src.logic.status_updater import actualizar_estados
+from src.logic.creditos.status_updater import actualizar_estados
 from src.utils.dates import normalize_date
 
 

@@ -1,7 +1,7 @@
 from typing import Optional, List
 from datetime import date, datetime
 from pydantic import BaseModel
-from src.database.models.creditos import TipoCredito
+from src.database.models.creditos.creditos import TipoCredito
 
 class TransferenciaCreate(BaseModel):
     cbu: str

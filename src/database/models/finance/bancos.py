@@ -131,3 +131,8 @@ class Movimiento(Base):
     # Relaciones
     concepto = relationship("Concepto", back_populates="movimientos")
     cuenta = relationship("Cuenta", back_populates="movimientos")
+    cheques = relationship("Cheque", back_populates="movimiento")
+
+    @property
+    def cheque_id(self):
+        return self.cheques[0].id if self.cheques else None

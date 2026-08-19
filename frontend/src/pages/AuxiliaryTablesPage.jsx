@@ -4,7 +4,7 @@ import axiosClient from '../api/axiosClient';
 import ExportExcelButton from '../components/ExportExcelButton';
 
 const AuxiliaryTablesPage = () => {
-  const { provincias, empleadores, socios, tasasYComisiones, relaciones, comercializadores, bancos, cuentas, conceptos, clasificaciones, fetchAuxiliares } = useAppStore();
+  const { provincias, empleadores, socios, operadores, tasasYComisiones, relaciones, comercializadores, bancos, cuentas, conceptos, clasificaciones, fetchAuxiliares } = useAppStore();
   
   const [activeTable, setActiveTable] = useState('socios');
   const [isCreating, setIsCreating] = useState(false);
@@ -48,6 +48,7 @@ const AuxiliaryTablesPage = () => {
   
   const tablesMap = {
     provincias: { name: 'Provincias', data: provincias, endpoint: 'provincias', schema: ['id', 'nombre'] },
+    operadores: { name: 'Operadores de Cheques', data: operadores, endpoint: 'operadores', basePath: '/api/cheques', idField: 'cuit', schema: ['cuit', 'razon_social', 'calificacion', 'telefono', 'email'] },
     empleadores: { name: 'Empleadores', data: empleadores, endpoint: 'empleadores', schema: ['id', 'cuit', 'razon_social', 'es_pasivo', 'domicilio_calle', 'domicilio_nro', 'domicilio_piso', 'domicilio_depto', 'id_provincia', 'id_codigo_postal', 'localidad', 'telefono', 'socio_comercial_id'] },
     socios: { name: 'Socios Comerciales', data: socios, endpoint: 'socios', schema: ['id', 'razon_social', 'cuit', 'domicilio_legal', 'contacto_nombre', 'mail', 'telefono', 'dia_corte', 'cbu', 'nro_cuenta_bancaria', 'nombre_banco', 'anticipo_vigente'] },
     tasasYComisiones: { name: 'Tasas y Comisiones', data: tasasYComisiones, endpoint: 'tasas_y_comisiones', schema: ['id', 'fecha', 'estado', 'socio_originador_id', 'socio_intermediario_id', 'colocacion_originador', 'colocacion_intermediario', 'cobranza_originador', 'cobranza_intermediario', 'colocacion_propia', 'gasto_1_porcentaje', 'gasto_1_socio_id', 'gasto_2_porcentaje', 'gasto_2_socio_id', 'porcentaje_sellado', 'plazo', 'tna_c_iva'] },
@@ -171,7 +172,8 @@ const AuxiliaryTablesPage = () => {
         setFeedback({ type: 'success', message: 'Registro creado exitosamente.' });
       } else {
         const basePath = currentTableConfig.basePath || '/api/v1/auxiliares';
-        await axiosClient.put(`${basePath}/${currentTableConfig.endpoint}/${editingRecord.id}`, cleanedData);
+        const idField = currentTableConfig.idField || 'id';
+        await axiosClient.put(`${basePath}/${currentTableConfig.endpoint}/${editingRecord[idField]}`, cleanedData);
         setFeedback({ type: 'success', message: 'Registro actualizado exitosamente.' });
       }
       await fetchAuxiliares();
@@ -402,7 +404,7 @@ const AuxiliaryTablesPage = () => {
                           <button className="btn-secondary" style={{ padding: '4px 8px', fontSize: '14px' }} onClick={() => openEditModal(row)} title="Editar">
                             ✏️
                           </button>
-                          <button className="btn-secondary" style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--danger-color)' }} onClick={() => handleDelete(row.id)} title="Eliminar">
+                          <button className="btn-secondary" style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--danger-color)' }} onClick={() => handleDelete(row[currentTableConfig.idField || 'id'])} title="Eliminar">
                             🗑️
                           </button>
                         </div>
@@ -447,7 +449,7 @@ const AuxiliaryTablesPage = () => {
             <form onSubmit={handleEditSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
                 {currentTableConfig.schema.map(col => {
-                  if (col === 'id') return null;
+                  if (col === 'id' && currentTableConfig.endpoint !== 'operadores') return null;
                   if (col === 'anticipo_vigente') return null;
                   
                   const relation = relationMaps[col];
@@ -538,6 +540,17 @@ const AuxiliaryTablesPage = () => {
                             {opt[relation.labelKey]}
                           </option>
                         ))}
+                      </select>
+                    );
+                  } else if (col === 'calificacion') {
+                    inputElement = (
+                      <select
+                        value={editFormData[col] ?? ''} 
+                        onChange={(e) => handleEditChange(col, e.target.value)}
+                        className="input-field" required
+                      >
+                        <option value="">Seleccione...</option>
+                        {['EXCELENTE', 'BUENO', 'REGULAR', 'MALO', 'RECHAZADO'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
                       </select>
                     );
                   } else if (col === 'estado') {

@@ -50,7 +50,7 @@ def calcular_gastos_credito(credito) -> float:
     return gastos
 
 from src.database import get_db, SocioComercial, Credito, Cliente, Cartera
-from src.database.models.papeleria import DocumentoPapeleria, DocumentoVariable
+from src.database.models.creditos.papeleria import DocumentoPapeleria, DocumentoVariable
 from src.config import get_company_data
 
 class VariableItem(BaseModel):
@@ -224,7 +224,7 @@ def _auto_map_variables(docx_path: str, doc_id: int, db: Session):
     if not placeholders:
         return
         
-    from src.database.models.papeleria import DocumentoVariable
+    from src.database.models.creditos.papeleria import DocumentoVariable
     existing = db.query(DocumentoVariable).filter(DocumentoVariable.documento_id == doc_id).all()
     existing_placeholders = {v.placeholder for v in existing}
     
@@ -605,7 +605,7 @@ def resolve_system_field(credito: Credito, field: str):
     elif field == "cliente.repet":
         return "SÍ" if credito.cliente.repet else "NO"
     elif field in ["cliente.repet_id", "cliente.repet_fecha_consulta", "cliente.repet_estado"]:
-        from src.database.models.repet import RepetAuditLog
+        from src.database.models.creditos.repet import RepetAuditLog
         from sqlalchemy.orm import object_session
         db = object_session(credito)
         if not db:
@@ -972,7 +972,7 @@ def _generar_pdf_for_credito(credito: Credito, db: Session) -> str:
 
     import tempfile
     from pypdf import PdfWriter
-    from src.logic.legajos import process_document
+    from src.logic.creditos.legajos import process_document
 
     merger = PdfWriter()
     temp_files = []
@@ -1050,7 +1050,7 @@ def generar_papeleria_cartera(cartera_id: int, formato: str = 'pdf', db: Session
         raise HTTPException(status_code=400, detail="No hay documentos de papelería de ventas de cartera configurados para este socio (o genéricos).")
         
     import tempfile
-    from src.logic.legajos import process_document, process_docx
+    from src.logic.creditos.legajos import process_document, process_docx
     from pypdf import PdfWriter
     
     has_pythoncom = False

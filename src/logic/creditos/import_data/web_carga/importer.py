@@ -12,7 +12,7 @@ from src.database.models import (
 )
 from src.database.models.socios import TasaYComision
 from sqlalchemy import func
-from src.logic.origination import LoanOriginator
+from src.logic.creditos.origination import LoanOriginator
 from .parser import leer_archivo_web_carga
 
 logger = logging.getLogger(__name__)

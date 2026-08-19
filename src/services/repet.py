@@ -5,7 +5,7 @@ from unidecode import unidecode
 from rapidfuzz import process, fuzz
 from typing import Dict, Optional
 
-from src.database.models.repet import RepetPerson, RepetEntity, RepetAuditLog
+from src.database.models.creditos.repet import RepetPerson, RepetEntity, RepetAuditLog
 
 logger = logging.getLogger(__name__)
 

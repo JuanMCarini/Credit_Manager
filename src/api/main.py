@@ -28,6 +28,7 @@ from src.api.routes.bcra import router as bcra_router
 from src.api.routes.finanzas import router as finanzas_router
 from src.api.routes.comprobantes import router as comprobantes_router
 from src.api.routes.planes import router as planes_router
+from src.api.routes.cheques import router as cheques_router
 from src.config import API_SETTINGS
 from src.database import Base, engine
 
@@ -141,6 +142,7 @@ app.include_router(bcra_router)
 app.include_router(finanzas_router)
 app.include_router(comprobantes_router)
 app.include_router(planes_router)
+app.include_router(cheques_router)
 
 # -------------------------------------------------------------------
 # Frontend (Ahora servido por Nginx)

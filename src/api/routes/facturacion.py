@@ -4,10 +4,10 @@ from pydantic import BaseModel
 from typing import List, Optional
 from sqlalchemy.orm import Session, joinedload
 from src.database import get_db
-from src.database.models.cobranzas import Cobranza
-from src.database.models.facturacion import Factura
-from src.database.models.creditos import Cuota, Credito
-from src.logic.facturacion import procesar_facturacion_pendiente
+from src.database.models.creditos.cobranzas import Cobranza
+from src.database.models.creditos.facturacion import Factura
+from src.database.models.creditos.creditos import Cuota, Credito
+from src.logic.creditos.facturacion import procesar_facturacion_pendiente
 import pandas as pd
 import io
 import zipfile

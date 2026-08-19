@@ -6,11 +6,11 @@ from datetime import date
 import os
 import re
 import shutil
-from src.database.models.clientes import Cliente, SexoEnum, EstadoClienteEnum, Provincia, Empleador
-from src.database.models.creditos import Credito, Cuota, TipoCredito, EstadoCredito, EstadoCuota, DocumentoLegajo, Transferencia
+from src.database.models.creditos.clientes import Cliente, SexoEnum, EstadoClienteEnum, Provincia, Empleador
+from src.database.models.creditos.creditos import Credito, Cuota, TipoCredito, EstadoCredito, EstadoCuota, DocumentoLegajo, Transferencia
 from src.database.models.socios import SocioComercial, TasaYComision
 from sqlalchemy import func
-from src.logic.amortization import AmortizationEngine
+from src.logic.creditos.amortization import AmortizationEngine
 from src.config import get_company_data
 def map_sexo(sexo_str: str) -> SexoEnum:
     if pd.isna(sexo_str):
