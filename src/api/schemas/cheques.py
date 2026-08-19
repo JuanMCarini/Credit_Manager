@@ -32,8 +32,10 @@ class ChequeResponse(ChequeBase):
     id: int
     estado: EstadoCheque
     es_propio: bool = False
+    is_beneficiario_empresa: bool = False
     emisor: OperadorChequeResponse
     beneficiario: OperadorChequeResponse
+    movimiento_id: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -62,3 +64,6 @@ class OperacionChequeResponse(OperacionChequeBase):
     tea: float
     
     model_config = ConfigDict(from_attributes=True)
+
+class ChequeAsignarMovimiento(BaseModel):
+    movimiento_id: int

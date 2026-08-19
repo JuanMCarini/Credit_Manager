@@ -139,5 +139,6 @@ class MovimientoResponse(MovimientoBase):
     cuenta: Optional[CuentaResponse] = None
     monto_asignado: Optional[float] = 0.0
     saldo_disponible: Optional[float] = 0.0
+    cheque_id: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)

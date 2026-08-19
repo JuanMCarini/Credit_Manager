@@ -27,6 +27,11 @@ const ChequesPage = () => {
   const [editingOperacionId, setEditingOperacionId] = useState(null);
   const [minFechaOperacion, setMinFechaOperacion] = useState('');
 
+  const [showModalMovimiento, setShowModalMovimiento] = useState(false);
+  const [movimientos, setMovimientos] = useState([]);
+  const [loadingMovimientos, setLoadingMovimientos] = useState(false);
+  const [movimientoSearch, setMovimientoSearch] = useState('');
+
   // Filtros y Ordenamiento
   const [filter, setFilter] = useState({ ID: '', Emisor: [], Beneficiario: [], Numero: '', Pago: [], Estado: [] });
   const [sortConfig, setSortConfig] = useState({ key: 'ID', direction: 'desc' });
@@ -244,6 +249,68 @@ const ChequesPage = () => {
         if (showListadoOperaciones) {
            abrirListadoOperaciones(selectedCheque);
         }
+      } else {
+        alert(await res.text());
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const fetchMovimientos = async () => {
+    setLoadingMovimientos(true);
+    try {
+      // Pedimos los ultimos movimientos (ej: limite de 200 para mostrar en la modal)
+      const res = await fetch(`/api/finanzas/movimientos?limit=200`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMovimientos(data.items || []);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingMovimientos(false);
+    }
+  };
+
+  const abrirModalMovimiento = (cheque) => {
+    setSelectedCheque(cheque);
+    setShowModalMovimiento(true);
+    fetchMovimientos();
+  };
+
+  const handleAsignarMovimiento = async (movimientoId) => {
+    try {
+      const res = await fetch(`/api/cheques/${selectedCheque.id}/asignar_movimiento`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ movimiento_id: movimientoId })
+      });
+      if (res.ok) {
+        setShowModalMovimiento(false);
+        fetchData();
+      } else {
+        alert(await res.text());
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleDesasignarMovimiento = async (cheque) => {
+    if (!window.confirm(`¿Seguro que deseás desvincular el movimiento del cheque #${cheque.numero}?`)) return;
+    try {
+      const res = await fetch(`/api/cheques/${cheque.id}/desasignar_movimiento`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        fetchData();
       } else {
         alert(await res.text());
       }
@@ -471,6 +538,44 @@ const ChequesPage = () => {
                 <td><span className={`status-badge status-${c.estado.toLowerCase()}`}>{c.estado}</span></td>
                 <td>
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'nowrap', alignItems: 'center' }}>
+                    {c.movimiento_id ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span className="badge" style={{ backgroundColor: 'var(--success-color)', fontSize: '10px' }} title={`Movimiento Bancario ID: ${c.movimiento_id}`}>
+                          🏦 Vinculado
+                        </span>
+                        <button 
+                          className="btn-secondary"
+                          style={{ padding: '2px 6px', fontSize: '12px', color: 'var(--danger-color)', border: 'none', background: 'transparent' }}
+                          title="Desvincular Movimiento"
+                          onClick={() => handleDesasignarMovimiento(c)}
+                        >
+                          ✖
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        {c.es_propio && c.estado !== 'DEBITADO' && (
+                          <button 
+                            className="btn-secondary"
+                            style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--danger-color)' }}
+                            title="Debitar Cheque"
+                            onClick={() => abrirModalMovimiento(c)}
+                          >
+                            💸
+                          </button>
+                        )}
+                        {!c.es_propio && c.is_beneficiario_empresa && c.estado !== 'ACREDITADO' && (
+                          <button 
+                            className="btn-secondary"
+                            style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--success-color)' }}
+                            title="Acreditar Cheque"
+                            onClick={() => abrirModalMovimiento(c)}
+                          >
+                            💰
+                          </button>
+                        )}
+                      </>
+                    )}
                     <button 
                       className="btn-secondary"
                       style={{ padding: '4px 8px', fontSize: '14px' }}
@@ -900,6 +1005,83 @@ const ChequesPage = () => {
                 </table>
                   );
                 })()}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      {/* MODAL ASIGNAR MOVIMIENTO */}
+      {showModalMovimiento && selectedCheque && (
+        <div className="modal-overlay">
+          <div className="modal-content glass-panel" style={{ maxWidth: '800px', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div className="modal-header" style={{ marginBottom: '20px' }}>
+              <h2>Asignar Movimiento Bancario - Cheque #{selectedCheque.numero}</h2>
+              <button className="btn-secondary" onClick={() => setShowModalMovimiento(false)}>Cerrar</button>
+            </div>
+            
+            <div style={{ marginBottom: '15px' }}>
+              <input 
+                type="text" 
+                className="form-control" 
+                placeholder="Buscar movimiento por descripción, monto..." 
+                value={movimientoSearch}
+                onChange={(e) => setMovimientoSearch(e.target.value)}
+              />
+            </div>
+            
+            {loadingMovimientos ? (
+              <p>Cargando movimientos bancarios...</p>
+            ) : movimientos.length === 0 ? (
+              <p>No se encontraron movimientos bancarios recientes.</p>
+            ) : (
+              <div className="table-responsive" style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                <table className="data-table" style={{ width: '100%', fontSize: '13px' }}>
+                  <thead style={{ position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-color)' }}>
+                    <tr>
+                      <th>Fecha</th>
+                      <th>Banco/Cuenta</th>
+                      <th>Concepto</th>
+                      <th>Nro. Comp</th>
+                      <th>Monto</th>
+                      <th>Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {movimientos
+                      .filter(m => {
+                        const searchLower = movimientoSearch.toLowerCase();
+                        return (
+                          (m.descripcion || '').toLowerCase().includes(searchLower) ||
+                          (m.monto || '').toString().includes(searchLower) ||
+                          (m.concepto?.name || '').toLowerCase().includes(searchLower) ||
+                          (m.nro_comprobante || '').toLowerCase().includes(searchLower)
+                        );
+                      })
+                      .map(m => (
+                      <tr key={m.id}>
+                        <td>{m.fecha?.split('-').reverse().join('/')}</td>
+                        <td>{m.cuenta?.banco?.nombre_banco} ({m.cuenta?.nro})</td>
+                        <td>
+                          {m.concepto?.name}
+                          {m.descripcion && <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{m.descripcion}</div>}
+                        </td>
+                        <td>{m.nro_comprobante || '-'}</td>
+                        <td style={{ color: m.monto < 0 ? 'var(--danger-color)' : 'var(--success-color)', fontWeight: 'bold' }}>
+                          ${Number(m.monto).toLocaleString('es-AR', {minimumFractionDigits: 2})}
+                        </td>
+                        <td>
+                          <button 
+                            className="btn btn-primary" 
+                            style={{ padding: '4px 10px', fontSize: '12px' }}
+                            onClick={() => handleAsignarMovimiento(m.id)}
+                          >
+                            Seleccionar
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>

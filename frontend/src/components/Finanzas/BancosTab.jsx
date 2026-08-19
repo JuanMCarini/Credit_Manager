@@ -4,6 +4,7 @@ import axiosClient from '../../api/axiosClient';
 import CuentaModal from './CuentaModal';
 import MovimientoModal from './MovimientoModal';
 import MovimientoPagoModal from './MovimientoPagoModal';
+import ModalAsignarCheque from './ModalAsignarCheque';
 import ExcelDateFilter from '../ExcelDateFilter';
 import ExcelListFilter from '../ExcelListFilter';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
@@ -226,6 +227,16 @@ const BancosTab = () => {
       }
     }
   };
+
+  // ----- MODAL ASIGNAR CHEQUE -----
+  const [isChequeModalOpen, setIsChequeModalOpen] = useState(false);
+  const [selectedMovimientoForCheque, setSelectedMovimientoForCheque] = useState(null);
+
+  const handleOpenChequeModal = (mov) => {
+    setSelectedMovimientoForCheque(mov);
+    setIsChequeModalOpen(true);
+  };
+  // ---------------------------------
 
   const handleDeleteMovimiento = async (id) => {
     if (!window.confirm("¿Está seguro de que desea eliminar este movimiento?")) return;
@@ -537,6 +548,15 @@ const BancosTab = () => {
                               💸
                             </button>
                           )}
+                          {mov.cheque_id ? (
+                            <span className="badge" style={{ backgroundColor: 'var(--success-color)', fontSize: '10px' }} title={`Cheque ID: ${mov.cheque_id}`}>
+                              🏦 Cheque {mov.cheque_id}
+                            </span>
+                          ) : (
+                            <button className="btn-secondary" onClick={() => handleOpenChequeModal(mov)} title="Asignar Cheque" style={{ padding: '4px 8px', fontSize: '14px' }}>
+                              🪪
+                            </button>
+                          )}
                           <button className="btn-secondary" onClick={() => handleEditMovimiento(mov)} title="Editar" style={{ padding: '4px 8px', fontSize: '14px' }}>
                             ✏️
                           </button>
@@ -607,6 +627,16 @@ const BancosTab = () => {
         onSave={() => {
           setIsPagoModalOpen(false);
           fetchKpis();
+          queryClient.invalidateQueries({ queryKey: ['movimientos'] });
+        }}
+      />
+
+      <ModalAsignarCheque
+        isOpen={isChequeModalOpen}
+        onClose={() => setIsChequeModalOpen(false)}
+        movimiento={selectedMovimientoForCheque}
+        onSave={() => {
+          setIsChequeModalOpen(false);
           queryClient.invalidateQueries({ queryKey: ['movimientos'] });
         }}
       />

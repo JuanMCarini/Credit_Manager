@@ -24,6 +24,7 @@ class EstadoCheque(enum.Enum):
     ACREDITADO = "ACREDITADO"
     VENDIDO = "VENDIDO"
     COMPRADO = "COMPRADO"
+    DEBITADO = "DEBITADO"
 
 
 class CalificacionEmisor(enum.Enum):
@@ -90,11 +91,13 @@ class Cheque(Base):
 
     estado = Column(Enum(EstadoCheque), default=EstadoCheque.PENDIENTE)
     imagen_path = Column(String(255), nullable=True)
+    movimiento_id = Column(Integer, ForeignKey("movimientos.id", ondelete="SET NULL"), nullable=True)
     
     # Relaciones
     emisor = relationship("OperadorCheque", back_populates="cheques")
     banco = relationship("Banco")
     operaciones = relationship("OperacionCheque", back_populates="cheque")
+    movimiento = relationship("Movimiento", back_populates="cheques")
 
     @hybrid_property
     def beneficiario(self):
