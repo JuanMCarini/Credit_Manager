@@ -430,14 +430,25 @@ async def upload_documento(credito_id: int, file: UploadFile = File(...), transf
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
             
-        nuevo_doc = DocumentoLegajo(
-            credito_id=credito_id,
-            nombre_archivo=file.filename,
-            ruta_archivo=file_path,
-            tipo_archivo=file.content_type,
-            transferencia_id=transferencia_id
-        )
-        db.add(nuevo_doc)
+        doc_existente = db.query(DocumentoLegajo).filter(
+            DocumentoLegajo.credito_id == credito_id,
+            DocumentoLegajo.nombre_archivo == file.filename
+        ).first()
+
+        if doc_existente:
+            doc_existente.ruta_archivo = file_path
+            doc_existente.tipo_archivo = file.content_type
+            doc_existente.transferencia_id = transferencia_id
+            nuevo_doc = doc_existente
+        else:
+            nuevo_doc = DocumentoLegajo(
+                credito_id=credito_id,
+                nombre_archivo=file.filename,
+                ruta_archivo=file_path,
+                tipo_archivo=file.content_type,
+                transferencia_id=transferencia_id
+            )
+            db.add(nuevo_doc)
         
         if es_legajo_firmado and credito.estado in (EstadoCredito.APROBADO, "APROBADO", "EstadoCredito.APROBADO"):
             credito.estado = EstadoCredito.FIRMADO.value
@@ -574,6 +585,9 @@ async def upload_batch_documentos(files: List[UploadFile] = File(...), db: Sessi
             # 1. Match Transferencia -> T-{ID}-{NUM}.ext (tolerates spaces)
             transfer_match = re.search(r"^T\s*-\s*(.+?)\s*-\s*(\d+)$", name_without_ext, re.IGNORECASE)
             
+            # 1.5 Match Sistema Venta -> Legajo Nro. {ID} - ...
+            sistema_venta_match = re.search(r"^Legajo Nro\.?\s+(\d+)\s+-", name_without_ext, re.IGNORECASE)
+            
             credito = None
             transferencia = None
 
@@ -598,6 +612,19 @@ async def upload_batch_documentos(files: List[UploadFile] = File(...), db: Sessi
                     transferencia = transferencias[transf_index - 1]
                 else:
                     errores.append({"archivo": filename, "error": f"Transferencia índice {transf_index} no válida para crédito {credito.id}"})
+                    return
+
+            elif sistema_venta_match:
+                cred_id_str = sistema_venta_match.group(1)
+                
+                # Find credit
+                if cred_id_str.isdigit():
+                    credito = db.query(Credito).filter(or_(Credito.id == int(cred_id_str), Credito.id_externo == cred_id_str)).first()
+                else:
+                    credito = db.query(Credito).filter(Credito.id_externo == cred_id_str).first()
+                    
+                if not credito:
+                    errores.append({"archivo": filename, "error": f"Crédito no encontrado para '{cred_id_str}' (Legajo Nro)"})
                     return
 
             else:
@@ -627,14 +654,26 @@ async def upload_batch_documentos(files: List[UploadFile] = File(...), db: Sessi
             with open(file_path, "wb") as f:
                 f.write(file_bytes)
 
-            nuevo_doc = DocumentoLegajo(
-                credito_id=credito.id,
-                nombre_archivo=filename,
-                ruta_archivo=file_path,
-                tipo_archivo=content_type,
-                transferencia_id=transferencia.id if transferencia else None
-            )
-            db.add(nuevo_doc)
+            doc_existente = db.query(DocumentoLegajo).filter(
+                DocumentoLegajo.credito_id == credito.id,
+                DocumentoLegajo.nombre_archivo == filename
+            ).first()
+
+            if doc_existente:
+                doc_existente.ruta_archivo = file_path
+                doc_existente.tipo_archivo = content_type
+                doc_existente.transferencia_id = transferencia.id if transferencia else None
+                nuevo_doc = doc_existente
+            else:
+                nuevo_doc = DocumentoLegajo(
+                    credito_id=credito.id,
+                    nombre_archivo=filename,
+                    ruta_archivo=file_path,
+                    tipo_archivo=content_type,
+                    transferencia_id=transferencia.id if transferencia else None
+                )
+                db.add(nuevo_doc)
+                db.flush()
             
             # Check state transition to ACTIVO
             if credito.estado in (EstadoCredito.APROBADO, EstadoCredito.FIRMADO, "APROBADO", "FIRMADO", "EstadoCredito.APROBADO", "EstadoCredito.FIRMADO"):

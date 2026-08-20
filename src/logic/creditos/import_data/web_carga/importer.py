@@ -329,8 +329,10 @@ def procesar_documentos_web_carga(file_paths: list, db_session: Session, upload_
             # Formatos esperados:
             # Transferencia: ID_WEB_CARGA.INDEX.ext
             # Legajo: ID_WEB_CARGA - LINEA - NOMBRE.ext
+            # Legajo Sistema Venta: Legajo Nro. ID - ...
             transfer_match = re.search(r"^(\d+)\.(\d+)$", name_without_ext)
             legajo_match = re.search(r"^(\d+)\s*-\s*", name_without_ext)
+            sistema_venta_match = re.search(r"^Legajo Nro\.?\s+(\d+)\s+-", name_without_ext, re.IGNORECASE)
 
             id_externo = None
             transf_index = None
@@ -339,6 +341,9 @@ def procesar_documentos_web_carga(file_paths: list, db_session: Session, upload_
             if transfer_match:
                 id_externo = transfer_match.group(1)
                 transf_index = int(transfer_match.group(2))
+            elif sistema_venta_match:
+                id_externo = sistema_venta_match.group(1)
+                is_legajo = True
             elif legajo_match:
                 id_externo = legajo_match.group(1)
                 is_legajo = True
@@ -365,14 +370,25 @@ def procesar_documentos_web_carga(file_paths: list, db_session: Session, upload_
             dest_path = os.path.join(upload_dir, filename)
             shutil.copy2(file_path, dest_path)
 
-            doc = DocumentoLegajo(
-                nombre_archivo=filename,
-                ruta_archivo=dest_path,
-                tipo_archivo="application/pdf" if ext.lower() == ".pdf" else "application/octet-stream",
-                credito_id=credito.id,
-                transferencia_id=transferencia.id if transferencia else None
-            )
-            db_session.add(doc)
+            doc_existente = db_session.query(DocumentoLegajo).filter(
+                DocumentoLegajo.credito_id == credito.id,
+                DocumentoLegajo.nombre_archivo == filename
+            ).first()
+
+            if doc_existente:
+                doc_existente.ruta_archivo = dest_path
+                doc_existente.tipo_archivo = "application/pdf" if ext.lower() == ".pdf" else "application/octet-stream"
+                doc_existente.transferencia_id = transferencia.id if transferencia else None
+            else:
+                doc = DocumentoLegajo(
+                    nombre_archivo=filename,
+                    ruta_archivo=dest_path,
+                    tipo_archivo="application/pdf" if ext.lower() == ".pdf" else "application/octet-stream",
+                    credito_id=credito.id,
+                    transferencia_id=transferencia.id if transferencia else None
+                )
+                db_session.add(doc)
+                db_session.flush()
             procesados.append(filename)
 
         except Exception as e:

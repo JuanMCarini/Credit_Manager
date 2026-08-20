@@ -27,6 +27,18 @@ def mapear_legajos_a_clave_externa(cql_data) -> pd.DataFrame:
     # Recorremos todos los archivos en la carpeta
     for filename in os.listdir(legajos_path):
         if filename.lower().endswith('.pdf'):
+            # Verificamos si es el formato exportado por el sistema: "Legajo Nro. {id_interno} - ..."
+            match_legajo_nro = re.match(r'^Legajo Nro\.?\s+(\d+)\s+-', filename, re.IGNORECASE)
+            if match_legajo_nro:
+                id_vendedor = match_legajo_nro.group(1)
+                resultados.append({
+                    "archivo_pdf": filename,
+                    "ruta_completa": os.path.join(legajos_path, filename),
+                    "id_inventario": id_vendedor,
+                    "clave_externa": id_vendedor
+                })
+                continue
+
             # Dividimos el nombre por el guion para extraer la primera parte
             partes = filename.split('-')
             if len(partes) > 0:
@@ -182,15 +194,25 @@ def importar_documentos_masivamente(cql_data):
             file_path_abs = os.path.join(UPLOAD_DIR_ABS, nuevo_nombre)
             shutil.copy2(row['ruta_completa'], file_path_abs)
             
-            # Insertar registro en Base de Datos
-            doc = DocumentoLegajo(
-                credito_id=credito.id,
-                nombre_archivo=row['archivo_pdf'],
-                ruta_archivo=file_path_abs,
-                tipo_archivo="application/pdf",
-                transferencia_id=None
-            )
-            db.add(doc)
+            # Insertar o actualizar registro en Base de Datos
+            doc_existente = db.query(DocumentoLegajo).filter(
+                DocumentoLegajo.credito_id == credito.id,
+                DocumentoLegajo.nombre_archivo == row['archivo_pdf']
+            ).first()
+
+            if doc_existente:
+                doc_existente.ruta_archivo = file_path_abs
+                doc_existente.tipo_archivo = "application/pdf"
+                doc_existente.transferencia_id = None
+            else:
+                doc = DocumentoLegajo(
+                    credito_id=credito.id,
+                    nombre_archivo=row['archivo_pdf'],
+                    ruta_archivo=file_path_abs,
+                    tipo_archivo="application/pdf",
+                    transferencia_id=None
+                )
+                db.add(doc)
             procesados += 1
             
         # Guardamos avance
@@ -229,15 +251,25 @@ def importar_documentos_masivamente(cql_data):
             file_path_abs = os.path.join(UPLOAD_DIR_ABS, nuevo_nombre)
             shutil.copy2(row['ruta_completa'], file_path_abs)
             
-            # Insertar en BD
-            doc_transf = DocumentoLegajo(
-                credito_id=credito.id,
-                nombre_archivo=row['archivo_pdf'],
-                ruta_archivo=file_path_abs,
-                tipo_archivo="application/pdf",
-                transferencia_id=transferencia_id
-            )
-            db.add(doc_transf)
+            # Insertar o actualizar en BD
+            doc_existente = db.query(DocumentoLegajo).filter(
+                DocumentoLegajo.credito_id == credito.id,
+                DocumentoLegajo.nombre_archivo == row['archivo_pdf']
+            ).first()
+
+            if doc_existente:
+                doc_existente.ruta_archivo = file_path_abs
+                doc_existente.tipo_archivo = "application/pdf"
+                doc_existente.transferencia_id = transferencia_id
+            else:
+                doc_transf = DocumentoLegajo(
+                    credito_id=credito.id,
+                    nombre_archivo=row['archivo_pdf'],
+                    ruta_archivo=file_path_abs,
+                    tipo_archivo="application/pdf",
+                    transferencia_id=transferencia_id
+                )
+                db.add(doc_transf)
             
             # Forzamos flush para evaluar los estados en tiempo real
             db.flush()
