@@ -9,6 +9,7 @@ const LoginPage = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [logoError, setLogoError] = useState(false);
   const navigate = useNavigate();
   const login = useAuthStore((state) => state.login);
 
@@ -68,21 +69,31 @@ const LoginPage = () => {
         boxSizing: 'border-box'
       }}>
         
-        <div style={{
-          width: '64px',
-          height: '64px',
-          backgroundColor: 'rgba(59, 130, 246, 0.1)',
-          borderRadius: '16px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          marginBottom: '24px',
-          border: '1px solid rgba(59, 130, 246, 0.2)'
-        }}>
-          <LogIn size={32} color="var(--accent-primary)" />
-        </div>
-        
-        <h2 style={{ marginBottom: '8px', color: 'var(--text-primary)' }}>Credit Manager</h2>
+        {!logoError ? (
+          <img 
+            src="/static/logo.png" 
+            alt="App Logo" 
+            style={{ maxHeight: '100px', maxWidth: '100%', marginBottom: '24px', objectFit: 'contain' }}
+            onError={() => setLogoError(true)}
+          />
+        ) : (
+          <>
+            <div style={{
+              width: '64px',
+              height: '64px',
+              backgroundColor: 'rgba(59, 130, 246, 0.1)',
+              borderRadius: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: '24px',
+              border: '1px solid rgba(59, 130, 246, 0.2)'
+            }}>
+              <LogIn size={32} color="var(--accent-primary)" />
+            </div>
+            <h2 style={{ marginBottom: '8px', color: 'var(--text-primary)' }}>Credit Manager</h2>
+          </>
+        )}
         <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '32px', textAlign: 'center' }}>
           Ingresa tus credenciales para continuar
         </p>
