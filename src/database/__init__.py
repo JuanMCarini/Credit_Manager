@@ -12,6 +12,7 @@ from .connection import Base, SessionLocal, engine, get_db
 from .seed_admin import seed_admin
 from .seed_geography import seed_provincias
 from .seed_conceptos import seed_conceptos
+from .seed_bancos import seed_bancos
 
 # Import all ORM models to ensure they are registered with SQLAlchemy's Base metadata
 from .models import (
@@ -91,6 +92,7 @@ __all__ = [
     "seed_admin",
     "seed_provincias",
     "seed_conceptos",
+    "seed_bancos",
     "Transferencia",
     "DocumentoLegajo",
     "Comercializador",

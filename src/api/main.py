@@ -74,12 +74,14 @@ def init_main_company():
 from src.database.seed_admin import seed_admin
 from src.database.seed_geography import seed_provincias
 from src.database.seed_conceptos import seed_conceptos
+from src.database.seed_bancos import seed_bancos
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
     init_main_company()
     seed_admin()
+    seed_bancos()
     
     try:
         with SessionLocal() as db:
