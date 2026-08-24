@@ -19,14 +19,50 @@ def import_extract(
 
     session = SessionLocal()
 
-    # Santander usa un archivo de texto separado por tabs con extensión .xls
-    # y encoding latin1, ignorando las primeras 4 filas de cabecera.
-    df_org = pd.read_csv(file_or_path, sep='\t', encoding='latin1', skiprows=4)
-    # Ignoramos filas que no tengan Fecha válida (pueden ser totales al final)
-    df = df_org.dropna(subset=["Fecha"]).copy()
+    # Función auxiliar para leer y rebobinar si es un archivo en memoria
+    def read_format(sep, skiprows, encoding):
+        if hasattr(file_or_path, 'seek'):
+            file_or_path.seek(0)
+        return pd.read_csv(file_or_path, sep=sep, encoding=encoding, skiprows=skiprows)
+
+    df_org = None
     
+    # Intentamos varias combinaciones de formato (viejo TSV vs nuevo CSV)
+    formatos = [
+        {'sep': '\t', 'skiprows': 4, 'encoding': 'latin1'}, # Formato viejo histórico
+        {'sep': ';', 'skiprows': 4, 'encoding': 'latin1'},  # Formato CSV nuevo (;) con 4 filas de cabecera
+        {'sep': ';', 'skiprows': 0, 'encoding': 'latin1'},  # Formato CSV nuevo estándar (;)
+        {'sep': ',', 'skiprows': 0, 'encoding': 'latin1'},  # Formato CSV alternativo (,)
+        {'sep': ';', 'skiprows': 4, 'encoding': 'utf-8'},   # Formato CSV utf-8 con cabeceras
+    ]
+
+    for fmt in formatos:
+        try:
+            df_tmp = read_format(**fmt)
+            # Limpiamos nombres de columnas por si vienen con espacios
+            df_tmp.columns = df_tmp.columns.str.strip()
+            if "Fecha" in df_tmp.columns:
+                df_org = df_tmp
+                break
+        except Exception:
+            continue
+            
+    if df_org is None:
+        # Fallback para mostrar el error real de qué columnas encontró
+        if hasattr(file_or_path, 'seek'): file_or_path.seek(0)
+        df_fall = pd.read_csv(file_or_path, sep=';', encoding='latin1')
+        raise ValueError(f"No se encontró la columna 'Fecha'. Columnas detectadas: {list(df_fall.columns)}")
+
+    # Ignoramos filas que no tengan Fecha válida o que sean encabezados intermedios
+    df = df_org.dropna(subset=["Fecha"]).copy()
+    df = df[df["Fecha"].astype(str).str.strip() != "Fecha"]
+    
+    # Ignoramos filas que no tengan un importe válido (elimina filas de "Saldo al...")
+    df = df.dropna(subset=["Importe"]).copy()
+    df = df[df["Importe"].astype(str).str.strip() != ""]
+
     # Parseo de fechas. Usamos format='mixed' para soportar fechas con horas como "30/07/2026 16:45"
-    df["Fecha"] = pd.to_datetime(df["Fecha"], format='mixed', dayfirst=True)
+    df["Fecha"] = pd.to_datetime(df["Fecha"].astype(str).str.strip(), format='mixed', dayfirst=True)
         
     # Filtro por fechas si es requerido
     if fecha_desde:
@@ -34,11 +70,9 @@ def import_extract(
     if fecha_hasta:
         df = df.loc[df["Fecha"] <= pd.to_datetime(fecha_hasta)]
         
-    # Limpieza de importe (remueve puntos de miles y cambia coma por punto)
-    df["Importe"] = df["Importe"].astype(str).str.replace(".", "", regex=False).str.replace(",", ".", regex=False).astype(float)
-    
-    # Ignoramos filas que no tengan un importe válido (evita errores con NaT)
-    df = df.dropna(subset=["Importe"])
+    # Limpieza de importe (remueve paréntesis de negativos, quita puntos de miles y cambia coma por punto)
+    # Ejemplo: "(388.261,50)" -> "-388261.50"
+    df["Importe"] = df["Importe"].astype(str).str.replace(r'^\((.*)\)$', r'-\1', regex=True).str.replace(".", "", regex=False).str.replace(",", ".", regex=False).astype(float)
 
     # Ordenar cronológicamente
     df = df.sort_values(by=["Fecha"])

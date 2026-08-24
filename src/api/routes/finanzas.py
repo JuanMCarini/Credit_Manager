@@ -365,8 +365,8 @@ def importar_extracto(
     if not cuenta:
         raise HTTPException(status_code=404, detail="Cuenta no encontrada")
     
-    if not file.filename.endswith((".xls", ".xlsx")):
-        raise HTTPException(status_code=400, detail="El archivo debe ser Excel (.xlsx o .xls)")
+    if not file.filename.endswith((".xls", ".xlsx", ".csv")):
+        raise HTTPException(status_code=400, detail="El archivo debe ser Excel (.xlsx, .xls) o CSV (.csv)")
 
     if not cuenta.banco.parser_type or cuenta.banco.parser_type == 'none':
         raise HTTPException(status_code=400, detail="El banco de esta cuenta no soporta importación automática de extractos.")

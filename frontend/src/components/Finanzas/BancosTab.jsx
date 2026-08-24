@@ -272,7 +272,13 @@ const BancosTab = () => {
     return [...new Set(list)].sort();
   }, [movimientos]);
 
-  const filteredMovimientos = movimientos;
+  const filteredMovimientos = useMemo(() => {
+    let result = movimientos;
+    if (debouncedColumnFilters['fecha'] && debouncedColumnFilters['fecha'].length > 0) {
+      result = result.filter(m => debouncedColumnFilters['fecha'].includes(m.fecha));
+    }
+    return result;
+  }, [movimientos, debouncedColumnFilters]);
 
   const subtotals = useMemo(() => {
     let ingresos = 0;

@@ -27,15 +27,15 @@ def reporte(fecha_corte: str | date, n_periodos: int = 2, salto_meses: int = 1, 
 
         fecha = fecha_corte - relativedelta(months=i * salto_meses)       
 
-        filtro_cartera = df_carteras["fecha_compra"] <= pd.to_datetime(fecha)
+        filtro_cartera = (df_carteras["fecha_compra"] <= pd.to_datetime(fecha))
         tna_series = df_carteras.loc[filtro_cartera, "tna_descuento"]
         
         if not tna_series.empty:
-            tna = tna_series.iloc[-1]
+            tna = tna_series.mean()
         else:
-            filtro_siguiente = df_carteras["fecha_compra"] > pd.to_datetime(fecha)
+            filtro_siguiente = df_carteras["fecha_compra"] < pd.to_datetime(fecha) - relativedelta(months=1)
             tna_siguiente = df_carteras.loc[filtro_siguiente, "tna_descuento"]
-            tna = tna_siguiente.iloc[0] if not tna_siguiente.empty else tna_descuento
+            tna = tna_siguiente.mean() if not tna_siguiente.empty else tna_descuento
         periodo = f"{pd.Period(fecha, freq='M')} - ({tna:.0%})"
         df_bcos = bancos.df.loc[bancos.df["fecha"] <= fecha].copy()
         caja = df_bcos["monto"].sum()
@@ -66,25 +66,20 @@ def reporte(fecha_corte: str | date, n_periodos: int = 2, salto_meses: int = 1, 
             {"Categoria": "Activos", "Detalle": "Interés (Cartera Activa)", periodo: df_saldos["VA Interés"].sum()})
     
     
-        carteras_vendidas = df_carteras.loc[filtro_cartera, 'valor_actual_total'].sum()
-        venta_cartera_cobradas = df_bcos.loc[df_bcos["concepto_nombre"] == "Venta Cartera", "monto"].sum()
-        filtro_comp = (df_comp["fecha_emision"] <= fecha) & (df_comp["concepto"] == 'Venta Cartera')
-        iva_venta = df_comp.loc[filtro_comp, "iva_21"].sum()
-        importe_venta = df_comp.loc[filtro_comp, "importe_total"].sum()
-        filtro_pagos = (df_pagos["fecha_cancelacion"] <= fecha) & (df_pagos["comprobante_id"].isin(df_comp.loc[filtro_comp, "comprobante_id"]))
-        comprobantes_cobrados = df_pagos.loc[filtro_pagos, "importe"].sum()
-        carteras_vendidas -= comprobantes_cobrados
-        if round(importe_venta, 0) == round(comprobantes_cobrados, 0):
-            venta_cartera_cobradas -= (comprobantes_cobrados - iva_venta)
-    
-        if round(carteras_vendidas, 2) != 0.0:
+        carteras_vendidas_a_cobrar = df_carteras.loc[filtro_cartera, 'valor_actual_total'].sum()
+        filtro_bcos_cartera = (df_bcos["fecha"] <= fecha) & (df_bcos["concepto_nombre"] == "Venta Cartera")
+        carteras_vendidas_a_cobrar -= df_bcos.loc[filtro_bcos_cartera, "monto"].sum()
+        filtro_comp_venta = (df_comp["fecha_emision"] <= fecha) & (df_comp["concepto"] == "Venta Cartera")
+        carteras_vendidas_a_cobrar -= df_comp.loc[filtro_comp_venta, "iva_21"].sum()
+        if round(carteras_vendidas_a_cobrar, 0) != 0.0:
             datos.append(
-                {"Categoria": "Activos", "Detalle": "Ventas de Cartera a Cobrar", periodo: carteras_vendidas})
-        if venta_cartera_cobradas != 0.0:
-            datos.append(
-                {"Categoria": "Pasivos", "Detalle": "Valor Actual de Cartera a Ceder", periodo: venta_cartera_cobradas})
+                {"Categoria": "Activos", "Detalle": "Ventas de Cartera a Cobrar", periodo: carteras_vendidas_a_cobrar})
 
-        
+        venta_cartera_a_ceder = df_bcos.loc[filtro_bcos_cartera, "monto"].sum() - (df_carteras.loc[filtro_cartera, 'valor_actual_total'].sum() + df_comp.loc[filtro_comp_venta, "iva_21"].sum())
+        if round(-venta_cartera_a_ceder, 0) < 0.0:
+            datos.append(
+                {"Categoria": "Pasivos", "Detalle": "Valor Actual de Cartera a Ceder", periodo: -venta_cartera_a_ceder})
+
         saldo_iva = 0.0
         db_session = SessionLocal()
         try:
@@ -155,7 +150,7 @@ def reporte(fecha_corte: str | date, n_periodos: int = 2, salto_meses: int = 1, 
         'IVA Adeudado': 3,
         'Planes de Ganancias': 4,
     }
-    
+
     # Asignar orden por detalle, o 99 si no está mapeado. 'Total' va siempre al final (100)
     df['det_order'] = df['Detalle'].map(detalle_order_map).fillna(99)
     df.loc[df['Detalle'] == 'Total', 'det_order'] = 100

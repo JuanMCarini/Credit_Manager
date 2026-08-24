@@ -21,6 +21,10 @@ query = db.query(
 
 df = pd.read_sql(query.statement, db.bind)
 
+# Convertir Enum a string para evitar TypeError en groupby
+if not df.empty and 'estado_cartera' in df.columns:
+    df['estado_cartera'] = df['estado_cartera'].apply(lambda x: x.value if hasattr(x, 'value') else str(x))
+
 # 2. Conversión de fechas y cálculos de días
 hoy = pd.to_datetime(date.today())
 df['fecha_vencimiento'] = pd.to_datetime(df['fecha_vencimiento'])

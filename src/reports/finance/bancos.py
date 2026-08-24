@@ -44,4 +44,5 @@ def resumen(fecha: str | date | None = None):
         fecha = pd.to_datetime(fecha).date()
     if fecha is None:
         fecha = df["fecha"].max()
-    return df[df["fecha"] <= fecha].groupby("clasificacion_nombre")["monto"].sum()
+    filtro = pd.to_datetime(df["fecha"]).dt.date <= pd.to_datetime(fecha).date()
+    return df[filtro].groupby("clasificacion_nombre")["monto"].sum()
