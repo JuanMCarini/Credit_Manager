@@ -131,6 +131,19 @@ const DashboardCarteraPage = () => {
 
   const [tasaDescuento, setTasaDescuento] = useState(0);
   const [tasaDescuentoStr, setTasaDescuentoStr] = useState("0 %");
+  const [appliedFilters, setAppliedFilters] = useState(() => {
+    const today = new Date();
+    const lastDay = new Date(today.getFullYear(), today.getMonth(), 0);
+    const yyyy = lastDay.getFullYear();
+    const mm = String(lastDay.getMonth() + 1).padStart(2, '0');
+    const dd = String(lastDay.getDate()).padStart(2, '0');
+    return {
+      fechaCorte: `${yyyy}-${mm}-${dd}`,
+      tasaDescuento: 0,
+      nPeriodosEsp: 2,
+      frecuenciaEsp: 1
+    };
+  });
   const [activeTab, setActiveTab] = useState('situacion_patrimonial'); // 'situacion_patrimonial', 'total', 'periodo', etc.
   const [filtroDueños, setFiltroDueños] = useState([]); // empty means 'Todos'
   const [filtroOriginadores, setFiltroOriginadores] = useState([]); // empty means 'Todos'
@@ -201,8 +214,8 @@ const DashboardCarteraPage = () => {
         pdf.setTextColor(100, 100, 100);
         const dueñosTextCover = filtroDueños.length > 0 ? filtroDueños.join(', ') : 'Todos';
         const origTextCover = filtroOriginadores.length > 0 ? filtroOriginadores.join(', ') : 'Todos';
-        pdf.text(`Fecha de Corte: ${fechaCorte.split('-').reverse().join('/')}`, pdfWidth / 2, pdfHeight / 2 + 25, { align: 'center' });
-        pdf.text(`TNA: ${tasaDescuento}%`, pdfWidth / 2, pdfHeight / 2 + 32, { align: 'center' });
+        pdf.text(`Fecha de Corte: ${appliedFilters.fechaCorte.split('-').reverse().join('/')}`, pdfWidth / 2, pdfHeight / 2 + 25, { align: 'center' });
+        pdf.text(`TNA: ${appliedFilters.tasaDescuento}%`, pdfWidth / 2, pdfHeight / 2 + 32, { align: 'center' });
         pdf.text(`Dueños: ${dueñosTextCover}`, pdfWidth / 2, pdfHeight / 2 + 39, { align: 'center' });
         pdf.text(`Originadores: ${origTextCover}`, pdfWidth / 2, pdfHeight / 2 + 46, { align: 'center' });
 
@@ -275,7 +288,7 @@ const DashboardCarteraPage = () => {
             pdf.setTextColor(100, 100, 100);
             const dueñosText = filtroDueños.length > 0 ? filtroDueños.join(', ') : 'Todos';
             const origText = filtroOriginadores.length > 0 ? filtroOriginadores.join(', ') : 'Todos';
-            const filtrosStr = `Fecha de Corte: ${fechaCorte.split('-').reverse().join('/')} | TNA: ${tasaDescuento}% | Dueños: ${dueñosText} | Originadores: ${origText}`;
+            const filtrosStr = `Fecha de Corte: ${appliedFilters.fechaCorte.split('-').reverse().join('/')} | TNA: ${appliedFilters.tasaDescuento}% | Dueños: ${dueñosText} | Originadores: ${origText}`;
             pdf.text(filtrosStr, margin, startY + 7);
 
             pdf.addImage(imgData, 'PNG', margin + offsetX, startY + 13, width, height);
@@ -291,7 +304,7 @@ const DashboardCarteraPage = () => {
         }
 
         const tipoReporte = orientation === 'p' ? 'Detallado' : 'Grafico';
-        pdf.save(`Reporte Cartera - ${tipoReporte} - ${fechaCorte}.pdf`);
+        pdf.save(`Reporte Cartera - ${tipoReporte} - ${appliedFilters.fechaCorte}.pdf`);
       } catch (err) {
         console.error("Error exporting to PDF:", err);
       } finally {
@@ -329,48 +342,40 @@ const DashboardCarteraPage = () => {
   };
 
   useEffect(() => {
-    const fetchDashboardData = async () => {
+    const fetchMainData = async () => {
       try {
         setLoading(true);
-        const [response, evolutionResponse, tnaResponse, cobranzasEvoResponse, espResponse] = await Promise.all([
+        const [response, evolutionResponse, tnaResponse, cobranzasEvoResponse] = await Promise.all([
           axiosClient.get('/api/v1/reports/balances', {
             params: {
-              fecha: fechaCorte,
+              fecha: appliedFilters.fechaCorte,
               con_saldo: false,
               agrupar: false
             }
           }),
           axiosClient.get('/api/v1/reports/balances/evolution', {
-            params: { meses: 12, fecha: fechaCorte }
+            params: { meses: 12, fecha: appliedFilters.fechaCorte }
           }),
           axiosClient.get('/api/v1/carteras/venta/tna_reciente', {
-            params: { fecha: fechaCorte }
+            params: { fecha: appliedFilters.fechaCorte }
           }).catch(err => {
             console.error("Error fetching recent TNA:", err);
             return { data: { tna: 0 } };
           }),
           axiosClient.get('/api/v1/reports/cobranzas/evolution', {
-            params: { meses: 12, fecha: fechaCorte }
-          }),
-          axiosClient.get('/api/v1/reports/esp', {
-            params: { fecha: fechaCorte, periodos: nPeriodosEsp, salto: frecuenciaEsp, tna_descuento: tasaDescuento / 100 }
-          }).catch(err => {
-            console.error("Error fetching ESP data:", err);
-            return { data: null };
+            params: { meses: 12, fecha: appliedFilters.fechaCorte }
           })
         ]);
         
         setData(response.data);
         setEvolutionData(evolutionResponse.data);
         setCobranzasEvolutionData(cobranzasEvoResponse.data);
-        if (espResponse && espResponse.data) {
-          setEspData(espResponse.data);
-        }
 
         if (tnaResponse && tnaResponse.data && tnaResponse.data.tna !== undefined) {
           const newTna = tnaResponse.data.tna;
           setTasaDescuento(newTna);
           setTasaDescuentoStr(`${newTna} %`);
+          setAppliedFilters(prev => ({ ...prev, tasaDescuento: newTna }));
         }
       } catch (err) {
         console.error("Error cargando dashboard:", err);
@@ -380,8 +385,26 @@ const DashboardCarteraPage = () => {
       }
     };
 
-    fetchDashboardData();
-  }, [fechaCorte, nPeriodosEsp, frecuenciaEsp]);
+    fetchMainData();
+  }, [appliedFilters.fechaCorte]);
+
+  useEffect(() => {
+    const fetchEspData = async () => {
+      try {
+        const espResponse = await axiosClient.get('/api/v1/reports/esp', {
+          params: { fecha: appliedFilters.fechaCorte, periodos: appliedFilters.nPeriodosEsp, salto: appliedFilters.frecuenciaEsp, tna_descuento: appliedFilters.tasaDescuento / 100 }
+        });
+        if (espResponse && espResponse.data) {
+          setEspData(espResponse.data);
+        }
+      } catch (err) {
+        console.error("Error fetching ESP data:", err);
+        setEspData(null);
+      }
+    };
+
+    fetchEspData();
+  }, [appliedFilters.fechaCorte, appliedFilters.nPeriodosEsp, appliedFilters.frecuenciaEsp, appliedFilters.tasaDescuento]);
 
   // Calcular KPIs y agrupaciones
   let totalCapital = 0;
@@ -392,9 +415,9 @@ const DashboardCarteraPage = () => {
 
   const grupos = {};
   const gruposPeriodo = {};
-  const tna = tasaDescuento / 100;
-  const parsedFechaCorteDate = new Date(fechaCorte + 'T00:00:00'); // Force local midnight
-  const corteYearMonth = fechaCorte.substring(0, 7);
+  const tna = appliedFilters.tasaDescuento / 100;
+  const parsedFechaCorteDate = new Date(appliedFilters.fechaCorte + 'T00:00:00'); // Force local midnight
+  const corteYearMonth = appliedFilters.fechaCorte.substring(0, 7);
 
   const resumenEstados = {
     'APROBADO': { Estado: 'Aprobado', Vencido: 0, AVencer: 0, Total: 0, fill: 'var(--color-capital)' },
@@ -746,7 +769,7 @@ const DashboardCarteraPage = () => {
     ];
 
     const creditosMora = {};
-    const parsedFechaCorteDate = new Date(fechaCorte + 'T00:00:00');
+    const parsedFechaCorteDate = new Date(appliedFilters.fechaCorte + 'T00:00:00');
 
     // Primer pasada: Calcular la mora (maxDiasMora) a nivel CRÉDITO, sin importar quién sea el dueño
     // de cada cuota. La mora es una propiedad del crédito.
@@ -831,7 +854,7 @@ const DashboardCarteraPage = () => {
     });
 
     return buckets;
-  }, [data, fechaCorte, filtroDueños, filtroOriginadores]);
+  }, [data, appliedFilters.fechaCorte, filtroDueños, filtroOriginadores]);
 
   const colocacionesUniqueOriginadores = useMemo(() => {
     const originadores = new Set();
@@ -1021,11 +1044,56 @@ const DashboardCarteraPage = () => {
 
   return (
     <div className="page-container" style={{ animation: 'fadeIn 0.5s ease' }}>
-      <header className="page-header" style={{ marginBottom: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
-        <div>
-          <h1 className="page-title">Dashboard Financiero</h1>
-          <p className="page-subtitle">Información general y estado actual de los saldos activos</p>
+      <header className="page-header" style={{ marginBottom: '30px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        {/* Fila superior: Título y Botones de Exportación */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '15px' }}>
+          <div>
+            <h1 className="page-title" style={{ margin: 0 }}>Dashboard Financiero</h1>
+            <p className="page-subtitle" style={{ margin: 0, marginTop: '5px' }}>Información general y estado actual de los saldos activos</p>
+          </div>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+              onClick={() => exportToPDF('p')}
+              disabled={exportFormat !== null}
+              style={{
+                padding: '10px 15px',
+                borderRadius: '8px',
+                border: 'none',
+                background: 'var(--color-capital)',
+                color: 'white',
+                fontWeight: 'bold',
+                cursor: exportFormat !== null ? 'not-allowed' : 'pointer',
+                opacity: exportFormat !== null ? 0.7 : 1,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+            >
+              📄 {exportFormat !== null ? 'Generando...' : 'Reporte Detallado'}
+            </button>
+            <button
+              onClick={() => exportToPDF('l')}
+              disabled={exportFormat !== null}
+              style={{
+                padding: '10px 15px',
+                borderRadius: '8px',
+                border: 'none',
+                background: 'var(--color-total)',
+                color: 'white',
+                fontWeight: 'bold',
+                cursor: exportFormat !== null ? 'not-allowed' : 'pointer',
+                opacity: exportFormat !== null ? 0.7 : 1,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+            >
+              📊 {exportFormat !== null ? 'Generando...' : 'Reporte Gráfico'}
+            </button>
+          </div>
         </div>
+
+        {/* Fila inferior: Filtros y Botón de Aplicar */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <label htmlFor="tasaDescuento" style={{ color: 'var(--text-secondary)', fontWeight: '500' }}>TNA Descuento:</label>
@@ -1071,46 +1139,33 @@ const DashboardCarteraPage = () => {
               }
             />
           </div>
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <button
-              onClick={() => exportToPDF('p')}
-              disabled={exportFormat !== null}
-              style={{
-                padding: '10px 15px',
-                borderRadius: '8px',
-                border: 'none',
-                background: 'var(--color-capital)',
-                color: 'white',
-                fontWeight: 'bold',
-                cursor: exportFormat !== null ? 'not-allowed' : 'pointer',
-                opacity: exportFormat !== null ? 0.7 : 1,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}
-            >
-              📄 {exportFormat !== null ? 'Generando...' : 'Reporte Detallado'}
-            </button>
-            <button
-              onClick={() => exportToPDF('l')}
-              disabled={exportFormat !== null}
-              style={{
-                padding: '10px 15px',
-                borderRadius: '8px',
-                border: 'none',
-                background: 'var(--color-total)',
-                color: 'white',
-                fontWeight: 'bold',
-                cursor: exportFormat !== null ? 'not-allowed' : 'pointer',
-                opacity: exportFormat !== null ? 0.7 : 1,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}
-            >
-              📊 {exportFormat !== null ? 'Generando...' : 'Reporte Gráfico'}
-            </button>
-          </div>
+          <button
+            onClick={() => {
+              setAppliedFilters({
+                fechaCorte: fechaCorte,
+                nPeriodosEsp: nPeriodosEsp,
+                frecuenciaEsp: frecuenciaEsp,
+                tasaDescuento: tasaDescuento
+              });
+            }}
+            style={{
+              padding: '10px 15px',
+              borderRadius: '8px',
+              border: '1px solid var(--color-total)',
+              background: 'rgba(33, 150, 243, 0.1)',
+              color: 'var(--color-total)',
+              fontWeight: '600',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-total)'; e.currentTarget.style.color = 'white'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(33, 150, 243, 0.1)'; e.currentTarget.style.color = 'var(--color-total)'; }}
+          >
+            Aplicar Filtros
+          </button>
         </div>
       </header>
 
@@ -1653,7 +1708,7 @@ const DashboardCarteraPage = () => {
             </div>
 
             <div className="glass-panel" style={{ width: '100%', minWidth: '260px', maxWidth: '300px', padding: '20px', borderRadius: '12px', borderTop: '4px solid var(--color-valoractual)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '10px', transition: 'transform 0.2s', cursor: 'default', background: 'linear-gradient(135deg, rgba(233, 30, 99, 0.1), rgba(0,0,0,0))' }} onMouseOver={e => e.currentTarget.style.transform = 'translateY(-5px)'} onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}>
-              <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '1px' }}>Valor Actual ({tasaDescuento}%)</span>
+              <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '1px' }}>Valor Actual ({appliedFilters.tasaDescuento}%)</span>
               <span style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>{formatCurrency(valorActual)}</span>
             </div>
           </div>
@@ -2366,8 +2421,8 @@ const DashboardCarteraPage = () => {
                   gap: '5px',
                   boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
                 }}>
-                  <span style={{ color: 'var(--text-primary)', fontSize: '0.85rem', fontWeight: '700', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Total General</span>
-                  <span style={{ fontSize: '1.3rem', fontWeight: 'bold', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{formatCurrency(estadosList.reduce((acc, curr) => acc + curr.Total, 0))}</span>
+                  <span style={{ color: 'var(--text-primary)', fontSize: '0.85rem', fontWeight: '700', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>Total General</span>
+                  <span style={{ fontSize: '1.3rem', fontWeight: 'bold', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{formatCurrency(estadosList.reduce((acc, curr) => acc + curr.Total, 0))}</span>
                 </div>
                 {estadosList.map((d, idx) => (
                   <div key={idx} style={{
@@ -2381,8 +2436,8 @@ const DashboardCarteraPage = () => {
                     gap: '5px',
                     boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
                   }}>
-                    <span style={{ color: d.fill, fontSize: '0.85rem', fontWeight: '700', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.Estado}</span>
-                    <span style={{ fontSize: '1.3rem', fontWeight: 'bold', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{formatCurrency(d.Total)}</span>
+                    <span style={{ color: d.fill, fontSize: '0.85rem', fontWeight: '700', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{d.Estado}</span>
+                    <span style={{ fontSize: '1.3rem', fontWeight: 'bold', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{formatCurrency(d.Total)}</span>
                   </div>
                 ))}
               </div>
