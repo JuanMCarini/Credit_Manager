@@ -2149,6 +2149,29 @@ const DashboardCarteraPage = () => {
               <div style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '5px' }}>
                 Último período {colocacionesData.length > 0 ? `(${colocacionesData[colocacionesData.length - 1].periodo})` : ''}
               </div>
+              
+              {(() => {
+                const ultimoPeriodo = colocacionesData.length > 0 ? colocacionesData[colocacionesData.length - 1] : {};
+                const totalCapital = ultimoPeriodo.totalColocado || 0;
+                const totalMonto = ultimoPeriodo.totalGenerado || 0;
+                if (colocacionesData.length === 0) return null;
+                return (
+                  <div className="glass-panel" style={{ padding: '20px', borderRadius: '12px', borderLeft: `4px solid var(--color-total)`, background: 'linear-gradient(135deg, rgba(33, 150, 243, 0.1), rgba(0,0,0,0))' }}>
+                    <div style={{ color: 'var(--text-primary)', fontSize: '1rem', marginBottom: '8px', fontWeight: 'bold', textTransform: 'uppercase' }}>TOTAL DEL MES</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                      <div>
+                        <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Capital Total: </span>
+                        <span style={{ color: 'var(--color-capital)', fontSize: '1.2rem', fontWeight: 'bold' }}>{formatCurrency(totalCapital)}</span>
+                      </div>
+                      <div>
+                        <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Monto Total: </span>
+                        <span style={{ color: 'var(--color-total)', fontSize: '1.2rem', fontWeight: 'bold' }}>{formatCurrency(totalMonto)}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {colocacionesUniqueOriginadores.map((originador, index) => {
                 const ultimoPeriodo = colocacionesData.length > 0 ? colocacionesData[colocacionesData.length - 1] : {};
                 const totalColocado = ultimoPeriodo[`orig_${originador}`] || 0;
