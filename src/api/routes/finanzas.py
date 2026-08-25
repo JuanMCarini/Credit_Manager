@@ -21,10 +21,12 @@ from src.api.schemas.bancos import (
 )
 from src.logic.creditos.import_data.bancos.bica import import_extract as bica_import
 from src.logic.creditos.import_data.bancos.santander import import_extract as santander_import
+from src.logic.creditos.import_data.bancos.pampa import import_extract as pampa_import
 
 PARSERS = {
     'bica': bica_import,
-    'santander': santander_import
+    'santander': santander_import,
+    'pampa': pampa_import
 }
 
 router = APIRouter(

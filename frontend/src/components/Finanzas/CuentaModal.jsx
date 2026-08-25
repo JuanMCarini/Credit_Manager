@@ -139,6 +139,7 @@ const CuentaModal = ({ isOpen, onClose, onSaved, cuenta = null }) => {
                     <option value="none">Sin importación</option>
                     <option value="bica">Banco Ficticio</option>
                     <option value="santander">Banco Santander</option>
+                    <option value="pampa">Banco Pampa</option>
                   </select>
                   <button type="button" className="btn btn-primary" onClick={handleCreateBanco} disabled={loading}>Guardar</button>
                   <button type="button" className="btn btn-outline" onClick={() => setShowNewBanco(false)}>Cancelar</button>

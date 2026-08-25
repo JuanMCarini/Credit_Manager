@@ -610,6 +610,7 @@ const AuxiliaryTablesPage = () => {
                         <option value="none">Sin importación automática</option>
                         <option value="bica">Banco Ficticio</option>
                         <option value="santander">Banco Santander</option>
+                        <option value="pampa">Banco Pampa</option>
                       </select>
                     );
                   } else if (col === 'fecha') {
