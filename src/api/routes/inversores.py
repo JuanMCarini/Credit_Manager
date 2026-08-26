@@ -1,13 +1,17 @@
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, File, Form, UploadFile
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import or_
+import tempfile
+from pathlib import Path
+from src.logic.deuda.suscripcion import nueva_serie
 
 from src.database import get_db
 from src.database.models.deuda.inversores import Inversor, CuentaComitente, TitularidadCuentaComitente
 from src.database.models.deuda.series import Serie
-from src.database.models.deuda.movimientos import MovimientoDeuda
+from src.database.models.deuda.movimientos import MovimientoDeuda, TipoMovimiento
+from sqlalchemy.sql import func
 from src.api.schemas.inversores import (
     InversorCreate, InversorResponse,
     CuentaComitenteCreate, CuentaComitenteResponse,
@@ -87,6 +91,27 @@ def delete_inversor(inversor_id: int, db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=400, detail="No se puede eliminar el inversor porque está asociado a cuentas comitentes u otras entidades.")
 
+@router.put("/{inversor_id}", response_model=Dict[str, Any])
+def update_inversor(inversor_id: int, inversor_data: InversorCreate, db: Session = Depends(get_db)):
+    inversor = db.query(Inversor).filter(Inversor.id == inversor_id).first()
+    if not inversor:
+        raise HTTPException(status_code=404, detail="Inversor no encontrado")
+    
+    try:
+        update_data = inversor_data.dict(exclude_unset=True)
+        for key, value in update_data.items():
+            setattr(inversor, key, value)
+            
+        db.commit()
+        db.refresh(inversor)
+        return {"status": "success", "message": "Inversor actualizado", "id": inversor.id}
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Error de integridad. El CUIT o Razón Social ya están registrados.")
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
 # -----------------
 # CUENTAS COMITENTES
 # -----------------
@@ -153,6 +178,55 @@ def get_cuentas_comitentes(
         })
     return {"items": items, "total": total}
 
+@router.put("/cuentas/{cuenta_id}", response_model=Dict[str, Any])
+def update_cuenta_comitente(cuenta_id: int, cuenta_data: CuentaComitenteCreate, db: Session = Depends(get_db)):
+    cuenta = db.query(CuentaComitente).filter(CuentaComitente.id == cuenta_id).first()
+    if not cuenta:
+        raise HTTPException(status_code=404, detail="Cuenta comitente no encontrada")
+    
+    try:
+        data = cuenta_data.dict()
+        titulares_data = data.pop("titulares", [])
+        
+        cuenta.id_bcbb = data["id_bcbb"]
+        cuenta.conjunta = data["conjunta"]
+        
+        # Eliminar titulares viejos
+        db.query(TitularidadCuentaComitente).filter(TitularidadCuentaComitente.id_cuenta_comitente == cuenta_id).delete()
+        
+        # Agregar nuevos titulares
+        for t in titulares_data:
+            titularidad = TitularidadCuentaComitente(
+                id_cuenta_comitente=cuenta_id,
+                id_inversor=t["id_inversor"],
+                orden=t["orden"],
+                activo=t["activo"]
+            )
+            db.add(titularidad)
+            
+        db.commit()
+        return {"status": "success", "message": "Cuenta comitente actualizada", "id": cuenta.id}
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Error de integridad. Puede que el ID BCBB ya exista.")
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/cuentas/{cuenta_id}")
+def delete_cuenta_comitente(cuenta_id: int, db: Session = Depends(get_db)):
+    cuenta = db.query(CuentaComitente).filter(CuentaComitente.id == cuenta_id).first()
+    if not cuenta:
+        raise HTTPException(status_code=404, detail="Cuenta comitente no encontrada")
+    try:
+        db.query(TitularidadCuentaComitente).filter(TitularidadCuentaComitente.id_cuenta_comitente == cuenta_id).delete()
+        db.delete(cuenta)
+        db.commit()
+        return {"status": "success", "message": "Cuenta comitente eliminada"}
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="No se puede eliminar la cuenta porque tiene movimientos asociados.")
+
 # -----------------
 # SERIES
 # -----------------
@@ -174,18 +248,61 @@ def create_serie(
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/series/upload", response_model=Dict[str, Any])
+def upload_serie(
+    name: str = Form(...),
+    fecha_suscripcion: str = Form(...),
+    tna: float = Form(...),
+    plazo: int = Form(...),
+    file: UploadFile = File(...)
+):
+    try:
+        # Save uploaded file to temp file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename).suffix) as tmp:
+            tmp.write(file.file.read())
+            tmp_path = Path(tmp.name)
+            
+        # Call the business logic
+        nueva_serie(
+            nombre=name, 
+            fecha=fecha_suscripcion, 
+            tna=tna, 
+            plazo=plazo, 
+            path=tmp_path
+        )
+        
+        # Cleanup
+        tmp_path.unlink(missing_ok=True)
+        
+        return {
+            "status": "success", 
+            "message": "Serie y suscripciones procesadas exitosamente",
+            "totals": {}
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/series", response_model=Dict[str, Any])
 def get_series(
     skip: int = 0,
     limit: int = 1000,
     db: Session = Depends(get_db)
 ):
-    query = db.query(Serie)
-    total = query.count()
-    series = query.order_by(Serie.id.desc()).offset(skip).limit(limit).all()
+    query = db.query(
+        Serie,
+        func.coalesce(func.sum(MovimientoDeuda.monto), 0).label("capital")
+    ).outerjoin(
+        MovimientoDeuda,
+        (MovimientoDeuda.id_serie == Serie.id) & (MovimientoDeuda.tipo_movimiento == TipoMovimiento.SUSCRIPCION)
+    ).group_by(Serie.id).order_by(Serie.id.desc())
+    
+    total = db.query(Serie).count()
+    results = query.offset(skip).limit(limit).all()
     
     items = []
-    for s in series:
+    for s, capital in results:
         items.append({
             "id": s.id,
             "name": s.name,
@@ -193,7 +310,8 @@ def get_series(
             "tna": float(s.tna),
             "plazo": s.plazo,
             "fecha_vencimiento": s.fecha_vencimiento,
-            "created_at": s.created_at
+            "created_at": s.created_at,
+            "capital": float(capital)
         })
     return {"items": items, "total": total}
 

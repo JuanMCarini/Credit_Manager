@@ -30,7 +30,7 @@ class MovimientoDeuda(Base):
     id_cuenta_comitente = Column(Integer, ForeignKey("cuentas_comitentes.id"), nullable=False)
     id_serie = Column(Integer, ForeignKey("series.id"), nullable=False)
     fecha = Column(DateTime, nullable=False)
-    monto = Column(Numeric(10, 2), nullable=False)
+    monto = Column(Numeric(18, 2), nullable=False)
     tipo_movimiento = Column(Enum(TipoMovimiento), nullable=False)
 
     created_at = Column(DateTime, default=func.now())

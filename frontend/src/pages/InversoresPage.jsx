@@ -1,26 +1,38 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axiosClient from '../api/axiosClient';
-import { Plus, X, Search, Trash2 } from 'lucide-react';
-import { useDebounce } from '../hooks/useDebounce';
+import { Plus, X, Search, Trash2, Edit2 } from 'lucide-react';
 
 const InversoresPage = () => {
   const queryClient = useQueryClient();
   const [showAddModal, setShowAddModal] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const debouncedSearch = useDebounce(searchTerm, 500);
+  const [editInversor, setEditInversor] = useState(null);
+  const [filters, setFilters] = useState({
+    id: '', cuit: '', razon_social: '', mail: '', telefono: '', nombre_banco: '', estado: ''
+  });
 
   // Fetch Inversores
   const { data, isLoading } = useQuery({
-    queryKey: ['inversores', debouncedSearch],
+    queryKey: ['inversores'],
     queryFn: async () => {
-      const res = await axiosClient.get('/api/v1/inversores', { params: { search: debouncedSearch } });
+      const res = await axiosClient.get('/api/v1/inversores', { params: { limit: 1000 } });
       return res.data;
     }
   });
 
   const inversores = data?.items || [];
-  const total = data?.total || 0;
+  
+  const filteredInversores = inversores.filter(inv => {
+    return (
+      inv.id.toString().includes(filters.id) &&
+      inv.cuit.toString().includes(filters.cuit) &&
+      inv.razon_social.toLowerCase().includes(filters.razon_social.toLowerCase()) &&
+      (inv.mail || '').toLowerCase().includes(filters.mail.toLowerCase()) &&
+      (inv.telefono || '').toLowerCase().includes(filters.telefono.toLowerCase()) &&
+      (inv.nombre_banco || '').toLowerCase().includes(filters.nombre_banco.toLowerCase()) &&
+      (filters.estado === '' ? true : filters.estado === 'activo' ? inv.activo : !inv.activo)
+    );
+  });
 
   // Add Inversor Mutation
   const addMutation = useMutation({
@@ -35,6 +47,22 @@ const InversoresPage = () => {
     },
     onError: (error) => {
       alert(error.response?.data?.detail || 'Error al crear inversor');
+    }
+  });
+
+  // Edit Inversor Mutation
+  const editMutation = useMutation({
+    mutationFn: async (updatedInversor) => {
+      const res = await axiosClient.put(`/api/v1/inversores/${updatedInversor.id}`, updatedInversor);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['inversores'] });
+      setEditInversor(null);
+      alert('Inversor actualizado con éxito');
+    },
+    onError: (error) => {
+      alert(error.response?.data?.detail || 'Error al actualizar inversor');
     }
   });
 
@@ -67,16 +95,6 @@ const InversoresPage = () => {
           <p>Gestione los inversores que participan en el financiamiento.</p>
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <div className="search-bar" style={{ position: 'relative' }}>
-            <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
-            <input 
-              type="text" 
-              placeholder="Buscar por CUIT o Razón Social..." 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              style={{ paddingLeft: '32px', width: '250px' }}
-            />
-          </div>
           <button className="btn-primary" onClick={() => setShowAddModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <Plus size={16} /> Nuevo Inversor
           </button>
@@ -88,23 +106,48 @@ const InversoresPage = () => {
           <table className="data-table">
             <thead>
               <tr>
-                <th>ID</th>
-                <th>CUIT</th>
-                <th>Razón Social</th>
-                <th>Email</th>
-                <th>Teléfono</th>
-                <th>Banco</th>
-                <th>Estado</th>
+                <th>
+                  ID
+                  <input type="text" placeholder="Filtrar..." style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.id} onChange={e => setFilters({...filters, id: e.target.value})} />
+                </th>
+                <th>
+                  CUIT
+                  <input type="text" placeholder="Filtrar..." style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.cuit} onChange={e => setFilters({...filters, cuit: e.target.value})} />
+                </th>
+                <th>
+                  Razón Social
+                  <input type="text" placeholder="Filtrar..." style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.razon_social} onChange={e => setFilters({...filters, razon_social: e.target.value})} />
+                </th>
+                <th>
+                  Email
+                  <input type="text" placeholder="Filtrar..." style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.mail} onChange={e => setFilters({...filters, mail: e.target.value})} />
+                </th>
+                <th>
+                  Teléfono
+                  <input type="text" placeholder="Filtrar..." style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.telefono} onChange={e => setFilters({...filters, telefono: e.target.value})} />
+                </th>
+                <th>
+                  Banco
+                  <input type="text" placeholder="Filtrar..." style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.nombre_banco} onChange={e => setFilters({...filters, nombre_banco: e.target.value})} />
+                </th>
+                <th>
+                  Estado
+                  <select style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.estado} onChange={e => setFilters({...filters, estado: e.target.value})}>
+                    <option value="">Todos</option>
+                    <option value="activo">Activo</option>
+                    <option value="inactivo">Inactivo</option>
+                  </select>
+                </th>
                 <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr><td colSpan="8" style={{ textAlign: 'center', padding: '20px' }}>Cargando...</td></tr>
-              ) : inversores.length === 0 ? (
+              ) : filteredInversores.length === 0 ? (
                 <tr><td colSpan="8" style={{ textAlign: 'center', padding: '20px' }}>No se encontraron inversores.</td></tr>
               ) : (
-                inversores.map(inv => (
+                filteredInversores.map(inv => (
                   <tr key={inv.id}>
                     <td>{inv.id}</td>
                     <td>{inv.cuit}</td>
@@ -118,9 +161,14 @@ const InversoresPage = () => {
                       </span>
                     </td>
                     <td>
-                      <button className="btn-secondary" onClick={() => handleDelete(inv.id)} style={{ padding: '4px', color: 'var(--danger-color)' }} title="Eliminar">
-                        <Trash2 size={16} />
-                      </button>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button className="btn-secondary" onClick={() => setEditInversor(inv)} style={{ padding: '4px 8px', fontSize: '14px' }} title="Editar">
+                          ✏️
+                        </button>
+                        <button className="btn-secondary" onClick={() => handleDelete(inv.id)} style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--danger-color)' }} title="Eliminar">
+                          🗑️
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -129,7 +177,7 @@ const InversoresPage = () => {
             <tfoot>
               <tr>
                 <td colSpan="8" style={{ textAlign: 'right', fontWeight: 'bold' }}>
-                  Total Inversores: {total}
+                  Total Inversores: {filteredInversores.length}
                 </td>
               </tr>
             </tfoot>
@@ -144,13 +192,22 @@ const InversoresPage = () => {
           isLoading={addMutation.isPending}
         />
       )}
+
+      {editInversor && (
+        <AddInversorModal 
+          initialData={editInversor}
+          onClose={() => setEditInversor(null)}
+          onSubmit={(data) => editMutation.mutate({ ...data, id: editInversor.id })}
+          isLoading={editMutation.isPending}
+        />
+      )}
     </section>
   );
 };
 
 // Modal Component
-const AddInversorModal = ({ onClose, onSubmit, isLoading }) => {
-  const [formData, setFormData] = useState({
+const AddInversorModal = ({ initialData, onClose, onSubmit, isLoading }) => {
+  const [formData, setFormData] = useState(initialData || {
     cuit: '',
     razon_social: '',
     domicilio_legal: '',
@@ -177,7 +234,7 @@ const AddInversorModal = ({ onClose, onSubmit, isLoading }) => {
         <button onClick={onClose} style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-color)' }}>
           <X size={20} />
         </button>
-        <h3 style={{ marginTop: 0, marginBottom: '20px' }}>Nuevo Inversor</h3>
+        <h3 style={{ marginTop: 0, marginBottom: '20px' }}>{initialData ? 'Editar Inversor' : 'Nuevo Inversor'}</h3>
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div className="form-group">
             <label>CUIT *</label>

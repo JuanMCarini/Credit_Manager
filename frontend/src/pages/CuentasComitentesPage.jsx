@@ -1,23 +1,36 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axiosClient from '../api/axiosClient';
-import { Plus, X, Trash2 } from 'lucide-react';
+import { Plus, X, Trash2, Edit2 } from 'lucide-react';
 
 const CuentasComitentesPage = () => {
   const queryClient = useQueryClient();
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editCuenta, setEditCuenta] = useState(null);
+  const [filters, setFilters] = useState({ id: '', id_bcbb: '', tipo: '', titulares: '', fecha: '' });
 
   // Fetch Cuentas
   const { data, isLoading } = useQuery({
     queryKey: ['cuentas-comitentes'],
     queryFn: async () => {
-      const res = await axiosClient.get('/api/v1/inversores/cuentas');
+      const res = await axiosClient.get('/api/v1/inversores/cuentas', { params: { limit: 1000 } });
       return res.data;
     }
   });
 
   const cuentas = data?.items || [];
-  const total = data?.total || 0;
+  
+  const filteredCuentas = cuentas.filter(cta => {
+    const titularesStr = cta.titulares ? cta.titulares.map(t => `${t.inversor_razon_social} ${t.inversor_cuit}`).join(' ').toLowerCase() : '';
+    const fechaStr = new Date(cta.created_at).toLocaleDateString();
+    return (
+      cta.id.toString().includes(filters.id) &&
+      cta.id_bcbb.toString().includes(filters.id_bcbb) &&
+      (filters.tipo === '' ? true : filters.tipo === 'conjunta' ? cta.conjunta : !cta.conjunta) &&
+      titularesStr.includes(filters.titulares.toLowerCase()) &&
+      fechaStr.includes(filters.fecha)
+    );
+  });
 
   // Add Mutation
   const addMutation = useMutation({
@@ -34,6 +47,43 @@ const CuentasComitentesPage = () => {
       alert(error.response?.data?.detail || 'Error al crear la cuenta comitente');
     }
   });
+
+  // Edit Mutation
+  const editMutation = useMutation({
+    mutationFn: async (updatedCuenta) => {
+      const res = await axiosClient.put(`/api/v1/inversores/cuentas/${updatedCuenta.id}`, updatedCuenta);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cuentas-comitentes'] });
+      setEditCuenta(null);
+      alert('Cuenta Comitente actualizada con éxito');
+    },
+    onError: (error) => {
+      alert(error.response?.data?.detail || 'Error al actualizar la cuenta comitente');
+    }
+  });
+
+  // Delete Mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (id) => {
+      const res = await axiosClient.delete(`/api/v1/inversores/cuentas/${id}`);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cuentas-comitentes'] });
+      alert('Cuenta Comitente eliminada con éxito');
+    },
+    onError: (error) => {
+      alert(error.response?.data?.detail || 'Error al eliminar la cuenta comitente');
+    }
+  });
+
+  const handleDelete = (id) => {
+    if (window.confirm('¿Está seguro de eliminar esta cuenta comitente?')) {
+      deleteMutation.mutate(id);
+    }
+  };
 
   return (
     <section className="tab-content active" style={{ animation: 'fadeIn 0.4s ease' }}>
@@ -54,24 +104,44 @@ const CuentasComitentesPage = () => {
           <table className="data-table">
             <thead>
               <tr>
-                <th>ID Interno</th>
-                <th>ID BCBB</th>
-                <th>Tipo</th>
-                <th>Titulares (Inversores)</th>
-                <th>Fecha de Alta</th>
+                <th>
+                  ID Interno
+                  <input type="text" placeholder="Filtrar..." style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.id} onChange={e => setFilters({...filters, id: e.target.value})} />
+                </th>
+                <th>
+                  ID BCBB
+                  <input type="text" placeholder="Filtrar..." style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.id_bcbb} onChange={e => setFilters({...filters, id_bcbb: e.target.value})} />
+                </th>
+                <th>
+                  Tipo
+                  <select style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.tipo} onChange={e => setFilters({...filters, tipo: e.target.value})}>
+                    <option value="">Todos</option>
+                    <option value="indistinta">Indistinta</option>
+                    <option value="conjunta">Conjunta</option>
+                  </select>
+                </th>
+                <th>
+                  Titulares (Inversores)
+                  <input type="text" placeholder="Filtrar..." style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.titulares} onChange={e => setFilters({...filters, titulares: e.target.value})} />
+                </th>
+                <th>
+                  Fecha de Alta
+                  <input type="text" placeholder="Filtrar..." style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.fecha} onChange={e => setFilters({...filters, fecha: e.target.value})} />
+                </th>
+                <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr><td colSpan="5" style={{ textAlign: 'center', padding: '20px' }}>Cargando...</td></tr>
-              ) : cuentas.length === 0 ? (
-                <tr><td colSpan="5" style={{ textAlign: 'center', padding: '20px' }}>No se encontraron cuentas comitentes.</td></tr>
+              ) : filteredCuentas.length === 0 ? (
+                <tr><td colSpan="6" style={{ textAlign: 'center', padding: '20px' }}>No se encontraron cuentas comitentes.</td></tr>
               ) : (
-                cuentas.map(cta => (
+                filteredCuentas.map(cta => (
                   <tr key={cta.id}>
                     <td>{cta.id}</td>
                     <td>{cta.id_bcbb}</td>
-                    <td>{cta.conjunta ? 'Conjunta' : 'Individual'}</td>
+                    <td>{cta.conjunta ? 'Conjunta' : 'Indistinta'}</td>
                     <td>
                       {cta.titulares && cta.titulares.length > 0 ? (
                         <ul style={{ margin: 0, paddingLeft: '15px' }}>
@@ -84,14 +154,24 @@ const CuentasComitentesPage = () => {
                       )}
                     </td>
                     <td>{new Date(cta.created_at).toLocaleDateString()}</td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button className="btn-secondary" onClick={() => setEditCuenta(cta)} style={{ padding: '4px 8px', fontSize: '14px' }} title="Editar">
+                          ✏️
+                        </button>
+                        <button className="btn-secondary" onClick={() => handleDelete(cta.id)} style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--danger-color)' }} title="Eliminar">
+                          🗑️
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))
               )}
             </tbody>
             <tfoot>
               <tr>
-                <td colSpan="5" style={{ textAlign: 'right', fontWeight: 'bold' }}>
-                  Total Cuentas: {total}
+                <td colSpan="6" style={{ textAlign: 'right', fontWeight: 'bold' }}>
+                  Total Cuentas: {filteredCuentas.length}
                 </td>
               </tr>
             </tfoot>
@@ -106,16 +186,38 @@ const CuentasComitentesPage = () => {
           isLoading={addMutation.isPending}
         />
       )}
+
+      {editCuenta && (
+        <AddCuentaModal 
+          initialData={editCuenta}
+          onClose={() => setEditCuenta(null)}
+          onSubmit={(data) => editMutation.mutate({ ...data, id: editCuenta.id })}
+          isLoading={editMutation.isPending}
+        />
+      )}
     </section>
   );
 };
 
 // Modal Component
-const AddCuentaModal = ({ onClose, onSubmit, isLoading }) => {
-  const [formData, setFormData] = useState({
-    id_bcbb: '',
-    conjunta: false,
-    titulares: [] // { id_inversor, orden, activo }
+const AddCuentaModal = ({ initialData, onClose, onSubmit, isLoading }) => {
+  const [formData, setFormData] = useState(() => {
+    if (initialData) {
+      return {
+        id_bcbb: initialData.id_bcbb,
+        conjunta: initialData.conjunta,
+        titulares: (initialData.titulares || []).map(t => ({
+          id_inversor: t.inversor_id,
+          orden: t.orden,
+          activo: true
+        }))
+      };
+    }
+    return {
+      id_bcbb: '',
+      conjunta: false,
+      titulares: [] // { id_inversor, orden, activo }
+    };
   });
 
   // Fetch Inversores para el selector
@@ -180,7 +282,7 @@ const AddCuentaModal = ({ onClose, onSubmit, isLoading }) => {
         <button onClick={onClose} style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-color)' }}>
           <X size={20} />
         </button>
-        <h3 style={{ marginTop: 0, marginBottom: '20px' }}>Nueva Cuenta Comitente</h3>
+        <h3 style={{ marginTop: 0, marginBottom: '20px' }}>{initialData ? 'Editar Cuenta Comitente' : 'Nueva Cuenta Comitente'}</h3>
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           
           <div className="form-group">

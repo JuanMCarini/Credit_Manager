@@ -6,18 +6,32 @@ import { Plus, X } from 'lucide-react';
 const MovimientosDeudaPage = () => {
   const queryClient = useQueryClient();
   const [showAddModal, setShowAddModal] = useState(false);
+  const [filters, setFilters] = useState({ id: '', fecha: '', cuenta: '', serie: '', tipo: '', monto: '' });
 
   // Fetch Movimientos
   const { data, isLoading } = useQuery({
     queryKey: ['movimientos-deuda'],
     queryFn: async () => {
-      const res = await axiosClient.get('/api/v1/inversores/movimientos');
+      const res = await axiosClient.get('/api/v1/inversores/movimientos', { params: { limit: 1000 } });
       return res.data;
     }
   });
 
   const movimientos = data?.items || [];
-  const total = data?.total || 0;
+  
+  const filteredMovimientos = movimientos.filter(m => {
+    const fechaStr = new Date(m.fecha).toLocaleDateString();
+    const cuentaStr = m.cuenta_bcbb ? `Cta ${m.cuenta_bcbb}` : `ID ${m.id_cuenta_comitente}`;
+    const serieStr = m.serie_name || `ID ${m.id_serie}`;
+    return (
+      m.id.toString().includes(filters.id) &&
+      fechaStr.includes(filters.fecha) &&
+      cuentaStr.toLowerCase().includes(filters.cuenta.toLowerCase()) &&
+      serieStr.toLowerCase().includes(filters.serie.toLowerCase()) &&
+      (filters.tipo === '' ? true : m.tipo_movimiento === filters.tipo) &&
+      m.monto.toString().includes(filters.monto)
+    );
+  });
 
   // Add Mutation
   const addMutation = useMutation({
@@ -67,21 +81,44 @@ const MovimientosDeudaPage = () => {
           <table className="data-table">
             <thead>
               <tr>
-                <th>ID</th>
-                <th>Fecha</th>
-                <th>Cuenta (BCBB)</th>
-                <th>Serie</th>
-                <th>Tipo de Movimiento</th>
-                <th>Monto</th>
+                <th>
+                  ID
+                  <input type="text" placeholder="Filtrar..." style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.id} onChange={e => setFilters({...filters, id: e.target.value})} />
+                </th>
+                <th>
+                  Fecha
+                  <input type="text" placeholder="Filtrar..." style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.fecha} onChange={e => setFilters({...filters, fecha: e.target.value})} />
+                </th>
+                <th>
+                  Cuenta (BCBB)
+                  <input type="text" placeholder="Filtrar..." style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.cuenta} onChange={e => setFilters({...filters, cuenta: e.target.value})} />
+                </th>
+                <th>
+                  Serie
+                  <input type="text" placeholder="Filtrar..." style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.serie} onChange={e => setFilters({...filters, serie: e.target.value})} />
+                </th>
+                <th>
+                  Tipo de Movimiento
+                  <select style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.tipo} onChange={e => setFilters({...filters, tipo: e.target.value})}>
+                    <option value="">Todos</option>
+                    <option value="SUSCRIPCION">Suscripción</option>
+                    <option value="RESCATE">Rescate</option>
+                    <option value="VENCIMIENTO">Vencimiento</option>
+                  </select>
+                </th>
+                <th>
+                  Monto
+                  <input type="text" placeholder="Filtrar..." style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.monto} onChange={e => setFilters({...filters, monto: e.target.value})} />
+                </th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr><td colSpan="6" style={{ textAlign: 'center', padding: '20px' }}>Cargando...</td></tr>
-              ) : movimientos.length === 0 ? (
+              ) : filteredMovimientos.length === 0 ? (
                 <tr><td colSpan="6" style={{ textAlign: 'center', padding: '20px' }}>No se registraron movimientos.</td></tr>
               ) : (
-                movimientos.map(m => (
+                filteredMovimientos.map(m => (
                   <tr key={m.id}>
                     <td>{m.id}</td>
                     <td>{new Date(m.fecha).toLocaleDateString()}</td>
@@ -96,7 +133,7 @@ const MovimientosDeudaPage = () => {
             <tfoot>
               <tr>
                 <td colSpan="6" style={{ textAlign: 'right', fontWeight: 'bold' }}>
-                  Total Movimientos: {total}
+                  Total Movimientos: {filteredMovimientos.length}
                 </td>
               </tr>
             </tfoot>
@@ -177,7 +214,7 @@ const AddMovimientoModal = ({ onClose, onSubmit, isLoading }) => {
             >
               <option value="">-- Seleccionar Cuenta --</option>
               {cuentasData?.map(cta => (
-                <option key={cta.id} value={cta.id}>BCBB: {cta.id_bcbb} {cta.conjunta ? '(Conjunta)' : '(Individual)'}</option>
+                <option key={cta.id} value={cta.id}>BCBB: {cta.id_bcbb} {cta.conjunta ? '(Conjunta)' : '(Indistinta)'}</option>
               ))}
             </select>
           </div>
