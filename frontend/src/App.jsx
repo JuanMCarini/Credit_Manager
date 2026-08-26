@@ -28,6 +28,10 @@ import BancosPage from './pages/BancosPage';
 import ComprobantesPage from './pages/ComprobantesPage';
 import ChequesPage from './pages/ChequesPage';
 import PosicionIvaPage from './pages/PosicionIvaPage';
+import InversoresPage from './pages/InversoresPage';
+import CuentasComitentesPage from './pages/CuentasComitentesPage';
+import SeriesPage from './pages/SeriesPage';
+import MovimientosDeudaPage from './pages/MovimientosDeudaPage';
 
 function App() {
   return (
@@ -65,6 +69,12 @@ function App() {
             <Route path="comprobantes" element={<ComprobantesPage />} />
             <Route path="cheques" element={<ChequesPage />} />
             <Route path="posicion-iva" element={<PosicionIvaPage />} />
+            
+            {/* Rutas de Inversores */}
+            <Route path="inversores" element={<InversoresPage />} />
+            <Route path="cuentas-comitentes" element={<CuentasComitentesPage />} />
+            <Route path="series" element={<SeriesPage />} />
+            <Route path="movimientos-deuda" element={<MovimientosDeudaPage />} />
             
             {/* Rutas exclusivas Administrador */}
             <Route element={<ProtectedRoute allowedRoles={[]} />}>
