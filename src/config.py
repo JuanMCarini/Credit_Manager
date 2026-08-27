@@ -10,7 +10,11 @@ Date: 2026-05-13
 from typing import List, Union
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pathlib import Path
 
+# Absolute path to the project root
+ROOT_DIR = Path(__file__).resolve().parent.parent
+ENV_PATH = str(ROOT_DIR / ".env")
 
 class CompanyConfig(BaseSettings):
     """
@@ -32,7 +36,7 @@ class CompanyConfig(BaseSettings):
 
     # Configuration for the Pydantic model
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=ENV_PATH,
         env_file_encoding="utf-8",
         env_prefix="COMPANY_",  # Maps variables like COMPANY_RAZON_SOCIAL to razon_social
         extra="ignore",
@@ -87,17 +91,12 @@ def update_company_env(socio):
     y la memoria (COMPANY_DATA).
     """
     import os
-    from pathlib import Path
     
-    # Calcular la ruta raíz absoluta basada en la ubicación de este archivo (src/config.py)
-    root_dir = Path(__file__).resolve().parent.parent
-    env_path = root_dir / ".env"
-    
-    if env_path.exists():
-        with open(env_path, "r", encoding="utf-8") as f:
+    if Path(ENV_PATH).exists():
+        with open(ENV_PATH, "r", encoding="utf-8") as f:
             lines = f.readlines()
         
-        with open(env_path, "w", encoding="utf-8") as f:
+        with open(ENV_PATH, "w", encoding="utf-8") as f:
             for line in lines:
                 if line.startswith("COMPANY_RAZON_SOCIAL="):
                     f.write(f'COMPANY_RAZON_SOCIAL="{socio.razon_social}"\n')
@@ -140,7 +139,7 @@ class APIConfig(BaseSettings):
     )
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=ENV_PATH,
         env_file_encoding="utf-8",
         env_prefix="API_", 
         extra="ignore",
@@ -166,7 +165,7 @@ class DatabaseConfig(BaseSettings):
     name: str = Field(default="credit_manager", description="Database name")
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=ENV_PATH,
         env_file_encoding="utf-8",
         env_prefix="DB_",
         extra="ignore",

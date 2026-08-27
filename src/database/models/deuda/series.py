@@ -25,7 +25,8 @@ class Serie(Base):
     created_at = Column(DateTime, default=func.now())
     update_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
-    movimientos = relationship("MovimientoDeuda", back_populates="serie")
+    movimientos = relationship("MovimientoDeuda", foreign_keys="[MovimientoDeuda.id_serie]", back_populates="serie", cascade="all, delete-orphan")
+    movimientos_destino = relationship("MovimientoDeuda", foreign_keys="[MovimientoDeuda.id_serie_destino]", back_populates="serie_destino", cascade="all, delete-orphan")
 
     @property
     def fecha_vencimiento(self):

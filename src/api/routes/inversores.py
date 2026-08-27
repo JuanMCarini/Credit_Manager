@@ -15,8 +15,8 @@ from sqlalchemy.sql import func
 from src.api.schemas.inversores import (
     InversorCreate, InversorResponse,
     CuentaComitenteCreate, CuentaComitenteResponse,
-    SerieCreate, SerieResponse,
-    MovimientoDeudaCreate, MovimientoDeudaResponse
+    SerieCreate, SerieUpdate, SerieResponse,
+    MovimientoDeudaCreate, MovimientoDeudaUpdate, MovimientoDeudaResponse
 )
 
 router = APIRouter(prefix="/api/v1/inversores", tags=["Inversores"])
@@ -171,7 +171,7 @@ def get_cuentas_comitentes(
             })
         items.append({
             "id": c.id,
-            "id_bcbb": c.id_bcbb,
+            "id_externo": c.id_externo,
             "conjunta": c.conjunta,
             "created_at": c.created_at,
             "titulares": titulares
@@ -188,7 +188,7 @@ def update_cuenta_comitente(cuenta_id: int, cuenta_data: CuentaComitenteCreate, 
         data = cuenta_data.dict()
         titulares_data = data.pop("titulares", [])
         
-        cuenta.id_bcbb = data["id_bcbb"]
+        cuenta.id_externo = data["id_externo"]
         cuenta.conjunta = data["conjunta"]
         
         # Eliminar titulares viejos
@@ -315,6 +315,47 @@ def get_series(
         })
     return {"items": items, "total": total}
 
+@router.put("/series/{serie_id}", response_model=Dict[str, Any])
+def update_serie(
+    serie_id: int,
+    serie_data: SerieUpdate,
+    db: Session = Depends(get_db)
+):
+    try:
+        serie = db.query(Serie).filter(Serie.id == serie_id).first()
+        if not serie:
+            raise HTTPException(status_code=404, detail="Serie no encontrada")
+
+        update_data = serie_data.dict(exclude_unset=True)
+        for key, value in update_data.items():
+            setattr(serie, key, value)
+
+        db.commit()
+        db.refresh(serie)
+        return {"status": "success", "message": "Serie actualizada exitosamente"}
+    except IntegrityError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Error de integridad. El nombre de la serie ya existe.")
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/series/{serie_id}", response_model=Dict[str, Any])
+def delete_serie(
+    serie_id: int,
+    db: Session = Depends(get_db)
+):
+    try:
+        serie = db.query(Serie).filter(Serie.id == serie_id).first()
+        if not serie:
+            raise HTTPException(status_code=404, detail="Serie no encontrada")
+
+        db.delete(serie)
+        db.commit()
+        return {"status": "success", "message": "Serie y sus movimientos asociados eliminados exitosamente"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 # -----------------
 # MOVIMIENTOS
 # -----------------
@@ -343,23 +384,76 @@ def get_movimientos(
     db: Session = Depends(get_db)
 ):
     query = db.query(MovimientoDeuda).options(
-        joinedload(MovimientoDeuda.cuenta_comitente),
-        joinedload(MovimientoDeuda.serie)
+        joinedload(MovimientoDeuda.cuenta_comitente).joinedload(CuentaComitente.titulares_assoc).joinedload(TitularidadCuentaComitente.inversor),
+        joinedload(MovimientoDeuda.serie),
+        joinedload(MovimientoDeuda.serie_destino)
     )
     total = query.count()
     movimientos = query.order_by(MovimientoDeuda.fecha.desc(), MovimientoDeuda.id.desc()).offset(skip).limit(limit).all()
     
     items = []
     for m in movimientos:
+        titulares = []
+        if m.cuenta_comitente and m.cuenta_comitente.titulares_assoc:
+            for t in m.cuenta_comitente.titulares_assoc:
+                titulares.append({
+                    "orden": t.orden,
+                    "inversor_razon_social": t.inversor.razon_social,
+                    "inversor_cuit": t.inversor.cuit,
+                    "inversor_id": t.inversor.id
+                })
         items.append({
             "id": m.id,
             "id_cuenta_comitente": m.id_cuenta_comitente,
-            "cuenta_bcbb": m.cuenta_comitente.id_bcbb if m.cuenta_comitente else None,
+            "cuenta_externo": m.cuenta_comitente.id_externo if m.cuenta_comitente else None,
+            "titulares": titulares,
             "id_serie": m.id_serie,
             "serie_name": m.serie.name if m.serie else None,
+            "id_serie_destino": m.id_serie_destino,
+            "serie_destino_name": m.serie_destino.name if m.serie_destino else None,
             "fecha": m.fecha,
             "monto": float(m.monto),
             "tipo_movimiento": m.tipo_movimiento.value,
+            "observaciones": m.observaciones,
             "created_at": m.created_at
         })
     return {"items": items, "total": total}
+
+@router.put("/movimientos/{movimiento_id}", response_model=Dict[str, Any])
+def update_movimiento(
+    movimiento_id: int,
+    movimiento_data: MovimientoDeudaUpdate,
+    db: Session = Depends(get_db)
+):
+    movimiento = db.query(MovimientoDeuda).filter(MovimientoDeuda.id == movimiento_id).first()
+    if not movimiento:
+        raise HTTPException(status_code=404, detail="Movimiento no encontrado")
+    
+    update_data = movimiento_data.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(movimiento, key, value)
+        
+    try:
+        db.commit()
+        db.refresh(movimiento)
+        return {"status": "success", "message": "Movimiento actualizado", "id": movimiento.id}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/movimientos/{movimiento_id}", response_model=Dict[str, Any])
+def delete_movimiento(
+    movimiento_id: int,
+    db: Session = Depends(get_db)
+):
+    movimiento = db.query(MovimientoDeuda).filter(MovimientoDeuda.id == movimiento_id).first()
+    if not movimiento:
+        raise HTTPException(status_code=404, detail="Movimiento no encontrado")
+    
+    try:
+        db.delete(movimiento)
+        db.commit()
+        return {"status": "success", "message": "Movimiento eliminado"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))

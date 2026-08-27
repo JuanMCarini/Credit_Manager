@@ -32,7 +32,7 @@ class InversorResponse(InversorBase):
 # CUENTA COMITENTE
 # -----------------
 class CuentaComitenteBase(BaseModel):
-    id_bcbb: int
+    id_externo: int
     conjunta: bool = False
 
 class TitularidadCuentaComitenteBase(BaseModel):
@@ -70,6 +70,12 @@ class SerieBase(BaseModel):
 class SerieCreate(SerieBase):
     pass
 
+class SerieUpdate(BaseModel):
+    name: Optional[str] = Field(None, max_length=100)
+    fecha_suscripcion: Optional[date] = None
+    tna: Optional[float] = None
+    plazo: Optional[int] = None
+
 class SerieResponse(SerieBase):
     id: int
     fecha_vencimiento: date
@@ -84,12 +90,23 @@ class SerieResponse(SerieBase):
 class MovimientoDeudaBase(BaseModel):
     id_cuenta_comitente: int
     id_serie: int
+    id_serie_destino: Optional[int] = None
     fecha: datetime
     monto: float
     tipo_movimiento: TipoMovimiento
+    observaciones: Optional[str] = None
 
 class MovimientoDeudaCreate(MovimientoDeudaBase):
     pass
+
+class MovimientoDeudaUpdate(BaseModel):
+    id_cuenta_comitente: Optional[int] = None
+    id_serie: Optional[int] = None
+    id_serie_destino: Optional[int] = None
+    fecha: Optional[datetime] = None
+    monto: Optional[float] = None
+    tipo_movimiento: Optional[TipoMovimiento] = None
+    observaciones: Optional[str] = None
 
 class MovimientoDeudaResponse(MovimientoDeudaBase):
     id: int

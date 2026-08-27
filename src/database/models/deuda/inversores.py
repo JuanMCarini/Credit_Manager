@@ -38,6 +38,7 @@ class Inversor(Base):
     update_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
     titularidades_assoc = relationship("TitularidadCuentaComitente", back_populates="inversor")
+    movimientos_assoc = relationship("TitularidadMovimientoDeuda", back_populates="inversor")
 
 class CuentaComitente(Base):
     """
@@ -49,13 +50,13 @@ class CuentaComitente(Base):
     __tablename__ = "cuentas_comitentes"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    id_bcbb = Column(Integer, unique=True, nullable=False)
+    id_externo = Column(Integer, unique=True, nullable=True)
     conjunta = Column(Boolean, default=False)
 
     created_at = Column(DateTime, default=func.now())
     update_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
-    titulares_assoc = relationship("TitularidadCuentaComitente", back_populates="cuenta_comitente", order_by="TitularidadCuentaComitente.orden")
+    titulares_assoc = relationship("TitularidadCuentaComitente", back_populates="cuenta_comitente", order_by="TitularidadCuentaComitente.orden", cascade="all, delete-orphan")
     movimientos = relationship("MovimientoDeuda", back_populates="cuenta_comitente")
 
 class TitularidadCuentaComitente(Base):

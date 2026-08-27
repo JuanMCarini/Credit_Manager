@@ -6,6 +6,7 @@ import { Plus, X } from 'lucide-react';
 const SeriesPage = () => {
   const queryClient = useQueryClient();
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editSerieData, setEditSerieData] = useState(null);
   const [fechaCorte, setFechaCorte] = useState(new Date().toISOString().split('T')[0]);
   const [fSuscripcionDesde, setFSuscripcionDesde] = useState('');
   const [fSuscripcionHasta, setFSuscripcionHasta] = useState('');
@@ -98,6 +99,34 @@ const SeriesPage = () => {
     }
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async (id) => {
+      const res = await axiosClient.delete(`/api/v1/inversores/series/${id}`);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['series-deuda'] });
+    },
+    onError: (error) => {
+      alert(error.response?.data?.detail || 'Error al eliminar la serie');
+    }
+  });
+
+  const editMutation = useMutation({
+    mutationFn: async ({ id, data }) => {
+      const res = await axiosClient.put(`/api/v1/inversores/series/${id}`, data);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['series-deuda'] });
+      setEditSerieData(null);
+      alert('Serie actualizada con éxito');
+    },
+    onError: (error) => {
+      alert(error.response?.data?.detail || 'Error al actualizar la serie');
+    }
+  });
+
   return (
     <section className="tab-content active" style={{ animation: 'fadeIn 0.4s ease' }}>
       <header className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -171,13 +200,14 @@ const SeriesPage = () => {
                 <th>Int. Mensual</th>
                 <th>Int. Devengado</th>
                 <th>Int. a Devengar</th>
+                <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
-                <tr><td colSpan="12" style={{ textAlign: 'center', padding: '20px' }}>Cargando...</td></tr>
+                <tr><td colSpan="13" style={{ textAlign: 'center', padding: '20px' }}>Cargando...</td></tr>
               ) : filteredSeries.length === 0 ? (
-                <tr><td colSpan="12" style={{ textAlign: 'center', padding: '20px' }}>No se encontraron series.</td></tr>
+                <tr><td colSpan="13" style={{ textAlign: 'center', padding: '20px' }}>No se encontraron series.</td></tr>
               ) : (
                 filteredSeries.map(s => {
                   const capital = s.capital || 0;
@@ -223,6 +253,30 @@ const SeriesPage = () => {
                       <td>{formatCurrency(interesMensual)}</td>
                       <td>{formatCurrency(interesDevengado)}</td>
                       <td>{formatCurrency(interesADevengar)}</td>
+                      <td>
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          <button 
+                            className="btn-secondary" 
+                            style={{ padding: '4px', fontSize: '14px' }}
+                            onClick={() => setEditSerieData(s)}
+                            title="Editar Serie"
+                          >
+                            ✏️
+                          </button>
+                          <button 
+                            className="btn-secondary" 
+                            style={{ padding: '4px', fontSize: '14px', color: 'var(--danger-color)' }}
+                            onClick={() => {
+                              if (window.confirm('¿Está seguro de eliminar esta serie? Se eliminarán también todos los movimientos asociados.')) {
+                                deleteMutation.mutate(s.id);
+                              }
+                            }}
+                            title="Eliminar Serie"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   );
                 })
@@ -239,6 +293,7 @@ const SeriesPage = () => {
                 <td style={{ fontWeight: 'bold' }}>{formatCurrency(totals.interesMensual)}</td>
                 <td style={{ fontWeight: 'bold' }}>{formatCurrency(totals.interesDevengado)}</td>
                 <td style={{ fontWeight: 'bold' }}>{formatCurrency(totals.interesADevengar)}</td>
+                <td></td>
               </tr>
             </tfoot>
           </table>
@@ -250,6 +305,14 @@ const SeriesPage = () => {
           onClose={() => setShowAddModal(false)}
           onSubmit={(data) => addMutation.mutate(data)}
           isLoading={addMutation.isPending}
+        />
+      )}
+      {editSerieData && (
+        <EditSerieModal
+          initialData={editSerieData}
+          onClose={() => setEditSerieData(null)}
+          onSubmit={(data) => editMutation.mutate({ id: editSerieData.id, data })}
+          isLoading={editMutation.isPending}
         />
       )}
     </section>
@@ -365,3 +428,96 @@ const AddSerieModal = ({ onClose, onSubmit, isLoading }) => {
 };
 
 export default SeriesPage;
+
+// Edit Modal Component
+const EditSerieModal = ({ initialData, onClose, onSubmit, isLoading }) => {
+  const [formData, setFormData] = useState({
+    name: initialData.name || '',
+    fecha_suscripcion: initialData.fecha_suscripcion || '',
+    tna: initialData.tna ? (initialData.tna * 100).toFixed(2) : '',
+    plazo: initialData.plazo || '',
+  });
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const data = {
+      name: formData.name,
+      fecha_suscripcion: formData.fecha_suscripcion,
+      tna: parseFloat(formData.tna) / 100,
+      plazo: parseInt(formData.plazo, 10)
+    };
+    onSubmit(data);
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+      backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
+      display: 'flex', justifyContent: 'center', alignItems: 'center'
+    }}>
+      <div className="glass-panel" style={{ width: '400px', maxWidth: '90%', maxHeight: '90vh', overflowY: 'auto', padding: '24px', position: 'relative' }}>
+        <button onClick={onClose} style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-color)' }}>
+          <X size={20} />
+        </button>
+        <h3 style={{ marginTop: 0, marginBottom: '20px' }}>Editar Serie</h3>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+          <div className="form-group">
+            <label>Nombre de la Serie *</label>
+            <input
+              type="text"
+              required
+              maxLength="100"
+              value={formData.name}
+              onChange={e => setFormData({ ...formData, name: e.target.value })}
+              placeholder="Ej. Serie I"
+            />
+          </div>
+
+          <div className="form-group">
+            <label>Fecha de Suscripción *</label>
+            <input
+              type="date"
+              required
+              value={formData.fecha_suscripcion}
+              onChange={e => setFormData({ ...formData, fecha_suscripcion: e.target.value })}
+            />
+          </div>
+
+          <div className="form-group">
+            <label>Tasa Nominal Anual (TNA %) *</label>
+            <input
+              type="number"
+              required
+              step="0.01"
+              min="0"
+              value={formData.tna}
+              onChange={e => setFormData({ ...formData, tna: e.target.value })}
+              placeholder="Ej. 45.5"
+            />
+          </div>
+
+          <div className="form-group">
+            <label>Plazo (días) *</label>
+            <input
+              type="number"
+              required
+              min="1"
+              step="1"
+              value={formData.plazo}
+              onChange={e => setFormData({ ...formData, plazo: e.target.value })}
+              placeholder="Ej. 365"
+            />
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
+            <button type="button" className="btn-secondary" onClick={onClose} disabled={isLoading}>Cancelar</button>
+            <button type="submit" className="btn-primary" disabled={isLoading}>
+              {isLoading ? 'Guardando...' : 'Guardar Cambios'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};

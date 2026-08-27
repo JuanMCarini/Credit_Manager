@@ -7,7 +7,7 @@ const CuentasComitentesPage = () => {
   const queryClient = useQueryClient();
   const [showAddModal, setShowAddModal] = useState(false);
   const [editCuenta, setEditCuenta] = useState(null);
-  const [filters, setFilters] = useState({ id: '', id_bcbb: '', tipo: '', titulares: '', fecha: '' });
+  const [filters, setFilters] = useState({ id: '', id_externo: '', tipo: '', titulares: '', fecha: '' });
 
   // Fetch Cuentas
   const { data, isLoading } = useQuery({
@@ -25,7 +25,7 @@ const CuentasComitentesPage = () => {
     const fechaStr = new Date(cta.created_at).toLocaleDateString();
     return (
       cta.id.toString().includes(filters.id) &&
-      cta.id_bcbb.toString().includes(filters.id_bcbb) &&
+      (cta.id_externo || '').toString().includes(filters.id_externo) &&
       (filters.tipo === '' ? true : filters.tipo === 'conjunta' ? cta.conjunta : !cta.conjunta) &&
       titularesStr.includes(filters.titulares.toLowerCase()) &&
       fechaStr.includes(filters.fecha)
@@ -90,7 +90,7 @@ const CuentasComitentesPage = () => {
       <header className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
         <div>
           <h2>Cuentas Comitentes</h2>
-          <p>Gestione las cuentas en el mercado (BCBB) y sus inversores titulares.</p>
+          <p>Gestione las cuentas en el mercado y sus inversores titulares.</p>
         </div>
         <div>
           <button className="btn-primary" onClick={() => setShowAddModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -109,8 +109,8 @@ const CuentasComitentesPage = () => {
                   <input type="text" placeholder="Filtrar..." style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.id} onChange={e => setFilters({...filters, id: e.target.value})} />
                 </th>
                 <th>
-                  ID BCBB
-                  <input type="text" placeholder="Filtrar..." style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.id_bcbb} onChange={e => setFilters({...filters, id_bcbb: e.target.value})} />
+                  ID Externo
+                  <input type="text" placeholder="Filtrar..." style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.id_externo} onChange={e => setFilters({...filters, id_externo: e.target.value})} />
                 </th>
                 <th>
                   Tipo
@@ -140,7 +140,7 @@ const CuentasComitentesPage = () => {
                 filteredCuentas.map(cta => (
                   <tr key={cta.id}>
                     <td>{cta.id}</td>
-                    <td>{cta.id_bcbb}</td>
+                    <td>{cta.id_externo}</td>
                     <td>{cta.conjunta ? 'Conjunta' : 'Indistinta'}</td>
                     <td>
                       {cta.titulares && cta.titulares.length > 0 ? (
@@ -204,7 +204,7 @@ const AddCuentaModal = ({ initialData, onClose, onSubmit, isLoading }) => {
   const [formData, setFormData] = useState(() => {
     if (initialData) {
       return {
-        id_bcbb: initialData.id_bcbb,
+        id_externo: initialData.id_externo,
         conjunta: initialData.conjunta,
         titulares: (initialData.titulares || []).map(t => ({
           id_inversor: t.inversor_id,
@@ -214,7 +214,7 @@ const AddCuentaModal = ({ initialData, onClose, onSubmit, isLoading }) => {
       };
     }
     return {
-      id_bcbb: '',
+      id_externo: '',
       conjunta: false,
       titulares: [] // { id_inversor, orden, activo }
     };
@@ -251,8 +251,8 @@ const AddCuentaModal = ({ initialData, onClose, onSubmit, isLoading }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!formData.id_bcbb) {
-      alert("El ID BCBB es obligatorio.");
+    if (!formData.id_externo) {
+      alert("El ID Externo es obligatorio.");
       return;
     }
     // Validar titulares
@@ -262,7 +262,7 @@ const AddCuentaModal = ({ initialData, onClose, onSubmit, isLoading }) => {
     }
     
     onSubmit({
-      id_bcbb: parseInt(formData.id_bcbb),
+      id_externo: parseInt(formData.id_externo),
       conjunta: formData.conjunta,
       titulares: formData.titulares.map(t => ({
         id_inversor: parseInt(t.id_inversor),
@@ -286,12 +286,12 @@ const AddCuentaModal = ({ initialData, onClose, onSubmit, isLoading }) => {
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           
           <div className="form-group">
-            <label>ID BCBB *</label>
+            <label>ID Externo *</label>
             <input 
               type="number" 
               required 
-              value={formData.id_bcbb} 
-              onChange={e => setFormData({...formData, id_bcbb: e.target.value})} 
+              value={formData.id_externo} 
+              onChange={e => setFormData({...formData, id_externo: e.target.value})} 
             />
           </div>
           
