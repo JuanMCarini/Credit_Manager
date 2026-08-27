@@ -10,7 +10,7 @@ from src.logic.deuda.suscripcion import nueva_serie
 from src.database import get_db
 from src.database.models.deuda.inversores import Inversor, CuentaComitente, TitularidadCuentaComitente
 from src.database.models.deuda.series import Serie
-from src.database.models.deuda.movimientos import MovimientoDeuda, TipoMovimiento
+from src.database.models.deuda.movimientos import MovimientoDeuda, TipoMovimiento, TitularidadMovimientoDeuda
 from sqlalchemy.sql import func
 from src.api.schemas.inversores import (
     InversorCreate, InversorResponse,
@@ -385,6 +385,7 @@ def get_movimientos(
 ):
     query = db.query(MovimientoDeuda).options(
         joinedload(MovimientoDeuda.cuenta_comitente).joinedload(CuentaComitente.titulares_assoc).joinedload(TitularidadCuentaComitente.inversor),
+        joinedload(MovimientoDeuda.titulares_assoc).joinedload(TitularidadMovimientoDeuda.inversor),
         joinedload(MovimientoDeuda.serie),
         joinedload(MovimientoDeuda.serie_destino)
     )
@@ -394,7 +395,17 @@ def get_movimientos(
     items = []
     for m in movimientos:
         titulares = []
-        if m.cuenta_comitente and m.cuenta_comitente.titulares_assoc:
+        if m.titulares_assoc:
+            # Usar titulares específicos del movimiento
+            for idx, t in enumerate(m.titulares_assoc):
+                titulares.append({
+                    "orden": idx + 1,
+                    "inversor_razon_social": t.inversor.razon_social,
+                    "inversor_cuit": t.inversor.cuit,
+                    "inversor_id": t.inversor.id
+                })
+        elif m.cuenta_comitente and m.cuenta_comitente.titulares_assoc:
+            # Fallback a los titulares de la cuenta comitente
             for t in m.cuenta_comitente.titulares_assoc:
                 titulares.append({
                     "orden": t.orden,

@@ -28,19 +28,25 @@ def nueva_serie(nombre: str, fecha: str | date, tna: float, plazo: int, path: Pa
     df.columns = ["ID Cta. Cte.", "Razón Social", "CUIT/CUIL", "Dirección", "Capital", "Interés", "Total"]
     
     # Aseguramos que las columnas monetarias sean numéricas (limpiando formato string de CSV)
+    def clean_money(val):
+        if isinstance(val, str):
+            val = val.replace('$', '').replace(' ', '').replace('.', '').replace(',', '.')
+            # Si el string queda vacío (por ejemplo en celdas vacías), devolvemos NaN
+            return float(val) if val else pd.NA
+        return val
+
     for col in ["Capital", "Interés", "Total"]:
-        if df[col].dtype == object:
-            df[col] = df[col].astype(str).str.replace(r"[\$\s\.]", "", regex=True).str.replace(",", ".").astype(float)
+        df[col] = df[col].apply(clean_money).astype(float)
 
     # Limpiamos filas completamente vacías al final del archivo
     df = df.dropna(subset=["ID Cta. Cte.", "CUIT/CUIL", "Capital"])
     df["Conjunta"] = False
     df = df.reset_index(drop=True)
-    df.index.name = "ID Movimiento"
+    df = df.reset_index() # Crea columna 'index'
+    df = df.rename(columns={"index": "ID Movimiento"})
 
     # Calculamos el capital total por cuenta ANTES de explotar titulares múltiples
     df_ctas_monto = df.groupby(["ID Movimiento", "ID Cta. Cte."])["Capital"].sum().reset_index()
-    df_ctas_monto.index.name = "ID Movimiento"
 
     # Buscamos coincidencias con " Y " o " Y/O "
     filtro = df["Razón Social"].str.contains(r" Y/O | Y ", regex=True, na=False)
@@ -51,12 +57,22 @@ def nueva_serie(nombre: str, fecha: str | date, tna: float, plazo: int, path: Pa
         # Detectamos si es conjunta (tiene "Y")
         df_multiples["Conjunta"] = df_multiples["Razón Social"].apply(lambda x: " Y " in str(x).upper())
         
-        # Separamos los nombres en una lista
-        df_multiples["Razón Social"] = df_multiples["Razón Social"].apply(
-            lambda x: str(x).upper().split(" Y ") if " Y " in str(x).upper() else str(x).upper().split(" Y/O ")
-        )
-        
-        df_multiples["CUIT/CUIL"] = df_multiples["CUIT/CUIL"].apply(lambda x: str(x).split(" - "))
+        import re
+        def align_lists(row):
+            rs = str(row["Razón Social"]).upper()
+            nombres = rs.split(" Y ") if " Y " in rs else rs.split(" Y/O ")
+            # Mejoramos el split de CUITs para aceptar guiones sin espacios o barras
+            cuits = re.split(r"\s*-\s*|\s*/\s*|\s+Y\s+|\s+Y/O\s+", str(row["CUIT/CUIL"]).upper())
+            
+            if len(cuits) < len(nombres):
+                # Si hay menos CUITs que nombres, rellenamos usando el primer CUIT
+                cuits.extend([cuits[0]] * (len(nombres) - len(cuits)))
+            elif len(nombres) < len(cuits):
+                nombres.extend(["INVERSOR DESCONOCIDO"] * (len(cuits) - len(nombres)))
+                
+            return pd.Series([nombres, cuits])
+            
+        df_multiples[["Razón Social", "CUIT/CUIL"]] = df_multiples.apply(align_lists, axis=1)
         
         # Explotamos las listas para que cada titular tenga su propia fila
         df_multiples = df_multiples.explode(["Razón Social", "CUIT/CUIL"])
@@ -84,7 +100,7 @@ def nueva_serie(nombre: str, fecha: str | date, tna: float, plazo: int, path: Pa
         raise ValueError("Error en el cálculo de totales o intereses. Verifique las fórmulas del archivo.")
 
     df_invs = df[["CUIT/CUIL", "Razón Social", "Dirección"]].copy()
-    df_invs = df_invs.drop_duplicates()
+    df_invs = df_invs.drop_duplicates(subset=["CUIT/CUIL"])
     validar_datos_arca(df_invs)
 
     # ---------------------------------------------------------
@@ -204,23 +220,27 @@ def nueva_serie(nombre: str, fecha: str | date, tna: float, plazo: int, path: Pa
                 db.add(movimiento)
                 db.flush() # Aseguramos que el movimiento tenga ID
 
-                # 5. Llenamos la tabla titularidad_movimiento_deuda en base a la cuenta
-                titulares_cuenta = db.query(TitularidadCuentaComitente).filter(
-                    TitularidadCuentaComitente.id_cuenta_comitente == cuenta.id
-                ).all()
-
-                for tc in titulares_cuenta:
-                    tit_mov = db.query(TitularidadMovimientoDeuda).filter(
-                        TitularidadMovimientoDeuda.id_movimiento_deuda == movimiento.id,
-                        TitularidadMovimientoDeuda.id_inversor == tc.id_inversor
-                    ).first()
-                    
-                    if not tit_mov:
-                        tit_mov = TitularidadMovimientoDeuda(
-                            id_movimiento_deuda=movimiento.id,
-                            id_inversor=tc.id_inversor
-                        )
-                        db.add(tit_mov)
+                # 5. Llenamos la tabla titularidad_movimiento_deuda usando SOLO los inversores del movimiento actual
+                id_movimiento_val = row["ID Movimiento"]
+                
+                # Buscamos en df cuáles son los CUITs vinculados a esta fila original
+                cuits_movimiento = df.loc[df["ID Movimiento"] == id_movimiento_val, "CUIT/CUIL"].tolist()
+                
+                for cuit_val in cuits_movimiento:
+                    inversor = db.query(Inversor).filter(Inversor.cuit == cuit_val).first()
+                    if inversor:
+                        tit_mov = db.query(TitularidadMovimientoDeuda).filter(
+                            TitularidadMovimientoDeuda.id_movimiento_deuda == movimiento.id,
+                            TitularidadMovimientoDeuda.id_inversor == inversor.id
+                        ).first()
+                        
+                        if not tit_mov:
+                            nueva_titularidad = TitularidadMovimientoDeuda(
+                                id_movimiento_deuda=movimiento.id,
+                                id_inversor=inversor.id
+                            )
+                            db.add(nueva_titularidad)
+                db.flush()
 
         # Commiteamos TODOS los cambios en un solo paso
         db.commit()
