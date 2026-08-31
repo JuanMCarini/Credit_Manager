@@ -21,10 +21,12 @@ from src.api.schemas.bancos import (
 )
 from src.logic.creditos.import_data.bancos.bica import import_extract as bica_import
 from src.logic.creditos.import_data.bancos.santander import import_extract as santander_import
+from src.logic.creditos.import_data.bancos.pampa import import_extract as pampa_import
 
 PARSERS = {
     'bica': bica_import,
-    'santander': santander_import
+    'santander': santander_import,
+    'pampa': pampa_import
 }
 
 router = APIRouter(
@@ -512,10 +514,17 @@ def get_movimientos(
         cat = mov.concepto.tipo_movimiento.value if hasattr(mov.concepto.tipo_movimiento, 'value') else mov.concepto.tipo_movimiento
         is_ingreso = cat in ('Ingreso', 'Rescate FCI', 'Egresos de plazo fijo')
         
-        if concepto_nombre and concepto_nombre not in (mov.concepto.name or ""):
-            continue
-        if clasificacion_nombre and mov.concepto.clasificacion and clasificacion_nombre not in (mov.concepto.clasificacion.name or ""):
-            continue
+        if concepto_nombre:
+            nombres = [n.strip().lower() for n in concepto_nombre.split(',')]
+            c_name = (mov.concepto.name or "").lower() if mov.concepto else ""
+            if not any(n in c_name for n in nombres):
+                continue
+                
+        if clasificacion_nombre:
+            nombres = [n.strip().lower() for n in clasificacion_nombre.split(',')]
+            cl_name = (mov.concepto.clasificacion.name or "").lower() if mov.concepto and mov.concepto.clasificacion else ""
+            if not any(n in cl_name for n in nombres):
+                continue
         if ingreso_str:
             if not is_ingreso:
                 continue
