@@ -37,6 +37,7 @@
         "cuit",
         "descripcion",
         "dias",
+        "direccion",
         "Egresos",
         "EGRESOS",
         "emision",
