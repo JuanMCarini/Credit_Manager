@@ -20,14 +20,11 @@ def cerrar_serie(nombre: str, fecha: str | date):
         if not serie:
             raise ValueError(f"Serie {nombre} no encontrada")
         
-        movimientos = db.query(MovimientoDeuda.fecha, MovimientoDeuda.id_cuenta_comitente, MovimientoDeuda.id_serie, MovimientoDeuda.id_serie_destino, MovimientoDeuda.tipo_movimiento, MovimientoDeuda.monto).filter(
-            or_(
-                MovimientoDeuda.id_serie == serie.id,
-                MovimientoDeuda.id_serie_destino == serie.id
-            )
+        movimientos = db.query(MovimientoDeuda.fecha, MovimientoDeuda.id_cuenta_comitente, MovimientoDeuda.id_serie, MovimientoDeuda.tipo_movimiento, MovimientoDeuda.monto).filter(
+            MovimientoDeuda.id_serie == serie.id
         ).all()
 
-        df = pd.DataFrame(movimientos, columns=['fecha', 'cuenta_comitente', 'id_serie', 'id_serie_destino', 'tipo_movimiento', 'monto'])
+        df = pd.DataFrame(movimientos, columns=['fecha', 'cuenta_comitente', 'id_serie', 'tipo_movimiento', 'monto'])
         
         if not df.empty:
             from IPython.display import display

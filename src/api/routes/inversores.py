@@ -386,8 +386,7 @@ def get_movimientos(
     query = db.query(MovimientoDeuda).options(
         joinedload(MovimientoDeuda.cuenta_comitente).joinedload(CuentaComitente.titulares_assoc).joinedload(TitularidadCuentaComitente.inversor),
         joinedload(MovimientoDeuda.titulares_assoc).joinedload(TitularidadMovimientoDeuda.inversor),
-        joinedload(MovimientoDeuda.serie),
-        joinedload(MovimientoDeuda.serie_destino)
+        joinedload(MovimientoDeuda.serie)
     )
     total = query.count()
     movimientos = query.order_by(MovimientoDeuda.fecha.desc(), MovimientoDeuda.id.desc()).offset(skip).limit(limit).all()
@@ -420,8 +419,6 @@ def get_movimientos(
             "titulares": titulares,
             "id_serie": m.id_serie,
             "serie_name": m.serie.name if m.serie else None,
-            "id_serie_destino": m.id_serie_destino,
-            "serie_destino_name": m.serie_destino.name if m.serie_destino else None,
             "fecha": m.fecha,
             "monto": float(m.monto),
             "tipo_movimiento": m.tipo_movimiento.value,

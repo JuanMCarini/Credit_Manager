@@ -90,7 +90,6 @@ class SerieResponse(SerieBase):
 class MovimientoDeudaBase(BaseModel):
     id_cuenta_comitente: int
     id_serie: int
-    id_serie_destino: Optional[int] = None
     fecha: datetime
     monto: float
     tipo_movimiento: TipoMovimiento
@@ -102,7 +101,6 @@ class MovimientoDeudaCreate(MovimientoDeudaBase):
 class MovimientoDeudaUpdate(BaseModel):
     id_cuenta_comitente: Optional[int] = None
     id_serie: Optional[int] = None
-    id_serie_destino: Optional[int] = None
     fecha: Optional[datetime] = None
     monto: Optional[float] = None
     tipo_movimiento: Optional[TipoMovimiento] = None

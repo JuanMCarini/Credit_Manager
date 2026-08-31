@@ -20,7 +20,8 @@ class TipoMovimiento(enum.Enum):
     RESCATE = "Rescate"
     VENCIMIENTO = "Vencimiento"
     RETIRO_INTERESES = "Retiro de intereses"
-    RENOVACION = "Renovación"
+    RENOVACION_RESCATE = "Renovación rescate"
+    RENOVACION_SUSCRIPCION = "Renovación suscripción"
 
 class MovimientoDeuda(Base):
 
@@ -29,7 +30,6 @@ class MovimientoDeuda(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     id_cuenta_comitente = Column(Integer, ForeignKey("cuentas_comitentes.id"), nullable=False)
     id_serie = Column(Integer, ForeignKey("series.id"), nullable=False)
-    id_serie_destino = Column(Integer, ForeignKey("series.id"), nullable=True)
     fecha = Column(DateTime, nullable=False)
     monto = Column(Numeric(18, 2), nullable=False)
     tipo_movimiento = Column(Enum(TipoMovimiento), nullable=False)
@@ -40,7 +40,6 @@ class MovimientoDeuda(Base):
 
     cuenta_comitente = relationship("CuentaComitente", back_populates="movimientos")
     serie = relationship("Serie", foreign_keys=[id_serie], back_populates="movimientos")
-    serie_destino = relationship("Serie", foreign_keys=[id_serie_destino], back_populates="movimientos_destino")
     titulares_assoc = relationship("TitularidadMovimientoDeuda", back_populates="movimiento", cascade="all, delete-orphan")
 
 
