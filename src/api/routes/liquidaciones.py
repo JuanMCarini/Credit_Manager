@@ -65,7 +65,7 @@ def preview_liquidaciones(req: LiquidacionProcessRequest, db: Session = Depends(
             con_recurso=req.con_recurso
         )
         sm.settlements_resource(df_rec)
-        sm.settlements_s_resource(df_s_rec)
+        sm.settlements_s_resource(df_s_rec, procesos_cobranza_id=req.procesos_cobranza_id)
         
         df_settlements = sm.settlements
         if df_settlements is None or df_settlements.empty:
@@ -96,7 +96,7 @@ def procesar_liquidaciones(req: LiquidacionProcessRequest, db: Session = Depends
             con_recurso=req.con_recurso
         )
         sm.settlements_resource(df_rec)
-        sm.settlements_s_resource(df_s_rec)
+        sm.settlements_s_resource(df_s_rec, procesos_cobranza_id=req.procesos_cobranza_id)
         
         sm.execute_settlements(fecha_pago=None, cancelada=False)
         return {"status": "success", "message": "Liquidaciones procesadas exitosamente."}

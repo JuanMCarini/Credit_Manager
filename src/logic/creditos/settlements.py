@@ -214,7 +214,7 @@ class SettlementManager:
 
         return df
 
-    def settlements_s_resource(self, df_s_rec: pd.DataFrame):
+    def settlements_s_resource(self, df_s_rec: pd.DataFrame, procesos_cobranza_id: Optional[list[int]] = None):
 
         df_s_rec = df_s_rec.sort_index()
         
@@ -229,6 +229,9 @@ class SettlementManager:
             Cobranza.cuota_id.in_(df_s_rec.index.unique()),
             not_(Cobranza.id.in_(settled_ids))
         )
+        
+        if procesos_cobranza_id is not None and len(procesos_cobranza_id) > 0:
+            query = query.filter(Cobranza.proceso_id.in_(procesos_cobranza_id))
 
         df_cobr = pd.read_sql(query.statement, self.db.get_bind(), index_col="id")
         df_cobr = df_cobr.sort_values(by="cuota_id")

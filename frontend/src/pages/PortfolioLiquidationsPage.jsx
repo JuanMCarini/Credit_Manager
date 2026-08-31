@@ -69,6 +69,18 @@ const PortfolioLiquidationsPage = () => {
 
   const handleFilterChange = (field, value) => setFilter(prev => ({ ...prev, [field]: value }));
 
+  const totalCapital = filteredLiquidaciones.reduce((acc, curr) => acc + Number(curr.capital || 0), 0);
+  const totalInteres = filteredLiquidaciones.reduce((acc, curr) => acc + Number(curr.interes || 0), 0);
+  const totalIva = filteredLiquidaciones.reduce((acc, curr) => acc + Number(curr.iva || 0), 0);
+  const totalImporte = filteredLiquidaciones.reduce((acc, curr) => acc + Number(curr.importe_total || 0), 0);
+
+  const formatMoney = (amount) => {
+    return '$ ' + new Intl.NumberFormat('es-AR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(Number(amount));
+  };
+
   const renderInput = (field, placeholder = 'Filtro...') => (
     <input 
       type="text" 
@@ -329,6 +341,16 @@ const PortfolioLiquidationsPage = () => {
                 ))
               )}
             </tbody>
+            <tfoot>
+              <tr>
+                <td colSpan="9" style={{ textAlign: 'right', fontWeight: 'bold' }}>Totales Filtrados:</td>
+                <td style={{ fontWeight: 'bold' }}>{formatMoney(totalCapital)}</td>
+                <td style={{ fontWeight: 'bold' }}>{formatMoney(totalInteres)}</td>
+                <td style={{ fontWeight: 'bold' }}>{formatMoney(totalIva)}</td>
+                <td style={{ fontWeight: 'bold' }}>{formatMoney(totalImporte)}</td>
+                <td colSpan="2"></td>
+              </tr>
+            </tfoot>
           </table>
         ) : (
           <table className="data-table">
