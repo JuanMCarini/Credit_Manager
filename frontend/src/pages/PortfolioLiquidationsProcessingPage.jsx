@@ -1,9 +1,72 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { FilterX } from 'lucide-react';
 import axiosClient from '../api/axiosClient';
 import ExcelDateFilter from '../components/ExcelDateFilter';
 import ExcelListFilter from '../components/ExcelListFilter';
 import ExportExcelButton from '../components/ExportExcelButton';
+
+const MultiSelectDropdown = ({ options, selectedValues, onChange, placeholder }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const toggleOption = (val) => {
+    let newValues;
+    if (selectedValues.includes(val)) {
+      newValues = selectedValues.filter(v => v !== val);
+    } else {
+      newValues = [...selectedValues, val];
+    }
+    onChange(newValues);
+  };
+
+  return (
+    <div ref={containerRef} style={{ position: 'relative', width: '100%' }}>
+      <div 
+        onClick={() => setIsOpen(!isOpen)} 
+        className="form-control" 
+        style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-input)' }}
+      >
+        <span>
+          {selectedValues.length === 0 
+            ? placeholder 
+            : `${selectedValues.length} proceso(s) seleccionado(s)`}
+        </span>
+        <span style={{ fontSize: '0.8rem', opacity: 0.7 }}>▼</span>
+      </div>
+      {isOpen && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100, 
+          background: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', 
+          borderRadius: '4px', maxHeight: '200px', overflowY: 'auto',
+          marginTop: '4px', boxShadow: '0 8px 16px rgba(0,0,0,0.5)'
+        }}>
+          {options.map(opt => (
+            <label key={opt.value} style={{ display: 'flex', alignItems: 'center', padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)', margin: 0 }}>
+              <input 
+                type="checkbox" 
+                checked={selectedValues.includes(opt.value)} 
+                onChange={() => toggleOption(opt.value)} 
+                style={{ marginRight: '8px', cursor: 'pointer' }} 
+              />
+              <span style={{ fontSize: '0.9rem', color: 'var(--text-primary)' }}>{opt.label}</span>
+            </label>
+          ))}
+          {options.length === 0 && <div style={{ padding: '8px 12px', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>No hay opciones</div>}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const PortfolioLiquidationsProcessingPage = () => {
   const [formData, setFormData] = useState({
@@ -12,13 +75,15 @@ const PortfolioLiquidationsProcessingPage = () => {
     fecha_corte: '',
     fecha_vencimiento_desde: '',
     fecha_vencimiento_hasta: '',
-    con_recurso: false
+    con_recurso: false,
+    procesos_cobranza_id: []
   });
   
   const [previewData, setPreviewData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [compradores, setCompradores] = useState([]);
+  const [procesos, setProcesos] = useState([]);
   const [filters, setFilters] = useState({
     credito_id: [],
     nro_cuota: '',
@@ -39,12 +104,29 @@ const PortfolioLiquidationsProcessingPage = () => {
         console.error("Error fetching compradores:", error);
       }
     };
+    
+    const fetchProcesos = async () => {
+      try {
+        const res = await axiosClient.get('/api/v1/procesos');
+        // Filter out processes that don't make sense or just show all
+        setProcesos(res.data);
+      } catch (error) {
+        console.error("Error fetching procesos:", error);
+      }
+    };
+
     fetchCompradores();
+    fetchProcesos();
   }, []);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleProcesosChange = (e) => {
+    const values = Array.from(e.target.selectedOptions, option => parseInt(option.value));
+    setFormData(prev => ({ ...prev, procesos_cobranza_id: values }));
   };
 
   const handlePreview = async (e) => {
@@ -60,7 +142,10 @@ const PortfolioLiquidationsProcessingPage = () => {
         fecha_corte: formData.fecha_corte || null,
         fecha_vencimiento_desde: formData.fecha_vencimiento_desde || null,
         fecha_vencimiento_hasta: formData.fecha_vencimiento_hasta || null,
-        con_recurso: formData.con_recurso
+        con_recurso: formData.con_recurso,
+        procesos_cobranza_id: formData.procesos_cobranza_id && formData.procesos_cobranza_id.length > 0 
+          ? formData.procesos_cobranza_id 
+          : null
       };
       const res = await axiosClient.post('/api/v1/liquidaciones/preview', payload);
       setPreviewData(res.data);
@@ -86,7 +171,10 @@ const PortfolioLiquidationsProcessingPage = () => {
         fecha_corte: formData.fecha_corte || null,
         fecha_vencimiento_desde: formData.fecha_vencimiento_desde || null,
         fecha_vencimiento_hasta: formData.fecha_vencimiento_hasta || null,
-        con_recurso: formData.con_recurso
+        con_recurso: formData.con_recurso,
+        procesos_cobranza_id: formData.procesos_cobranza_id && formData.procesos_cobranza_id.length > 0 
+          ? formData.procesos_cobranza_id 
+          : null
       };
       await axiosClient.post('/api/v1/liquidaciones/procesar', payload);
       alert("Liquidaciones procesadas exitosamente.");
@@ -98,7 +186,8 @@ const PortfolioLiquidationsProcessingPage = () => {
         fecha_corte: '',
         fecha_vencimiento_desde: '',
         fecha_vencimiento_hasta: '',
-        con_recurso: false
+        con_recurso: false,
+        procesos_cobranza_id: []
       });
     } catch (error) {
       alert("Error al procesar: " + (error.response?.data?.detail || error.message));
@@ -151,7 +240,7 @@ const PortfolioLiquidationsProcessingPage = () => {
       </header>
 
       <div className="glass-panel" style={{ padding: '24px', marginBottom: '24px' }}>
-        <form onSubmit={handlePreview} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+        <form onSubmit={handlePreview} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', alignItems: 'end' }}>
           
           <div className="form-group">
             <label>Tipo de Identificador</label>
@@ -177,18 +266,8 @@ const PortfolioLiquidationsProcessingPage = () => {
           </div>
 
           <div className="form-group">
-            <label>Vencimiento Desde (opcional)</label>
-            <input type="date" name="fecha_vencimiento_desde" value={formData.fecha_vencimiento_desde} onChange={handleInputChange} className="form-control" />
-          </div>
-
-          <div className="form-group">
-            <label>Vencimiento Hasta (opcional)</label>
-            <input type="date" name="fecha_vencimiento_hasta" value={formData.fecha_vencimiento_hasta} onChange={handleInputChange} className="form-control" />
-          </div>
-
-          <div className="form-group">
             <label>Tipo de Operación</label>
-            <div style={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'center', height: '42px' }}>
               <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '8px', fontSize: '14px', color: 'var(--text-primary)' }}>
                 <div className="toggle-switch">
                   <input 
@@ -201,6 +280,29 @@ const PortfolioLiquidationsProcessingPage = () => {
                 {formData.con_recurso ? 'Operaciones Con Recurso' : 'Operaciones Sin Recurso'}
               </label>
             </div>
+          </div>
+
+          <div className="form-group">
+            <label>Vencimiento Desde (opcional)</label>
+            <input type="date" name="fecha_vencimiento_desde" value={formData.fecha_vencimiento_desde} onChange={handleInputChange} className="form-control" />
+          </div>
+
+          <div className="form-group">
+            <label>Vencimiento Hasta (opcional)</label>
+            <input type="date" name="fecha_vencimiento_hasta" value={formData.fecha_vencimiento_hasta} onChange={handleInputChange} className="form-control" />
+          </div>
+
+          <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+            <label>Procesos de Cobranza (Opcional)</label>
+            <MultiSelectDropdown 
+              options={procesos.map(p => ({
+                value: p.ID,
+                label: `[${p.ID}] ${p.Tipo} - ${p.Descripción} (${p["Fecha Ejecución"]})`
+              }))}
+              selectedValues={formData.procesos_cobranza_id}
+              onChange={(newValues) => setFormData(prev => ({ ...prev, procesos_cobranza_id: newValues }))}
+              placeholder="Todos los procesos (Seleccionar para filtrar)"
+            />
           </div>
 
           <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
