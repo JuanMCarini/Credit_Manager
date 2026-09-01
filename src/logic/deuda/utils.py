@@ -1,9 +1,21 @@
+from itertools import groupby
 import pandas as pd
 
 from pathlib import Path
 from datetime import date
 
 from src.utils import select_file
+from src.services.arca_consulta import validar_datos_arca
+from src.database.models.deuda.movimientos import TipoMovimiento
+
+mov_exp = {
+    TipoMovimiento.SUSCRIPCION: 1,
+    TipoMovimiento.RENOVACION_SUSCRIPCION: 1,
+    TipoMovimiento.RESCATE: -1,
+    TipoMovimiento.RENOVACION_RESCATE: -1,
+    TipoMovimiento.VENCIMIENTO: -1,
+    TipoMovimiento.RETIRO_INTERESES: -1
+}
 
 def clean_money(val):
     # Aseguramos que las columnas monetarias sean numéricas (limpiando formato string de CSV)
@@ -28,14 +40,17 @@ def read_file(path: Path | None):
 
     if len(df.columns) == 7:
         df.columns = ["ID Cta. Cte.", "Razón Social", "CUIT/CUIL", "Dirección", "Capital", "Interés", "Total"]
+        df = df.groupby(["ID Cta. Cte.", "CUIT/CUIL"]).agg({"Razón Social": 'first', "Dirección": 'first', "Capital": 'sum', "Interés": 'sum', "Total": 'sum'}).reset_index()
     elif len(df.columns) == 10:
         df.columns = ["ID Cta. Cte.", "Razón Social", "CUIT/CUIL", "Dirección", "Capital", "Interés", "Total", "Rescate", "Suscripción", "Observación"]
+        df = df.groupby(["ID Cta. Cte.", "CUIT/CUIL"]).agg({"Razón Social": 'first', "Dirección": 'first', "Capital": 'sum', "Interés": 'sum', "Total": 'sum', "Rescate": 'sum', "Suscripción": 'sum', "Observación": 'first'}).reset_index()
     else:
         raise ValueError("El archivo, para nueva serie, debe tener 7 o 10 columnas")
 
     for col in ["Capital", "Interés", "Total", "Rescate", "Suscripción"]:
         if col in df.columns:
             df[col] = df[col].apply(clean_money).astype(float)
+            df[col] = df[col].fillna(0.0)
 
     # Limpiamos filas completamente vacías al final del archivo
     df = df.dropna(subset=["ID Cta. Cte.", "CUIT/CUIL", "Capital"])
@@ -44,5 +59,7 @@ def read_file(path: Path | None):
 
     df["CUIT/CUIL"] = df["CUIT/CUIL"].astype(str).apply(lambda x: x.split(" - "))
     df["Razón Social"] = df["Razón Social"].astype(str).apply(lambda x: x.split(" Y/O "))
+
+    # validar_datos_arca(df)
 
     return df

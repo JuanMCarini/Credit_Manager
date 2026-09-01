@@ -2,12 +2,18 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axiosClient from '../api/axiosClient';
 import { Plus, X, Trash2, Edit2 } from 'lucide-react';
+import ExcelListFilter from '../components/ExcelListFilter';
 
 const CuentasComitentesPage = () => {
   const queryClient = useQueryClient();
   const [showAddModal, setShowAddModal] = useState(false);
   const [editCuenta, setEditCuenta] = useState(null);
-  const [filters, setFilters] = useState({ id: '', id_externo: '', tipo: '', titulares: '', fecha: '' });
+  const [showEstadoCuenta, setShowEstadoCuenta] = useState(null);
+  const [filters, setFilters] = useState({});
+
+  const handleFilterChange = (key, value) => {
+    setFilters(prev => ({ ...prev, [key]: value }));
+  };
 
   // Fetch Cuentas
   const { data, isLoading } = useQuery({
@@ -20,17 +26,45 @@ const CuentasComitentesPage = () => {
 
   const cuentas = data?.items || [];
   
-  const filteredCuentas = cuentas.filter(cta => {
-    const titularesStr = cta.titulares ? cta.titulares.map(t => `${t.inversor_razon_social} ${t.inversor_cuit}`).join(' ').toLowerCase() : '';
-    const fechaStr = new Date(cta.created_at).toLocaleDateString();
-    return (
-      cta.id.toString().includes(filters.id) &&
-      (cta.id_externo || '').toString().includes(filters.id_externo) &&
-      (filters.tipo === '' ? true : filters.tipo === 'conjunta' ? cta.conjunta : !cta.conjunta) &&
-      titularesStr.includes(filters.titulares.toLowerCase()) &&
-      fechaStr.includes(filters.fecha)
-    );
+  const filteredCuentas = (cuentas || []).filter(cta => {
+    return Object.entries(filters).every(([key, filterValue]) => {
+      if (!filterValue || filterValue.length === 0) return true;
+      let valStr = '';
+      if (key === 'tipo') {
+        valStr = cta.conjunta ? 'Conjunta' : 'Indistinta';
+      } else if (key === 'titulares') {
+        valStr = cta.titulares && cta.titulares.length > 0 
+          ? cta.titulares.map(t => `${t.inversor_razon_social} ${t.inversor_cuit}`).join(' ') 
+          : 'Sin titulares asignados';
+      } else if (key === 'fecha') {
+        valStr = new Date(cta.created_at).toLocaleDateString();
+      } else {
+        valStr = String(cta[key] !== null && cta[key] !== undefined ? cta[key] : '');
+      }
+      return filterValue.includes(valStr);
+    });
   });
+
+  const getAvailableOptions = (key) => {
+    if (!cuentas) return [];
+    if (key === 'tipo') return ['Conjunta', 'Indistinta'];
+    
+    const options = new Set();
+    cuentas.forEach(cta => {
+      let valStr = '';
+      if (key === 'titulares') {
+        valStr = cta.titulares && cta.titulares.length > 0
+          ? cta.titulares.map(t => `${t.inversor_razon_social} ${t.inversor_cuit}`).join(' ')
+          : 'Sin titulares asignados';
+      } else if (key === 'fecha') {
+        valStr = new Date(cta.created_at).toLocaleDateString();
+      } else {
+        valStr = String(cta[key] !== null && cta[key] !== undefined ? cta[key] : '');
+      }
+      if (valStr) options.add(valStr);
+    });
+    return Array.from(options).sort();
+  };
 
   // Add Mutation
   const addMutation = useMutation({
@@ -104,30 +138,23 @@ const CuentasComitentesPage = () => {
           <table className="data-table">
             <thead>
               <tr>
-                <th>
-                  ID Interno
-                  <input type="text" placeholder="Filtrar..." style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.id} onChange={e => setFilters({...filters, id: e.target.value})} />
-                </th>
-                <th>
-                  ID Externo
-                  <input type="text" placeholder="Filtrar..." style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.id_externo} onChange={e => setFilters({...filters, id_externo: e.target.value})} />
-                </th>
-                <th>
-                  Tipo
-                  <select style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.tipo} onChange={e => setFilters({...filters, tipo: e.target.value})}>
-                    <option value="">Todos</option>
-                    <option value="indistinta">Indistinta</option>
-                    <option value="conjunta">Conjunta</option>
-                  </select>
-                </th>
-                <th>
-                  Titulares (Inversores)
-                  <input type="text" placeholder="Filtrar..." style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.titulares} onChange={e => setFilters({...filters, titulares: e.target.value})} />
-                </th>
-                <th>
-                  Fecha de Alta
-                  <input type="text" placeholder="Filtrar..." style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.fecha} onChange={e => setFilters({...filters, fecha: e.target.value})} />
-                </th>
+                {[
+                  { key: 'id', label: 'ID Interno' },
+                  { key: 'id_externo', label: 'ID Externo' },
+                  { key: 'tipo', label: 'Tipo' },
+                  { key: 'titulares', label: 'Titulares (Inversores)' },
+                  { key: 'fecha', label: 'Fecha de Alta' }
+                ].map(col => (
+                  <th key={col.key}>
+                    <div style={{ marginBottom: '8px' }}>{col.label}</div>
+                    <ExcelListFilter
+                      availableOptions={getAvailableOptions(col.key)}
+                      selectedOptions={filters[col.key] || []}
+                      onChange={(selected) => handleFilterChange(col.key, selected)}
+                      title={`Filtrar ${col.label}`}
+                    />
+                  </th>
+                ))}
                 <th>Acciones</th>
               </tr>
             </thead>
@@ -156,6 +183,9 @@ const CuentasComitentesPage = () => {
                     <td>{new Date(cta.created_at).toLocaleDateString()}</td>
                     <td>
                       <div style={{ display: 'flex', gap: '6px' }}>
+                        <button className="btn-secondary" onClick={() => setShowEstadoCuenta(cta.id)} style={{ padding: '4px 8px', fontSize: '14px' }} title="Ver Estado de Cuenta">
+                          👁️
+                        </button>
                         <button className="btn-secondary" onClick={() => setEditCuenta(cta)} style={{ padding: '4px 8px', fontSize: '14px' }} title="Editar">
                           ✏️
                         </button>
@@ -193,6 +223,13 @@ const CuentasComitentesPage = () => {
           onClose={() => setEditCuenta(null)}
           onSubmit={(data) => editMutation.mutate({ ...data, id: editCuenta.id })}
           isLoading={editMutation.isPending}
+        />
+      )}
+
+      {showEstadoCuenta && (
+        <EstadoCuentaModal
+          cuentaId={showEstadoCuenta}
+          onClose={() => setShowEstadoCuenta(null)}
         />
       )}
     </section>
@@ -348,6 +385,123 @@ const AddCuentaModal = ({ initialData, onClose, onSubmit, isLoading }) => {
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+};
+
+// Modal Component para Estado de Cuenta
+const EstadoCuentaModal = ({ cuentaId, onClose }) => {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['estado-cuenta', cuentaId],
+    queryFn: async () => {
+      const res = await axiosClient.get(`/api/v1/inversores/cuentas/${cuentaId}/estado`);
+      return res.data;
+    }
+  });
+
+  const formatCurrency = (value) => {
+    if (value === null || value === undefined) return '-';
+    return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(value);
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+      backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
+      display: 'flex', justifyContent: 'center', alignItems: 'center'
+    }}>
+      <div className="glass-panel" style={{ width: '1000px', maxWidth: '95%', maxHeight: '90vh', overflowY: 'auto', padding: '24px', position: 'relative' }}>
+        <button onClick={onClose} style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-color)' }}>
+          <X size={20} />
+        </button>
+        <h3 style={{ marginTop: 0, marginBottom: '20px' }}>
+          Estado de Cuenta #{cuentaId}
+          {data && data.inversores && data.inversores.length > 0 && ` (Externo: ${data.inversores[0]["ID Externo"]})`}
+        </h3>
+        
+        {isLoading && <p>Cargando datos...</p>}
+        {error && <p style={{color: 'var(--danger-color)'}}>Error al cargar el estado de cuenta: {error.response?.data?.detail || error.message}</p>}
+        
+        {data && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            {/* INVERSORES */}
+            <div>
+              <h4 style={{ marginBottom: '10px' }}>Datos de los Inversores</h4>
+              <div className="table-responsive">
+                <table className="data-table" style={{ fontSize: '13px' }}>
+                  <thead>
+                    <tr>
+                      <th>ID Inversor</th>
+                      <th>Orden</th>
+                      <th>Nombre Inversor</th>
+                      <th>CUIL/CUIT</th>
+                      <th>Domicilio</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.inversores.map((inv, idx) => (
+                      <tr key={idx}>
+                        <td>{inv["ID Inversor"]}</td>
+                        <td>{inv["Orden"]}</td>
+                        <td>{inv["Nombre Inversor"]}</td>
+                        <td>{inv["CUIL/CUIT"]}</td>
+                        <td>{inv["Domicilio"]}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* MOVIMIENTOS */}
+            <div>
+              <h4 style={{ marginBottom: '10px' }}>Movimientos y Saldos</h4>
+              <div className="table-responsive">
+                <table className="data-table" style={{ fontSize: '13px' }}>
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Serie</th>
+                      <th>Fecha Susc.</th>
+                      <th>Vencimiento</th>
+                      <th>Fecha Mov.</th>
+                      <th>Inversores</th>
+                      <th>Tipo</th>
+                      <th style={{textAlign: 'right'}}>Capital</th>
+                      <th style={{textAlign: 'right'}}>Interés</th>
+                      <th style={{textAlign: 'right'}}>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.movimientos.map((mov, idx) => (
+                      <tr key={idx}>
+                        <td>{mov["ID"]}</td>
+                        <td>{mov["Serie"]}</td>
+                        <td>{mov["Fecha Suscripción"]}</td>
+                        <td>{mov["Fecha Vencimiento"]}</td>
+                        <td>{mov["Fecha"]}</td>
+                        <td>{mov["Inversores"]}</td>
+                        <td>{mov["Tipo Movimiento"]}</td>
+                        <td style={{textAlign: 'right'}}>{formatCurrency(mov["Capital"])}</td>
+                        <td style={{textAlign: 'right'}}>{formatCurrency(mov["Interés"])}</td>
+                        <td style={{textAlign: 'right', fontWeight: 'bold'}}>{formatCurrency(mov["Total"])}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ fontWeight: 'bold', backgroundColor: 'var(--bg-color)' }}>
+                      <td colSpan="7" style={{textAlign: 'right'}}>Subtotales:</td>
+                      <td style={{textAlign: 'right'}}>{formatCurrency(data.movimientos.reduce((sum, mov) => sum + (mov["Capital"] || 0), 0))}</td>
+                      <td style={{textAlign: 'right'}}>{formatCurrency(data.movimientos.reduce((sum, mov) => sum + (mov["Interés"] || 0), 0))}</td>
+                      <td style={{textAlign: 'right'}}>{formatCurrency(data.movimientos.reduce((sum, mov) => sum + (mov["Total"] || 0), 0))}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

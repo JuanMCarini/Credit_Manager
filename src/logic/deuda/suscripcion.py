@@ -6,7 +6,6 @@ from pathlib import Path
 from src.database import SessionLocal
 from src.database.models.deuda.movimientos import TipoMovimiento
 
-from src.services.arca_consulta import validar_datos_arca
 from .utils import read_file
 from src.logic.deuda.commit import new_serie, new_cta_cte, new_inversor, new_titular, new_movimiento
 

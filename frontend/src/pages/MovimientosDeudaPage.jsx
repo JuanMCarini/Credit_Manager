@@ -2,13 +2,19 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axiosClient from '../api/axiosClient';
 import { Plus, X } from 'lucide-react';
+import ExcelListFilter from '../components/ExcelListFilter';
+import ExcelNumberRangeFilter from '../components/ExcelNumberRangeFilter';
 
 const MovimientosDeudaPage = () => {
   const queryClient = useQueryClient();
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingMovimiento, setEditingMovimiento] = useState(null);
   const [viewTitularesMovimiento, setViewTitularesMovimiento] = useState(null);
-  const [filters, setFilters] = useState({ id: '', fecha: '', cuenta: '', serie: '', tipo: '', monto: '' });
+  const [filters, setFilters] = useState({});
+
+  const handleFilterChange = (key, value) => {
+    setFilters(prev => ({ ...prev, [key]: value }));
+  };
 
   // Fetch Movimientos
   const { data, isLoading } = useQuery({
@@ -21,19 +27,72 @@ const MovimientosDeudaPage = () => {
 
   const movimientos = data?.items || [];
   
+  const getMontoMultiplier = (tipo) => {
+    switch (tipo) {
+      case 'Suscripción': return 1;
+      case 'Renovación suscripción': return 1;
+      case 'Rescate': return -1;
+      case 'Renovación rescate': return -1;
+      case 'Vencimiento': return -1;
+      case 'Retiro de intereses': return -1;
+      default: return 1;
+    }
+  };
+
   const filteredMovimientos = movimientos.filter(m => {
-    const fechaStr = new Date(m.fecha).toLocaleDateString();
-    const cuentaStr = m.cuenta_externo ? `Cta ${m.cuenta_externo}` : `ID ${m.id_cuenta_comitente}`;
-    const serieStr = m.serie_name || `ID ${m.id_serie}`;
-    return (
-      m.id.toString().includes(filters.id) &&
-      fechaStr.includes(filters.fecha) &&
-      cuentaStr.toLowerCase().includes(filters.cuenta.toLowerCase()) &&
-      serieStr.toLowerCase().includes(filters.serie.toLowerCase()) &&
-      (filters.tipo === '' ? true : m.tipo_movimiento === filters.tipo) &&
-      m.monto.toString().includes(filters.monto)
-    );
+    return Object.entries(filters).every(([key, filterValue]) => {
+      if (!filterValue || (Array.isArray(filterValue) && filterValue.length === 0)) return true;
+      
+      if (key === 'monto') {
+        if (filterValue.min === undefined && filterValue.max === undefined) return true;
+        const val = Number(m.monto * getMontoMultiplier(m.tipo_movimiento));
+        if (isNaN(val)) return false;
+        if (filterValue.min !== undefined && val < filterValue.min) return false;
+        if (filterValue.max !== undefined && val > filterValue.max) return false;
+        return true;
+      }
+      
+      let valStr = '';
+      if (key === 'fecha') {
+        valStr = new Date(m.fecha).toLocaleDateString();
+      } else if (key === 'cuenta') {
+        valStr = m.cuenta_externo ? `${m.cuenta_externo} (ID ${m.id_cuenta_comitente})` : `ID ${m.id_cuenta_comitente}`;
+      } else if (key === 'serie') {
+        valStr = m.tipo_movimiento === 'Renovación rescate' && m.id_serie_destino
+          ? `${m.serie_name || `ID ${m.id_serie}`} ➔ ${m.serie_destino_name || `ID ${m.id_serie_destino}`}`
+          : m.serie_name || `ID ${m.id_serie}`;
+      } else if (key === 'tipo') {
+        valStr = m.tipo_movimiento;
+      } else {
+        valStr = String(m[key] !== null && m[key] !== undefined ? m[key] : '');
+      }
+      
+      return filterValue.includes(valStr);
+    });
   });
+
+  const getAvailableOptions = (key) => {
+    if (!movimientos) return [];
+    const options = new Set();
+    movimientos.forEach(m => {
+      let valStr = '';
+      if (key === 'fecha') {
+        valStr = new Date(m.fecha).toLocaleDateString();
+      } else if (key === 'cuenta') {
+        valStr = m.cuenta_externo ? `${m.cuenta_externo} (ID ${m.id_cuenta_comitente})` : `ID ${m.id_cuenta_comitente}`;
+      } else if (key === 'serie') {
+        valStr = m.tipo_movimiento === 'Renovación rescate' && m.id_serie_destino
+          ? `${m.serie_name || `ID ${m.id_serie}`} ➔ ${m.serie_destino_name || `ID ${m.id_serie_destino}`}`
+          : m.serie_name || `ID ${m.id_serie}`;
+      } else if (key === 'tipo') {
+        valStr = m.tipo_movimiento;
+      } else if (key !== 'monto') {
+        valStr = String(m[key] !== null && m[key] !== undefined ? m[key] : '');
+      }
+      if (valStr) options.add(valStr);
+    });
+    return Array.from(options).sort();
+  };
 
   // Add Mutation
   const addMutation = useMutation({
@@ -98,12 +157,22 @@ const MovimientosDeudaPage = () => {
 
   const getTipoBadge = (tipo) => {
     switch (tipo) {
-      case 'SUSCRIPCION': return <span className="status-badge status-activo">Suscripción</span>;
-      case 'RESCATE': return <span className="status-badge status-inactivo" style={{ background: 'var(--danger-color)' }}>Rescate</span>;
-      case 'VENCIMIENTO': return <span className="status-badge" style={{ background: 'var(--text-secondary)' }}>Vencimiento</span>;
-      default: return tipo;
+      case 'Suscripción': 
+      case 'Renovación suscripción':
+        return <span className="status-badge status-activo">{tipo}</span>;
+      case 'Rescate': 
+      case 'Renovación rescate':
+      case 'Retiro de intereses':
+        return <span className="status-badge status-inactivo" style={{ background: 'var(--danger-color)' }}>{tipo}</span>;
+      case 'Vencimiento': 
+        return <span className="status-badge" style={{ background: 'var(--text-secondary)' }}>{tipo}</span>;
+      default: return <span className="status-badge">{tipo}</span>;
     }
   };
+
+  // getMontoMultiplier moved up
+
+  const subtotal = filteredMovimientos.reduce((acc, m) => acc + (m.monto * getMontoMultiplier(m.tipo_movimiento)), 0);
 
   return (
     <section className="tab-content active" style={{ animation: 'fadeIn 0.4s ease' }}>
@@ -124,45 +193,39 @@ const MovimientosDeudaPage = () => {
           <table className="data-table">
             <thead>
               <tr>
-                <th>
-                  ID
-                  <input type="text" placeholder="Filtrar..." style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.id} onChange={e => setFilters({...filters, id: e.target.value})} />
-                </th>
-                <th>
-                  Fecha
-                  <input type="text" placeholder="Filtrar..." style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.fecha} onChange={e => setFilters({...filters, fecha: e.target.value})} />
-                </th>
-                <th>
-                  Cuenta (Externa)
-                  <input type="text" placeholder="Filtrar..." style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.cuenta} onChange={e => setFilters({...filters, cuenta: e.target.value})} />
-                </th>
-                <th>
-                  Serie
-                  <input type="text" placeholder="Filtrar..." style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.serie} onChange={e => setFilters({...filters, serie: e.target.value})} />
-                </th>
-                <th>
-                  Tipo de Movimiento
-                  <select style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.tipo} onChange={e => setFilters({...filters, tipo: e.target.value})}>
-                    <option value="">Todos</option>
-                    <option value="SUSCRIPCION">Suscripción</option>
-                    <option value="RESCATE">Rescate</option>
-                    <option value="VENCIMIENTO">Vencimiento</option>
-                    <option value="RETIRO_INTERESES">Retiro de intereses</option>
-                    <option value="RENOVACION">Renovación</option>
-                  </select>
-                </th>
-                <th>
-                  Monto
-                  <input type="text" placeholder="Filtrar..." style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.monto} onChange={e => setFilters({...filters, monto: e.target.value})} />
-                </th>
+                {[
+                  { key: 'id', label: 'ID' },
+                  { key: 'fecha', label: 'Fecha' },
+                  { key: 'cuenta', label: 'Cuenta (Externa)' },
+                  { key: 'serie', label: 'Serie' },
+                  { key: 'tipo', label: 'Tipo de Movimiento' },
+                  { key: 'monto', label: 'Monto' }
+                ].map(col => (
+                  <th key={col.key}>
+                    <div style={{ marginBottom: '8px' }}>{col.label}</div>
+                    {col.key === 'monto' ? (
+                      <ExcelNumberRangeFilter
+                        selectedRange={filters[col.key]}
+                        onChange={(range) => handleFilterChange(col.key, range)}
+                      />
+                    ) : (
+                      <ExcelListFilter
+                        availableOptions={getAvailableOptions(col.key)}
+                        selectedOptions={filters[col.key] || []}
+                        onChange={(selected) => handleFilterChange(col.key, selected)}
+                        title={`Filtrar ${col.label}`}
+                      />
+                    )}
+                  </th>
+                ))}
                 <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
-                <tr><td colSpan="6" style={{ textAlign: 'center', padding: '20px' }}>Cargando...</td></tr>
+                <tr><td colSpan="7" style={{ textAlign: 'center', padding: '20px' }}>Cargando...</td></tr>
               ) : filteredMovimientos.length === 0 ? (
-                <tr><td colSpan="6" style={{ textAlign: 'center', padding: '20px' }}>No se registraron movimientos.</td></tr>
+                <tr><td colSpan="7" style={{ textAlign: 'center', padding: '20px' }}>No se registraron movimientos.</td></tr>
               ) : (
                 filteredMovimientos.map(m => (
                   <tr key={m.id}>
@@ -170,12 +233,12 @@ const MovimientosDeudaPage = () => {
                     <td>{new Date(m.fecha).toLocaleDateString()}</td>
                     <td>{m.cuenta_externo ? `${m.cuenta_externo} (ID ${m.id_cuenta_comitente})` : `ID ${m.id_cuenta_comitente}`}</td>
                     <td>
-                      {m.tipo_movimiento === 'RENOVACION' && m.id_serie_destino 
+                      {m.tipo_movimiento === 'Renovación rescate' && m.id_serie_destino 
                         ? `${m.serie_name || `ID ${m.id_serie}`} ➔ ${m.serie_destino_name || `ID ${m.id_serie_destino}`}`
                         : m.serie_name || `ID ${m.id_serie}`}
                     </td>
                     <td>{getTipoBadge(m.tipo_movimiento)}</td>
-                    <td style={{ fontWeight: 'bold' }}>{formatCurrency(m.monto)}</td>
+                    <td style={{ fontWeight: 'bold' }}>{formatCurrency(m.monto * getMontoMultiplier(m.tipo_movimiento))}</td>
                     <td>
                       <div style={{ display: 'flex', gap: '8px', flexWrap: 'nowrap', alignItems: 'center' }}>
                         {m.observaciones && (
@@ -192,9 +255,13 @@ const MovimientosDeudaPage = () => {
             </tbody>
             <tfoot>
               <tr>
-                <td colSpan="7" style={{ textAlign: 'right', fontWeight: 'bold' }}>
-                  Total Movimientos: {filteredMovimientos.length}
+                <td colSpan="5" style={{ textAlign: 'right', fontWeight: 'bold' }}>
+                  Total Movimientos: {filteredMovimientos.length} | Subtotal:
                 </td>
+                <td style={{ fontWeight: 'bold', color: subtotal >= 0 ? 'var(--primary-color)' : 'var(--danger-color)' }}>
+                  {formatCurrency(subtotal)}
+                </td>
+                <td></td>
               </tr>
             </tfoot>
           </table>

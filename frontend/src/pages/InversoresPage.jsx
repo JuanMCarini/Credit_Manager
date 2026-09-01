@@ -2,14 +2,17 @@ import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axiosClient from '../api/axiosClient';
 import { Plus, X, Search, Trash2, Edit2 } from 'lucide-react';
+import ExcelListFilter from '../components/ExcelListFilter';
 
 const InversoresPage = () => {
   const queryClient = useQueryClient();
   const [showAddModal, setShowAddModal] = useState(false);
   const [editInversor, setEditInversor] = useState(null);
-  const [filters, setFilters] = useState({
-    id: '', cuit: '', razon_social: '', mail: '', telefono: '', nombre_banco: '', estado: ''
-  });
+  const [filters, setFilters] = useState({});
+
+  const handleFilterChange = (key, value) => {
+    setFilters(prev => ({ ...prev, [key]: value }));
+  };
 
   // Fetch Inversores
   const { data, isLoading } = useQuery({
@@ -22,17 +25,28 @@ const InversoresPage = () => {
 
   const inversores = data?.items || [];
   
-  const filteredInversores = inversores.filter(inv => {
-    return (
-      inv.id.toString().includes(filters.id) &&
-      inv.cuit.toString().includes(filters.cuit) &&
-      inv.razon_social.toLowerCase().includes(filters.razon_social.toLowerCase()) &&
-      (inv.mail || '').toLowerCase().includes(filters.mail.toLowerCase()) &&
-      (inv.telefono || '').toLowerCase().includes(filters.telefono.toLowerCase()) &&
-      (inv.nombre_banco || '').toLowerCase().includes(filters.nombre_banco.toLowerCase()) &&
-      (filters.estado === '' ? true : filters.estado === 'activo' ? inv.activo : !inv.activo)
-    );
-  });
+  const filteredInversores = useMemo(() => {
+    if (!inversores) return [];
+    return inversores.filter(inv => {
+      return Object.entries(filters).every(([key, filterValue]) => {
+        if (!filterValue || filterValue.length === 0) return true;
+        let valStr = '';
+        if (key === 'estado') {
+          valStr = inv.activo ? 'Activo' : 'Inactivo';
+        } else {
+          valStr = String(inv[key] !== null && inv[key] !== undefined ? inv[key] : '');
+        }
+        return filterValue.includes(valStr);
+      });
+    });
+  }, [inversores, filters]);
+
+  const getAvailableOptions = (key) => {
+    if (!inversores) return [];
+    if (key === 'estado') return ['Activo', 'Inactivo'];
+    const options = new Set(inversores.map(inv => String(inv[key] !== null && inv[key] !== undefined ? inv[key] : '')));
+    return Array.from(options).filter(Boolean).sort();
+  };
 
   // Add Inversor Mutation
   const addMutation = useMutation({
@@ -106,38 +120,25 @@ const InversoresPage = () => {
           <table className="data-table">
             <thead>
               <tr>
-                <th>
-                  ID
-                  <input type="text" placeholder="Filtrar..." style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.id} onChange={e => setFilters({...filters, id: e.target.value})} />
-                </th>
-                <th>
-                  CUIT
-                  <input type="text" placeholder="Filtrar..." style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.cuit} onChange={e => setFilters({...filters, cuit: e.target.value})} />
-                </th>
-                <th>
-                  Razón Social
-                  <input type="text" placeholder="Filtrar..." style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.razon_social} onChange={e => setFilters({...filters, razon_social: e.target.value})} />
-                </th>
-                <th>
-                  Email
-                  <input type="text" placeholder="Filtrar..." style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.mail} onChange={e => setFilters({...filters, mail: e.target.value})} />
-                </th>
-                <th>
-                  Teléfono
-                  <input type="text" placeholder="Filtrar..." style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.telefono} onChange={e => setFilters({...filters, telefono: e.target.value})} />
-                </th>
-                <th>
-                  Banco
-                  <input type="text" placeholder="Filtrar..." style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.nombre_banco} onChange={e => setFilters({...filters, nombre_banco: e.target.value})} />
-                </th>
-                <th>
-                  Estado
-                  <select style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} value={filters.estado} onChange={e => setFilters({...filters, estado: e.target.value})}>
-                    <option value="">Todos</option>
-                    <option value="activo">Activo</option>
-                    <option value="inactivo">Inactivo</option>
-                  </select>
-                </th>
+                {[
+                  { key: 'id', label: 'ID' },
+                  { key: 'cuit', label: 'CUIT' },
+                  { key: 'razon_social', label: 'Razón Social' },
+                  { key: 'mail', label: 'Email' },
+                  { key: 'telefono', label: 'Teléfono' },
+                  { key: 'nombre_banco', label: 'Banco' },
+                  { key: 'estado', label: 'Estado' }
+                ].map(col => (
+                  <th key={col.key}>
+                    <div style={{ marginBottom: '8px' }}>{col.label}</div>
+                    <ExcelListFilter
+                      availableOptions={getAvailableOptions(col.key)}
+                      selectedOptions={filters[col.key] || []}
+                      onChange={(selected) => handleFilterChange(col.key, selected)}
+                      title={`Filtrar ${col.label}`}
+                    />
+                  </th>
+                ))}
                 <th>Acciones</th>
               </tr>
             </thead>

@@ -3,98 +3,108 @@ import pandas as pd
 from datetime import date
 from pathlib import Path
 
-from src.utils import select_file
 from src.database import SessionLocal
-from src.database.models.deuda import Inversor, CuentaComitente, TitularidadCuentaComitente, Serie, MovimientoDeuda
+from src.database.models.deuda.series import Serie
 from src.database.models.deuda.movimientos import TipoMovimiento
-    
-from src.services.arca_consulta import validar_datos_arca
 
+from .utils import read_file
+from src.logic.deuda.commit import new_serie, new_cta_cte, new_inversor, new_titular, new_movimiento
+from src.logic.deuda.series import resumen
 
-from sqlalchemy import or_
+def renovación(serie_vieja: str, serie_nueva: str, fecha: str | date, tna: float, plazo: int, path: Path | None = None):
 
-def cerrar_serie(nombre: str, fecha: str | date):
-
-    with SessionLocal() as db:
-        serie = db.query(Serie).filter(Serie.name == nombre).first()
-        if not serie:
-            raise ValueError(f"Serie {nombre} no encontrada")
-        
-        movimientos = db.query(MovimientoDeuda.fecha, MovimientoDeuda.id_cuenta_comitente, MovimientoDeuda.id_serie, MovimientoDeuda.tipo_movimiento, MovimientoDeuda.monto).filter(
-            MovimientoDeuda.id_serie == serie.id
-        ).all()
-
-        df = pd.DataFrame(movimientos, columns=['fecha', 'cuenta_comitente', 'id_serie', 'tipo_movimiento', 'monto'])
-        
-        if not df.empty:
-            from IPython.display import display
-            display(df)
-            df['fecha'] = fecha
-            df['tipo_movimiento'] = TipoMovimiento.VENCIMIENTO
-            df['monto'] = round(df['monto'] * (1+serie.tna/365 * serie.plazo), 2)
-        
-        nuevos_movimientos = df.to_dict(orient='records')
-        
-        for movimiento in nuevos_movimientos:
-            db.add(MovimientoDeuda(**movimiento))
-
-        db.commit()
-
-    return df
-
-def renovacion_serie(serie_vieja: str, serie_nueva: str, fecha: str | date, tna: float, plazo: int, path: Path | None = None):
-
-    if path == None:
-        path = select_file()
+    df = read_file(path)
 
     if isinstance(fecha, str):
         fecha = pd.to_datetime(fecha).date()
-    
-    if path.suffix == ".xlsx":
-        df = pd.read_excel(path)
-    elif path.suffix == ".csv":
-        df = pd.read_csv(path)
-    else:
-        raise ValueError("El archivo debe ser Excel o CSV")
 
-    if len(df.columns) == 9:
-        df.columns = ["ID Cta. Cte.", "Razón Social", "CUIT/CUIL", "Dirección", "Capital", "Interés", "Total", "Rescate", "Suscripción"]
-        df["Observaciones"] = None
-    elif len(df.columns) == 10:
-        df.columns = ["ID Cta. Cte.", "Razón Social", "CUIT/CUIL", "Dirección", "Capital", "Interés", "Total", "Rescate", "Suscripción", "Observaciones"]
-    else:
-        raise ValueError(f"El archivo tiene {len(df.columns)} columnas, pero se esperaban 9 o 10.")
-    
-    # Limpiamos filas completamente vacías al final del archivo
-    df = df.dropna(subset=["ID Cta. Cte.", "CUIT/CUIL", "Capital"])
-    df[['Capital', 'Interés', 'Total', 'Rescate', 'Suscripción']] = df[['Capital', 'Interés', 'Total', 'Rescate', 'Suscripción']].fillna(0.0)
-
-    # Estandarizamos el CUIT/CUIL a nivel de todo el DataFrame
-    df["CUIT/CUIL"] = df["CUIT/CUIL"].astype(str).str.replace("-", "", regex=False).str.strip()
-    df["CUIT/CUIL"] = df["CUIT/CUIL"].str.replace(r"\.0$", "", regex=True)
-
-    # Control del cálculo de intereses
-    # Calculamos la diferencia (error) sin modificar las columnas originales
     db = SessionLocal()
-    serie_vieja = db.query(Serie).filter(Serie.name == serie_vieja).first()
-    error_interes = df["Interés"] - (df["Capital"] * float(serie_vieja.tna)/365 * int(serie_vieja.plazo))
+    try:
+        old_serie = db.query(Serie).filter(Serie.name == serie_vieja).one_or_none()
+        if old_serie is None:
+            raise ValueError(f"No se encontró la serie {serie_vieja}")
 
-    # Comprobamos que en NINGUNA fila el error sea mayor a 1 centavo usando .abs().max()
-    if error_interes.abs().max() > 0.01:
-        raise ValueError("Error en el cálculo de totales o intereses. Verifique las fórmulas del archivo.")
+        df_vieja = resumen(serie_vieja)
+        errores = df_vieja[["Capital", "Interés"]].sum() - df[["Capital", "Interés"]].sum()
+        error_int = df["Interés"] - (df["Capital"] * (float(old_serie.tna) / 365) * int(old_serie.plazo))
+        error_total = df["Total"] - (df["Capital"] + df["Interés"] - df["Rescate"] + df["Suscripción"])
+        if error_int.abs().max() > 0.05 or error_total.abs().max() > 0.01:
+            err_msg = "Error en el cálculo de totales o intereses. "
+            
+            int_err_mask = error_int.abs() > 0.05
+            if int_err_mask.any():
+                bad_int_rows = df.loc[int_err_mask]
+                detalles = [f"Cta {r['ID Cta. Cte.']}: esperado {(r['Capital'] * (float(old_serie.tna) / 365) * int(old_serie.plazo)):.2f} vs archivo {r['Interés']:.2f}" for _, r in bad_int_rows.iterrows()]
+                err_msg += f"Dif. Int: {'; '.join(detalles)}. "
+                
+            tot_err_mask = error_total.abs() > 0.05
+            if tot_err_mask.any():
+                bad_tot_rows = df.loc[tot_err_mask]
+                detalles = [f"Cta {r['ID Cta. Cte.']}: esperado {(r['Capital'] + r['Interés'] - r['Rescate'] + r['Suscripción']):.2f} vs archivo {r['Total']:.2f}" for _, r in bad_tot_rows.iterrows()]
+                err_msg += f"Dif. Total: {'; '.join(detalles)}."
 
-    df_invs = df[["CUIT/CUIL", "Razón Social", "Dirección"]].copy()
-    df_invs = df_invs.drop_duplicates()
-    validar_datos_arca(df_invs)
+            raise ValueError(err_msg)
 
-    # ---------------------------------------------------------
-    # Preparación de DataFrames
-    # ---------------------------------------------------------
-    df_ctas = df[["ID Cta. Cte.", "CUIT/CUIL"]].copy()
-    df_ctas = df_ctas.drop_duplicates()
+        if errores.abs().max() > 0.05:
+            diferencias = []
+            for col, diff in errores.items():
+                if abs(diff) > 0.05:
+                    val_base = df_vieja[col].sum()
+                    val_archivo = df[col].sum()
+                    diferencias.append(f"{col}: Base={val_base:.2f} vs Archivo={val_archivo:.2f} (Dif={diff:.2f})")
+            
+            raise ValueError(f"Error en el cálculo de totales del archivo con los de la base. Detalles: {', '.join(diferencias)}")
 
-    df_egr_ing = df.loc[(df["Rescate"] > 0) | (df["Suscripción"] > 0)].copy()
-    df_egr_ing = df_egr_ing.sort_values(by=["Rescate", "Suscripción"])
-    df_egr_ing[['Capital', 'Interés', 'Total', 'Rescate', 'Suscripción']] = df_egr_ing[['Capital', 'Interés', 'Total', 'Rescate', 'Suscripción']].map("${:,.2f}".format)
+        df_ei = df.loc[(df["Rescate"] > 0) | (df["Suscripción"] > 0)]
 
-    return df_egr_ing
+        nueva_serie = new_serie(db, serie_nueva, fecha, tna, plazo)
+        for _, row in df.iterrows():
+
+            id_externo_cta = row["ID Cta. Cte."]
+
+            # Buscar o crear Cuenta Comitente
+            cuenta = new_cta_cte(db, id_externo_cta, row)
+
+            inversores_de_la_fila = []
+
+            # Procesar inversores de la fila
+            cuits = row["CUIT/CUIL"]
+            razones_sociales = row["Razón Social"]
+            # Extraemos la dirección, manejando posibles valores nulos de pandas
+            direccion = row["Dirección"] if pd.notna(row["Dirección"]) else None
+
+            for i in range(len(cuits)):
+                cuit = cuits[i]
+                # Fallback por si Razón Social tiene menos elementos que CUITs
+                rs = razones_sociales[i] if i < len(razones_sociales) else "Desconocido"
+                inversor = new_inversor(db, cuit, rs, direccion)
+                inversores_de_la_fila.append(inversor)
+
+                # Asociar Inversor con la Cuenta Comitente (si no existe ya)
+                new_titular(db, cuenta.id, inversor.id)
+
+            rescate = row["Rescate"]
+            if rescate > 0:
+                new_movimiento(db, cuenta.id, old_serie.id, fecha, rescate, TipoMovimiento.RESCATE, inversores_de_la_fila)
+
+            renovacion = row["Capital"] + row["Interés"] - rescate
+            if renovacion > 0:
+                new_movimiento(db, cuenta.id, old_serie.id, fecha, renovacion, TipoMovimiento.RENOVACION_RESCATE, inversores_de_la_fila)
+                new_movimiento(db, cuenta.id, nueva_serie.id, fecha, renovacion, TipoMovimiento.RENOVACION_SUSCRIPCION, inversores_de_la_fila)
+            
+            suscripcion = row["Suscripción"]
+            if suscripcion > 0:
+                new_movimiento(db, cuenta.id, nueva_serie.id, fecha, suscripcion, TipoMovimiento.SUSCRIPCION, inversores_de_la_fila)
+
+        # 3. Guardar todos los cambios juntos al final de procesar el archivo
+        db.commit()
+
+        df_ei.sort_values(by=["Rescate", "Suscripción", "ID Cta. Cte."], inplace=True)
+        return df_ei
+
+    except Exception:
+        db.rollback()
+        raise
+
+    finally:
+        db.close()

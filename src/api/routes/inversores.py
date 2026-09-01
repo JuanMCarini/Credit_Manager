@@ -6,6 +6,8 @@ from sqlalchemy import or_
 import tempfile
 from pathlib import Path
 from src.logic.deuda.suscripcion import nueva_serie
+from src.logic.deuda.vencimiento import renovación
+from src.logic.deuda.series import resumen as buscar_resumen_serie
 
 from src.database import get_db
 from src.database.models.deuda.inversores import Inversor, CuentaComitente, TitularidadCuentaComitente
@@ -178,6 +180,38 @@ def get_cuentas_comitentes(
         })
     return {"items": items, "total": total}
 
+import pandas as pd
+from src.logic.deuda.ctas_ctes import buscar as buscar_ctas_ctes
+
+@router.get("/cuentas/{cuenta_id}/estado", response_model=Dict[str, Any])
+def get_estado_cuenta(cuenta_id: int):
+    try:
+        df_inv, df_mov = buscar_ctas_ctes(cuenta_id)
+        
+        # Format datetimes
+        for col in df_mov.select_dtypes(include=['datetime64', 'datetime64[ns]']).columns:
+            df_mov[col] = df_mov[col].dt.strftime('%Y-%m-%d')
+            
+        for col in df_inv.select_dtypes(include=['datetime64', 'datetime64[ns]']).columns:
+            df_inv[col] = df_inv[col].dt.strftime('%Y-%m-%d')
+            
+        # Replace NaNs with None for JSON serialization
+        df_inv = df_inv.replace({pd.NA: None, float('nan'): None})
+        df_mov = df_mov.replace({pd.NA: None, float('nan'): None})
+        
+        inv_records = df_inv.reset_index().to_dict(orient="records")
+        mov_records = df_mov.to_dict(orient="records")
+        
+        return {
+            "status": "success",
+            "inversores": inv_records,
+            "movimientos": mov_records
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.put("/cuentas/{cuenta_id}", response_model=Dict[str, Any])
 def update_cuenta_comitente(cuenta_id: int, cuenta_data: CuentaComitenteCreate, db: Session = Depends(get_db)):
     cuenta = db.query(CuentaComitente).filter(CuentaComitente.id == cuenta_id).first()
@@ -284,6 +318,47 @@ def upload_serie(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/series/renovacion", response_model=Dict[str, Any])
+def renovacion_serie(
+    serie_vieja: str = Form(...),
+    serie_nueva: str = Form(...),
+    fecha_suscripcion: str = Form(...),
+    tna: float = Form(...),
+    plazo: int = Form(...),
+    file: UploadFile = File(...)
+):
+    try:
+        # Save uploaded file to temp file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename).suffix) as tmp:
+            tmp.write(file.file.read())
+            tmp_path = Path(tmp.name)
+            
+        # Call the business logic
+        df_ei = renovación(
+            serie_vieja=serie_vieja,
+            serie_nueva=serie_nueva, 
+            fecha=fecha_suscripcion, 
+            tna=tna, 
+            plazo=plazo, 
+            path=tmp_path
+        )
+        
+        # Cleanup
+        tmp_path.unlink(missing_ok=True)
+        
+        # Convert df_ei to json format
+        records = df_ei.fillna("").to_dict(orient="records")
+        
+        return {
+            "status": "success", 
+            "message": "Renovación procesada exitosamente",
+            "df_ei": records
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/series", response_model=Dict[str, Any])
 def get_series(
     skip: int = 0,
@@ -295,7 +370,7 @@ def get_series(
         func.coalesce(func.sum(MovimientoDeuda.monto), 0).label("capital")
     ).outerjoin(
         MovimientoDeuda,
-        (MovimientoDeuda.id_serie == Serie.id) & (MovimientoDeuda.tipo_movimiento == TipoMovimiento.SUSCRIPCION)
+        (MovimientoDeuda.id_serie == Serie.id) & (MovimientoDeuda.tipo_movimiento.in_([TipoMovimiento.SUSCRIPCION, TipoMovimiento.RENOVACION_SUSCRIPCION]))
     ).group_by(Serie.id).order_by(Serie.id.desc())
     
     total = db.query(Serie).count()
@@ -314,6 +389,27 @@ def get_series(
             "capital": float(capital)
         })
     return {"items": items, "total": total}
+
+@router.get("/series/{serie_id}/resumen", response_model=Dict[str, Any])
+def get_resumen_serie(serie_id: int):
+    try:
+        df = buscar_resumen_serie(serie_id)
+        if df.empty:
+            return {"status": "success", "data": []}
+            
+        # Format datetimes
+        for col in df.select_dtypes(include=['datetime64', 'datetime64[ns]']).columns:
+            df[col] = df[col].dt.strftime('%Y-%m-%d')
+            
+        # Replace NaNs with None for JSON serialization
+        df = df.replace({pd.NA: None, float('nan'): None})
+        
+        records = df.to_dict(orient="records")
+        return {"status": "success", "data": records}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/series/{serie_id}", response_model=Dict[str, Any])
 def update_serie(
