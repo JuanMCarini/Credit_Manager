@@ -20,7 +20,10 @@ def new_serie(db, nombre: str, fecha: date, tna: float, plazo: int):
 
 def new_cta_cte(db, id_externo, row):
     if id_externo is not None:
-        id_externo = int(id_externo)
+        try:
+            id_externo = str(id_externo)
+        except (ValueError, TypeError):
+            id_externo = str(id_externo).strip()
     cuenta = db.query(CuentaComitente).filter(CuentaComitente.id_externo == id_externo).first()
     if not cuenta:
         cuenta = CuentaComitente(

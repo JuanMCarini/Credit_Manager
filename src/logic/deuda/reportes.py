@@ -18,6 +18,8 @@ def estado(periodo: pd.Period = pd.Period.now("D")):
 
         for _, row in df.iterrows():
             df_serie = series.resumen(_)
+            df_serie["Fecha"] = pd.to_datetime(df_serie["Fecha"]).dt.to_period("D")
+            df_serie = df_serie[df_serie["Fecha"] <= fin_mes]
             dias_devengados = (min(row["Fecha Vencimiento"], fin_mes) - row["Fecha Suscripción"]).n
             df_serie["Int. Dev."] = df_serie["Capital"] * row["TNA"]/365 * dias_devengados
             df.loc[_, ["Capital", "Interés", "Total", "Int. Dev."]] = df_serie[["Capital", "Interés", "Total", "Int. Dev."]].sum().round(0)

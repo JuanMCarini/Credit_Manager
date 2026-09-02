@@ -135,8 +135,64 @@ const SeriesPage = () => {
 
   const getAvailableOptions = (key) => {
     if (!series) return [];
+    
+    const validRows = computedSeries.filter(s => {
+      return Object.entries(tableFilters).every(([filterKey, filterValue]) => {
+        if (filterKey === key) return true;
+        if (!filterValue || (Array.isArray(filterValue) && filterValue.length === 0)) return true;
+        
+        const isMonetaryCol = ["capital", "interes", "total", "interesMensual", "interesDevengado", "interesADevengar", "tna", "plazo"].includes(filterKey);
+        if (isMonetaryCol) {
+          if (filterValue.min === undefined && filterValue.max === undefined) return true;
+          
+          const capital = s.computedCapital || 0;
+          const interes = capital * s.tna * (s.plazo / 365);
+          const total = capital + interes;
+          const fSuscripcion = new Date(s.fecha_suscripcion + 'T00:00:00');
+          const fVencimiento = new Date(s.fecha_vencimiento + 'T00:00:00');
+          const fCorte = new Date(fechaCorte + 'T23:59:59');
+          
+          let interesDevengado = 0;
+          if (fCorte <= fSuscripcion) interesDevengado = 0;
+          else if (fCorte >= fVencimiento) interesDevengado = interes;
+          else interesDevengado = capital * s.tna * (((fCorte - fSuscripcion) / 86400000) / 365);
+          
+          const interesADevengar = Math.max(0, interes - interesDevengado);
+          
+          const primerDiaMes = new Date(fCorte.getFullYear(), fCorte.getMonth(), 1);
+          const fechaInicioMensual = fSuscripcion > primerDiaMes ? fSuscripcion : primerDiaMes;
+          const fechaFinMensual = fCorte < fVencimiento ? fCorte : fVencimiento;
+          let diasMensuales = (fechaFinMensual - fechaInicioMensual) / 86400000;
+          if (diasMensuales < 0) diasMensuales = 0;
+          const interesMensual = capital * s.tna * (diasMensuales / 365);
+
+          let val = 0;
+          if (filterKey === 'capital') val = capital;
+          if (filterKey === 'interes') val = interes;
+          if (filterKey === 'total') val = total;
+          if (filterKey === 'interesMensual') val = interesMensual;
+          if (filterKey === 'interesDevengado') val = interesDevengado;
+          if (filterKey === 'interesADevengar') val = interesADevengar;
+          if (filterKey === 'tna') val = s.tna * 100;
+          if (filterKey === 'plazo') val = s.plazo;
+
+          if (filterValue.min !== undefined && val < filterValue.min) return false;
+          if (filterValue.max !== undefined && val > filterValue.max) return false;
+          return true;
+        }
+        
+        let valStr = '';
+        if (filterKey === 'id') valStr = String(s.id);
+        if (filterKey === 'name') valStr = s.name;
+        if (filterKey === 'fecha_suscripcion') valStr = formatDate(new Date(s.fecha_suscripcion + 'T00:00:00'));
+        if (filterKey === 'fecha_vencimiento') valStr = formatDate(new Date(s.fecha_vencimiento + 'T00:00:00'));
+        
+        return filterValue.includes(valStr);
+      });
+    });
+
     const options = new Set();
-    series.forEach(s => {
+    validRows.forEach(s => {
       let valStr = '';
       if (key === 'id') valStr = String(s.id);
       if (key === 'name') valStr = s.name;
@@ -782,7 +838,7 @@ const ResumenModal = ({ serieName, data, onClose }) => {
       return Object.entries(filters).every(([key, filterValue]) => {
         if (!filterValue) return true;
         
-        const isMonetaryCol = ["Capital", "Interés", "Total", "Monto"].includes(key);
+        const isMonetaryCol = ["Capital", "Interés", "Total", "Monto", "Int. Dev."].includes(key);
         
         if (isMonetaryCol) {
           if (filterValue.min === undefined && filterValue.max === undefined) return true;
@@ -804,7 +860,32 @@ const ResumenModal = ({ serieName, data, onClose }) => {
 
   const getAvailableOptions = (key) => {
     if (!data) return [];
-    const options = new Set(data.map(row => String(row[key] !== null ? row[key] : '')));
+    
+    const validRows = data.filter(row => {
+      return Object.entries(filters).every(([filterKey, filterValue]) => {
+        if (filterKey === key) return true; // Skip filtering for this column itself
+        if (!filterValue) return true;
+        
+        const isMonetaryCol = ["Capital", "Interés", "Total", "Monto", "Int. Dev."].includes(filterKey);
+        
+        if (isMonetaryCol) {
+          if (filterValue.min === undefined && filterValue.max === undefined) return true;
+          let val = row[filterKey];
+          if (typeof val === 'string') val = val.replace(/[^0-9.-]+/g,"");
+          const numVal = Number(val);
+          if (isNaN(numVal)) return false;
+          if (filterValue.min !== undefined && numVal < filterValue.min) return false;
+          if (filterValue.max !== undefined && numVal > filterValue.max) return false;
+          return true;
+        } else {
+          if (!Array.isArray(filterValue) || filterValue.length === 0) return true;
+          const valStr = String(row[filterKey] !== null ? row[filterKey] : '');
+          return filterValue.includes(valStr);
+        }
+      });
+    });
+
+    const options = new Set(validRows.map(row => String(row[key] !== null ? row[key] : '')));
     return Array.from(options).sort();
   };
 
@@ -813,7 +894,7 @@ const ResumenModal = ({ serieName, data, onClose }) => {
     const totals = {};
     if (filteredData.length > 0) {
       Object.keys(filteredData[0]).forEach(key => {
-        const isMonetaryCol = ["Capital", "Interés", "Total", "Monto"].includes(key);
+        const isMonetaryCol = ["Capital", "Interés", "Total", "Monto", "Int. Dev."].includes(key);
         if (isMonetaryCol) {
           totals[key] = filteredData.reduce((acc, row) => {
             let val = row[key];
@@ -852,7 +933,7 @@ const ResumenModal = ({ serieName, data, onClose }) => {
                 <thead>
                   <tr>
                     {Object.keys(data[0]).map((key) => {
-                      const isMonetaryCol = ["Capital", "Interés", "Total", "Monto"].includes(key);
+                      const isMonetaryCol = ["Capital", "Interés", "Total", "Monto", "Int. Dev."].includes(key);
                       return (
                         <th key={key}>
                           <div style={{ marginBottom: '8px' }}>{key}</div>
@@ -878,7 +959,7 @@ const ResumenModal = ({ serieName, data, onClose }) => {
                   {filteredData.map((row, index) => (
                     <tr key={index}>
                       {Object.entries(row).map(([key, val], idx) => {
-                        const isMonetaryCol = ["Capital", "Interés", "Total", "Monto"].includes(key);
+                        const isMonetaryCol = ["Capital", "Interés", "Total", "Monto", "Int. Dev."].includes(key);
                         const formattedVal = (isMonetaryCol && !isNaN(val) && val !== "" && val !== null)
                           ? new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(val)
                           : String(val !== null ? val : '');
