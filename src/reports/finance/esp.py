@@ -9,6 +9,8 @@ import src.reports.balances as balances
 import src.reports.finance.comprobantes as comprobantes
 import src.reports.finance.cartera as cartera
 
+from src.logic.deuda.reportes import estado as deuda_estado
+
 from src.database import SessionLocal
 from src.database.models import LiquidacionCuotaCedida, Cobranza
 from src.database.models.finance.posicion_iva import PosicionIva
@@ -137,6 +139,15 @@ def reporte(fecha_corte: str | date, n_periodos: int = 2, salto_meses: int = 1, 
         datos.append(
             {"Categoria": "Pasivos", "Detalle": "Caída de Cuotas Adeudadas", periodo: cdc_inpaga})
 
+        df_deuda = deuda_estado(fecha)
+        cap_deuda = df_deuda["Capital"].sum() if "Capital" in df_deuda.columns else 0.0
+        int_deuda = df_deuda["Int. Dev."].sum() if "Int. Dev." in df_deuda.columns else 0.0
+
+        datos.append(
+            {"Categoria": "Pasivos", "Detalle": "Capital Inversores", periodo: cap_deuda})
+        datos.append(
+            {"Categoria": "Pasivos", "Detalle": "Interés Inversores", periodo: int_deuda})
+
     df = pd.DataFrame(datos)
     df = df.groupby(["Categoria", "Detalle"]).sum()
     df.loc["Pasivos"] *= -1
@@ -158,8 +169,10 @@ def reporte(fecha_corte: str | date, n_periodos: int = 2, salto_meses: int = 1, 
         'Cheques a Pagar': 1,
         'Valor Actual de Cartera a Ceder': 2,
         'Caída de Cuotas Adeudadas': 3,
-        'IVA Adeudado': 4,
-        'Planes de Ganancias': 5,
+        "Capital Inversores": 4,
+        "Interés Inversores": 5,
+        'IVA Adeudado': 6,
+        'Planes de Ganancias': 7,
     }
 
     # Asignar orden por detalle, o 99 si no está mapeado. 'Total' va siempre al final (100)

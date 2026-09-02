@@ -12,11 +12,20 @@ from src.logic.deuda.utils import mov_exp
 def buscar(id_cuenta_comitente: str | int):
 
     try:
+            
         db = SessionLocal()
+        
+        conditions = [CuentaComitente.id_externo == str(id_cuenta_comitente)]
+        try:
+            id_as_int = int(id_cuenta_comitente)
+            conditions.append(CuentaComitente.id == id_as_int)
+        except (ValueError, TypeError):
+            pass
+
         rows = (db.query(CuentaComitente, Inversor.id, Inversor.razon_social, Inversor.cuit, Inversor.domicilio_legal, TitularidadCuentaComitente.orden)
                .join(TitularidadCuentaComitente, TitularidadCuentaComitente.id_cuenta_comitente == CuentaComitente.id)
                .join(Inversor, Inversor.id == TitularidadCuentaComitente.id_inversor)
-               .filter(or_(CuentaComitente.id == id_cuenta_comitente, CuentaComitente.id_externo == id_cuenta_comitente)).all())
+               .filter(or_(*conditions)).all())
         
         if not rows:
             raise ValueError(f"Cuenta comitente {id_cuenta_comitente} no encontrada")

@@ -50,7 +50,7 @@ class CuentaComitente(Base):
     __tablename__ = "cuentas_comitentes"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    id_externo = Column(Integer, unique=True, nullable=True)
+    id_externo = Column(String(50), unique=True, nullable=True)
     conjunta = Column(Boolean, default=False)
 
     created_at = Column(DateTime, default=func.now())

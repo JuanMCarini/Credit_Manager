@@ -4,6 +4,7 @@ import axiosClient from '../api/axiosClient';
 import { Plus, X } from 'lucide-react';
 import ExcelListFilter from '../components/ExcelListFilter';
 import ExcelNumberRangeFilter from '../components/ExcelNumberRangeFilter';
+import CurrencyInput from '../components/CurrencyInput';
 
 const MovimientosDeudaPage = () => {
   const queryClient = useQueryClient();
@@ -26,7 +27,7 @@ const MovimientosDeudaPage = () => {
   });
 
   const movimientos = data?.items || [];
-  
+
   const getMontoMultiplier = (tipo) => {
     switch (tipo) {
       case 'Suscripción': return 1;
@@ -42,7 +43,7 @@ const MovimientosDeudaPage = () => {
   const filteredMovimientos = movimientos.filter(m => {
     return Object.entries(filters).every(([key, filterValue]) => {
       if (!filterValue || (Array.isArray(filterValue) && filterValue.length === 0)) return true;
-      
+
       if (key === 'monto') {
         if (filterValue.min === undefined && filterValue.max === undefined) return true;
         const val = Number(m.monto * getMontoMultiplier(m.tipo_movimiento));
@@ -51,7 +52,7 @@ const MovimientosDeudaPage = () => {
         if (filterValue.max !== undefined && val > filterValue.max) return false;
         return true;
       }
-      
+
       let valStr = '';
       if (key === 'fecha') {
         valStr = new Date(m.fecha).toLocaleDateString();
@@ -66,7 +67,7 @@ const MovimientosDeudaPage = () => {
       } else {
         valStr = String(m[key] !== null && m[key] !== undefined ? m[key] : '');
       }
-      
+
       return filterValue.includes(valStr);
     });
   });
@@ -157,14 +158,14 @@ const MovimientosDeudaPage = () => {
 
   const getTipoBadge = (tipo) => {
     switch (tipo) {
-      case 'Suscripción': 
+      case 'Suscripción':
       case 'Renovación suscripción':
         return <span className="status-badge status-activo">{tipo}</span>;
-      case 'Rescate': 
+      case 'Rescate':
       case 'Renovación rescate':
       case 'Retiro de intereses':
         return <span className="status-badge status-inactivo" style={{ background: 'var(--danger-color)' }}>{tipo}</span>;
-      case 'Vencimiento': 
+      case 'Vencimiento':
         return <span className="status-badge" style={{ background: 'var(--text-secondary)' }}>{tipo}</span>;
       default: return <span className="status-badge">{tipo}</span>;
     }
@@ -233,7 +234,7 @@ const MovimientosDeudaPage = () => {
                     <td>{new Date(m.fecha).toLocaleDateString()}</td>
                     <td>{m.cuenta_externo ? `${m.cuenta_externo} (ID ${m.id_cuenta_comitente})` : `ID ${m.id_cuenta_comitente}`}</td>
                     <td>
-                      {m.tipo_movimiento === 'Renovación rescate' && m.id_serie_destino 
+                      {m.tipo_movimiento === 'Renovación rescate' && m.id_serie_destino
                         ? `${m.serie_name || `ID ${m.id_serie}`} ➔ ${m.serie_destino_name || `ID ${m.id_serie_destino}`}`
                         : m.serie_name || `ID ${m.id_serie}`}
                     </td>
@@ -269,7 +270,7 @@ const MovimientosDeudaPage = () => {
       </div>
 
       {showAddModal && (
-        <AddMovimientoModal 
+        <AddMovimientoModal
           initialData={editingMovimiento}
           onClose={() => {
             setShowAddModal(false);
@@ -296,7 +297,7 @@ const MovimientosDeudaPage = () => {
             <p style={{ marginBottom: '16px', color: 'var(--text-secondary)' }}>
               Cuenta Externa: {viewTitularesMovimiento.cuenta_externo || 'N/A'} (Interno: {viewTitularesMovimiento.id_cuenta_comitente})
             </p>
-            
+
             {viewTitularesMovimiento.titulares && viewTitularesMovimiento.titulares.length > 0 ? (
               <table className="data-table" style={{ marginTop: '0' }}>
                 <thead>
@@ -321,7 +322,7 @@ const MovimientosDeudaPage = () => {
                 No hay inversores asociados a esta cuenta.
               </div>
             )}
-            
+
             <div className="modal-actions" style={{ marginTop: '24px', justifyContent: 'flex-end' }}>
               <button type="button" className="btn-primary" onClick={() => setViewTitularesMovimiento(null)}>Cerrar</button>
             </div>
@@ -340,7 +341,7 @@ const AddMovimientoModal = ({ initialData, onClose, onSubmit, isLoading }) => {
     id_serie_destino: initialData?.id_serie_destino || '',
     fecha: initialData?.fecha ? new Date(initialData.fecha).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
     monto: initialData?.monto || '',
-    tipo_movimiento: initialData?.tipo_movimiento || 'SUSCRIPCION',
+    tipo_movimiento: initialData?.tipo_movimiento || 'Suscripción',
     observaciones: initialData?.observaciones || ''
   });
 
@@ -372,7 +373,7 @@ const AddMovimientoModal = ({ initialData, onClose, onSubmit, isLoading }) => {
       tipo_movimiento: formData.tipo_movimiento,
       observaciones: formData.observaciones || null
     };
-    if (formData.tipo_movimiento === 'RENOVACION' && formData.id_serie_destino) {
+    if ((formData.tipo_movimiento === 'Renovación suscripción' || formData.tipo_movimiento === 'Renovación rescate') && formData.id_serie_destino) {
       data.id_serie_destino = parseInt(formData.id_serie_destino);
     }
     onSubmit(data);
@@ -390,13 +391,13 @@ const AddMovimientoModal = ({ initialData, onClose, onSubmit, isLoading }) => {
         </button>
         <h3 style={{ marginTop: 0, marginBottom: '20px' }}>{initialData ? 'Editar Movimiento' : 'Registrar Movimiento'}</h3>
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          
+
           <div className="form-group">
             <label>Cuenta Comitente *</label>
-            <select 
-              required 
-              value={formData.id_cuenta_comitente} 
-              onChange={(e) => setFormData({...formData, id_cuenta_comitente: e.target.value})}
+            <select
+              required
+              value={formData.id_cuenta_comitente}
+              onChange={(e) => setFormData({ ...formData, id_cuenta_comitente: e.target.value })}
               style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--surface-color)', color: 'var(--text-color)' }}
             >
               <option value="">-- Seleccionar Cuenta --</option>
@@ -407,11 +408,11 @@ const AddMovimientoModal = ({ initialData, onClose, onSubmit, isLoading }) => {
           </div>
 
           <div className="form-group">
-            <label>{formData.tipo_movimiento === 'RENOVACION' ? 'Serie de Salida (vence) *' : 'Serie *'}</label>
-            <select 
-              required 
-              value={formData.id_serie} 
-              onChange={(e) => setFormData({...formData, id_serie: e.target.value})}
+            <label>{(formData.tipo_movimiento === 'Renovación suscripción' || formData.tipo_movimiento === 'Renovación rescate') ? 'Serie de Salida (vence) *' : 'Serie *'}</label>
+            <select
+              required
+              value={formData.id_serie}
+              onChange={(e) => setFormData({ ...formData, id_serie: e.target.value })}
               style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--surface-color)', color: 'var(--text-color)' }}
             >
               <option value="">-- Seleccionar Serie --</option>
@@ -421,13 +422,13 @@ const AddMovimientoModal = ({ initialData, onClose, onSubmit, isLoading }) => {
             </select>
           </div>
 
-          {formData.tipo_movimiento === 'RENOVACION' && (
+          {(formData.tipo_movimiento === 'Renovación suscripción' || formData.tipo_movimiento === 'Renovación rescate') && (
             <div className="form-group">
               <label>Serie de Entrada (suscribe) *</label>
-              <select 
-                required 
-                value={formData.id_serie_destino} 
-                onChange={(e) => setFormData({...formData, id_serie_destino: e.target.value})}
+              <select
+                required
+                value={formData.id_serie_destino}
+                onChange={(e) => setFormData({ ...formData, id_serie_destino: e.target.value })}
                 style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--surface-color)', color: 'var(--text-color)' }}
               >
                 <option value="">-- Seleccionar Serie --</option>
@@ -440,53 +441,51 @@ const AddMovimientoModal = ({ initialData, onClose, onSubmit, isLoading }) => {
 
           <div className="form-group">
             <label>Tipo de Movimiento *</label>
-            <select 
-              required 
-              value={formData.tipo_movimiento} 
-              onChange={(e) => setFormData({...formData, tipo_movimiento: e.target.value})}
+            <select
+              required
+              value={formData.tipo_movimiento}
+              onChange={(e) => setFormData({ ...formData, tipo_movimiento: e.target.value })}
               style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--surface-color)', color: 'var(--text-color)' }}
             >
-              <option value="SUSCRIPCION">Suscripción</option>
-              <option value="RESCATE">Rescate</option>
-              <option value="VENCIMIENTO">Vencimiento</option>
-              <option value="RETIRO_INTERESES">Retiro de intereses</option>
-              <option value="RENOVACION">Renovación</option>
+              <option value="Suscripción">Suscripción</option>
+              <option value="Rescate">Rescate</option>
+              <option value="Vencimiento">Vencimiento</option>
+              <option value="Retiro de intereses">Retiro de intereses</option>
+              <option value="Renovación suscripción">Renovación suscripción</option>
+              <option value="Renovación rescate">Renovación rescate</option>
             </select>
           </div>
 
           <div className="form-group">
             <label>Fecha *</label>
-            <input 
-              type="date" 
-              required 
-              value={formData.fecha} 
-              onChange={e => setFormData({...formData, fecha: e.target.value})} 
+            <input
+              type="date"
+              required
+              value={formData.fecha}
+              onChange={e => setFormData({ ...formData, fecha: e.target.value })}
             />
           </div>
 
           <div className="form-group">
             <label>Monto *</label>
-            <input 
-              type="number" 
-              required 
-              step="0.01"
-              min="0.01"
-              value={formData.monto} 
-              onChange={e => setFormData({...formData, monto: e.target.value})} 
-              placeholder="Ej. 1000000.00"
+            <CurrencyInput
+              required
+              value={formData.monto}
+              onChange={(val) => setFormData({ ...formData, monto: val })}
+              placeholder="Ej. $ 1.000.000,00"
             />
           </div>
-          
+
           <div className="form-group">
             <label>Observaciones</label>
-            <textarea 
-              value={formData.observaciones} 
-              onChange={e => setFormData({...formData, observaciones: e.target.value})} 
+            <textarea
+              value={formData.observaciones}
+              onChange={e => setFormData({ ...formData, observaciones: e.target.value })}
               placeholder="Opcional..."
               style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--surface-color)', color: 'var(--text-color)', minHeight: '60px' }}
             />
           </div>
-          
+
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
             <button type="button" className="btn-secondary" onClick={onClose} disabled={isLoading}>Cancelar</button>
             <button type="submit" className="btn-primary" disabled={isLoading}>

@@ -32,7 +32,7 @@ class InversorResponse(InversorBase):
 # CUENTA COMITENTE
 # -----------------
 class CuentaComitenteBase(BaseModel):
-    id_externo: int
+    id_externo: Optional[str] = None
     conjunta: bool = False
 
 class TitularidadCuentaComitenteBase(BaseModel):

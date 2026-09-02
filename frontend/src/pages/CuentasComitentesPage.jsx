@@ -299,7 +299,7 @@ const AddCuentaModal = ({ initialData, onClose, onSubmit, isLoading }) => {
     }
     
     onSubmit({
-      id_externo: parseInt(formData.id_externo),
+      id_externo: formData.id_externo,
       conjunta: formData.conjunta,
       titulares: formData.titulares.map(t => ({
         id_inversor: parseInt(t.id_inversor),
@@ -325,7 +325,7 @@ const AddCuentaModal = ({ initialData, onClose, onSubmit, isLoading }) => {
           <div className="form-group">
             <label>ID Externo *</label>
             <input 
-              type="number" 
+              type="text" 
               required 
               value={formData.id_externo} 
               onChange={e => setFormData({...formData, id_externo: e.target.value})} 
