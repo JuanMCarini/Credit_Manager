@@ -10,6 +10,7 @@ import src.reports.finance.comprobantes as comprobantes
 import src.reports.finance.cartera as cartera
 
 from src.database import SessionLocal
+from src.database.models import LiquidacionCuotaCedida, Cobranza
 from src.database.models.finance.posicion_iva import PosicionIva
 from src.database.models.cheques.main import Cheque, OperacionCheque, TipoOperacionCheque
 
@@ -113,19 +114,28 @@ def reporte(fecha_corte: str | date, n_periodos: int = 2, salto_meses: int = 1, 
             cheques_a_cobrar = float(cheques_a_cobrar or 0.0)
             cheques_a_pagar = float(cheques_a_pagar or 0.0)
 
-    
+            query =  db_session.query(LiquidacionCuotaCedida.capital, LiquidacionCuotaCedida.interes, LiquidacionCuotaCedida.iva, Cobranza.fecha.label("fecha_cobranza"), LiquidacionCuotaCedida.fecha_pago).join(Cobranza, LiquidacionCuotaCedida.cobranza_id == Cobranza.id)
+            df_lqcc = pd.read_sql(query.statement, db_session.get_bind())
+            df_lqcc['fecha_cobranza'] = pd.to_datetime(df_lqcc['fecha_cobranza']).dt.to_period("M")
+            df_lqcc['fecha_pago'] = pd.to_datetime(df_lqcc['fecha_pago']).dt.to_period("M")
+            periodo_filtro = pd.Period(fecha, freq='M')
+            filtro = (df_lqcc['fecha_cobranza'] == periodo_filtro) & ((df_lqcc["fecha_pago"] > periodo_filtro) | (df_lqcc["fecha_pago"].isna()))
+            cdc_inpaga = df_lqcc.loc[filtro, ["capital", "interes", "iva"]].sum().sum()
+
         finally:
             db_session.close()
-        
+
         datos.append(
             {"Categoria": "Pasivos", "Detalle": "IVA Adeudado", periodo: saldo_iva})
 
         datos.append(
                 {"Categoria": "Activos", "Detalle": "Cheques a Cobrar", periodo: cheques_a_cobrar})
-        
+
         datos.append(
                 {"Categoria": "Pasivos", "Detalle": "Cheques a Pagar", periodo: cheques_a_pagar})
-    
+
+        datos.append(
+            {"Categoria": "Pasivos", "Detalle": "Caída de Cuotas Adeudadas", periodo: cdc_inpaga})
 
     df = pd.DataFrame(datos)
     df = df.groupby(["Categoria", "Detalle"]).sum()
@@ -147,8 +157,9 @@ def reporte(fecha_corte: str | date, n_periodos: int = 2, salto_meses: int = 1, 
         'Ventas de Cartera a Cobrar': 6,
         'Cheques a Pagar': 1,
         'Valor Actual de Cartera a Ceder': 2,
-        'IVA Adeudado': 3,
-        'Planes de Ganancias': 4,
+        'Caída de Cuotas Adeudadas': 3,
+        'IVA Adeudado': 4,
+        'Planes de Ganancias': 5,
     }
 
     # Asignar orden por detalle, o 99 si no está mapeado. 'Total' va siempre al final (100)
