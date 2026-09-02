@@ -26,7 +26,9 @@ def reporte(fecha_corte: str | date, n_periodos: int = 2, salto_meses: int = 1, 
     datos = []
     for i in range(n_periodos - 1, -1, -1):
 
-        fecha = fecha_corte - relativedelta(months=i * salto_meses)       
+        fecha_base = fecha_corte - relativedelta(months=i * salto_meses)
+        ultimo_dia = fecha_base + relativedelta(day=31)
+        fecha = min(ultimo_dia, fecha_corte)
 
         filtro_cartera = (df_carteras["fecha_compra"] <= pd.to_datetime(fecha))
         tna_series = df_carteras.loc[filtro_cartera, "tna_descuento"]
@@ -43,7 +45,7 @@ def reporte(fecha_corte: str | date, n_periodos: int = 2, salto_meses: int = 1, 
         datos.append(
             {"Categoria": "Activos", "Detalle": "Bancos/Caja", periodo: caja})
     
-        fci = -bancos.resumen(fecha).get("FCI", 0.0)
+        fci = max(0.0, -bancos.resumen(fecha).get("FCI", 0.0))
         datos.append(
             {"Categoria": "Activos", "Detalle": "Inversiones (FCI)", periodo: fci})
     

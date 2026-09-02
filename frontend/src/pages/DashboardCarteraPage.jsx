@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useTransition } from 'react';
 import axiosClient from '../api/axiosClient';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, LabelList, ComposedChart, Line} from 'recharts';
 import { jsPDF } from 'jspdf';
@@ -105,6 +105,7 @@ const DashboardCarteraPage = () => {
   const [comparePeriodA, setComparePeriodA] = useState("");
   const [comparePeriodB, setComparePeriodB] = useState("");
   const [loading, setLoading] = useState(true);
+  const [espLoading, setEspLoading] = useState(true);
   const [error, setError] = useState(null);
   const [fechaCorteDate, setFechaCorteDate] = useState(() => {
     const today = new Date();
@@ -151,6 +152,7 @@ const DashboardCarteraPage = () => {
   const [openOriginador, setOpenOriginador] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportFormat, setExportFormat] = useState(null);
+  const [isPending, startTransition] = useTransition();
 
   const exportToPDF = async (orientation = 'p') => {
     setIsExporting(true);
@@ -391,6 +393,7 @@ const DashboardCarteraPage = () => {
   useEffect(() => {
     const fetchEspData = async () => {
       try {
+        setEspLoading(true);
         const espResponse = await axiosClient.get('/api/v1/reports/esp', {
           params: { fecha: appliedFilters.fechaCorte, periodos: appliedFilters.nPeriodosEsp, salto: appliedFilters.frecuenciaEsp, tna_descuento: appliedFilters.tasaDescuento / 100 }
         });
@@ -400,6 +403,8 @@ const DashboardCarteraPage = () => {
       } catch (err) {
         console.error("Error fetching ESP data:", err);
         setEspData(null);
+      } finally {
+        setEspLoading(false);
       }
     };
 
@@ -1141,11 +1146,13 @@ const DashboardCarteraPage = () => {
           </div>
           <button
             onClick={() => {
-              setAppliedFilters({
-                fechaCorte: fechaCorte,
-                nPeriodosEsp: nPeriodosEsp,
-                frecuenciaEsp: frecuenciaEsp,
-                tasaDescuento: tasaDescuento
+              startTransition(() => {
+                setAppliedFilters({
+                  fechaCorte: fechaCorte,
+                  nPeriodosEsp: nPeriodosEsp,
+                  frecuenciaEsp: frecuenciaEsp,
+                  tasaDescuento: tasaDescuento
+                });
               });
             }}
             style={{
@@ -1169,7 +1176,7 @@ const DashboardCarteraPage = () => {
         </div>
       </header>
 
-      {loading ? (
+      {(loading || espLoading || isPending) ? (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '100px 0' }}>
           <div className="loading-spinner"></div>
           <span style={{ marginLeft: '10px' }}>Cargando información de la cartera...</span>
@@ -1206,7 +1213,7 @@ const DashboardCarteraPage = () => {
               {openDueño && (
                 <div className="custom-scrollbar" style={{ position: 'absolute', top: '100%', left: 0, marginTop: '5px', padding: '8px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.2)', maxHeight: '200px', overflowY: 'auto', minWidth: '220px', zIndex: 10, boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', cursor: 'pointer', fontSize: '0.9rem' }}>
-                    <input type="checkbox" checked={filtroDueños.length === 0} onChange={() => setFiltroDueños([])} />
+                    <input type="checkbox" checked={filtroDueños.length === 0} onChange={() => startTransition(() => setFiltroDueños([]))} />
                     <span style={{ opacity: filtroDueños.length === 0 ? 1 : 0.6 }}>Todos</span>
                   </label>
                   {uniqueDueños.filter(d => d !== 'Todos').map(d => (
@@ -1215,8 +1222,10 @@ const DashboardCarteraPage = () => {
                         type="checkbox"
                         checked={filtroDueños.includes(d)}
                         onChange={(e) => {
-                          if (e.target.checked) setFiltroDueños([...filtroDueños, d]);
-                          else setFiltroDueños(filtroDueños.filter(item => item !== d));
+                          startTransition(() => {
+                            if (e.target.checked) setFiltroDueños([...filtroDueños, d]);
+                            else setFiltroDueños(filtroDueños.filter(item => item !== d));
+                          });
                         }}
                       />
                       <span style={{ opacity: filtroDueños.includes(d) ? 1 : 0.6 }}>{d}</span>
@@ -1242,7 +1251,7 @@ const DashboardCarteraPage = () => {
               {openOriginador && (
                 <div className="custom-scrollbar" style={{ position: 'absolute', top: '100%', left: 0, marginTop: '5px', padding: '8px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.2)', maxHeight: '200px', overflowY: 'auto', minWidth: '220px', zIndex: 10, boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', cursor: 'pointer', fontSize: '0.9rem' }}>
-                    <input type="checkbox" checked={filtroOriginadores.length === 0} onChange={() => setFiltroOriginadores([])} />
+                    <input type="checkbox" checked={filtroOriginadores.length === 0} onChange={() => startTransition(() => setFiltroOriginadores([]))} />
                     <span style={{ opacity: filtroOriginadores.length === 0 ? 1 : 0.6 }}>Todos</span>
                   </label>
                   {uniqueOriginadores.filter(o => o !== 'Todos').map(o => (
@@ -1251,8 +1260,10 @@ const DashboardCarteraPage = () => {
                         type="checkbox"
                         checked={filtroOriginadores.includes(o)}
                         onChange={(e) => {
-                          if (e.target.checked) setFiltroOriginadores([...filtroOriginadores, o]);
-                          else setFiltroOriginadores(filtroOriginadores.filter(item => item !== o));
+                          startTransition(() => {
+                            if (e.target.checked) setFiltroOriginadores([...filtroOriginadores, o]);
+                            else setFiltroOriginadores(filtroOriginadores.filter(item => item !== o));
+                          });
                         }}
                       />
                       <span style={{ opacity: filtroOriginadores.includes(o) ? 1 : 0.6 }}>{o}</span>
