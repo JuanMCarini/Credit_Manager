@@ -29,6 +29,7 @@ def import_extract(
     
     # Intentamos varias combinaciones de formato (viejo TSV vs nuevo CSV)
     formatos = [
+        {'sep': '\t', 'skiprows': 6, 'encoding': 'latin1'}, # Nuevo formato excel con saltos de linea
         {'sep': '\t', 'skiprows': 4, 'encoding': 'latin1'}, # Formato viejo histórico
         {'sep': ';', 'skiprows': 4, 'encoding': 'latin1'},  # Formato CSV nuevo (;) con 4 filas de cabecera
         {'sep': ';', 'skiprows': 0, 'encoding': 'latin1'},  # Formato CSV nuevo estándar (;)
@@ -105,16 +106,19 @@ def import_extract(
         
         # Si no existe, usamos reglas para Santander o lo mandamos a los no clasificados
         if not concepto_id:
-            if "Rescate" in transaccion and "FCI" in transaccion:
+            trans_lower = transaccion.lower()
+            if "rescate" in trans_lower and "fci" in trans_lower:
                 concepto_id = mapa_conceptos.get("Rescate FCI")
-            elif "Suscrip" in transaccion and "FCI" in transaccion:
+            elif "suscrip" in trans_lower and "fci" in trans_lower:
                 concepto_id = mapa_conceptos.get("Suscripción FCI")
-            elif "Mantenimiento" in transaccion or "Comision" in transaccion:
+            elif "mantenimiento" in trans_lower or "comision" in trans_lower:
                 concepto_id = mapa_conceptos.get("Servicio de Cuenta")
-            elif "Iva percepcion rg":
+            elif "iva " in trans_lower:
                 concepto_id = mapa_conceptos.get("ARCA - IVA")
-            elif "Impuesto ley 25.413 debito 0,6%":
-                concepto_id = mapa_conceptos.get("ARCA - IVA")
+            elif "ley 25.413" in trans_lower:
+                concepto_id = mapa_conceptos.get("Impuesto Débito") or mapa_conceptos.get("ARCA - IVA")
+            elif "iibb" in trans_lower:
+                concepto_id = mapa_conceptos.get("ARBA - IIBB")
             
             if not concepto_id:
                 if row["Importe"] < 0:

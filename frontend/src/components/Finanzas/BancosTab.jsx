@@ -295,6 +295,12 @@ const BancosTab = () => {
     return { ingresos, egresos };
   }, [filteredMovimientos]);
 
+  const selectedCuenta = useMemo(() => {
+    return cuentas.find(c => c.id == selectedCuentaId);
+  }, [cuentas, selectedCuentaId]);
+
+  const isSantander = selectedCuenta && selectedCuenta.banco?.nombre_banco?.toLowerCase().includes('santander');
+
   return (
     <div style={{ animation: 'fadeIn 0.3s ease-in-out' }}>
       
@@ -396,14 +402,21 @@ const BancosTab = () => {
               accept=".xls,.xlsx" 
               onChange={handleFileUpload} 
             />
-            <button 
-              className="btn btn-secondary" 
-              onClick={() => fileInputRef.current && fileInputRef.current.click()} 
-              disabled={!selectedCuentaId || isUploading} 
-              style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-            >
-              <Upload size={18} /> {isUploading ? 'Importando...' : 'Importar'}
-            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+              <button 
+                className="btn btn-secondary" 
+                onClick={() => fileInputRef.current && fileInputRef.current.click()} 
+                disabled={!selectedCuentaId || isUploading} 
+                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                <Upload size={18} /> {isUploading ? 'Importando...' : 'Importar'}
+              </button>
+              {isSantander && (
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)', maxWidth: '200px', textAlign: 'right' }}>
+                  Usar reporte: <strong>"Online Banking Empresas Formato Excel"</strong>
+                </span>
+              )}
+            </div>
             <button className="btn btn-primary" onClick={() => { setEditingMovimiento(null); setIsMovimientoModalOpen(true); }} disabled={!selectedCuentaId} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Plus size={18} /> Nuevo Movimiento
             </button>
