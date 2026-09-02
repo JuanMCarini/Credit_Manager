@@ -45,9 +45,9 @@ def reporte(fecha_corte: str | date, n_periodos: int = 2, salto_meses: int = 1, 
         datos.append(
             {"Categoria": "Activos", "Detalle": "Bancos/Caja", periodo: caja})
     
-        fci = max(0.0, -bancos.resumen(fecha).get("FCI", 0.0))
+        fci_saldo = max(0.0, bancos.fci(fecha))
         datos.append(
-            {"Categoria": "Activos", "Detalle": "Inversiones (FCI)", periodo: fci})
+            {"Categoria": "Activos", "Detalle": "Inversiones (FCI)", periodo: fci_saldo})
     
         df_comp_pend = comprobantes.pendientes(fecha)
         pendientes = df_comp_pend.groupby("concepto")["saldo"].sum()
