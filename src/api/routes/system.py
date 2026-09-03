@@ -198,6 +198,36 @@ async def upload_logo(file: UploadFile = File(...)):
         
     return {"status": "success", "message": "Logo actualizado correctamente. Recarga la página para ver los cambios."}
 
+@router.post("/favicon")
+async def upload_favicon(file: UploadFile = File(...)):
+    filename = (file.filename or "").lower()
+    valid_exts = ('.ico', '.png', '.svg', '.jpg', '.jpeg', '.webp')
+    if not (file.content_type.startswith('image/') or filename.endswith(valid_exts)):
+        raise HTTPException(status_code=400, detail="El archivo debe ser un icono o imagen (.ico, .png, .svg, .jpg).")
+    
+    os.makedirs("data/uploads", exist_ok=True)
+    
+    try:
+        content = await file.read()
+        from PIL import Image
+        import io
+
+        img = Image.open(io.BytesIO(content))
+        if img.mode != 'RGBA':
+            img = img.convert('RGBA')
+        
+        # 1. Guardar PNG optimizado (192x192)
+        png_img = img.copy()
+        png_img.thumbnail((192, 192), Image.Resampling.LANCZOS)
+        png_img.save("data/uploads/favicon.png", format="PNG", optimize=True)
+
+        # 2. Guardar binario ICO genuino con múltiples resoluciones (16, 32, 48, 64)
+        img.save("data/uploads/favicon.ico", format="ICO", sizes=[(16, 16), (32, 32), (48, 48), (64, 64)])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al procesar y guardar el favicon: {str(e)}")
+        
+    return {"status": "success", "message": "Favicon actualizado y optimizado correctamente. Recarga la página para ver los cambios."}
+
 from typing import Dict, List, Any
 from src.database.models.system import ModuloSistema
 from src.database.models.auth import Usuario, TipoRolEnum

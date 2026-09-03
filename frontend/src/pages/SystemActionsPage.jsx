@@ -7,6 +7,8 @@ const SystemActionsPage = () => {
   const [loading, setLoading] = useState(false);
   const [logoFile, setLogoFile] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [faviconFile, setFaviconFile] = useState(null);
+  const [uploadingFavicon, setUploadingFavicon] = useState(false);
   const [moduleSaving, setModuleSaving] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState(null);
 
@@ -52,6 +54,40 @@ const SystemActionsPage = () => {
       alert("Error al subir el logo: " + (error.response?.data?.detail || error.message));
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleFaviconChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      setFaviconFile(e.target.files[0]);
+    }
+  };
+
+  const handleFaviconUpload = async () => {
+    if (!faviconFile) return;
+    setUploadingFavicon(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', faviconFile);
+      await axiosClient.post('/api/v1/system/favicon', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      alert("Favicon actualizado con éxito.");
+      setFaviconFile(null);
+      
+      // Actualizar inmediatamente el favicon en el documento
+      const t = Date.now();
+      const linkPng = document.getElementById('app-favicon') || document.querySelector("link[rel~='icon']");
+      if (linkPng) {
+        linkPng.href = `/static/favicon.png?v=${t}`;
+      }
+      setTimeout(() => {
+        window.location.reload();
+      }, 300);
+    } catch (error) {
+      alert("Error al subir el favicon: " + (error.response?.data?.detail || error.message));
+    } finally {
+      setUploadingFavicon(false);
     }
   };
 
@@ -260,6 +296,22 @@ const SystemActionsPage = () => {
           />
           <button className="btn-primary" onClick={handleLogoUpload} disabled={!logoFile || uploading} style={{ width: '100%', maxWidth: '300px', margin: '0 auto', display: 'block' }}>
             {uploading ? "Subiendo..." : "Subir Logo"}
+          </button>
+        </div>
+
+        <div className="glass-panel" style={{ padding: '24px', borderRadius: 'var(--radius-lg)', textAlign: 'center' }}>
+          <h3 style={{ marginBottom: '12px' }}>Favicon de la Aplicación 🌐</h3>
+          <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '24px' }}>
+            Sube un favicon personalizado (.ico, .png, .svg) para la pestaña del navegador.
+          </p>
+          <input 
+            type="file" 
+            accept=".ico,image/x-icon,image/png,image/svg+xml,image/*" 
+            onChange={handleFaviconChange} 
+            style={{ marginBottom: '15px', width: '100%', maxWidth: '300px', margin: '0 auto 15px auto', display: 'block' }}
+          />
+          <button className="btn-primary" onClick={handleFaviconUpload} disabled={!faviconFile || uploadingFavicon} style={{ width: '100%', maxWidth: '300px', margin: '0 auto', display: 'block' }}>
+            {uploadingFavicon ? "Subiendo..." : "Subir Favicon"}
           </button>
         </div>
       </div>

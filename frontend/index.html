@@ -4,6 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Credit Manager - Core Engine (React)</title>
+    <!-- Favicon -->
+    <link id="app-favicon" rel="icon" type="image/png" href="/static/favicon.png">
+    <link rel="shortcut icon" type="image/x-icon" href="/static/favicon.ico">
+    <script>
+      (function() {
+        var t = new Date().getTime();
+        var fav = document.getElementById('app-favicon');
+        if (fav) fav.href = '/static/favicon.png?v=' + t;
+      })();
+    </script>
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

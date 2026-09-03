@@ -124,6 +124,8 @@ app.mount("/static", StaticFiles(directory="data/uploads"), name="static")
 # Endpoints Root
 # -------------------------------------------------------------------
 
+from fastapi.responses import FileResponse, Response
+
 @app.get("/", tags=["Health"])
 async def health_check() -> Dict[str, str]:
     """
@@ -131,6 +133,16 @@ async def health_check() -> Dict[str, str]:
     Retorna 200 OK y el estado general de la aplicación.
     """
     return {"status": "ok", "message": "Credit Manager API is running"}
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def get_favicon():
+    file_path = "data/uploads/favicon.ico"
+    if os.path.exists(file_path):
+        return FileResponse(file_path)
+    file_png = "data/uploads/favicon.png"
+    if os.path.exists(file_png):
+        return FileResponse(file_png)
+    return Response(status_code=204)
 
 # -------------------------------------------------------------------
 # Registro de Routers
