@@ -41,7 +41,7 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         
         {/* Rutas protegidas genéricas (cualquier rol) */}
-        <Route element={<ProtectedRoute allowedRoles={['Auditor / Solo Lectura', 'Operador de Cobranzas', 'Oficial de Crédito']} />}>
+        <Route element={<ProtectedRoute allowedRoles={['Auditor / Solo Lectura', 'Operador de Cobranzas', 'Oficial de Crédito', 'Gerente', 'Operador de Inversiones', 'Responsable de Finanzas']} />}>
           <Route path="/" element={<MainLayout />}>
             <Route index element={<Navigate to="/dashboard-cartera" replace />} />
             <Route path="dashboard-cartera" element={<DashboardCarteraPage />} />

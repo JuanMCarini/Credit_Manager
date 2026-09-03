@@ -5,9 +5,12 @@ import { Plus, X } from 'lucide-react';
 import ExportExcelButton from '../components/ExportExcelButton';
 import ExcelListFilter from '../components/ExcelListFilter';
 import ExcelNumberRangeFilter from '../components/ExcelNumberRangeFilter';
+import { useAuthStore } from '../store/useAuthStore';
 
 const SeriesPage = () => {
   const queryClient = useQueryClient();
+  const { user } = useAuthStore();
+  const isAuditor = user?.rol === 'Auditor / Solo Lectura';
   const [showAddModal, setShowAddModal] = useState(false);
   const [editSerieData, setEditSerieData] = useState(null);
   const [fechaCorte, setFechaCorte] = useState(new Date().toISOString().split('T')[0]);
@@ -332,9 +335,11 @@ const SeriesPage = () => {
           <p>Gestione las series emitidas para suscripción de los inversores.</p>
         </div>
         <div>
-          <button className="btn-primary" onClick={() => setShowAddModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Plus size={16} /> Nueva Serie
-          </button>
+          {!isAuditor && (
+            <button className="btn-primary" onClick={() => setShowAddModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Plus size={16} /> Nueva Serie
+            </button>
+          )}
         </div>
       </header>
 
@@ -457,37 +462,41 @@ const SeriesPage = () => {
                           >
                             📋
                           </button>
-                          <button 
-                            className="btn-secondary" 
-                            style={{ padding: '4px', fontSize: '14px' }}
-                            onClick={() => setEditSerieData(s)}
-                            title="Editar Serie"
-                          >
-                            ✏️
-                          </button>
-                          <button 
-                            className="btn-secondary" 
-                            style={{ padding: '4px', fontSize: '14px' }}
-                            onClick={() => {
-                              setSelectedSerieVieja(s);
-                              setShowRenovacionModal(true);
-                            }}
-                            title="Renovar Serie"
-                          >
-                            🔄
-                          </button>
-                          <button 
-                            className="btn-secondary" 
-                            style={{ padding: '4px', fontSize: '14px', color: 'var(--danger-color)' }}
-                            onClick={() => {
-                              if (window.confirm('¿Está seguro de eliminar esta serie? Se eliminarán también todos los movimientos asociados.')) {
-                                deleteMutation.mutate(s.id);
-                              }
-                            }}
-                            title="Eliminar Serie"
-                          >
-                            🗑️
-                          </button>
+                          {!isAuditor && (
+                            <>
+                              <button 
+                                className="btn-secondary" 
+                                style={{ padding: '4px', fontSize: '14px' }}
+                                onClick={() => setEditSerieData(s)}
+                                title="Editar Serie"
+                              >
+                                ✏️
+                              </button>
+                              <button 
+                                className="btn-secondary" 
+                                style={{ padding: '4px', fontSize: '14px' }}
+                                onClick={() => {
+                                  setSelectedSerieVieja(s);
+                                  setShowRenovacionModal(true);
+                                }}
+                                title="Renovar Serie"
+                              >
+                                🔄
+                              </button>
+                              <button 
+                                className="btn-secondary" 
+                                style={{ padding: '4px', fontSize: '14px', color: 'var(--danger-color)' }}
+                                onClick={() => {
+                                  if (window.confirm('¿Está seguro de eliminar esta serie? Se eliminarán también todos los movimientos asociados.')) {
+                                    deleteMutation.mutate(s.id);
+                                  }
+                                }}
+                                title="Eliminar Serie"
+                              >
+                                🗑️
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>

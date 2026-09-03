@@ -7,9 +7,12 @@ from src.database.connection import Base
 
 class TipoRolEnum(str, enum.Enum):
     ADMINISTRADOR = "Administrador"
+    GERENTE = "Gerente"
     AUDITOR = "Auditor / Solo Lectura"
     OPERADOR_COBRANZAS = "Operador de Cobranzas"
     OFICIAL_CREDITO = "Oficial de Crédito"
+    OPERADOR_INVERSIONES = "Operador de Inversiones"
+    RESPONSABLE_FINANZAS = "Responsable de Finanzas"
 
 class Rol(Base):
     __tablename__ = "roles"

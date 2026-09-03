@@ -99,13 +99,25 @@ async def enforce_rbac(request: Request, db: Session = Depends(get_db)):
 
     rol = current_user.rol.nombre
     
-    if rol == TipoRolEnum.ADMINISTRADOR:
+    if rol in [TipoRolEnum.ADMINISTRADOR, TipoRolEnum.GERENTE]:
         pass
     elif rol == TipoRolEnum.AUDITOR:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, 
             detail="Acción no permitida: Los auditores solo tienen acceso de lectura."
         )
+    elif rol == TipoRolEnum.OPERADOR_INVERSIONES:
+        if not (path.startswith("/api/v1/inversores") or path.startswith("/api/v1/series") or path.startswith("/api/v1/movimientos-deuda") or path.startswith("/api/v1/cuentas-comitentes") or path.startswith("/api/v1/reportes")):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Acción no permitida: Solo puede modificar datos del área de Inversiones."
+            )
+    elif rol == TipoRolEnum.RESPONSABLE_FINANZAS:
+        if not (path.startswith("/api/finanzas") or path.startswith("/api/cheques") or path.startswith("/api/v1/facturacion") or path.startswith("/api/v1/reportes")):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Acción no permitida: Solo puede modificar datos del área de Finanzas."
+            )
     elif rol == TipoRolEnum.OPERADOR_COBRANZAS:
         if not (path.startswith("/api/v1/cobranzas") or path.startswith("/api/v1/procesos")):
             raise HTTPException(

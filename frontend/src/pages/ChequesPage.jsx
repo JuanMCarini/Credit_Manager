@@ -8,6 +8,7 @@ import ExcelDateFilter from '../components/ExcelDateFilter';
 
 const ChequesPage = () => {
   const { user, token } = useAuthStore();
+  const isAuditor = user?.rol === 'Auditor / Solo Lectura';
   const { apiStatus, bancos = [], fetchAuxiliares } = useAppStore();
   const [cheques, setCheques] = useState([]);
   const [operadores, setOperadores] = useState([]);
@@ -468,9 +469,11 @@ const ChequesPage = () => {
           >
             <FilterX size={16} /> Limpiar Filtros
           </button>
-          <button className="btn btn-primary" onClick={() => setShowNuevoCheque(true)}>
-            Nuevo Cheque
-          </button>
+          {!isAuditor && (
+            <button className="btn btn-primary" onClick={() => setShowNuevoCheque(true)}>
+              Nuevo Cheque
+            </button>
+          )}
         </div>
       </div>
 
@@ -543,18 +546,20 @@ const ChequesPage = () => {
                         <span className="badge" style={{ backgroundColor: 'var(--success-color)', fontSize: '10px' }} title={`Movimiento Bancario ID: ${c.movimiento_id}`}>
                           🏦 Vinculado
                         </span>
-                        <button 
-                          className="btn-secondary"
-                          style={{ padding: '2px 6px', fontSize: '12px', color: 'var(--danger-color)', border: 'none', background: 'transparent' }}
-                          title="Desvincular Movimiento"
-                          onClick={() => handleDesasignarMovimiento(c)}
-                        >
-                          ✖
-                        </button>
+                        {!isAuditor && (
+                          <button 
+                            className="btn-secondary"
+                            style={{ padding: '2px 6px', fontSize: '12px', color: 'var(--danger-color)', border: 'none', background: 'transparent' }}
+                            title="Desvincular Movimiento"
+                            onClick={() => handleDesasignarMovimiento(c)}
+                          >
+                            ✖
+                          </button>
+                        )}
                       </div>
                     ) : (
                       <>
-                        {c.es_propio && c.estado !== 'DEBITADO' && (
+                        {!isAuditor && c.es_propio && c.estado !== 'DEBITADO' && (
                           <button 
                             className="btn-secondary"
                             style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--danger-color)' }}
@@ -564,7 +569,7 @@ const ChequesPage = () => {
                             💸
                           </button>
                         )}
-                        {!c.es_propio && c.is_beneficiario_empresa && c.estado !== 'ACREDITADO' && (
+                        {!isAuditor && !c.es_propio && c.is_beneficiario_empresa && c.estado !== 'ACREDITADO' && (
                           <button 
                             className="btn-secondary"
                             style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--success-color)' }}
@@ -594,7 +599,7 @@ const ChequesPage = () => {
                         📋
                       </button>
                     )}
-                    {(c.estado === 'PENDIENTE' || c.estado === 'COMPRADO') && (
+                    {!isAuditor && (c.estado === 'PENDIENTE' || c.estado === 'COMPRADO') && (
                       <button 
                         className="btn-secondary"
                         style={{ padding: '4px 8px', fontSize: '14px' }}
@@ -604,7 +609,7 @@ const ChequesPage = () => {
                         🔄
                       </button>
                     )}
-                    {c.estado === 'PENDIENTE' && (
+                    {!isAuditor && c.estado === 'PENDIENTE' && (
                       <>
                         <button 
                           className="btn-secondary"

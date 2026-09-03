@@ -3,9 +3,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axiosClient from '../api/axiosClient';
 import { Plus, X, Search, Trash2, Edit2 } from 'lucide-react';
 import ExcelListFilter from '../components/ExcelListFilter';
+import { useAuthStore } from '../store/useAuthStore';
 
 const InversoresPage = () => {
   const queryClient = useQueryClient();
+  const { user } = useAuthStore();
+  const isAuditor = user?.rol === 'Auditor / Solo Lectura';
   const [showAddModal, setShowAddModal] = useState(false);
   const [editInversor, setEditInversor] = useState(null);
   const [filters, setFilters] = useState({});
@@ -109,9 +112,11 @@ const InversoresPage = () => {
           <p>Gestione los inversores que participan en el financiamiento.</p>
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <button className="btn-primary" onClick={() => setShowAddModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Plus size={16} /> Nuevo Inversor
-          </button>
+          {!isAuditor && (
+            <button className="btn-primary" onClick={() => setShowAddModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Plus size={16} /> Nuevo Inversor
+            </button>
+          )}
         </div>
       </header>
 
@@ -139,7 +144,7 @@ const InversoresPage = () => {
                     />
                   </th>
                 ))}
-                <th>Acciones</th>
+                {!isAuditor && <th>Acciones</th>}
               </tr>
             </thead>
             <tbody>
@@ -161,23 +166,25 @@ const InversoresPage = () => {
                         {inv.activo ? 'Activo' : 'Inactivo'}
                       </span>
                     </td>
-                    <td>
-                      <div style={{ display: 'flex', gap: '6px' }}>
-                        <button className="btn-secondary" onClick={() => setEditInversor(inv)} style={{ padding: '4px 8px', fontSize: '14px' }} title="Editar">
-                          ✏️
-                        </button>
-                        <button className="btn-secondary" onClick={() => handleDelete(inv.id)} style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--danger-color)' }} title="Eliminar">
-                          🗑️
-                        </button>
-                      </div>
-                    </td>
+                    {!isAuditor && (
+                      <td>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <button className="btn-secondary" onClick={() => setEditInversor(inv)} style={{ padding: '4px 8px', fontSize: '14px' }} title="Editar">
+                            ✏️
+                          </button>
+                          <button className="btn-secondary" onClick={() => handleDelete(inv.id)} style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--danger-color)' }} title="Eliminar">
+                            🗑️
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))
               )}
             </tbody>
             <tfoot>
               <tr>
-                <td colSpan="8" style={{ textAlign: 'right', fontWeight: 'bold' }}>
+                <td colSpan={isAuditor ? "7" : "8"} style={{ textAlign: 'right', fontWeight: 'bold' }}>
                   Total Inversores: {filteredInversores.length}
                 </td>
               </tr>

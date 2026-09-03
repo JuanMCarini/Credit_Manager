@@ -3,9 +3,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axiosClient from '../api/axiosClient';
 import { Plus, X, Trash2, Edit2 } from 'lucide-react';
 import ExcelListFilter from '../components/ExcelListFilter';
+import { useAuthStore } from '../store/useAuthStore';
 
 const CuentasComitentesPage = () => {
   const queryClient = useQueryClient();
+  const { user } = useAuthStore();
+  const isAuditor = user?.rol === 'Auditor / Solo Lectura';
   const [showAddModal, setShowAddModal] = useState(false);
   const [editCuenta, setEditCuenta] = useState(null);
   const [showEstadoCuenta, setShowEstadoCuenta] = useState(null);
@@ -127,9 +130,11 @@ const CuentasComitentesPage = () => {
           <p>Gestione las cuentas en el mercado y sus inversores titulares.</p>
         </div>
         <div>
-          <button className="btn-primary" onClick={() => setShowAddModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Plus size={16} /> Nueva Cuenta
-          </button>
+          {!isAuditor && (
+            <button className="btn-primary" onClick={() => setShowAddModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Plus size={16} /> Nueva Cuenta
+            </button>
+          )}
         </div>
       </header>
 
@@ -186,12 +191,16 @@ const CuentasComitentesPage = () => {
                         <button className="btn-secondary" onClick={() => setShowEstadoCuenta(cta.id)} style={{ padding: '4px 8px', fontSize: '14px' }} title="Ver Estado de Cuenta">
                           👁️
                         </button>
-                        <button className="btn-secondary" onClick={() => setEditCuenta(cta)} style={{ padding: '4px 8px', fontSize: '14px' }} title="Editar">
-                          ✏️
-                        </button>
-                        <button className="btn-secondary" onClick={() => handleDelete(cta.id)} style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--danger-color)' }} title="Eliminar">
-                          🗑️
-                        </button>
+                        {!isAuditor && (
+                          <>
+                            <button className="btn-secondary" onClick={() => setEditCuenta(cta)} style={{ padding: '4px 8px', fontSize: '14px' }} title="Editar">
+                              ✏️
+                            </button>
+                            <button className="btn-secondary" onClick={() => handleDelete(cta.id)} style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--danger-color)' }} title="Eliminar">
+                              🗑️
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

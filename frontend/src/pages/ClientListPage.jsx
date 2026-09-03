@@ -9,10 +9,13 @@ import ClientCCModal from '../components/ClientCCModal';
 import ClientViewModal from '../components/ClientViewModal';
 import ExportExcelButton from '../components/ExportExcelButton';
 import { CreditCard, Eye, Edit, Trash2 } from 'lucide-react';
+import { useAuthStore } from '../store/useAuthStore';
 
 const ClientListPage = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { user } = useAuthStore();
+  const isAuditor = user?.rol === 'Auditor / Solo Lectura';
   const limit = 1000;
 
   const [filter, setFilter] = useState({ CUIL: '', Documento: '', Apellido: '', Nombre: '', Estado: [], Mail: '', Teléfono: '' });
@@ -252,12 +255,16 @@ const ClientListPage = () => {
                         <button className="btn-secondary" onClick={() => setCcCuil(c.CUIL)} style={{ padding: '4px 8px', fontSize: '14px' }} title="Ver Cuenta Corriente">
                           👁️
                         </button>
-                        <button className="btn-secondary" onClick={() => setEditCuil(c.CUIL)} style={{ padding: '4px 8px', fontSize: '14px' }} title="Editar">
-                          ✏️
-                        </button>
-                        <button className="btn-secondary" onClick={() => handleDelete(c.CUIL)} style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--danger-color)' }} title="Eliminar">
-                          🗑️
-                        </button>
+                        {!isAuditor && (
+                          <>
+                            <button className="btn-secondary" onClick={() => setEditCuil(c.CUIL)} style={{ padding: '4px 8px', fontSize: '14px' }} title="Editar">
+                              ✏️
+                            </button>
+                            <button className="btn-secondary" onClick={() => handleDelete(c.CUIL)} style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--danger-color)' }} title="Eliminar">
+                              🗑️
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

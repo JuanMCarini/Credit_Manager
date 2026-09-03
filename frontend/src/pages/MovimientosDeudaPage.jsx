@@ -5,9 +5,12 @@ import { Plus, X } from 'lucide-react';
 import ExcelListFilter from '../components/ExcelListFilter';
 import ExcelNumberRangeFilter from '../components/ExcelNumberRangeFilter';
 import CurrencyInput from '../components/CurrencyInput';
+import { useAuthStore } from '../store/useAuthStore';
 
 const MovimientosDeudaPage = () => {
   const queryClient = useQueryClient();
+  const { user } = useAuthStore();
+  const isAuditor = user?.rol === 'Auditor / Solo Lectura';
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingMovimiento, setEditingMovimiento] = useState(null);
   const [viewTitularesMovimiento, setViewTitularesMovimiento] = useState(null);
@@ -183,9 +186,11 @@ const MovimientosDeudaPage = () => {
           <p>Gestione suscripciones, rescates y vencimientos de las cuentas comitentes.</p>
         </div>
         <div>
-          <button className="btn-primary" onClick={() => setShowAddModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Plus size={16} /> Registrar Movimiento
-          </button>
+          {!isAuditor && (
+            <button className="btn-primary" onClick={() => setShowAddModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Plus size={16} /> Registrar Movimiento
+            </button>
+          )}
         </div>
       </header>
 
@@ -246,8 +251,12 @@ const MovimientosDeudaPage = () => {
                           <button className="btn-secondary" style={{ padding: '4px 8px', fontSize: '14px' }} onClick={() => alert(`Observación:\n\n${m.observaciones}`)} title="Ver Observación">💬</button>
                         )}
                         <button className="btn-secondary" style={{ padding: '4px 8px', fontSize: '14px' }} onClick={() => setViewTitularesMovimiento(m)} title="Ver Inversores">👥</button>
-                        <button className="btn-secondary" style={{ padding: '4px 8px', fontSize: '14px' }} onClick={() => handleEdit(m)} title="Editar">✏️</button>
-                        <button className="btn-secondary" style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--danger-color)' }} onClick={() => handleDelete(m.id)} title="Eliminar">🗑️</button>
+                        {!isAuditor && (
+                          <>
+                            <button className="btn-secondary" style={{ padding: '4px 8px', fontSize: '14px' }} onClick={() => handleEdit(m)} title="Editar">✏️</button>
+                            <button className="btn-secondary" style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--danger-color)' }} onClick={() => handleDelete(m.id)} title="Eliminar">🗑️</button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

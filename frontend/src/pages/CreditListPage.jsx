@@ -13,6 +13,7 @@ import ExcelNumberRangeFilter from '../components/ExcelNumberRangeFilter';
 import ExcelListFilter from '../components/ExcelListFilter';
 import ExportExcelButton from '../components/ExportExcelButton';
 import { Eye, Edit, Trash2 } from 'lucide-react';
+import { useAuthStore } from '../store/useAuthStore';
 
 const formatCurrency = (num) => {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(num);
@@ -22,6 +23,8 @@ const CreditListPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { user } = useAuthStore();
+  const isAuditor = user?.rol === 'Auditor / Solo Lectura';
   const limit = 1000;
   
   const [filter, setFilter] = useState({ ID: [], IdExterno: '', Originador: '', CUIL: '', Capital: {}, Plazo: '', TNA: '', IdTasa: '', Estado: [], Fecha: [], TipoCredito: [], SaldoMora: {}, DiasMora: {} });
@@ -401,12 +404,16 @@ const CreditListPage = () => {
                         <button className="btn-secondary" onClick={() => setViewLegajoCredito({id: c.ID, estado: c.Estado})} style={{ padding: '4px 8px', fontSize: '14px' }} title="Ver Legajo">
                           📁
                         </button>
-                        <button className="btn-secondary" onClick={() => setEditCredito({ id: c.ID, estado: c.Estado })} style={{ padding: '4px 8px', fontSize: '14px' }} title="Editar Estado">
-                          ✏️
-                        </button>
-                        <button className="btn-secondary" onClick={() => handleDelete(c.ID)} style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--danger-color)' }} title="Eliminar">
-                          🗑️
-                        </button>
+                        {!isAuditor && (
+                          <>
+                            <button className="btn-secondary" onClick={() => setEditCredito({ id: c.ID, estado: c.Estado })} style={{ padding: '4px 8px', fontSize: '14px' }} title="Editar Estado">
+                              ✏️
+                            </button>
+                            <button className="btn-secondary" onClick={() => handleDelete(c.ID)} style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--danger-color)' }} title="Eliminar">
+                              🗑️
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
