@@ -30,6 +30,7 @@ from src.api.routes.comprobantes import router as comprobantes_router
 from src.api.routes.planes import router as planes_router
 from src.api.routes.cheques import router as cheques_router
 from src.api.routes.posicion_iva import router as posicion_iva_router
+from src.api.routes.posicion_iibb import router as posicion_iibb_router
 from src.config import API_SETTINGS
 from src.database import Base, engine
 
@@ -38,6 +39,7 @@ from src.database import Base, engine
 # -------------------------------------------------------------------
 import src.database.models.finance.planes # Import to register the model
 import src.database.models.finance.posicion_iva # Registrar PosicionIva
+import src.database.models.finance.posicion_iibb # Registrar PosicionIibb
 Base.metadata.create_all(bind=engine)
 
 # -------------------------------------------------------------------
@@ -148,6 +150,7 @@ app.include_router(comprobantes_router)
 app.include_router(planes_router)
 app.include_router(cheques_router)
 app.include_router(posicion_iva_router)
+app.include_router(posicion_iibb_router)
 
 # -------------------------------------------------------------------
 # Frontend (Ahora servido por Nginx)

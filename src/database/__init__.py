@@ -56,6 +56,7 @@ from .models import (
     TipoOperacionCheque,
     OperacionCheque,
     PosicionIva,
+    PosicionIibb,
 )
 
 # Import events to register SQLAlchemy event listeners
