@@ -44,7 +44,7 @@ const DashboardComprobantesTab = ({ comprobantes }) => {
       nuevas += impTotal;
       pagado += impCancelado;
 
-      if (c.estado !== 'pagado') {
+      if (c.estado !== 'pagado' && saldo > 0.005) {
         adeudado += saldo;
         
         if (c.fecha_vencimiento) {

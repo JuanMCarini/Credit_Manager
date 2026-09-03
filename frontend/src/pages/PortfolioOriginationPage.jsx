@@ -46,6 +46,7 @@ const PortfolioOriginationPage = () => {
   // Form Compra
   const [compraData, setCompraData] = useState({
     nombre: '', fecha: '', tna: '', socio: '',
+    recurso: true, iva: false,
     personasCsv: null, prestamosCsv: null, cuotasCsv: null
   });
 
@@ -72,7 +73,9 @@ const PortfolioOriginationPage = () => {
         nombre: editingCompra.nombre || '',
         fecha: editingCompra.fecha_compra || '',
         tna: editingCompra.tna_descuento ? (editingCompra.tna_descuento * 100).toFixed(2) : '',
-        socio: socioMatch ? socioMatch.id : ''
+        socio: socioMatch ? socioMatch.id : '',
+        recurso: editingCompra.recurso !== undefined ? editingCompra.recurso : true,
+        iva: editingCompra.iva !== undefined ? editingCompra.iva : false,
       });
     }
   }, [editingCompra, socios]);
@@ -159,6 +162,33 @@ const PortfolioOriginationPage = () => {
 
   const handleConfirmCompra = async (e) => {
     if (e) e.preventDefault();
+    const hasFiles = Boolean(compraData.personasCsv && compraData.prestamosCsv && compraData.cuotasCsv);
+
+    if (editingCompra && !hasFiles) {
+      // Modificar solo metadatos (recurso, iva, nombre, fecha, tna) sin tocar créditos/cuotas
+      setLoading(true);
+      setFeedback({ type: '', message: '' });
+      try {
+        await axiosClient.patch(`/api/v1/carteras/${editingCompra.id}`, {
+          nombre: compraData.nombre,
+          fecha_compra: compraData.fecha,
+          tna_descuento: parseFloat(compraData.tna) / 100,
+          recurso: compraData.recurso,
+          iva: compraData.iva
+        });
+        setFeedback({ type: 'success', message: 'Cartera actualizada con éxito.' });
+        setShowPreviewModal(false);
+        setEditingCompra(null);
+        setCompraData({ nombre: '', fecha: '', tna: '', socio: '', recurso: true, iva: false, personasCsv: null, prestamosCsv: null, cuotasCsv: null });
+        return;
+      } catch (err) {
+        setFeedback({ type: 'error', message: 'Error al actualizar cartera: ' + (err.response?.data?.detail || err.message) });
+        return;
+      } finally {
+        setLoading(false);
+      }
+    }
+
     if (!compraData.personasCsv || !compraData.prestamosCsv || !compraData.cuotasCsv) {
       setFeedback({ type: 'error', message: 'Debe cargar los 3 archivos CSV para la compra.' });
       return;
@@ -173,6 +203,8 @@ const PortfolioOriginationPage = () => {
     formData.append('tna_descuento', parseFloat(compraData.tna) / 100);
     formData.append('cuit_vendedor', selectedSocio ? selectedSocio.cuit : '');
     formData.append('razon_social_vendedor', selectedSocio ? selectedSocio.razon_social : '');
+    formData.append('recurso', compraData.recurso);
+    formData.append('iva', compraData.iva);
     formData.append('personas_csv', compraData.personasCsv);
     formData.append('prestamos_csv', compraData.prestamosCsv);
     formData.append('cuotas_csv', compraData.cuotasCsv);
@@ -185,7 +217,7 @@ const PortfolioOriginationPage = () => {
       setFeedback({ type: 'success', message: res.data.message || `Compra ${editingCompra ? 'actualizada' : 'registrada'} con éxito.` });
       setShowPreviewModal(false);
       setEditingCompra(null);
-      setCompraData({ nombre: '', fecha: '', tna: '', socio: '', personasCsv: null, prestamosCsv: null, cuotasCsv: null });
+      setCompraData({ nombre: '', fecha: '', tna: '', socio: '', recurso: true, iva: false, personasCsv: null, prestamosCsv: null, cuotasCsv: null });
     } catch (error) {
       const data = error.response?.data;
       const msg = data?.detail || error.message;
@@ -258,6 +290,32 @@ const PortfolioOriginationPage = () => {
 
   const handleSimularCompra = async (e) => {
     if (e) e.preventDefault();
+    const hasAnyFile = Boolean(compraData.personasCsv || compraData.prestamosCsv || compraData.cuotasCsv);
+    const hasAllFiles = Boolean(compraData.personasCsv && compraData.prestamosCsv && compraData.cuotasCsv);
+
+    if (editingCompra && !hasAnyFile) {
+      // Previsualizar la cartera existente sin requerir subir nuevamente los archivos
+      setLoading(true);
+      setFeedback({ type: '', message: '' });
+      try {
+        const res = await axiosClient.get(`/api/v1/carteras/compra/${editingCompra.id}/preview`);
+        setPreviewData(res.data);
+        setPreviewTab('resumen');
+        setShowPreviewModal(true);
+        return;
+      } catch (error) {
+        setFeedback({ type: 'error', message: 'Error al previsualizar cartera existente: ' + (error.response?.data?.detail || error.message) });
+        return;
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    if (hasAnyFile && !hasAllFiles) {
+      setFeedback({ type: 'error', message: 'Si desea reemplazar los archivos, debe seleccionar los 3 archivos CSV (Personas, Préstamos y Cuotas).' });
+      return;
+    }
+
     if (!compraData.personasCsv || !compraData.prestamosCsv || !compraData.cuotasCsv) {
       setFeedback({ type: 'error', message: 'Debe cargar los 3 archivos CSV para la compra.' });
       return;
@@ -276,6 +334,8 @@ const PortfolioOriginationPage = () => {
     formData.append('tna_descuento', parseFloat(compraData.tna) / 100);
     formData.append('cuit_vendedor', selectedSocio ? selectedSocio.cuit : '');
     formData.append('razon_social_vendedor', selectedSocio ? selectedSocio.razon_social : '');
+    formData.append('recurso', compraData.recurso);
+    formData.append('iva', compraData.iva);
     formData.append('personas_csv', compraData.personasCsv);
     formData.append('prestamos_csv', compraData.prestamosCsv);
     formData.append('cuotas_csv', compraData.cuotasCsv);
@@ -523,19 +583,46 @@ const PortfolioOriginationPage = () => {
               </div>
             </div>
 
+            <div style={{ marginBottom: '24px' }}>
+              <label style={{ display: 'block', marginBottom: '12px', fontSize: '0.9em', color: 'var(--text-secondary)' }}>Condiciones Comerciales</label>
+              <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '12px', fontWeight: 500, cursor: 'pointer' }}>
+                  <div className="toggle-switch">
+                    <input type="checkbox" checked={compraData.recurso} onChange={(e) => setCompraData({ ...compraData, recurso: e.target.checked })} />
+                    <span className="slider"></span>
+                  </div>
+                  Con Recurso
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '12px', fontWeight: 500, cursor: 'pointer' }}>
+                  <div className="toggle-switch">
+                    <input type="checkbox" checked={compraData.iva} onChange={(e) => setCompraData({ ...compraData, iva: e.target.checked })} />
+                    <span className="slider"></span>
+                  </div>
+                  Incluir IVA
+                </label>
+              </div>
+            </div>
+
             <div style={{ marginBottom: '24px', background: 'rgba(0,0,0,0.2)', padding: '24px', borderRadius: '8px' }}>
-              <h4 style={{ marginBottom: '16px', fontSize: '1.1em' }}>Archivos a Importar (CSV)</h4>
+              <h4 style={{ marginBottom: '16px', fontSize: '1.1em' }}>
+                Archivos a Importar (CSV)
+                {editingCompra && (
+                  <span style={{ marginLeft: '10px', fontSize: '0.85em', color: 'var(--text-secondary)', fontWeight: 'normal' }}>
+                    (Opcional: deje vacío para mantener los créditos y cuotas actuales)
+                  </span>
+                )}
+              </h4>
               <div className="form-group" style={{ marginBottom: '16px' }}>
                 <label>Personas (personas.csv)</label>
-                <input type="file" accept=".csv" className="input-field" required onChange={(e) => setCompraData({ ...compraData, personasCsv: e.target.files[0] })} />
+                <input type="file" accept=".csv" className="input-field" required={!editingCompra} onChange={(e) => setCompraData({ ...compraData, personasCsv: e.target.files[0] })} />
               </div>
               <div className="form-group" style={{ marginBottom: '16px' }}>
                 <label>Préstamos (prestamos.csv)</label>
-                <input type="file" accept=".csv" className="input-field" required onChange={(e) => setCompraData({ ...compraData, prestamosCsv: e.target.files[0] })} />
+                <input type="file" accept=".csv" className="input-field" required={!editingCompra} onChange={(e) => setCompraData({ ...compraData, prestamosCsv: e.target.files[0] })} />
               </div>
               <div className="form-group">
                 <label>Cuotas (cuotas.csv)</label>
-                <input type="file" accept=".csv" className="input-field" required onChange={(e) => setCompraData({ ...compraData, cuotasCsv: e.target.files[0] })} />
+                <input type="file" accept=".csv" className="input-field" required={!editingCompra} onChange={(e) => setCompraData({ ...compraData, cuotasCsv: e.target.files[0] })} />
               </div>
             </div>
 
@@ -636,9 +723,18 @@ const PortfolioOriginationPage = () => {
               <h3 style={{ marginBottom: '8px', fontFamily: 'var(--font-heading)' }}>
                 Simulación de {tipoOperacion === 'VENTA' ? 'Venta' : 'Compra'} de Cartera
               </h3>
-              <p style={{ color: 'var(--text-secondary)', marginBottom: '24px' }}>
+              <p style={{ color: 'var(--text-secondary)', marginBottom: '16px' }}>
                 Revise los créditos y cuotas {tipoOperacion === 'VENTA' ? 'que serán cedidos' : 'importados'} antes de confirmar la operación.
               </p>
+
+              <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
+                <span className="badge" style={{ backgroundColor: 'rgba(255,255,255,0.08)', padding: '6px 14px', borderRadius: '20px', fontSize: '13px' }}>
+                  <strong>Régimen:</strong> {(tipoOperacion === 'VENTA' ? ventaData.recurso : compraData.recurso) ? 'Con Recurso' : 'Sin Recurso'}
+                </span>
+                <span className="badge" style={{ backgroundColor: 'rgba(255,255,255,0.08)', padding: '6px 14px', borderRadius: '20px', fontSize: '13px' }}>
+                  <strong>IVA:</strong> {(tipoOperacion === 'VENTA' ? ventaData.iva : compraData.iva) ? 'Incluye IVA' : 'Sin IVA'}
+                </span>
+              </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '24px' }}>
                 <div style={{ background: 'rgba(255,255,255,0.05)', padding: '16px', borderRadius: '8px', textAlign: 'center' }}>

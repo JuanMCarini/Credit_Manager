@@ -22,6 +22,7 @@ class VentaCarteraRequest(BaseModel):
     socio_originador_id: Optional[List[int]] = None
 
 class UpdateCarteraRequest(BaseModel):
+    nombre: Optional[str] = None
     fecha_compra: Optional[date] = None
     tna_descuento: Optional[float] = None
     recurso: Optional[bool] = None

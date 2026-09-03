@@ -64,6 +64,23 @@ const MultiSelectDropdown = ({ options, selectedValues, onChange, placeholder })
   );
 };
 
+const getComprobanteEstado = (c) => {
+  const saldo = Math.max(0, parseFloat(c.importe_total || 0) - parseFloat(c.importe_cancelado || 0));
+  if (saldo <= 0.005) {
+    return 'pagado';
+  }
+  let st = (c.estado || 'pendiente').toLowerCase();
+  if (c.fecha_vencimiento) {
+    const today = new Date();
+    const venc = new Date(c.fecha_vencimiento + 'T00:00:00');
+    today.setHours(0, 0, 0, 0);
+    if (venc < today) {
+      st = 'vencido';
+    }
+  }
+  return st;
+};
+
 const ComprobantesPage = () => {
   const [activeTab, setActiveTab] = useState('resumen');
 
@@ -124,14 +141,8 @@ const ComprobantesPage = () => {
     }
     if (comprobanteFilter.estado && comprobanteFilter.estado.length > 0) {
       result = result.filter(c => {
-        let st = c.estado;
-        if (c.estado !== 'pagado' && c.fecha_vencimiento) {
-          const today = new Date();
-          const venc = new Date(c.fecha_vencimiento + 'T00:00:00');
-          today.setHours(0, 0, 0, 0);
-          if (venc < today) st = 'vencido';
-        }
-        return comprobanteFilter.estado.includes(st.toLowerCase());
+        const st = getComprobanteEstado(c);
+        return comprobanteFilter.estado.includes(st);
       });
     }
     if (comprobanteSort.key) {
@@ -149,18 +160,8 @@ const ComprobantesPage = () => {
             valA = `${a.tipo_comprobante} ${String(a.punto_venta).padStart(4, '0')}-${String(a.numero_comprobante).padStart(8, '0')}`;
             valB = `${b.tipo_comprobante} ${String(b.punto_venta).padStart(4, '0')}-${String(b.numero_comprobante).padStart(8, '0')}`;
         } else if (comprobanteSort.key === 'estado_calc') {
-            const getEst = (c) => {
-                let st = c.estado;
-                if (c.estado !== 'pagado' && c.fecha_vencimiento) {
-                  const today = new Date();
-                  const venc = new Date(c.fecha_vencimiento + 'T00:00:00');
-                  today.setHours(0, 0, 0, 0);
-                  if (venc < today) st = 'vencido';
-                }
-                return st;
-            };
-            valA = getEst(a);
-            valB = getEst(b);
+            valA = getComprobanteEstado(a);
+            valB = getComprobanteEstado(b);
         } else if (comprobanteSort.key === 'saldo') {
             valA = Math.max(0, parseFloat(a.importe_total) - parseFloat(a.importe_cancelado || 0));
             valB = Math.max(0, parseFloat(b.importe_total) - parseFloat(b.importe_cancelado || 0));
@@ -222,14 +223,8 @@ const ComprobantesPage = () => {
     }
     if (comprobanteFilter.estado && comprobanteFilter.estado.length > 0) {
       result = result.filter(c => {
-        let st = c.estado;
-        if (c.estado !== 'pagado' && c.fecha_vencimiento) {
-          const today = new Date();
-          const venc = new Date(c.fecha_vencimiento + 'T00:00:00');
-          today.setHours(0, 0, 0, 0);
-          if (venc < today) st = 'vencido';
-        }
-        return comprobanteFilter.estado.includes(st.toLowerCase());
+        const st = getComprobanteEstado(c);
+        return comprobanteFilter.estado.includes(st);
       });
     }
     return [...new Set(result.map(c => c.proveedor?.razon_social).filter(Boolean))].sort();
@@ -245,14 +240,8 @@ const ComprobantesPage = () => {
     }
     if (comprobanteFilter.estado && comprobanteFilter.estado.length > 0) {
       result = result.filter(c => {
-        let st = c.estado;
-        if (c.estado !== 'pagado' && c.fecha_vencimiento) {
-          const today = new Date();
-          const venc = new Date(c.fecha_vencimiento + 'T00:00:00');
-          today.setHours(0, 0, 0, 0);
-          if (venc < today) st = 'vencido';
-        }
-        return comprobanteFilter.estado.includes(st.toLowerCase());
+        const st = getComprobanteEstado(c);
+        return comprobanteFilter.estado.includes(st);
       });
     }
     return [...new Set(result.map(c => c.concepto?.name).filter(Boolean))].sort();
@@ -269,16 +258,7 @@ const ComprobantesPage = () => {
     if (comprobanteFilter.concepto && comprobanteFilter.concepto.length > 0) {
       result = result.filter(c => comprobanteFilter.concepto.includes(c.concepto?.name));
     }
-    return [...new Set(result.map(c => {
-        let st = c.estado;
-        if (c.estado !== 'pagado' && c.fecha_vencimiento) {
-          const today = new Date();
-          const venc = new Date(c.fecha_vencimiento + 'T00:00:00');
-          today.setHours(0, 0, 0, 0);
-          if (venc < today) st = 'vencido';
-        }
-        return st;
-    }))].sort();
+    return [...new Set(result.map(c => getComprobanteEstado(c)))].sort();
   }, [comprobantes, comprobanteFilter.proveedor, comprobanteFilter.numero, comprobanteFilter.concepto]);
 
   const fetchData = useCallback(async () => {
@@ -535,15 +515,7 @@ const ComprobantesPage = () => {
                   <tr><td colSpan="10" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>No hay comprobantes cargados.</td></tr>
                 ) : (
                   filteredAndSortedComprobantes.map(c => {
-                    let displayEstado = c.estado;
-                    if (c.estado !== 'pagado' && c.fecha_vencimiento) {
-                      const today = new Date();
-                      const venc = new Date(c.fecha_vencimiento + 'T00:00:00');
-                      today.setHours(0, 0, 0, 0);
-                      if (venc < today) {
-                        displayEstado = 'vencido';
-                      }
-                    }
+                    const displayEstado = getComprobanteEstado(c);
 
                     let rowStyle = {};
                     if (displayEstado === 'pagado') rowStyle = { backgroundColor: 'rgba(81, 207, 102, 0.05)' };
@@ -576,7 +548,7 @@ const ComprobantesPage = () => {
                             <button className="btn-secondary" onClick={() => handleOpenCancelacionesListModal(c)} style={{ padding: '4px 8px', fontSize: '14px' }} title="Ver Historial de Pagos">
                               📑
                             </button>
-                            {c.estado !== 'pagado' && (
+                            {displayEstado !== 'pagado' && (
                               <button className="btn-secondary" onClick={() => handleOpenCancelacionModal(c)} style={{ padding: '4px 8px', fontSize: '14px' }} title="Registrar Pago">
                                 💸
                               </button>

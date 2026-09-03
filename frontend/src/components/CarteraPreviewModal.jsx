@@ -110,6 +110,19 @@ const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }
   const handleGuardarEdicion = async () => {
     setLoading(true);
     try {
+      if (cartera.tipo_operacion === 'COMPRA') {
+        const payload = {
+          nombre: editData.nombre,
+          recurso: editData.recurso,
+          iva: editData.iva,
+          fecha_compra: editData.fecha,
+          tna_descuento: parseFloat(editData.tna) / 100
+        };
+        await axiosClient.patch(`/api/v1/carteras/${cartera.id}`, payload);
+        onSuccess();
+        return;
+      }
+
       const payload = {
         cartera_id: cartera.id,
         usar_cuotas_guardadas: usarCuotasGuardadas,
@@ -188,9 +201,25 @@ const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }
                   <label>Fecha de Operación</label>
                   <input type="date" value={editData.fecha} onChange={e => setEditData({...editData, fecha: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-color)' }} disabled={isReadOnly} />
                 </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', paddingBottom: '8px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: isReadOnly ? 'default' : 'pointer' }}>
+                    <div className="toggle-switch">
+                      <input type="checkbox" checked={editData.recurso} onChange={e => setEditData({...editData, recurso: e.target.checked})} disabled={isReadOnly} />
+                      <span className="slider"></span>
+                    </div>
+                    Con Recurso
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: isReadOnly ? 'default' : 'pointer' }}>
+                    <div className="toggle-switch">
+                      <input type="checkbox" checked={editData.iva} onChange={e => setEditData({...editData, iva: e.target.checked})} disabled={isReadOnly} />
+                      <span className="slider"></span>
+                    </div>
+                    Incluir IVA
+                  </label>
+                </div>
                 <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px' }}>
-                  {!isReadOnly && <button type="button" className="btn-secondary" onClick={handleRecalcular}>Recalcular</button>}
-                  {!isReadOnly && <button type="button" className="btn-secondary" onClick={() => setShowAdvanced(!showAdvanced)}>Filtros Avanzados</button>}
+                  {!isReadOnly && tipoOperacion === 'VENTA' && <button type="button" className="btn-secondary" onClick={handleRecalcular}>Recalcular</button>}
+                  {!isReadOnly && tipoOperacion === 'VENTA' && <button type="button" className="btn-secondary" onClick={() => setShowAdvanced(!showAdvanced)}>Filtros Avanzados</button>}
                 </div>
               </div>
               {showAdvanced && (

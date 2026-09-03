@@ -74,13 +74,6 @@ const PortfolioOperationsPage = () => {
   };
 
   const handleEditClick = (c, readOnly = false) => {
-    if (c.tipo_operacion === 'COMPRA') {
-      if (!readOnly) {
-        setEditingCompra(c);
-        navigate('/nueva-operacion-cartera');
-        return;
-      }
-    }
     setIsReadOnly(readOnly);
     setEditingCartera(c);
     setShowEditModal(true);

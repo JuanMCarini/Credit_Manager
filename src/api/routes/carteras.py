@@ -248,6 +248,8 @@ def preview_compra_cartera(
     tna_descuento: float = Form(...),
     cuit_vendedor: str = Form(...),
     razon_social_vendedor: str = Form(...),
+    recurso: bool = Form(True),
+    iva: bool = Form(False),
     personas_csv: UploadFile = File(...),
     prestamos_csv: UploadFile = File(...),
     cuotas_csv: UploadFile = File(...),
@@ -269,7 +271,9 @@ def preview_compra_cartera(
                 fecha_compra=fecha_compra,
                 tna_descuento=tna_descuento,
                 cuit_vendedor=cuit_vendedor,
-                razon_social_vendedor=razon_social_vendedor
+                razon_social_vendedor=razon_social_vendedor,
+                recurso=recurso,
+                iva=iva
             )
             importer.read_csv(
                 personas_path=p_personas,
@@ -373,12 +377,21 @@ def preview_compra_cartera(
                     "comprada": val_act > 0
                 })
                 
-            df_cuotas_compradas['Fecha Vto. parsed'] = pd.to_datetime(df_cuotas_compradas['Fecha Vto.'], dayfirst=True, errors='coerce')
-            df_cuotas_compradas['Fecha Vto. parsed'] = df_cuotas_compradas['Fecha Vto. parsed'].fillna(pd.to_datetime(df_cuotas_compradas['Fecha Vto.'], errors='coerce'))
+            # Si las fechas tienen formato ISO (YYYY-MM-DD), parsear directo sin dayfirst=True
+            is_iso_vto = df_cuotas_compradas['Fecha Vto.'].astype(str).str.match(r'^\d{4}[-/]\d{2}[-/]\d{2}')
+            if is_iso_vto.all():
+                df_cuotas_compradas['Fecha Vto. parsed'] = pd.to_datetime(df_cuotas_compradas['Fecha Vto.'], errors='coerce')
+            else:
+                df_cuotas_compradas['Fecha Vto. parsed'] = pd.to_datetime(df_cuotas_compradas['Fecha Vto.'], dayfirst=True, errors='coerce')
+                df_cuotas_compradas['Fecha Vto. parsed'] = df_cuotas_compradas['Fecha Vto. parsed'].fillna(pd.to_datetime(df_cuotas_compradas['Fecha Vto.'], errors='coerce'))
             df_cuotas_compradas['Mes_Año'] = df_cuotas_compradas['Fecha Vto. parsed'].dt.strftime('%Y-%m')
             
-            df_cuotas_compradas['Fecha Pago parsed'] = pd.to_datetime(df_cuotas_compradas['Fecha Vto. Pago'], dayfirst=False, errors='coerce')
-            df_cuotas_compradas['Fecha Pago parsed'] = df_cuotas_compradas['Fecha Pago parsed'].fillna(pd.to_datetime(df_cuotas_compradas['Fecha Vto. Pago'], errors='coerce'))
+            is_iso_pago = df_cuotas_compradas['Fecha Vto. Pago'].astype(str).str.match(r'^\d{4}[-/]\d{2}[-/]\d{2}')
+            if is_iso_pago.all():
+                df_cuotas_compradas['Fecha Pago parsed'] = pd.to_datetime(df_cuotas_compradas['Fecha Vto. Pago'], errors='coerce')
+            else:
+                df_cuotas_compradas['Fecha Pago parsed'] = pd.to_datetime(df_cuotas_compradas['Fecha Vto. Pago'], dayfirst=False, errors='coerce')
+                df_cuotas_compradas['Fecha Pago parsed'] = df_cuotas_compradas['Fecha Pago parsed'].fillna(pd.to_datetime(df_cuotas_compradas['Fecha Vto. Pago'], errors='coerce'))
             df_cuotas_compradas['Mes_Año_Pago'] = df_cuotas_compradas['Fecha Pago parsed'].dt.strftime('%Y-%m')
             
             resumen_dict = {}
@@ -457,6 +470,8 @@ def create_compra_cartera(
     tna_descuento: float = Form(...),
     cuit_vendedor: str = Form(...),
     razon_social_vendedor: str = Form(...),
+    recurso: bool = Form(True),
+    iva: bool = Form(False),
     personas_csv: UploadFile = File(...),
     prestamos_csv: UploadFile = File(...),
     cuotas_csv: UploadFile = File(...),
@@ -478,7 +493,9 @@ def create_compra_cartera(
                 fecha_compra=fecha_compra,
                 tna_descuento=tna_descuento,
                 cuit_vendedor=cuit_vendedor,
-                razon_social_vendedor=razon_social_vendedor
+                razon_social_vendedor=razon_social_vendedor,
+                recurso=recurso,
+                iva=iva
             )
             importer.read_csv(
                 personas_path=p_personas,
@@ -645,6 +662,8 @@ def update_cartera(cartera_id: int, data: UpdateCarteraRequest, db: Session = De
         raise HTTPException(status_code=400, detail="Solo se pueden modificar carteras en estado PENDIENTE.")
         
     try:
+        if data.nombre is not None and data.nombre.strip():
+            cartera.nombre = data.nombre.strip()
         if data.fecha_compra is not None:
             cartera.fecha_compra = data.fecha_compra
         if data.tna_descuento is not None:

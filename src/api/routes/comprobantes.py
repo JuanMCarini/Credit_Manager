@@ -6,7 +6,7 @@ import shutil
 import uuid
 
 from src.database import get_db
-from src.database.models.finance.comprobantes import Proveedor, Comprobante, CancelacionComprobante, TipoComprobante
+from src.database.models.finance.comprobantes import Proveedor, Comprobante, CancelacionComprobante, TipoComprobante, EstadoComprobante
 from src.api.schemas.comprobantes import (
     ProveedorCreate, ProveedorUpdate, ProveedorResponse,
     ComprobanteCreate, ComprobanteUpdate, ComprobanteResponse,
@@ -71,7 +71,25 @@ def delete_proveedor(proveedor_id: int, db: Session = Depends(get_db)):
 # -------------------------------------------------------------------
 @router.get("/comprobantes", response_model=List[ComprobanteResponse])
 def get_comprobantes(db: Session = Depends(get_db)):
-    return db.query(Comprobante).options(joinedload(Comprobante.proveedor), joinedload(Comprobante.concepto)).order_by(Comprobante.fecha_contable.desc()).all()
+    comprobantes = db.query(Comprobante).options(joinedload(Comprobante.proveedor), joinedload(Comprobante.concepto)).order_by(Comprobante.fecha_contable.desc()).all()
+    changed = False
+    for c in comprobantes:
+        if c.importe_total and c.importe_cancelado is not None:
+            if c.importe_cancelado >= c.importe_total > 0 and c.estado != EstadoComprobante.PAGADO:
+                c.estado = EstadoComprobante.PAGADO
+                changed = True
+            elif c.importe_cancelado < c.importe_total and c.importe_cancelado > 0 and c.estado != EstadoComprobante.PARCIAL:
+                c.estado = EstadoComprobante.PARCIAL
+                changed = True
+            elif c.importe_cancelado == 0 and c.estado != EstadoComprobante.PENDIENTE:
+                c.estado = EstadoComprobante.PENDIENTE
+                changed = True
+    if changed:
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+    return comprobantes
 
 @router.post("/comprobantes", response_model=ComprobanteResponse)
 def create_comprobante(comprobante: ComprobanteCreate, db: Session = Depends(get_db)):
@@ -211,7 +229,14 @@ def create_cancelacion(
     
     # Update importe_cancelado of parent Comprobante
     current_cancelado = db_comprobante.importe_cancelado or Decimal('0.0')
-    db_comprobante.importe_cancelado = current_cancelado + importe_cancelacion
+    nuevo_cancelado = current_cancelado + importe_cancelacion
+    db_comprobante.importe_cancelado = nuevo_cancelado
+    if db_comprobante.importe_total and nuevo_cancelado >= db_comprobante.importe_total:
+        db_comprobante.estado = EstadoComprobante.PAGADO
+    elif nuevo_cancelado > 0:
+        db_comprobante.estado = EstadoComprobante.PARCIAL
+    else:
+        db_comprobante.estado = EstadoComprobante.PENDIENTE
     
     try:
         db.commit()
@@ -272,6 +297,12 @@ def update_cancelacion(cancelacion_id: int, cancelacion: CancelacionCreate, db: 
     current_cancelado = db_comprobante.importe_cancelado or Decimal('0.0')
     current_cancelado = current_cancelado - Decimal(str(db_cancelacion.importe)) + importe_cancelacion
     db_comprobante.importe_cancelado = current_cancelado
+    if db_comprobante.importe_total and current_cancelado >= db_comprobante.importe_total:
+        db_comprobante.estado = EstadoComprobante.PAGADO
+    elif current_cancelado > 0:
+        db_comprobante.estado = EstadoComprobante.PARCIAL
+    else:
+        db_comprobante.estado = EstadoComprobante.PENDIENTE
     
     db_cancelacion.importe = importe_cancelacion
     db_cancelacion.fecha_cancelacion = cancelacion.fecha_cancelacion
@@ -293,7 +324,14 @@ def delete_cancelacion(cancelacion_id: int, db: Session = Depends(get_db)):
     # Update importe_cancelado of parent Comprobante
     from decimal import Decimal
     current_cancelado = db_comprobante.importe_cancelado or Decimal('0.0')
-    db_comprobante.importe_cancelado = current_cancelado - Decimal(str(db_cancelacion.importe))
+    current_cancelado = current_cancelado - Decimal(str(db_cancelacion.importe))
+    db_comprobante.importe_cancelado = current_cancelado
+    if db_comprobante.importe_total and current_cancelado >= db_comprobante.importe_total:
+        db_comprobante.estado = EstadoComprobante.PAGADO
+    elif current_cancelado > 0:
+        db_comprobante.estado = EstadoComprobante.PARCIAL
+    else:
+        db_comprobante.estado = EstadoComprobante.PENDIENTE
     
     db.delete(db_cancelacion)
     db.commit()
