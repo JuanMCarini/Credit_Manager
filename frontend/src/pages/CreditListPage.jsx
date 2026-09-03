@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { FilterX } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import axiosClient from '../api/axiosClient';
 import { useDebounce } from '../hooks/useDebounce';
 import ClientCCModal from '../components/ClientCCModal';
@@ -43,29 +43,12 @@ const CreditListPage = () => {
     if (cuilParam) setFilter(prev => ({ ...prev, CUIL: cuilParam }));
   }, [location.search]);
 
-  const fetchCreditos = async ({ pageParam = 0, queryKey }) => {
-    const [_key, filters, fCorte] = queryKey;
-    const f = { ...filters };
+  const fetchCreditos = async ({ queryKey }) => {
+    const [_key, fCorte] = queryKey;
     const p = {
-      skip: pageParam * limit,
-      limit: limit,
-      fecha_corte: fCorte,
-      ...(f.ID && f.ID.length > 0 && { id: f.ID.join(',') }),
-      ...(f.IdExterno && { id_externo: f.IdExterno }),
-      ...(f.Originador && { originador: f.Originador }),
-      ...(f.CUIL && { cuil: f.CUIL }),
-      ...(f.Plazo && { plazo: f.Plazo }),
-      ...(f.TNA && { tna: f.TNA }),
-      ...(f.IdTasa && { id_tasa: f.IdTasa }),
-      ...(f.Estado && f.Estado.length > 0 && { estado: f.Estado.join(',') }),
-      ...(f.TipoCredito && f.TipoCredito.length > 0 && { tipo_credito: f.TipoCredito.join(',') }),
-      ...(f.Fecha && f.Fecha.length > 0 && { fecha: f.Fecha.join(',') }),
-      ...(f.Capital?.min !== undefined && { capital_min: f.Capital.min }),
-      ...(f.Capital?.max !== undefined && { capital_max: f.Capital.max }),
-      ...(f.SaldoMora?.min !== undefined && { saldo_mora_min: f.SaldoMora.min }),
-      ...(f.SaldoMora?.max !== undefined && { saldo_mora_max: f.SaldoMora.max }),
-      ...(f.DiasMora?.min !== undefined && { dias_mora_min: f.DiasMora.min }),
-      ...(f.DiasMora?.max !== undefined && { dias_mora_max: f.DiasMora.max }),
+      skip: 0,
+      limit: 100000,
+      fecha_corte: fCorte
     };
 
     const res = await axiosClient.get('/api/v1/creditos', { params: p });
@@ -78,23 +61,15 @@ const CreditListPage = () => {
     isError,
     error,
     isFetching,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage
-  } = useInfiniteQuery({
-    queryKey: ['creditos', debouncedFilter, fechaCorte],
+    refetch
+  } = useQuery({
+    queryKey: ['creditos', fechaCorte],
     queryFn: fetchCreditos,
-    getNextPageParam: (lastPage, pages) => {
-       const loadedItems = pages.length * limit;
-       if (loadedItems < lastPage.total) {
-           return pages.length;
-       }
-       return undefined;
-    }
+    keepPreviousData: true
   });
 
-  const creditos = useMemo(() => data?.pages.flatMap(page => page.items) || [], [data]);
-  const totalItems = data?.pages[0]?.total || 0;
+  const creditos = useMemo(() => data?.items || [], [data]);
+  const totalItems = data?.total || 0;
 
   const handleDelete = async (id) => {
     if (!window.confirm(`¿Está seguro que desea eliminar el crédito #${id}?`)) return;
@@ -131,6 +106,69 @@ const CreditListPage = () => {
 
   const filteredAndSortedCreditos = useMemo(() => {
     let result = [...creditos];
+    
+    // Filtros locales
+    if (filter.ID && filter.ID.length > 0) {
+      result = result.filter(c => filter.ID.includes(String(c.ID)));
+    }
+    if (filter.IdExterno) {
+      const q = filter.IdExterno.toLowerCase();
+      result = result.filter(c => c["ID Externo"] && String(c["ID Externo"]).toLowerCase().includes(q));
+    }
+    if (filter.Originador) {
+      const q = filter.Originador.toLowerCase();
+      result = result.filter(c => c["Socio Originador"] && String(c["Socio Originador"]).toLowerCase().includes(q));
+    }
+    if (filter.CUIL) {
+      const q = filter.CUIL.toLowerCase();
+      result = result.filter(c => c["Cliente CUIL"] && String(c["Cliente CUIL"]).toLowerCase().includes(q));
+    }
+    if (filter.Capital && (filter.Capital.min !== undefined || filter.Capital.max !== undefined)) {
+      result = result.filter(c => {
+        const val = c.Capital || 0;
+        if (filter.Capital.min !== undefined && val < filter.Capital.min) return false;
+        if (filter.Capital.max !== undefined && val > filter.Capital.max) return false;
+        return true;
+      });
+    }
+    if (filter.Plazo) {
+      const q = filter.Plazo;
+      result = result.filter(c => c.Plazo && String(c.Plazo) === q);
+    }
+    if (filter.TNA) {
+      const q = filter.TNA;
+      result = result.filter(c => c["TNA con IVA"] && String(c["TNA con IVA"]).includes(q));
+    }
+    if (filter.IdTasa) {
+      const q = filter.IdTasa.toLowerCase();
+      result = result.filter(c => c["ID Tasa Comision"] && String(c["ID Tasa Comision"]).toLowerCase().includes(q));
+    }
+    if (filter.TipoCredito && filter.TipoCredito.length > 0) {
+      result = result.filter(c => filter.TipoCredito.includes(c["Tipo Crédito"]));
+    }
+    if (filter.Estado && filter.Estado.length > 0) {
+      result = result.filter(c => filter.Estado.includes(c.Estado));
+    }
+    if (filter.SaldoMora && (filter.SaldoMora.min !== undefined || filter.SaldoMora.max !== undefined)) {
+      result = result.filter(c => {
+        const val = c["Saldo en Mora"] || 0;
+        if (filter.SaldoMora.min !== undefined && val < filter.SaldoMora.min) return false;
+        if (filter.SaldoMora.max !== undefined && val > filter.SaldoMora.max) return false;
+        return true;
+      });
+    }
+    if (filter.DiasMora && (filter.DiasMora.min !== undefined || filter.DiasMora.max !== undefined)) {
+      result = result.filter(c => {
+        const val = c["Días de Mora"] || 0;
+        if (filter.DiasMora.min !== undefined && val < filter.DiasMora.min) return false;
+        if (filter.DiasMora.max !== undefined && val > filter.DiasMora.max) return false;
+        return true;
+      });
+    }
+    if (filter.Fecha && filter.Fecha.length > 0) {
+      result = result.filter(c => filter.Fecha.includes(c["Fecha Emisión"]));
+    }
+
     if (sortConfig.key) {
       result.sort((a, b) => {
         let valA = a[sortConfig.key] ?? '';
@@ -143,7 +181,7 @@ const CreditListPage = () => {
       });
     }
     return result;
-  }, [creditos, sortConfig]);
+  }, [creditos, filter, sortConfig]);
 
   const ESTADOS_DISPONIBLES = useMemo(() => {
     return [...new Set(creditos.map(c => c.Estado).filter(Boolean))].sort();
@@ -154,12 +192,12 @@ const CreditListPage = () => {
   }, [creditos]);
 
   const AVAILABLE_TIPOS_CREDITO = useMemo(() => {
-    return [...new Set(filteredAndSortedCreditos.map(c => c["Tipo Crédito"]).filter(Boolean))].sort();
-  }, [filteredAndSortedCreditos]);
+    return [...new Set(creditos.map(c => c["Tipo Crédito"]).filter(Boolean))].sort();
+  }, [creditos]);
 
   const AVAILABLE_FECHAS_EMISION = useMemo(() => {
-    return [...new Set(filteredAndSortedCreditos.map(c => c["Fecha Emisión"]).filter(Boolean))].sort();
-  }, [filteredAndSortedCreditos]);
+    return [...new Set(creditos.map(c => c["Fecha Emisión"]).filter(Boolean))].sort();
+  }, [creditos]);
 
   const totalCapital = useMemo(() => {
     return filteredAndSortedCreditos.reduce((acc, c) => acc + (c.Capital || 0), 0);
@@ -373,20 +411,6 @@ const CreditListPage = () => {
                     </td>
                   </tr>
                 ))
-              )}
-              {hasNextPage && (
-                <tr>
-                  <td colSpan="14" style={{ textAlign: 'center', padding: '15px' }}>
-                    <button 
-                      className="btn-primary" 
-                      onClick={() => fetchNextPage()}
-                      disabled={isFetchingNextPage}
-                      style={{ width: 'auto', padding: '8px 20px', margin: '0 auto', display: 'block' }}
-                    >
-                      {isFetchingNextPage ? "Cargando más registros..." : "Mostrar más registros"}
-                    </button>
-                  </td>
-                </tr>
               )}
             </tbody>
             <tfoot>

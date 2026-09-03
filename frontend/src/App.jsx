@@ -32,6 +32,7 @@ import InversoresPage from './pages/InversoresPage';
 import CuentasComitentesPage from './pages/CuentasComitentesPage';
 import SeriesPage from './pages/SeriesPage';
 import MovimientosDeudaPage from './pages/MovimientosDeudaPage';
+import PosicionIibbPage from './pages/PosicionIibbPage';
 
 function App() {
   return (
@@ -69,6 +70,7 @@ function App() {
             <Route path="comprobantes" element={<ComprobantesPage />} />
             <Route path="cheques" element={<ChequesPage />} />
             <Route path="posicion-iva" element={<PosicionIvaPage />} />
+            <Route path="posicion-iibb" element={<PosicionIibbPage />} />
             
             {/* Rutas de Inversores */}
             <Route path="inversores" element={<InversoresPage />} />
