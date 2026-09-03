@@ -12,6 +12,7 @@ import src.reports.finance.cartera as cartera
 from src.database import SessionLocal
 from src.database.models import LiquidacionCuotaCedida, Cobranza
 from src.database.models.finance.posicion_iva import PosicionIva
+from src.database.models.finance.posicion_iibb import PosicionIibb
 from src.database.models.cheques.main import Cheque, OperacionCheque, TipoOperacionCheque
 
 
@@ -84,6 +85,7 @@ def reporte(fecha_corte: str | date, n_periodos: int = 2, salto_meses: int = 1, 
                 {"Categoria": "Pasivos", "Detalle": "Valor Actual de Cartera a Ceder", periodo: -venta_cartera_a_ceder})
 
         saldo_iva = 0.0
+        saldo_iibb = 0.0
         db_session = SessionLocal()
         try:
             posicion = db_session.query(PosicionIva).filter(
@@ -92,6 +94,13 @@ def reporte(fecha_corte: str | date, n_periodos: int = 2, salto_meses: int = 1, 
             ).first()
             if posicion:
                 saldo_iva = float(posicion.saldo_a_pagar)
+
+            posicion_iibb = db_session.query(PosicionIibb).filter(
+                PosicionIibb.anio == fecha.year,
+                PosicionIibb.mes == fecha.month
+            ).first()
+            if posicion_iibb:
+                saldo_iibb = float(posicion_iibb.saldo_a_pagar)
 
 
             vendidos_stmt = select(OperacionCheque.cheque_id).filter(
@@ -131,6 +140,9 @@ def reporte(fecha_corte: str | date, n_periodos: int = 2, salto_meses: int = 1, 
             {"Categoria": "Pasivos", "Detalle": "IVA Adeudado", periodo: saldo_iva})
 
         datos.append(
+            {"Categoria": "Pasivos", "Detalle": "IIBB Adeudado", periodo: saldo_iibb})
+
+        datos.append(
                 {"Categoria": "Activos", "Detalle": "Cheques a Cobrar", periodo: cheques_a_cobrar})
 
         datos.append(
@@ -161,7 +173,8 @@ def reporte(fecha_corte: str | date, n_periodos: int = 2, salto_meses: int = 1, 
         'Valor Actual de Cartera a Ceder': 2,
         'Caída de Cuotas Adeudadas': 3,
         'IVA Adeudado': 4,
-        'Planes de Ganancias': 5,
+        'IIBB Adeudado': 5,
+        'Planes de Ganancias': 6,
     }
 
     # Asignar orden por detalle, o 99 si no está mapeado. 'Total' va siempre al final (100)
