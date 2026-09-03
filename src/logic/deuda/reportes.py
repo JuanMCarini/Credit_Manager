@@ -15,6 +15,10 @@ def estado(periodo: pd.Period = pd.Period.now("D")):
         df["Fecha Suscripción"] = pd.to_datetime(df["Fecha Suscripción"]).dt.to_period("D")
         df["Fecha Vencimiento"] = df["Fecha Suscripción"] + df["Plazo"]
         df.set_index("Serie", inplace=True)
+        df["Capital"] = 0.0
+        df["Interés"] = 0.0
+        df["Total"] = 0.0
+        df["Int. Dev."] = 0.0
 
         for _, row in df.iterrows():
             df_serie = series.resumen(_)
