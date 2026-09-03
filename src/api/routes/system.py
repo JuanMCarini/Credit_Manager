@@ -198,4 +198,65 @@ async def upload_logo(file: UploadFile = File(...)):
         
     return {"status": "success", "message": "Logo actualizado correctamente. Recarga la página para ver los cambios."}
 
+from typing import Dict, List, Any
+from src.database.models.system import ModuloSistema
+from src.database.models.auth import Usuario, TipoRolEnum
+from src.api.dependencies.auth import get_current_user
+from src.database.seed_modulos import seed_modulos
+
+class ModuloUpdateSchema(BaseModel):
+    creditos: bool | None = None
+    cheques: bool | None = None
+    inversores: bool | None = None
+    finanzas: bool | None = None
+    modulos: Dict[str, bool] | None = None
+
+@router.get("/modules")
+def get_system_modules(db: Session = Depends(get_db)):
+    """
+    Retorna el estado de activación de todas las secciones principales del sistema.
+    """
+    seed_modulos(db)
+    mods = db.query(ModuloSistema).all()
+    result = {m.codigo: m.activo for m in mods}
+    items = [{"codigo": m.codigo, "nombre": m.nombre, "activo": m.activo} for m in mods]
+    return {"modulos": result, "items": items}
+
+@router.put("/modules")
+def update_system_modules(
+    payload: ModuloUpdateSchema,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Actualiza el estado de las secciones del sistema.
+    Exclusivo para usuarios con rol Administrador.
+    """
+    if current_user.rol.nombre != TipoRolEnum.ADMINISTRADOR:
+        raise HTTPException(
+            status_code=403,
+            detail="Operación no permitida. Solo los administradores pueden modificar los módulos del sistema."
+        )
+
+    seed_modulos(db)
+    updates = {}
+    if payload.modulos:
+        updates.update(payload.modulos)
+    for k in ["creditos", "cheques", "inversores", "finanzas"]:
+        val = getattr(payload, k, None)
+        if val is not None:
+            updates[k] = val
+
+    for codigo, activo in updates.items():
+        mod = db.query(ModuloSistema).filter(ModuloSistema.codigo == codigo).first()
+        if mod:
+            mod.activo = activo
+    
+    db.commit()
+
+    mods = db.query(ModuloSistema).all()
+    result = {m.codigo: m.activo for m in mods}
+    items = [{"codigo": m.codigo, "nombre": m.nombre, "activo": m.activo} for m in mods]
+    return {"status": "success", "message": "Módulos actualizados correctamente.", "modulos": result, "items": items}
+
 

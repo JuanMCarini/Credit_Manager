@@ -41,6 +41,7 @@ from src.database import Base, engine
 import src.database.models.finance.planes # Import to register the model
 import src.database.models.finance.posicion_iva # Registrar PosicionIva
 import src.database.models.finance.posicion_iibb # Registrar PosicionIibb
+import src.database.models.system # Registrar ModuloSistema
 Base.metadata.create_all(bind=engine)
 
 # -------------------------------------------------------------------
@@ -78,6 +79,7 @@ from src.database.seed_admin import seed_admin
 from src.database.seed_geography import seed_provincias
 from src.database.seed_conceptos import seed_conceptos
 from src.database.seed_bancos import seed_bancos
+from src.database.seed_modulos import seed_modulos
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -90,6 +92,7 @@ async def lifespan(app: FastAPI):
         with SessionLocal() as db:
             seed_provincias(db)
             seed_conceptos(db)
+            seed_modulos(db)
     except Exception as e:
         print(f"⚠️ Error executing seeds: {e}")
         

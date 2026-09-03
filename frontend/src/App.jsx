@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
 import MainLayout from './components/MainLayout';
@@ -33,6 +33,24 @@ import CuentasComitentesPage from './pages/CuentasComitentesPage';
 import SeriesPage from './pages/SeriesPage';
 import MovimientosDeudaPage from './pages/MovimientosDeudaPage';
 import PosicionIibbPage from './pages/PosicionIibbPage';
+import useAppStore from './store/useAppStore';
+
+const IndexRedirect = () => {
+  const { systemModules } = useAppStore();
+  if (systemModules?.creditos !== false) return <Navigate to="/dashboard-cartera" replace />;
+  if (systemModules?.cheques !== false) return <Navigate to="/cheques" replace />;
+  if (systemModules?.inversores !== false) return <Navigate to="/inversores" replace />;
+  if (systemModules?.finanzas !== false) return <Navigate to="/finanzas" replace />;
+  return <Navigate to="/auxiliares" replace />;
+};
+
+const ModuleGuard = ({ moduleKey }) => {
+  const { systemModules } = useAppStore();
+  if (systemModules && systemModules[moduleKey] === false) {
+    return <IndexRedirect />;
+  }
+  return <Outlet />;
+};
 
 function App() {
   return (
@@ -43,40 +61,56 @@ function App() {
         {/* Rutas protegidas genéricas (cualquier rol) */}
         <Route element={<ProtectedRoute allowedRoles={['Auditor / Solo Lectura', 'Operador de Cobranzas', 'Oficial de Crédito', 'Gerente', 'Operador de Inversiones', 'Responsable de Finanzas']} />}>
           <Route path="/" element={<MainLayout />}>
-            <Route index element={<Navigate to="/dashboard-cartera" replace />} />
-            <Route path="dashboard-cartera" element={<DashboardCarteraPage />} />
-            <Route path="dashboard-clientes" element={<DashboardClientesPage />} />
-            <Route path="simulation" element={<SimulationPage />} />
-            <Route path="balances" element={<BalancesPage />} />
-            <Route path="clientes" element={<ClientListPage />} />
-            <Route path="creditos" element={<CreditListPage />} />
-            <Route path="alta-cliente" element={<ClientRegistrationPage />} />
-            <Route path="alta-credito" element={<CreditOriginationPage />} />
-            <Route path="creditos-procesos" element={<CreditProcessesPage />} />
-            <Route path="cobranzas" element={<CollectionsListPage />} />
-            <Route path="procesamiento-cobranzas" element={<CollectionsProcessingPage />} />
-            <Route path="operaciones-cartera" element={<PortfolioOperationsPage />} />
-            <Route path="liquidaciones-cartera" element={<PortfolioLiquidationsPage />} />
-            <Route path="procesar-liquidaciones" element={<PortfolioLiquidationsProcessingPage />} />
-            <Route path="nueva-operacion-cartera" element={<PortfolioOriginationPage />} />
+            <Route index element={<IndexRedirect />} />
+
+            {/* Rutas de Cartera de Créditos */}
+            <Route element={<ModuleGuard moduleKey="creditos" />}>
+              <Route path="dashboard-cartera" element={<DashboardCarteraPage />} />
+              <Route path="dashboard-clientes" element={<DashboardClientesPage />} />
+              <Route path="simulation" element={<SimulationPage />} />
+              <Route path="balances" element={<BalancesPage />} />
+              <Route path="clientes" element={<ClientListPage />} />
+              <Route path="creditos" element={<CreditListPage />} />
+              <Route path="alta-cliente" element={<ClientRegistrationPage />} />
+              <Route path="alta-credito" element={<CreditOriginationPage />} />
+              <Route path="creditos-procesos" element={<CreditProcessesPage />} />
+              <Route path="cobranzas" element={<CollectionsListPage />} />
+              <Route path="procesamiento-cobranzas" element={<CollectionsProcessingPage />} />
+              <Route path="operaciones-cartera" element={<PortfolioOperationsPage />} />
+              <Route path="liquidaciones-cartera" element={<PortfolioLiquidationsPage />} />
+              <Route path="procesar-liquidaciones" element={<PortfolioLiquidationsProcessingPage />} />
+              <Route path="nueva-operacion-cartera" element={<PortfolioOriginationPage />} />
+              <Route path="papeleria/creditos" element={<PapeleriaPage categoria="creditos" />} />
+              <Route path="papeleria/ventas" element={<PapeleriaPage categoria="ventas_cartera" />} />
+              <Route path="reportes/bcra" element={<BcraReportsPage />} />
+              <Route path="facturacion" element={<FacturacionPage />} />
+            </Route>
+
+            {/* Rutas de Cartera de Cheques */}
+            <Route element={<ModuleGuard moduleKey="cheques" />}>
+              <Route path="cheques" element={<ChequesPage />} />
+            </Route>
+
+            {/* Rutas de Inversores */}
+            <Route element={<ModuleGuard moduleKey="inversores" />}>
+              <Route path="inversores" element={<InversoresPage />} />
+              <Route path="cuentas-comitentes" element={<CuentasComitentesPage />} />
+              <Route path="series" element={<SeriesPage />} />
+              <Route path="movimientos-deuda" element={<MovimientosDeudaPage />} />
+            </Route>
+
+            {/* Rutas de Finanzas */}
+            <Route element={<ModuleGuard moduleKey="finanzas" />}>
+              <Route path="finanzas" element={<FinanzasPage />} />
+              <Route path="bancos" element={<BancosPage />} />
+              <Route path="comprobantes" element={<ComprobantesPage />} />
+              <Route path="posicion-iva" element={<PosicionIvaPage />} />
+              <Route path="posicion-iibb" element={<PosicionIibbPage />} />
+            </Route>
+
+            {/* Configuración y comunes */}
             <Route path="auxiliares" element={<AuxiliaryTablesPage />} />
             <Route path="acciones" element={<SystemActionsPage />} />
-            <Route path="papeleria/creditos" element={<PapeleriaPage categoria="creditos" />} />
-            <Route path="papeleria/ventas" element={<PapeleriaPage categoria="ventas_cartera" />} />
-            <Route path="reportes/bcra" element={<BcraReportsPage />} />
-            <Route path="facturacion" element={<FacturacionPage />} />
-            <Route path="finanzas" element={<FinanzasPage />} />
-            <Route path="bancos" element={<BancosPage />} />
-            <Route path="comprobantes" element={<ComprobantesPage />} />
-            <Route path="cheques" element={<ChequesPage />} />
-            <Route path="posicion-iva" element={<PosicionIvaPage />} />
-            <Route path="posicion-iibb" element={<PosicionIibbPage />} />
-            
-            {/* Rutas de Inversores */}
-            <Route path="inversores" element={<InversoresPage />} />
-            <Route path="cuentas-comitentes" element={<CuentasComitentesPage />} />
-            <Route path="series" element={<SeriesPage />} />
-            <Route path="movimientos-deuda" element={<MovimientosDeudaPage />} />
             
             {/* Rutas exclusivas Administrador */}
             <Route element={<ProtectedRoute allowedRoles={[]} />}>

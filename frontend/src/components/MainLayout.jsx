@@ -9,7 +9,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import axiosClient from '../api/axiosClient';
 
 const MainLayout = () => {
-  const { fetchAuxiliares, checkApiStatus } = useAppStore();
+  const { fetchAuxiliares, checkApiStatus, fetchSystemModules } = useAppStore();
   const { user, login, logout } = useAuthStore();
   const navigate = useNavigate();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -41,7 +41,8 @@ const MainLayout = () => {
   useEffect(() => {
     checkApiStatus();
     fetchAuxiliares();
-  }, [checkApiStatus, fetchAuxiliares]);
+    fetchSystemModules();
+  }, [checkApiStatus, fetchAuxiliares, fetchSystemModules]);
 
   useEffect(() => {
     const events = ['mousemove', 'keydown', 'click', 'scroll'];
