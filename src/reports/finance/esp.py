@@ -54,9 +54,17 @@ def reporte(fecha_corte: str | date, n_periodos: int = 2, salto_meses: int = 1, 
     
         df_comp_pend = comprobantes.pendientes(fecha)
         pendientes = df_comp_pend.groupby("concepto")["saldo"].sum()
-        planes_ganancias = pendientes.get("Ganancias", 0.0)
-        datos.append(
-            {"Categoria": "Pasivos", "Detalle": "Planes de Ganancias", periodo: planes_ganancias})
+        facturas_adeudadas = 0.0
+        for concepto, saldo in pendientes.items():
+            if concepto in ["Ganancias", "IIBB", "IVA"]:
+                datos.append(
+                    {"Categoria": "Pasivos", "Detalle": f"Planes de Pago {concepto}", periodo: saldo})
+            else:
+                facturas_adeudadas += saldo
+        
+        if facturas_adeudadas > 0:
+            datos.append(
+                {"Categoria": "Pasivos", "Detalle": "Facturas adeudadas", periodo: facturas_adeudadas})
     
         df_saldos = balances.saldos(fecha, propias=True)
         df_saldos["Días"] = (df_saldos["Fecha Vencimiento"] - pd.to_datetime(fecha)).dt.days
