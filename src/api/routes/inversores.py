@@ -11,8 +11,9 @@ from src.logic.deuda.series import resumen as buscar_resumen_serie
 
 from src.database import get_db
 from src.database.models.deuda.inversores import Inversor, CuentaComitente, TitularidadCuentaComitente
-from src.database.models.deuda.series import Serie
+from src.database.models.deuda.series import Serie, ComisionesSerie as ComisionSerie
 from src.database.models.deuda.movimientos import MovimientoDeuda, TipoMovimiento, TitularidadMovimientoDeuda
+from src.database.models.deuda.series import Comision as ComisionDeuda
 from sqlalchemy.sql import func
 from src.api.schemas.inversores import (
     InversorCreate, InversorResponse,
@@ -378,6 +379,21 @@ def get_series(
     
     items = []
     for s, capital in results:
+        # load associated comisiones
+        comisiones_serie = db.query(ComisionSerie).filter(ComisionSerie.id_serie == s.id).all()
+        comisiones_list = []
+        for cs in comisiones_serie:
+            c = db.query(ComisionDeuda).filter(ComisionDeuda.id == cs.id_comision).first()
+            if c:
+                from src.database.models import SocioComercial
+                sc = db.query(SocioComercial).filter(SocioComercial.id == c.id_socio_comercial).first()
+                comisiones_list.append({
+                    "id_comisiones_serie": cs.id,
+                    "id_comision": c.id,
+                    "fecha": str(c.fecha),
+                    "porcentaje": float(c.porcentaje),
+                    "socio_comercial": sc.razon_social if sc else None
+                })
         items.append({
             "id": s.id,
             "name": s.name,
@@ -388,7 +404,7 @@ def get_series(
             "created_at": s.created_at,
             "capital": float(capital),
             "comision": s.comision,
-            "id_comision": s.id_comision
+            "comisiones": comisiones_list
         })
     return {"items": items, "total": total}
 
@@ -451,6 +467,59 @@ def delete_serie(
         db.delete(serie)
         db.commit()
         return {"status": "success", "message": "Serie y sus movimientos asociados eliminados exitosamente"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+# -----------------
+# COMISIONES DE SERIE
+# -----------------
+@router.post("/series/{serie_id}/comisiones", response_model=Dict[str, Any])
+def add_comision_serie(
+    serie_id: int,
+    body: Dict[str, Any],
+    db: Session = Depends(get_db)
+):
+    """Asocia una comisión a una serie."""
+    id_comision = body.get("id_comision")
+    if not id_comision:
+        raise HTTPException(status_code=400, detail="id_comision es requerido")
+    
+    # Check it doesn't already exist
+    existing = db.query(ComisionSerie).filter(
+        ComisionSerie.id_serie == serie_id,
+        ComisionSerie.id_comision == id_comision
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Esta comisión ya está asociada a la serie")
+    
+    try:
+        nueva = ComisionSerie(id_serie=serie_id, id_comision=id_comision)
+        db.add(nueva)
+        db.commit()
+        db.refresh(nueva)
+        return {"status": "success", "message": "Comisión asociada exitosamente", "id": nueva.id}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/series/{serie_id}/comisiones/{comision_serie_id}", response_model=Dict[str, Any])
+def remove_comision_serie(
+    serie_id: int,
+    comision_serie_id: int,
+    db: Session = Depends(get_db)
+):
+    """Desasocia una comisión de una serie."""
+    cs = db.query(ComisionSerie).filter(
+        ComisionSerie.id == comision_serie_id,
+        ComisionSerie.id_serie == serie_id
+    ).first()
+    if not cs:
+        raise HTTPException(status_code=404, detail="Asociación no encontrada")
+    try:
+        db.delete(cs)
+        db.commit()
+        return {"status": "success", "message": "Comisión desasociada exitosamente"}
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))

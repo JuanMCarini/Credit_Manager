@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axiosClient from '../api/axiosClient';
-import { Plus, X, Eye, Edit, Trash2 } from 'lucide-react';
+import { Plus, X, Eye, Edit, Trash2, PlusCircle, MinusCircle } from 'lucide-react';
 import ExportExcelButton from '../components/ExportExcelButton';
 import ExcelListFilter from '../components/ExcelListFilter';
 import ExcelNumberRangeFilter from '../components/ExcelNumberRangeFilter';
@@ -446,7 +446,7 @@ const SeriesPage = () => {
             <thead>
               <tr>
                 {[
-                  { key: 'id', label: 'ID' },
+                            { key: 'id', label: 'ID' },
                   { key: 'name', label: 'Nombre' },
                   { key: 'fecha_suscripcion', label: 'Fecha de Susc.' },
                   { key: 'tna', label: 'TNA (%)' },
@@ -549,7 +549,9 @@ const SeriesPage = () => {
                       <td style={{ fontWeight: 'bold' }}>{formatCurrency(capital + interesDevengado)}</td>
                       <td>
                         {s.comision ? (
-                          <span style={{ color: 'var(--success-color)', fontWeight: 'bold' }}>Sí</span>
+                          <span style={{ color: 'var(--success-color)', fontWeight: 'bold' }}>
+                            Sí {s.comisiones?.length > 0 ? `(${s.comisiones.length})` : ''}
+                          </span>
                         ) : (
                           <span style={{ color: 'var(--text-muted)' }}>No</span>
                         )}
@@ -647,6 +649,7 @@ const SeriesPage = () => {
           onSubmit={(data) => editMutation.mutate({ id: editSerieData.id, data })}
           isLoading={editMutation.isPending}
           comisionesDeuda={comisionesDeuda}
+          queryClient={queryClient}
         />
       )}
       {showRenovacionModal && selectedSerieVieja && (
@@ -682,7 +685,6 @@ const AddSerieModal = ({ onClose, onSubmit, isLoading, comisionesDeuda }) => {
     tna: '',
     plazo: '',
     comision: false,
-    id_comision: '',
     file: null
   });
 
@@ -694,7 +696,6 @@ const AddSerieModal = ({ onClose, onSubmit, isLoading, comisionesDeuda }) => {
       tna: parseFloat(formData.tna) / 100,
       plazo: parseInt(formData.plazo, 10),
       comision: formData.comision,
-      id_comision: formData.comision && formData.id_comision ? parseInt(formData.id_comision, 10) : null
     };
     if (formData.file) {
       data.file = formData.file;
@@ -774,22 +775,9 @@ const AddSerieModal = ({ onClose, onSubmit, isLoading, comisionesDeuda }) => {
           </div>
 
           {formData.comision && (
-            <div className="form-group">
-              <label>Seleccionar Comisión *</label>
-              <select
-                required
-                value={formData.id_comision}
-                onChange={e => setFormData({ ...formData, id_comision: e.target.value })}
-                className="input-field"
-              >
-                <option value="">Seleccione...</option>
-                {comisionesDeuda?.map(c => (
-                  <option key={c.id} value={c.id}>
-                    ID {c.id} - Fecha: {c.fecha} - Porcentaje: {(c.porcentaje * 100).toFixed(2)}%
-                  </option>
-                ))}
-              </select>
-            </div>
+            <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>
+              💡 Las comisiones específicas se pueden asignar después de crear la serie desde el modal de edición.
+            </p>
           )}
 
           <div className="form-group">
@@ -1211,15 +1199,19 @@ const ResumenModal = ({ serieName, data, onClose }) => {
 export default SeriesPage;
 
 // Edit Modal Component
-const EditSerieModal = ({ initialData, onClose, onSubmit, isLoading, comisionesDeuda }) => {
+const EditSerieModal = ({ initialData, onClose, onSubmit, isLoading, comisionesDeuda, queryClient }) => {
   const [formData, setFormData] = useState({
     name: initialData.name || '',
     fecha_suscripcion: initialData.fecha_suscripcion || '',
     tna: initialData.tna ? (initialData.tna * 100).toFixed(2) : '',
     plazo: initialData.plazo || '',
     comision: initialData.comision || false,
-    id_comision: initialData.id_comision || ''
   });
+
+  // Local state for comisiones list (starts with existing ones)
+  const [comisionesAsociadas, setComisionesAsociadas] = useState(initialData.comisiones || []);
+  const [selectedNewComision, setSelectedNewComision] = useState('');
+  const [comisionLoading, setComisionLoading] = useState(false);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -1229,10 +1221,55 @@ const EditSerieModal = ({ initialData, onClose, onSubmit, isLoading, comisionesD
       tna: parseFloat(formData.tna) / 100,
       plazo: parseInt(formData.plazo, 10),
       comision: formData.comision,
-      id_comision: formData.comision && formData.id_comision ? parseInt(formData.id_comision, 10) : null
     };
     onSubmit(data);
   };
+
+  const handleAddComision = async () => {
+    if (!selectedNewComision) return;
+    const idComision = parseInt(selectedNewComision, 10);
+    // Prevent duplicates
+    if (comisionesAsociadas.some(c => c.id_comision === idComision)) {
+      alert('Esta comisión ya está asociada a la serie');
+      return;
+    }
+    setComisionLoading(true);
+    try {
+      const res = await axiosClient.post(`/api/v1/inversores/series/${initialData.id}/comisiones`, { id_comision: idComision });
+      // Find the comision object to show details
+      const comision = comisionesDeuda?.find(c => c.id === idComision);
+      setComisionesAsociadas(prev => [...prev, {
+        id_comisiones_serie: res.data.id,
+        id_comision: idComision,
+        fecha: comision?.fecha || '',
+        porcentaje: comision?.porcentaje || 0,
+        socio_comercial: comision?.socio_comercial || null
+      }]);
+      setSelectedNewComision('');
+      if (queryClient) queryClient.invalidateQueries({ queryKey: ['series-deuda'] });
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Error al asociar comisión');
+    } finally {
+      setComisionLoading(false);
+    }
+  };
+
+  const handleRemoveComision = async (comisionSerie) => {
+    if (!window.confirm('¿Desea quitar esta comisión de la serie?')) return;
+    setComisionLoading(true);
+    try {
+      await axiosClient.delete(`/api/v1/inversores/series/${initialData.id}/comisiones/${comisionSerie.id_comisiones_serie}`);
+      setComisionesAsociadas(prev => prev.filter(c => c.id_comisiones_serie !== comisionSerie.id_comisiones_serie));
+      if (queryClient) queryClient.invalidateQueries({ queryKey: ['series-deuda'] });
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Error al quitar comisión');
+    } finally {
+      setComisionLoading(false);
+    }
+  };
+
+  // Available comisiones to add (filter out already associated)
+  const availableComisiones = comisionesDeuda?.filter(c => !comisionesAsociadas.some(ca => ca.id_comision === c.id)) || [];
 
   return (
     <div style={{
@@ -1240,7 +1277,7 @@ const EditSerieModal = ({ initialData, onClose, onSubmit, isLoading, comisionesD
       backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
       display: 'flex', justifyContent: 'center', alignItems: 'center'
     }}>
-      <div className="glass-panel" style={{ width: '400px', maxWidth: '90%', maxHeight: '90vh', overflowY: 'auto', padding: '24px', position: 'relative' }}>
+      <div className="glass-panel" style={{ width: '500px', maxWidth: '90%', maxHeight: '90vh', overflowY: 'auto', padding: '24px', position: 'relative' }}>
         <button onClick={onClose} style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-color)' }}>
           <X size={20} />
         </button>
@@ -1305,22 +1342,69 @@ const EditSerieModal = ({ initialData, onClose, onSubmit, isLoading, comisionesD
             />
           </div>
 
+          {/* Comisiones Section */}
           {formData.comision && (
-            <div className="form-group">
-              <label>Seleccionar Comisión *</label>
-              <select
-                required
-                value={formData.id_comision}
-                onChange={e => setFormData({ ...formData, id_comision: e.target.value })}
-                className="input-field"
-              >
-                <option value="">Seleccione...</option>
-                {comisionesDeuda?.map(c => (
-                  <option key={c.id} value={c.id}>
-                    ID {c.id} - Fecha: {c.fecha} - Porcentaje: {(c.porcentaje * 100).toFixed(2)}%
-                  </option>
-                ))}
-              </select>
+            <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '12px' }}>
+              <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '10px' }}>Comisiones Asociadas</label>
+              
+              {/* Current comisiones list */}
+              {comisionesAsociadas.length === 0 ? (
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '0 0 10px 0' }}>No hay comisiones asociadas.</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px' }}>
+                  {comisionesAsociadas.map(cs => (
+                    <div key={cs.id_comisiones_serie} style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '6px', padding: '8px 10px'
+                    }}>
+                      <span style={{ fontSize: '13px' }}>
+                        <strong>{cs.socio_comercial || `ID ${cs.id_comision}`}</strong>
+                        {' — '}{(cs.porcentaje * 100).toFixed(2)}% ({cs.fecha})
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveComision(cs)}
+                        disabled={comisionLoading}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger-color)', padding: '2px' }}
+                        title="Quitar comisión"
+                      >
+                        <MinusCircle size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Add new comision */}
+              {availableComisiones.length > 0 && (
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <select
+                    value={selectedNewComision}
+                    onChange={e => setSelectedNewComision(e.target.value)}
+                    style={{ flex: 1, padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--input-bg)', color: 'var(--text-color)' }}
+                  >
+                    <option value="">Agregar comisión...</option>
+                    {availableComisiones.map(c => (
+                      <option key={c.id} value={c.id}>
+                        ID {c.id} — {(c.porcentaje * 100).toFixed(2)}% — {c.fecha}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={handleAddComision}
+                    disabled={!selectedNewComision || comisionLoading}
+                    className="btn-primary"
+                    style={{ padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                    title="Agregar comisión"
+                  >
+                    <PlusCircle size={15} /> Agregar
+                  </button>
+                </div>
+              )}
+              {availableComisiones.length === 0 && comisionesDeuda?.length > 0 && (
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '8px 0 0 0' }}>Todas las comisiones disponibles ya están asociadas.</p>
+              )}
             </div>
           )}
 

@@ -1,6 +1,6 @@
 from .inversores import Inversor, CuentaComitente, TitularidadCuentaComitente
-from .series import Serie
-from .movimientos import MovimientoDeuda
+from .series import Serie, Comision, ComisionesSerie
+from .movimientos import MovimientoDeuda, TipoMovimiento
 
 __all__ = [
     "Inversor",
@@ -8,4 +8,7 @@ __all__ = [
     "TitularidadCuentaComitente",
     "Serie",
     "MovimientoDeuda",
+    "TipoMovimiento",
+    "Comision",
+    "ComisionesSerie",
 ]

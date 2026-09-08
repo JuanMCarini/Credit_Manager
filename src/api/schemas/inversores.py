@@ -67,7 +67,6 @@ class SerieBase(BaseModel):
     tna: float
     plazo: int
     comision: bool = False
-    id_comision: Optional[int] = None
 
 class SerieCreate(SerieBase):
     pass
@@ -78,7 +77,6 @@ class SerieUpdate(BaseModel):
     tna: Optional[float] = None
     plazo: Optional[int] = None
     comision: Optional[bool] = None
-    id_comision: Optional[int] = None
 
 class SerieResponse(SerieBase):
     id: int

@@ -24,7 +24,6 @@ class Serie(Base):
     tna = Column(Numeric(10, 2), nullable=False)
     plazo = Column(Integer, nullable=False)
     comision = Column(Boolean, nullable=False, default=False)
-    id_comision = Column(ForeignKey('comisiones_deuda.id'), nullable=True)
 
     created_at = Column(DateTime, default=func.now())
     update_at = Column(DateTime, default=func.now(), onupdate=func.now())
@@ -48,3 +47,15 @@ class Comision(Base):
     
     socio_comercial = relationship("SocioComercial", foreign_keys="[Comision.id_socio_comercial]")
 
+class ComisionesSerie(Base):
+    __tablename__ = "comisiones_series"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    id_serie = Column(ForeignKey('series.id'), nullable=False)
+    id_comision = Column(ForeignKey('comisiones_deuda.id'), nullable=False)
+
+    created_at = Column(DateTime, default=func.now())
+    update_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    
+    comision = relationship("Comision", foreign_keys="[ComisionesSerie.id_comision]")
+    serie = relationship("Serie", foreign_keys="[ComisionesSerie.id_serie]")
