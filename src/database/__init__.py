@@ -57,6 +57,8 @@ from .models import (
     OperacionCheque,
     PosicionIva,
     PosicionIibb,
+    Serie,
+    Comision,
 )
 
 # Import events to register SQLAlchemy event listeners
@@ -111,4 +113,6 @@ __all__ = [
     "Cheque",
     "TipoOperacionCheque",
     "OperacionCheque",
+    "Serie",
+    "Comision",
 ]

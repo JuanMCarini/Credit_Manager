@@ -386,7 +386,9 @@ def get_series(
             "plazo": s.plazo,
             "fecha_vencimiento": s.fecha_vencimiento,
             "created_at": s.created_at,
-            "capital": float(capital)
+            "capital": float(capital),
+            "comision": s.comision,
+            "id_comision": s.id_comision
         })
     return {"items": items, "total": total}
 

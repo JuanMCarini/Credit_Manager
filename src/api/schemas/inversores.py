@@ -66,6 +66,8 @@ class SerieBase(BaseModel):
     fecha_suscripcion: date
     tna: float
     plazo: int
+    comision: bool = False
+    id_comision: Optional[int] = None
 
 class SerieCreate(SerieBase):
     pass
@@ -75,6 +77,8 @@ class SerieUpdate(BaseModel):
     fecha_suscripcion: Optional[date] = None
     tna: Optional[float] = None
     plazo: Optional[int] = None
+    comision: Optional[bool] = None
+    id_comision: Optional[int] = None
 
 class SerieResponse(SerieBase):
     id: int

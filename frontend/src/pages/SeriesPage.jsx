@@ -1,23 +1,33 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axiosClient from '../api/axiosClient';
-import { Plus, X } from 'lucide-react';
+import { Plus, X, Eye, Edit, Trash2 } from 'lucide-react';
 import ExportExcelButton from '../components/ExportExcelButton';
 import ExcelListFilter from '../components/ExcelListFilter';
 import ExcelNumberRangeFilter from '../components/ExcelNumberRangeFilter';
+import ExcelDateFilter from '../components/ExcelDateFilter';
 import { useAuthStore } from '../store/useAuthStore';
+import useAppStore from '../store/useAppStore';
 
 const SeriesPage = () => {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
+  const { comisionesDeuda } = useAppStore();
   const isAuditor = user?.rol === 'Auditor / Solo Lectura';
   const [showAddModal, setShowAddModal] = useState(false);
   const [editSerieData, setEditSerieData] = useState(null);
   const [fechaCorte, setFechaCorte] = useState(new Date().toISOString().split('T')[0]);
   const [tableFilters, setTableFilters] = useState({});
+  const [sortConfig, setSortConfig] = useState({ key: 'id', direction: 'desc' });
 
   const handleTableFilterChange = (key, value) => {
     setTableFilters(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
+    setSortConfig({ key, direction });
   };
 
   const [showRenovacionModal, setShowRenovacionModal] = useState(false);
@@ -86,7 +96,7 @@ const SeriesPage = () => {
     return Object.entries(tableFilters).every(([key, filterValue]) => {
       if (!filterValue || (Array.isArray(filterValue) && filterValue.length === 0)) return true;
       
-      const isMonetaryCol = ["capital", "interes", "total", "interesMensual", "interesDevengado", "interesADevengar", "tna", "plazo"].includes(key);
+      const isMonetaryCol = ["capital", "interes", "total", "interesMensual", "interesDevengado", "interesADevengar", "tna", "plazo", "capitalMasDevengado"].includes(key);
       if (isMonetaryCol) {
         if (filterValue.min === undefined && filterValue.max === undefined) return true;
         
@@ -118,6 +128,7 @@ const SeriesPage = () => {
         if (key === 'interesMensual') val = interesMensual;
         if (key === 'interesDevengado') val = interesDevengado;
         if (key === 'interesADevengar') val = interesADevengar;
+        if (key === 'capitalMasDevengado') val = capital + interesDevengado;
         if (key === 'tna') val = s.tna * 100;
         if (key === 'plazo') val = s.plazo;
 
@@ -129,12 +140,71 @@ const SeriesPage = () => {
       let valStr = '';
       if (key === 'id') valStr = String(s.id);
       if (key === 'name') valStr = s.name;
+      if (key === 'comision') valStr = s.comision ? 'Sí' : 'No';
       if (key === 'fecha_suscripcion') valStr = formatDate(new Date(s.fecha_suscripcion + 'T00:00:00'));
       if (key === 'fecha_vencimiento') valStr = formatDate(new Date(s.fecha_vencimiento + 'T00:00:00'));
       
       return filterValue.includes(valStr);
     });
   });
+
+  const filteredAndSortedSeries = useMemo(() => {
+    let result = [...filteredSeries];
+    if (sortConfig.key) {
+      result.sort((a, b) => {
+        let valA = a[sortConfig.key];
+        let valB = b[sortConfig.key];
+        
+        // Handle computed values for sorting
+        if (["capital", "interes", "total", "interesMensual", "interesDevengado", "interesADevengar", "capitalMasDevengado"].includes(sortConfig.key)) {
+          const getComputedValues = (s) => {
+            const cap = s.computedCapital || 0;
+            const int = cap * s.tna * (s.plazo / 365);
+            const fSusc = new Date(s.fecha_suscripcion + 'T00:00:00');
+            const fVenc = new Date(s.fecha_vencimiento + 'T00:00:00');
+            const fCorte = new Date(fechaCorte + 'T23:59:59');
+            let intDev = 0;
+            if (fCorte <= fSusc) intDev = 0;
+            else if (fCorte >= fVenc) intDev = int;
+            else intDev = cap * s.tna * (((fCorte - fSusc) / 86400000) / 365);
+            
+            const primerDiaMes = new Date(fCorte.getFullYear(), fCorte.getMonth(), 1);
+            const fechaInicioMensual = fSusc > primerDiaMes ? fSusc : primerDiaMes;
+            const fechaFinMensual = fCorte < fVenc ? fCorte : fVenc;
+            let diasMensuales = (fechaFinMensual - fechaInicioMensual) / 86400000;
+            if (diasMensuales < 0) diasMensuales = 0;
+            
+            return {
+              capital: cap,
+              interes: int,
+              total: cap + int,
+              interesDevengado: intDev,
+              interesADevengar: Math.max(0, int - intDev),
+              interesMensual: cap * s.tna * (diasMensuales / 365),
+              capitalMasDevengado: cap + intDev
+            };
+          };
+          const compA = getComputedValues(a);
+          const compB = getComputedValues(b);
+          valA = compA[sortConfig.key];
+          valB = compB[sortConfig.key];
+        }
+        if (sortConfig.key === 'comision') { valA = a.comision ? 1 : 0; valB = b.comision ? 1 : 0; }
+        if (sortConfig.key === 'fecha_suscripcion' || sortConfig.key === 'fecha_vencimiento') {
+          valA = new Date(valA + 'T00:00:00').getTime();
+          valB = new Date(valB + 'T00:00:00').getTime();
+        }
+
+        if (typeof valA === 'string') valA = valA.toLowerCase();
+        if (typeof valB === 'string') valB = valB.toLowerCase();
+        
+        if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+    return result;
+  }, [filteredSeries, sortConfig]);
 
   const getAvailableOptions = (key) => {
     if (!series) return [];
@@ -144,7 +214,7 @@ const SeriesPage = () => {
         if (filterKey === key) return true;
         if (!filterValue || (Array.isArray(filterValue) && filterValue.length === 0)) return true;
         
-        const isMonetaryCol = ["capital", "interes", "total", "interesMensual", "interesDevengado", "interesADevengar", "tna", "plazo"].includes(filterKey);
+        const isMonetaryCol = ["capital", "interes", "total", "interesMensual", "interesDevengado", "interesADevengar", "tna", "plazo", "capitalMasDevengado"].includes(filterKey);
         if (isMonetaryCol) {
           if (filterValue.min === undefined && filterValue.max === undefined) return true;
           
@@ -176,6 +246,7 @@ const SeriesPage = () => {
           if (filterKey === 'interesMensual') val = interesMensual;
           if (filterKey === 'interesDevengado') val = interesDevengado;
           if (filterKey === 'interesADevengar') val = interesADevengar;
+          if (filterKey === 'capitalMasDevengado') val = capital + interesDevengado;
           if (filterKey === 'tna') val = s.tna * 100;
           if (filterKey === 'plazo') val = s.plazo;
 
@@ -187,6 +258,7 @@ const SeriesPage = () => {
         let valStr = '';
         if (filterKey === 'id') valStr = String(s.id);
         if (filterKey === 'name') valStr = s.name;
+        if (filterKey === 'comision') valStr = s.comision ? 'Sí' : 'No';
         if (filterKey === 'fecha_suscripcion') valStr = formatDate(new Date(s.fecha_suscripcion + 'T00:00:00'));
         if (filterKey === 'fecha_vencimiento') valStr = formatDate(new Date(s.fecha_vencimiento + 'T00:00:00'));
         
@@ -199,6 +271,7 @@ const SeriesPage = () => {
       let valStr = '';
       if (key === 'id') valStr = String(s.id);
       if (key === 'name') valStr = s.name;
+      if (key === 'comision') valStr = s.comision ? 'Sí' : 'No';
       if (key === 'fecha_suscripcion') valStr = formatDate(new Date(s.fecha_suscripcion + 'T00:00:00'));
       if (key === 'fecha_vencimiento') valStr = formatDate(new Date(s.fecha_vencimiento + 'T00:00:00'));
       if (valStr) options.add(valStr);
@@ -206,7 +279,7 @@ const SeriesPage = () => {
     return Array.from(options).sort();
   };
 
-  const totals = filteredSeries.reduce((acc, s) => {
+  const totals = filteredAndSortedSeries.reduce((acc, s) => {
     const capital = s.computedCapital || 0;
     const interes = capital * s.tna * (s.plazo / 365);
     const total = capital + interes;
@@ -235,9 +308,10 @@ const SeriesPage = () => {
     acc.interesDevengado += interesDevengado;
     acc.interesADevengar += interesADevengar;
     acc.interesMensual += interesMensual;
+    acc.capitalMasDevengado += (capital + interesDevengado);
 
     return acc;
-  }, { capital: 0, interes: 0, total: 0, interesDevengado: 0, interesADevengar: 0, interesMensual: 0 });
+  }, { capital: 0, interes: 0, total: 0, interesDevengado: 0, interesADevengar: 0, interesMensual: 0, capitalMasDevengado: 0 });
 
   // Add Mutation
   const addMutation = useMutation({
@@ -327,6 +401,11 @@ const SeriesPage = () => {
     }
   });
 
+  const SortIcon = ({ columnKey }) => {
+    if (sortConfig.key !== columnKey) return <span style={{ opacity: 0.4, marginLeft: '5px' }} title="Haz clic para ordenar">↕</span>;
+    return <span style={{ marginLeft: '5px' }}>{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>;
+  };
+
   return (
     <section className="tab-content active" style={{ animation: 'fadeIn 0.4s ease' }}>
       <header className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -334,7 +413,15 @@ const SeriesPage = () => {
           <h2>Series de Deuda</h2>
           <p>Gestione las series emitidas para suscripción de los inversores.</p>
         </div>
-        <div>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <button 
+            className="btn-secondary" 
+            onClick={() => setTableFilters({})}
+            title="Limpiar todos los filtros"
+            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            Limpiar Filtros
+          </button>
           {!isAuditor && (
             <button className="btn-primary" onClick={() => setShowAddModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Plus size={16} /> Nueva Serie
@@ -371,24 +458,38 @@ const SeriesPage = () => {
                   { key: 'interesMensual', label: 'Int. Mensual' },
                   { key: 'interesDevengado', label: 'Int. Devengado' },
                   { key: 'interesADevengar', label: 'Int. a Devengar' },
+                  { key: 'capitalMasDevengado', label: 'Cap. + Int. Dev.' },
+                  { key: 'comision', label: 'Comisión' },
                 ].map(col => {
-                  const isMonetaryCol = ["capital", "interes", "total", "interesMensual", "interesDevengado", "interesADevengar", "tna", "plazo"].includes(col.key);
+                  const isMonetaryCol = ["capital", "interes", "total", "interesMensual", "interesDevengado", "interesADevengar", "tna", "plazo", "capitalMasDevengado"].includes(col.key);
+                  const isDateCol = ["fecha_suscripcion", "fecha_vencimiento"].includes(col.key);
+                  
                   return (
-                    <th key={col.key}>
-                      <div style={{ marginBottom: '8px' }}>{col.label}</div>
-                      {isMonetaryCol ? (
-                        <ExcelNumberRangeFilter
-                          selectedRange={tableFilters[col.key]}
-                          onChange={(range) => handleTableFilterChange(col.key, range)}
-                        />
-                      ) : (
-                        <ExcelListFilter
-                          availableOptions={getAvailableOptions(col.key)}
-                          selectedOptions={tableFilters[col.key] || []}
-                          onChange={(selected) => handleTableFilterChange(col.key, selected)}
-                          title={`Filtrar ${col.label}`}
-                        />
-                      )}
+                    <th key={col.key} onClick={() => handleSort(col.key)} style={{ cursor: 'pointer' }}>
+                      <div style={{ marginBottom: '8px' }}>
+                        {col.label} <SortIcon columnKey={col.key} />
+                      </div>
+                      <div onClick={e => e.stopPropagation()}>
+                        {isMonetaryCol ? (
+                          <ExcelNumberRangeFilter
+                            selectedRange={tableFilters[col.key]}
+                            onChange={(range) => handleTableFilterChange(col.key, range)}
+                          />
+                        ) : isDateCol ? (
+                          <ExcelDateFilter
+                            availableDates={getAvailableOptions(col.key)}
+                            selectedDates={tableFilters[col.key] || []}
+                            onChange={(dates) => handleTableFilterChange(col.key, dates)}
+                          />
+                        ) : (
+                          <ExcelListFilter
+                            availableOptions={getAvailableOptions(col.key)}
+                            selectedOptions={tableFilters[col.key] || []}
+                            onChange={(selected) => handleTableFilterChange(col.key, selected)}
+                            title={`Filtrar ${col.label}`}
+                          />
+                        )}
+                      </div>
                     </th>
                   );
                 })}
@@ -397,11 +498,11 @@ const SeriesPage = () => {
             </thead>
             <tbody>
               {isLoading ? (
-                <tr><td colSpan="13" style={{ textAlign: 'center', padding: '20px' }}>Cargando...</td></tr>
-              ) : filteredSeries.length === 0 ? (
-                <tr><td colSpan="13" style={{ textAlign: 'center', padding: '20px' }}>No se encontraron series.</td></tr>
+                <tr><td colSpan="15" style={{ textAlign: 'center', padding: '20px' }}>Cargando...</td></tr>
+              ) : filteredAndSortedSeries.length === 0 ? (
+                <tr><td colSpan="15" style={{ textAlign: 'center', padding: '20px' }}>No se encontraron series.</td></tr>
               ) : (
-                filteredSeries.map(s => {
+                filteredAndSortedSeries.map(s => {
                   const capital = s.computedCapital || 0;
                   const interes = capital * s.tna * (s.plazo / 365);
                   const total = capital + interes;
@@ -445,6 +546,14 @@ const SeriesPage = () => {
                       <td>{formatCurrency(interesMensual)}</td>
                       <td>{formatCurrency(interesDevengado)}</td>
                       <td>{formatCurrency(interesADevengar)}</td>
+                      <td style={{ fontWeight: 'bold' }}>{formatCurrency(capital + interesDevengado)}</td>
+                      <td>
+                        {s.comision ? (
+                          <span style={{ color: 'var(--success-color)', fontWeight: 'bold' }}>Sí</span>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)' }}>No</span>
+                        )}
+                      </td>
                       <td>
                         <div style={{ display: 'flex', gap: '4px' }}>
                           <button 
@@ -507,7 +616,7 @@ const SeriesPage = () => {
             <tfoot>
               <tr>
                 <td colSpan="6" style={{ textAlign: 'right', fontWeight: 'bold' }}>
-                  Totales ({filteredSeries.length} series):
+                  Totales ({filteredAndSortedSeries.length} series):
                 </td>
                 <td style={{ fontWeight: 'bold' }}>{formatCurrency(totals.capital)}</td>
                 <td style={{ fontWeight: 'bold' }}>{formatCurrency(totals.interes)}</td>
@@ -515,7 +624,8 @@ const SeriesPage = () => {
                 <td style={{ fontWeight: 'bold' }}>{formatCurrency(totals.interesMensual)}</td>
                 <td style={{ fontWeight: 'bold' }}>{formatCurrency(totals.interesDevengado)}</td>
                 <td style={{ fontWeight: 'bold' }}>{formatCurrency(totals.interesADevengar)}</td>
-                <td></td>
+                <td style={{ fontWeight: 'bold' }}>{formatCurrency(totals.capitalMasDevengado)}</td>
+                <td colSpan="2"></td>
               </tr>
             </tfoot>
           </table>
@@ -527,6 +637,7 @@ const SeriesPage = () => {
           onClose={() => setShowAddModal(false)}
           onSubmit={(data) => addMutation.mutate(data)}
           isLoading={addMutation.isPending}
+          comisionesDeuda={comisionesDeuda}
         />
       )}
       {editSerieData && (
@@ -535,6 +646,7 @@ const SeriesPage = () => {
           onClose={() => setEditSerieData(null)}
           onSubmit={(data) => editMutation.mutate({ id: editSerieData.id, data })}
           isLoading={editMutation.isPending}
+          comisionesDeuda={comisionesDeuda}
         />
       )}
       {showRenovacionModal && selectedSerieVieja && (
@@ -563,12 +675,14 @@ const SeriesPage = () => {
 };
 
 // Modal Component
-const AddSerieModal = ({ onClose, onSubmit, isLoading }) => {
+const AddSerieModal = ({ onClose, onSubmit, isLoading, comisionesDeuda }) => {
   const [formData, setFormData] = useState({
     name: '',
     fecha_suscripcion: '',
     tna: '',
     plazo: '',
+    comision: false,
+    id_comision: '',
     file: null
   });
 
@@ -578,7 +692,9 @@ const AddSerieModal = ({ onClose, onSubmit, isLoading }) => {
       name: formData.name,
       fecha_suscripcion: formData.fecha_suscripcion,
       tna: parseFloat(formData.tna) / 100,
-      plazo: parseInt(formData.plazo, 10)
+      plazo: parseInt(formData.plazo, 10),
+      comision: formData.comision,
+      id_comision: formData.comision && formData.id_comision ? parseInt(formData.id_comision, 10) : null
     };
     if (formData.file) {
       data.file = formData.file;
@@ -646,6 +762,35 @@ const AddSerieModal = ({ onClose, onSubmit, isLoading }) => {
               placeholder="Ej. 365"
             />
           </div>
+
+          <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <label style={{ margin: 0 }}>¿Lleva Comisión?</label>
+            <input
+              type="checkbox"
+              checked={formData.comision}
+              onChange={e => setFormData({ ...formData, comision: e.target.checked })}
+              style={{ width: '18px', height: '18px' }}
+            />
+          </div>
+
+          {formData.comision && (
+            <div className="form-group">
+              <label>Seleccionar Comisión *</label>
+              <select
+                required
+                value={formData.id_comision}
+                onChange={e => setFormData({ ...formData, id_comision: e.target.value })}
+                className="input-field"
+              >
+                <option value="">Seleccione...</option>
+                {comisionesDeuda?.map(c => (
+                  <option key={c.id} value={c.id}>
+                    ID {c.id} - Fecha: {c.fecha} - Porcentaje: {(c.porcentaje * 100).toFixed(2)}%
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="form-group">
             <label>Archivo de Suscripciones (Excel/CSV) - Opcional</label>
@@ -835,15 +980,27 @@ const RenovacionResultsModal = ({ data, onClose }) => {
 // Resumen Modal
 const ResumenModal = ({ serieName, data, onClose }) => {
   const [filters, setFilters] = useState({});
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+
+  const handleSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
+    setSortConfig({ key, direction });
+  };
+
+  const SortIcon = ({ columnKey }) => {
+    if (sortConfig.key !== columnKey) return <span style={{ opacity: 0.4, marginLeft: '5px' }} title="Haz clic para ordenar">↕</span>;
+    return <span style={{ marginLeft: '5px' }}>{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>;
+  };
 
   const handleFilterChange = (key, value) => {
     setFilters(prev => ({ ...prev, [key]: value }));
   };
 
   // Filter data
-  const filteredData = useMemo(() => {
+  const filteredAndSortedData = useMemo(() => {
     if (!data) return [];
-    return data.filter(row => {
+    let result = data.filter(row => {
       return Object.entries(filters).every(([key, filterValue]) => {
         if (!filterValue) return true;
         
@@ -865,7 +1022,42 @@ const ResumenModal = ({ serieName, data, onClose }) => {
         }
       });
     });
-  }, [data, filters]);
+
+    if (sortConfig.key) {
+      result.sort((a, b) => {
+        let valA = a[sortConfig.key];
+        let valB = b[sortConfig.key];
+        const isMonetaryCol = ["Capital", "Interés", "Total", "Monto", "Int. Dev."].includes(sortConfig.key);
+        const isDateCol = String(sortConfig.key).toLowerCase().includes('fecha');
+
+        if (isMonetaryCol) {
+          if (typeof valA === 'string') valA = Number(valA.replace(/[^0-9.-]+/g,""));
+          if (typeof valB === 'string') valB = Number(valB.replace(/[^0-9.-]+/g,""));
+          valA = isNaN(valA) ? 0 : valA;
+          valB = isNaN(valB) ? 0 : valB;
+        } else if (isDateCol && valA && valB) {
+          const parseDate = (d) => {
+            if (typeof d === 'string' && d.includes('/')) {
+              const parts = d.split('/');
+              return new Date(parts[2], parts[1] - 1, parts[0]).getTime();
+            }
+            return new Date(d).getTime();
+          };
+          valA = parseDate(valA);
+          valB = parseDate(valB);
+        }
+
+        if (typeof valA === 'string') valA = valA.toLowerCase();
+        if (typeof valB === 'string') valB = valB.toLowerCase();
+
+        if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+
+    return result;
+  }, [data, filters, sortConfig]);
 
   const getAvailableOptions = (key) => {
     if (!data) return [];
@@ -901,11 +1093,11 @@ const ResumenModal = ({ serieName, data, onClose }) => {
   // Calculate subtotals
   const subtotals = useMemo(() => {
     const totals = {};
-    if (filteredData.length > 0) {
-      Object.keys(filteredData[0]).forEach(key => {
+    if (filteredAndSortedData.length > 0) {
+      Object.keys(filteredAndSortedData[0]).forEach(key => {
         const isMonetaryCol = ["Capital", "Interés", "Total", "Monto", "Int. Dev."].includes(key);
         if (isMonetaryCol) {
-          totals[key] = filteredData.reduce((acc, row) => {
+          totals[key] = filteredAndSortedData.reduce((acc, row) => {
             let val = row[key];
             if (typeof val === 'string') {
               val = val.replace(/[^0-9.-]+/g,"");
@@ -918,7 +1110,7 @@ const ResumenModal = ({ serieName, data, onClose }) => {
       });
     }
     return totals;
-  }, [filteredData]);
+  }, [filteredAndSortedData]);
 
   return (
     <div style={{
@@ -932,7 +1124,7 @@ const ResumenModal = ({ serieName, data, onClose }) => {
         </button>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <h3 style={{ margin: 0 }}>Resumen de Serie: {serieName}</h3>
-          <ExportExcelButton data={filteredData} filename={`Resumen_Serie_${serieName}`} />
+          <ExportExcelButton data={filteredAndSortedData} filename={`Resumen_Serie_${serieName}`} />
         </div>
         
         {data && data.length > 0 ? (
@@ -943,29 +1135,41 @@ const ResumenModal = ({ serieName, data, onClose }) => {
                   <tr>
                     {Object.keys(data[0]).map((key) => {
                       const isMonetaryCol = ["Capital", "Interés", "Total", "Monto", "Int. Dev."].includes(key);
+                      const isDateCol = String(key).toLowerCase().includes('fecha');
                       return (
-                        <th key={key}>
-                          <div style={{ marginBottom: '8px' }}>{key}</div>
-                          {isMonetaryCol ? (
-                            <ExcelNumberRangeFilter
-                              selectedRange={filters[key]}
-                              onChange={(range) => handleFilterChange(key, range)}
-                            />
-                          ) : (
-                            <ExcelListFilter
-                              availableOptions={getAvailableOptions(key)}
-                              selectedOptions={filters[key] || []}
-                              onChange={(selected) => handleFilterChange(key, selected)}
-                              title={`Filtrar ${key}`}
-                            />
-                          )}
+                        <th key={key} onClick={() => handleSort(key)} style={{ cursor: 'pointer' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                            <span>{key}</span>
+                            <SortIcon columnKey={key} />
+                          </div>
+                          <div onClick={e => e.stopPropagation()}>
+                            {isMonetaryCol ? (
+                              <ExcelNumberRangeFilter
+                                selectedRange={filters[key]}
+                                onChange={(range) => handleFilterChange(key, range)}
+                              />
+                            ) : isDateCol ? (
+                              <ExcelDateFilter
+                                availableDates={getAvailableOptions(key)}
+                                selectedDates={filters[key] || []}
+                                onChange={(selected) => handleFilterChange(key, selected)}
+                              />
+                            ) : (
+                              <ExcelListFilter
+                                availableOptions={getAvailableOptions(key)}
+                                selectedOptions={filters[key] || []}
+                                onChange={(selected) => handleFilterChange(key, selected)}
+                                title={`Filtrar ${key}`}
+                              />
+                            )}
+                          </div>
                         </th>
                       );
                     })}
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredData.map((row, index) => (
+                  {filteredAndSortedData.map((row, index) => (
                     <tr key={index}>
                       {Object.entries(row).map(([key, val], idx) => {
                         const isMonetaryCol = ["Capital", "Interés", "Total", "Monto", "Int. Dev."].includes(key);
@@ -980,7 +1184,7 @@ const ResumenModal = ({ serieName, data, onClose }) => {
                 <tfoot>
                   <tr>
                     {Object.keys(data[0]).map((key, idx) => {
-                      if (idx === 0) return <td key={idx} style={{ fontWeight: 'bold' }}>Totales ({filteredData.length})</td>;
+                      if (idx === 0) return <td key={idx} style={{ fontWeight: 'bold' }}>Totales ({filteredAndSortedData.length})</td>;
                       const subtotalVal = subtotals[key];
                       if (subtotalVal !== null && subtotalVal !== undefined) {
                         return <td key={idx} style={{ fontWeight: 'bold' }}>{new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(subtotalVal)}</td>;
@@ -1007,12 +1211,14 @@ const ResumenModal = ({ serieName, data, onClose }) => {
 export default SeriesPage;
 
 // Edit Modal Component
-const EditSerieModal = ({ initialData, onClose, onSubmit, isLoading }) => {
+const EditSerieModal = ({ initialData, onClose, onSubmit, isLoading, comisionesDeuda }) => {
   const [formData, setFormData] = useState({
     name: initialData.name || '',
     fecha_suscripcion: initialData.fecha_suscripcion || '',
     tna: initialData.tna ? (initialData.tna * 100).toFixed(2) : '',
     plazo: initialData.plazo || '',
+    comision: initialData.comision || false,
+    id_comision: initialData.id_comision || ''
   });
 
   const handleSubmit = (e) => {
@@ -1021,7 +1227,9 @@ const EditSerieModal = ({ initialData, onClose, onSubmit, isLoading }) => {
       name: formData.name,
       fecha_suscripcion: formData.fecha_suscripcion,
       tna: parseFloat(formData.tna) / 100,
-      plazo: parseInt(formData.plazo, 10)
+      plazo: parseInt(formData.plazo, 10),
+      comision: formData.comision,
+      id_comision: formData.comision && formData.id_comision ? parseInt(formData.id_comision, 10) : null
     };
     onSubmit(data);
   };
@@ -1086,6 +1294,35 @@ const EditSerieModal = ({ initialData, onClose, onSubmit, isLoading }) => {
               placeholder="Ej. 365"
             />
           </div>
+
+          <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <label style={{ margin: 0 }}>¿Lleva Comisión?</label>
+            <input
+              type="checkbox"
+              checked={formData.comision}
+              onChange={e => setFormData({ ...formData, comision: e.target.checked })}
+              style={{ width: '18px', height: '18px' }}
+            />
+          </div>
+
+          {formData.comision && (
+            <div className="form-group">
+              <label>Seleccionar Comisión *</label>
+              <select
+                required
+                value={formData.id_comision}
+                onChange={e => setFormData({ ...formData, id_comision: e.target.value })}
+                className="input-field"
+              >
+                <option value="">Seleccione...</option>
+                {comisionesDeuda?.map(c => (
+                  <option key={c.id} value={c.id}>
+                    ID {c.id} - Fecha: {c.fecha} - Porcentaje: {(c.porcentaje * 100).toFixed(2)}%
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
             <button type="button" className="btn-secondary" onClick={onClose} disabled={isLoading}>Cancelar</button>

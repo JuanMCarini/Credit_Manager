@@ -4,7 +4,7 @@ import axiosClient from '../api/axiosClient';
 import ExportExcelButton from '../components/ExportExcelButton';
 
 const AuxiliaryTablesPage = () => {
-  const { provincias, empleadores, socios, operadores, tasasYComisiones, relaciones, comercializadores, bancos, cuentas, conceptos, clasificaciones, fetchAuxiliares } = useAppStore();
+  const { provincias, empleadores, socios, operadores, tasasYComisiones, relaciones, comercializadores, bancos, cuentas, conceptos, clasificaciones, comisionesDeuda, fetchAuxiliares } = useAppStore();
   
   const [activeTable, setActiveTable] = useState('socios');
   const [isCreating, setIsCreating] = useState(false);
@@ -36,14 +36,15 @@ const AuxiliaryTablesPage = () => {
     id_provincia: { options: provincias, valueKey: 'id', labelKey: 'nombre' },
     banco_id: { options: bancos, valueKey: 'id', labelKey: 'nombre_banco' },
     concepto_id: { options: conceptos, valueKey: 'id', labelKey: 'name' },
-    clasificacion_id: { options: clasificaciones, valueKey: 'id', labelKey: 'name' }
+    clasificacion_id: { options: clasificaciones, valueKey: 'id', labelKey: 'name' },
+    id_socio_comercial: { options: socios, valueKey: 'id', labelKey: 'razon_social' }
   };
 
   const percentFields = [
     'colocacion_originador', 'colocacion_intermediario', 
     'cobranza_originador', 'cobranza_intermediario', 
     'colocacion_propia', 'tna_c_iva', 'tna_s_iva', 'alicuota_iva',
-    'gasto_1_porcentaje', 'gasto_2_porcentaje', 'porcentaje_sellado'
+    'gasto_1_porcentaje', 'gasto_2_porcentaje', 'porcentaje_sellado', 'porcentaje'
   ];
   
   const tablesMap = {
@@ -57,7 +58,8 @@ const AuxiliaryTablesPage = () => {
     bancos: { name: 'Bancos', data: bancos, endpoint: 'bancos', basePath: '/api/finanzas', schema: ['id', 'nombre_banco', 'parser_type'] },
     cuentas: { name: 'Cuentas Bancarias', data: cuentas, endpoint: 'cuentas', basePath: '/api/finanzas', schema: ['id', 'nombre', 'banco_id', 'nro', 'cbu', 'alias', 'tipo_cuenta', 'moneda'] },
     conceptos: { name: 'Conceptos', data: conceptos, endpoint: 'conceptos', basePath: '/api/finanzas', schema: ['id', 'name', 'clasificacion_id', 'tipo_movimiento', 'descripcion'] },
-    clasificaciones: { name: 'Clasificaciones de Conceptos', data: clasificaciones, endpoint: 'clasificaciones', basePath: '/api/finanzas', schema: ['id', 'name', 'descripcion'] }
+    clasificaciones: { name: 'Clasificaciones de Conceptos', data: clasificaciones, endpoint: 'clasificaciones', basePath: '/api/finanzas', schema: ['id', 'name', 'descripcion'] },
+    comisionesDeuda: { name: 'Comisiones Deuda', data: comisionesDeuda, endpoint: 'comisiones_deuda', schema: ['id', 'fecha', 'id_socio_comercial', 'porcentaje'] }
   };
 
   const currentTableConfig = tablesMap[activeTable];
@@ -201,7 +203,7 @@ const AuxiliaryTablesPage = () => {
 
   const formatCellValue = (col, value) => {
     if (value === null || value === undefined) return '-';
-    if (['socio_comercial_id', 'socio_originador_id', 'socio_intermediario_id', 'gasto_1_socio_id', 'gasto_2_socio_id'].includes(col)) {
+    if (['socio_comercial_id', 'socio_originador_id', 'socio_intermediario_id', 'gasto_1_socio_id', 'gasto_2_socio_id', 'id_socio_comercial'].includes(col)) {
       const socio = socios.find(s => s.id === value);
       return socio ? socio.razon_social : value;
     }
@@ -315,6 +317,7 @@ const AuxiliaryTablesPage = () => {
                     else if (col === 'gasto_2_socio_id') headerText = 'GASTO 2 SOCIO';
                     else if (col === 'id_provincia' || col === 'provincia_id') headerText = 'PROVINCIA';
                     else if (col === 'es_pasivo') headerText = 'ES PASIVO';
+                    else if (col === 'id_socio_comercial') headerText = 'SOCIO COMERCIAL';
                     return (
                       <th key={col} onClick={() => handleSort(col)} style={{ cursor: 'pointer', verticalAlign: 'top' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}>
@@ -673,6 +676,7 @@ const AuxiliaryTablesPage = () => {
                   let labelText = col.toUpperCase().replace(/_/g, ' ');
                   if (col === 'socio_id') labelText = 'SOCIO COMERCIAL';
                   if (col === 'socio_comercial_id') labelText = 'SOCIO ORIGINADOR ASOCIADO';
+                  if (col === 'id_socio_comercial') labelText = 'SOCIO COMERCIAL';
                   if (col === 'es_pasivo') labelText = 'ES PASIVO';
 
                   return (

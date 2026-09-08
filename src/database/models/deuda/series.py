@@ -4,7 +4,9 @@ from sqlalchemy import (
     Column,
     Integer,
     String,
-    Numeric
+    Numeric,
+    Boolean,
+    ForeignKey
 )
 
 from sqlalchemy.sql import func
@@ -21,7 +23,9 @@ class Serie(Base):
     fecha_suscripcion = Column(Date, nullable=False)
     tna = Column(Numeric(10, 2), nullable=False)
     plazo = Column(Integer, nullable=False)
-    
+    comision = Column(Boolean, nullable=False, default=False)
+    id_comision = Column(ForeignKey('comisiones_deuda.id'), nullable=True)
+
     created_at = Column(DateTime, default=func.now())
     update_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
@@ -30,4 +34,17 @@ class Serie(Base):
     @property
     def fecha_vencimiento(self):
         return self.fecha_suscripcion + timedelta(days=self.plazo)
+
+class Comision(Base):
+    __tablename__ = "comisiones_deuda"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    fecha = Column(Date, nullable=False)
+    id_socio_comercial = Column(ForeignKey('socios_comerciales.id'), nullable=False)
+    porcentaje = Column(Numeric(10, 2), nullable=False)
+    
+    created_at = Column(DateTime, default=func.now())
+    update_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    
+    socio_comercial = relationship("SocioComercial", foreign_keys="[Comision.id_socio_comercial]")
 

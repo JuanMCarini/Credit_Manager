@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axiosClient from '../api/axiosClient';
 import { Plus, X, Trash2, Edit2 } from 'lucide-react';
 import ExcelListFilter from '../components/ExcelListFilter';
+import ExcelDateFilter from '../components/ExcelDateFilter';
 import { useAuthStore } from '../store/useAuthStore';
 
 const CuentasComitentesPage = () => {
@@ -13,6 +14,18 @@ const CuentasComitentesPage = () => {
   const [editCuenta, setEditCuenta] = useState(null);
   const [showEstadoCuenta, setShowEstadoCuenta] = useState(null);
   const [filters, setFilters] = useState({});
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+
+  const handleSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
+    setSortConfig({ key, direction });
+  };
+
+  const SortIcon = ({ columnKey }) => {
+    if (sortConfig.key !== columnKey) return <span style={{ opacity: 0.4, marginLeft: '5px' }} title="Haz clic para ordenar">↕</span>;
+    return <span style={{ marginLeft: '5px' }}>{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>;
+  };
 
   const handleFilterChange = (key, value) => {
     setFilters(prev => ({ ...prev, [key]: value }));
@@ -47,6 +60,37 @@ const CuentasComitentesPage = () => {
       return filterValue.includes(valStr);
     });
   });
+
+  const filteredAndSortedCuentas = useMemo(() => {
+    let result = [...filteredCuentas];
+    if (sortConfig.key) {
+      result.sort((a, b) => {
+        let valA = '';
+        let valB = '';
+        if (sortConfig.key === 'tipo') {
+          valA = a.conjunta ? 'Conjunta' : 'Indistinta';
+          valB = b.conjunta ? 'Conjunta' : 'Indistinta';
+        } else if (sortConfig.key === 'titulares') {
+          valA = a.titulares && a.titulares.length > 0 ? a.titulares.map(t => t.inversor_razon_social).join(' ') : 'Sin titulares asignados';
+          valB = b.titulares && b.titulares.length > 0 ? b.titulares.map(t => t.inversor_razon_social).join(' ') : 'Sin titulares asignados';
+        } else if (sortConfig.key === 'fecha') {
+          valA = new Date(a.created_at).getTime();
+          valB = new Date(b.created_at).getTime();
+        } else {
+          valA = a[sortConfig.key] !== null && a[sortConfig.key] !== undefined ? a[sortConfig.key] : '';
+          valB = b[sortConfig.key] !== null && b[sortConfig.key] !== undefined ? b[sortConfig.key] : '';
+        }
+
+        if (typeof valA === 'string') valA = valA.toLowerCase();
+        if (typeof valB === 'string') valB = valB.toLowerCase();
+
+        if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+    return result;
+  }, [filteredCuentas, sortConfig]);
 
   const getAvailableOptions = (key) => {
     if (!cuentas) return [];
@@ -150,14 +194,27 @@ const CuentasComitentesPage = () => {
                   { key: 'titulares', label: 'Titulares (Inversores)' },
                   { key: 'fecha', label: 'Fecha de Alta' }
                 ].map(col => (
-                  <th key={col.key}>
-                    <div style={{ marginBottom: '8px' }}>{col.label}</div>
-                    <ExcelListFilter
-                      availableOptions={getAvailableOptions(col.key)}
-                      selectedOptions={filters[col.key] || []}
-                      onChange={(selected) => handleFilterChange(col.key, selected)}
-                      title={`Filtrar ${col.label}`}
-                    />
+                  <th key={col.key} onClick={() => handleSort(col.key)} style={{ cursor: 'pointer' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <span>{col.label}</span>
+                      <SortIcon columnKey={col.key} />
+                    </div>
+                    <div onClick={e => e.stopPropagation()}>
+                      {col.key === 'fecha' ? (
+                        <ExcelDateFilter
+                          availableDates={getAvailableOptions(col.key)}
+                          selectedDates={filters[col.key] || []}
+                          onChange={(selected) => handleFilterChange(col.key, selected)}
+                        />
+                      ) : (
+                        <ExcelListFilter
+                          availableOptions={getAvailableOptions(col.key)}
+                          selectedOptions={filters[col.key] || []}
+                          onChange={(selected) => handleFilterChange(col.key, selected)}
+                          title={`Filtrar ${col.label}`}
+                        />
+                      )}
+                    </div>
                   </th>
                 ))}
                 <th>Acciones</th>
@@ -166,10 +223,10 @@ const CuentasComitentesPage = () => {
             <tbody>
               {isLoading ? (
                 <tr><td colSpan="5" style={{ textAlign: 'center', padding: '20px' }}>Cargando...</td></tr>
-              ) : filteredCuentas.length === 0 ? (
+              ) : filteredAndSortedCuentas.length === 0 ? (
                 <tr><td colSpan="6" style={{ textAlign: 'center', padding: '20px' }}>No se encontraron cuentas comitentes.</td></tr>
               ) : (
-                filteredCuentas.map(cta => (
+                filteredAndSortedCuentas.map(cta => (
                   <tr key={cta.id}>
                     <td>{cta.id}</td>
                     <td>{cta.id_externo}</td>
@@ -210,7 +267,7 @@ const CuentasComitentesPage = () => {
             <tfoot>
               <tr>
                 <td colSpan="6" style={{ textAlign: 'right', fontWeight: 'bold' }}>
-                  Total Cuentas: {filteredCuentas.length}
+                  Total Cuentas: {filteredAndSortedCuentas.length}
                 </td>
               </tr>
             </tfoot>
