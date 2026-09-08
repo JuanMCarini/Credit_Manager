@@ -219,6 +219,42 @@ def calcular_cobranza(
     resultado.sort(key=lambda x: (x["razon_social"], x["fecha"]))
     return resultado
 
+
+@router.get("/comisiones/inversores")
+def calcular_comisiones_inversores(
+    mes: str = Query(..., description="Mes en formato YYYY-MM"),
+):
+    """
+    Calcula las comisiones de suscripciones de inversores para el mes dado.
+    Utiliza src.logic.deuda.comision.calcular() internamente.
+    """
+    import pandas as pd
+    from src.logic.deuda.comision import calcular
+
+    try:
+        year_str, month_str = mes.split('-')
+        periodo = pd.Period(f"{year_str}-{month_str}", freq="M")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Formato de mes inválido. Use YYYY-MM")
+
+    try:
+        df = calcular(periodo)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al calcular comisiones de inversores: {e}")
+
+    if df.empty:
+        return []
+
+    # Reset index (Socio, Serie son el índice del groupby)
+    df = df.reset_index()
+
+    # Sanitize: replace NaN / inf
+    df = df.fillna(0)
+
+    records = df.to_dict(orient="records")
+    return records
+
+
 # -------------------------------------------------------------------
 # Bancos
 # -------------------------------------------------------------------
