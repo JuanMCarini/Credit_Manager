@@ -1,9 +1,12 @@
-﻿import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import axiosClient from '../api/axiosClient';
 import { Calendar, DollarSign, Briefcase, Users, Download } from 'lucide-react';
 import ExportExcelButton from '../components/ExportExcelButton';
+import useAppStore from '../store/useAppStore';
 
 const FinanzasPage = () => {
+  const systemModules = useAppStore((s) => s.systemModules);
+  const showInversores = systemModules?.inversores !== false;
   const [mes, setMes] = useState(
     new Date().toISOString().substring(0, 7)
   );
@@ -95,7 +98,7 @@ const FinanzasPage = () => {
   const tabs = [
     { key: 'colocacion', label: 'Colocación', icon: <DollarSign size={16} /> },
     { key: 'cobranza',   label: 'Cobranza',   icon: <Briefcase size={16} /> },
-    { key: 'inversores', label: 'Inversores', icon: <Users size={16} /> },
+    ...(showInversores ? [{ key: 'inversores', label: 'Inversores', icon: <Users size={16} /> }] : []),
   ];
 
   return (
