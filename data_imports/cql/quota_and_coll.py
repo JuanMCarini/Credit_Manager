@@ -15,7 +15,7 @@ from src.database import TipoCobranzaEnum, Cobranza
 from src.database.models.creditos.cobranzas import Proceso, TipoProcesoEnum
 
     # --- A. OPTIMIZED QUOTA LOAD AND MERGE ---
-from src.imports.cql.read import CQLData
+from data_imports.cql.read import CQLData
 
 def import_quotas_and_coll(data: CQLData):
     df_cuotas = data.df_cuotas.copy()

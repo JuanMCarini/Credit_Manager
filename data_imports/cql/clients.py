@@ -10,7 +10,7 @@ efficiently load data into the database while avoiding memory exhaustion.
 import pandas as pd
 import numpy as np
 from src.database import SessionLocal, Cliente, SexoEnum, EstadoClienteEnum, Provincia, Empleador, SocioComercial
-from src.imports.cql.read import CQLData
+from data_imports.cql.read import CQLData
 
 def import_clients(data: CQLData):
     df_clientes = data.df_clientes.copy()

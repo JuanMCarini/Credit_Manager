@@ -14,7 +14,7 @@ import numpy_financial as npf
 from sqlalchemy.orm import Session
 from src.database import engine, SessionLocal, Credito
 from src.database.models import EstadoCredito, TipoCredito
-from src.imports.cql.read import CQLData
+from data_imports.cql.read import CQLData
 
 def import_credits(data: CQLData):
     df_creditos = data.df_creditos.copy()
