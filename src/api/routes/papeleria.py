@@ -829,7 +829,7 @@ def resolve_system_field_cartera(cartera: Cartera, field: str, db: Session = Non
             cli = credito.cliente
             plazo_vend = len(ops)
             vn = sum(float(op.cuota.capital or 0) for op in ops)
-            cap_int = sum(float(op.cuota.capital or 0) + float(op.cuota.interes or 0) + float(op.cuota.iva or 0) for op in ops)
+            cap_int = sum(float(op.cuota.capital or 0) + float(op.cuota.interes or 0) for op in ops)
             va_credito = 0.0
             for op in ops:
                 c = op.cuota
