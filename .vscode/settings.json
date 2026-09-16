@@ -80,6 +80,7 @@
         "telefono",
         "trnsf",
         "unicos",
-        "unuse"
+        "unuse",
+        "uvicorn"
     ]
 }
