@@ -294,9 +294,9 @@ class Cuota(Base):
         if self.estado == EstadoCuota.NO_COMPRADA:
             return self.estado.value
 
-        total_esperado = round(self.capital + self.interes + self.iva, 2)
+        total_esperado = round(float(self.capital) + float(self.interes) + float(self.iva), 2)
         total_cobrado = round(sum(
-            round(c.capital + c.interes + c.iva, 2) for c in self.cobranzas if not session or c not in session.deleted
+            round(float(c.capital) + float(c.interes) + float(c.iva), 2) for c in self.cobranzas if not session or c not in session.deleted
         ), 2)
 
         if total_cobrado >= total_esperado:
@@ -319,9 +319,9 @@ class Cuota(Base):
         ]:
             return self.estado_cesion.value
 
-        total_esperado = round(self.capital + self.interes + self.iva, 2)
+        total_esperado = round(float(self.capital) + float(self.interes) + float(self.iva), 2)
         total_cobrado = round(sum(
-            round(c.capital + c.interes + c.iva, 2) for c in self.liquidaciones if not session or c not in session.deleted
+            round(float(c.capital) + float(c.interes) + float(c.iva), 2) for c in self.liquidaciones if not session or c not in session.deleted
         ), 2)
 
         if total_cobrado >= total_esperado:

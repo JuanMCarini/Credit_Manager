@@ -187,7 +187,7 @@ const BancosTab = () => {
       });
       setSelectedMovimientoIds([]);
       setBulkConceptoId('');
-      fetchDashboardData();
+      queryClient.invalidateQueries({ queryKey: ['movimientos'] });
     } catch (err) {
       console.error(err);
       alert('Error al actualizar los movimientos.');
