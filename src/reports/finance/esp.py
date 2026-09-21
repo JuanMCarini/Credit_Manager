@@ -135,12 +135,14 @@ def reporte(fecha_corte: str | date, n_periodos: int = 2, salto_meses: int = 1, 
             cheques_a_cobrar = float(cheques_a_cobrar or 0.0)
             cheques_a_pagar = float(cheques_a_pagar or 0.0)
 
-            query =  db_session.query(LiquidacionCuotaCedida.capital, LiquidacionCuotaCedida.interes, LiquidacionCuotaCedida.iva, Cobranza.fecha.label("fecha_cobranza"), LiquidacionCuotaCedida.fecha_pago).join(Cobranza, LiquidacionCuotaCedida.cobranza_id == Cobranza.id)
+            query =  (db_session
+                      .query(LiquidacionCuotaCedida.capital, LiquidacionCuotaCedida.interes, LiquidacionCuotaCedida.iva, Cobranza.fecha.label("fecha_cobranza"), LiquidacionCuotaCedida.fecha_pago)
+                      .join(Cobranza, LiquidacionCuotaCedida.cobranza_id == Cobranza.id))
             df_lqcc = pd.read_sql(query.statement, db_session.get_bind())
             df_lqcc['fecha_cobranza'] = pd.to_datetime(df_lqcc['fecha_cobranza']).dt.to_period("M")
             df_lqcc['fecha_pago'] = pd.to_datetime(df_lqcc['fecha_pago']).dt.to_period("M")
             periodo_filtro = pd.Period(fecha, freq='M')
-            filtro = (df_lqcc['fecha_cobranza'] == periodo_filtro) & ((df_lqcc["fecha_pago"] > periodo_filtro) | (df_lqcc["fecha_pago"].isna()))
+            filtro = (df_lqcc["fecha_pago"] > periodo_filtro) | (df_lqcc["fecha_pago"].isna())
             cdc_inpaga = df_lqcc.loc[filtro, ["capital", "interes", "iva"]].sum().sum()
 
         finally:
