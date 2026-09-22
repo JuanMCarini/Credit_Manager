@@ -25,6 +25,11 @@ const AuxiliaryTablesPage = () => {
   const [advanceAmount, setAdvanceAmount] = useState('');
   const [advanceDate, setAdvanceDate] = useState('');
 
+  // Bulk Edit Factores State
+  const [showBulkEditFactores, setShowBulkEditFactores] = useState(false);
+  const [bulkFactoresData, setBulkFactoresData] = useState([]);
+  const [bulkFactoresSaving, setBulkFactoresSaving] = useState(false);
+
   const relationMaps = {
     socio_comercial_id: { options: socios, valueKey: 'id', labelKey: 'razon_social' },
     socio_originador_id: { options: socios, valueKey: 'id', labelKey: 'razon_social' },
@@ -204,6 +209,54 @@ const AuxiliaryTablesPage = () => {
     }
   };
 
+  const openBulkEditFactores = () => {
+    // Inicializar data con porcentajes
+    const data = factoresRiesgo.map(f => ({
+      ...f,
+      peso_pct: f.peso !== null ? parseFloat((f.peso * 100).toFixed(2)) : 0
+    }));
+    setBulkFactoresData(data);
+    setShowBulkEditFactores(true);
+  };
+
+  const handleBulkFactoresChange = (id, newValue) => {
+    const parsed = parseFloat(newValue) || 0;
+    setBulkFactoresData(prev => prev.map(f => f.id === id ? { ...f, peso_pct: parsed } : f));
+  };
+
+  const handleBulkFactoresSubmit = async (e) => {
+    e.preventDefault();
+    setBulkFactoresSaving(true);
+    setFeedback(null);
+    try {
+      const promises = bulkFactoresData.map(f => {
+        const original = factoresRiesgo.find(orig => orig.id === f.id);
+        const nuevoPeso = parseFloat((f.peso_pct / 100).toFixed(4));
+        if (original && original.peso !== nuevoPeso) {
+          return axiosClient.put(`/api/v1/auxiliares/factores_riesgo/${f.id}`, {
+            ...original,
+            peso: nuevoPeso
+          });
+        }
+        return null;
+      }).filter(p => p !== null);
+
+      if (promises.length > 0) {
+        await Promise.all(promises);
+        setFeedback({ type: 'success', message: 'Pesos actualizados exitosamente.' });
+        await fetchAuxiliares();
+      }
+      setShowBulkEditFactores(false);
+    } catch (error) {
+      setFeedback({ type: 'error', message: "Error al actualizar los pesos." });
+    } finally {
+      setBulkFactoresSaving(false);
+    }
+  };
+
+  const bulkFactoresTotal = bulkFactoresData.reduce((acc, f) => acc + f.peso_pct, 0);
+  const isBulkFactoresValid = Math.abs(bulkFactoresTotal - 100) < 0.01;
+
   const formatCellValue = (col, value) => {
     if (value === null || value === undefined) return '-';
     if (['socio_comercial_id', 'socio_originador_id', 'socio_intermediario_id', 'gasto_1_socio_id', 'gasto_2_socio_id', 'id_socio_comercial'].includes(col)) {
@@ -299,14 +352,15 @@ const AuxiliaryTablesPage = () => {
         <div className="glass-panel">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
             <h3 style={{ margin: 0, fontFamily: 'var(--font-heading)' }}>Registros de {currentTableConfig.name}</h3>
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <ExportExcelButton data={tableData} filename={`auxiliares_${currentTableConfig.endpoint}_export`} />
-              <button
-                className="btn-primary"
-                onClick={() => openEditModal(null)}
-                style={{ padding: '8px 16px', fontSize: '14px' }}
-              >
-                + Agregar Registro
+            <div style={{ display: 'flex', gap: '10px' }}>
+              {activeTable === 'factoresRiesgo' && (
+                <button className="btn-secondary" onClick={openBulkEditFactores} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  ⚖️ Ajustar Pesos (100%)
+                </button>
+              )}
+              <ExportExcelButton data={filteredData} filename={`${currentTableConfig.name}_export`} />
+              <button className="btn-primary" onClick={() => openEditModal()} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                + Nuevo {currentTableConfig.name.split(' ')[0]}
               </button>
             </div>
           </div>
@@ -738,55 +792,108 @@ const AuxiliaryTablesPage = () => {
         </div>
       )}
 
+      {/* Modal de Ajuste de Anticipo */}
       {adjustingAdvance && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1000,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px',
-          backdropFilter: 'blur(4px)'
-        }}>
-          <div className="glass-panel" style={{
-            width: '100%', maxWidth: '400px',
-            position: 'relative', padding: '32px'
-          }}>
-            <button
-              onClick={() => setAdjustingAdvance(null)}
-              style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '20px' }}
-            >
-              ✕
-            </button>
-            <h3 style={{ margin: '0 0 24px 0', fontFamily: 'var(--font-heading)' }}>
-              Ajustar Anticipos: {adjustingAdvance.razon_social}
-            </h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '24px' }}>
-              Ingrese un monto positivo para agregar anticipos, o un monto negativo para descontar anticipos vigentes.
+        <div className="modal-overlay">
+          <div className="modal-content glass-panel" style={{ width: '400px' }}>
+            <h3 style={{ marginTop: 0, color: 'var(--text-color)' }}>Registrar Anticipo</h3>
+            <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+              Socio: {adjustingAdvance.razon_social}
             </p>
-            <form onSubmit={handleAdvanceSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <form onSubmit={handleAdvanceSubmit}>
               <div className="form-group">
-                <label>Monto</label>
-                <input
-                  type="number"
+                <label>Monto del Anticipo</label>
+                <input 
+                  type="number" 
                   step="0.01"
-                  className="input-field"
-                  value={advanceAmount}
-                  onChange={e => setAdvanceAmount(e.target.value)}
-                  placeholder="Ej: 50000 o -25000"
-                  required
+                  value={advanceAmount} 
+                  onChange={(e) => setAdvanceAmount(e.target.value)} 
+                  required 
                 />
               </div>
               <div className="form-group">
-                <label>Fecha del Movimiento</label>
-                <input
-                  type="date"
-                  className="input-field"
-                  value={advanceDate}
-                  onChange={e => setAdvanceDate(e.target.value)}
-                  required
+                <label>Fecha</label>
+                <input 
+                  type="date" 
+                  value={advanceDate} 
+                  onChange={(e) => setAdvanceDate(e.target.value)} 
+                  required 
                 />
               </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
                 <button type="button" className="btn-secondary" onClick={() => setAdjustingAdvance(null)}>Cancelar</button>
-                <button type="submit" className="btn-primary">Registrar Movimiento</button>
+                <button type="submit" className="btn-primary">Guardar Anticipo</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Bulk Edit Factores */}
+      {showBulkEditFactores && (
+        <div className="modal-overlay">
+          <div className="modal-content glass-panel" style={{ 
+            width: '500px', maxWidth: '90%', 
+            maxHeight: '90vh', display: 'flex', flexDirection: 'column' 
+          }}>
+            <h3 style={{ marginTop: 0, color: 'var(--text-color)', flexShrink: 0 }}>Ajustar Pesos de Riesgo</h3>
+            <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '20px', flexShrink: 0 }}>
+              Ajuste los porcentajes de cada factor. <strong>La suma total debe ser exactamente 100%.</strong>
+            </p>
+            <form onSubmit={handleBulkFactoresSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+              <div style={{ flex: 1, overflowY: 'auto', paddingRight: '10px', minHeight: '150px' }}>
+                {bulkFactoresData.map(f => (
+                  <div key={f.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', background: 'rgba(255,255,255,0.05)', padding: '12px', borderRadius: '8px' }}>
+                    <div style={{ flex: 1, fontSize: '0.9rem' }}>
+                      <div style={{ fontWeight: 'bold' }}>{f.detalle}</div>
+                      <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Código: {f.codigo}</div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <input 
+                        type="number" 
+                        step="0.1" 
+                        min="0" 
+                        max="100" 
+                        value={f.peso_pct} 
+                        onChange={(e) => handleBulkFactoresChange(f.id, e.target.value)}
+                        className="input-field"
+                        style={{ width: '80px', padding: '8px', textAlign: 'right', margin: 0 }}
+                        disabled={f.codigo === 'cortes'}
+                      />
+                      <span style={{ color: 'var(--text-secondary)', fontWeight: 'bold' }}>%</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              
+              <div style={{ flexShrink: 0 }}>
+                <div style={{ 
+                  marginTop: '16px', padding: '16px', borderRadius: '8px', 
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  background: isBulkFactoresValid ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                  border: `1px solid ${isBulkFactoresValid ? '#10b981' : '#ef4444'}`
+                }}>
+                  <span style={{ fontWeight: 'bold' }}>Total Resultante:</span>
+                  <span style={{ 
+                    fontWeight: 'bold', fontSize: '1.2rem',
+                    color: isBulkFactoresValid ? '#10b981' : '#ef4444' 
+                  }}>
+                    {bulkFactoresTotal.toFixed(2)}%
+                  </span>
+                </div>
+                
+                {!isBulkFactoresValid && (
+                  <div style={{ color: '#ef4444', fontSize: '0.85rem', marginTop: '8px', textAlign: 'center' }}>
+                    El total debe ser 100%. Por favor, ajuste los valores.
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
+                  <button type="button" className="btn-secondary" onClick={() => setShowBulkEditFactores(false)}>Cancelar</button>
+                  <button type="submit" className="btn-primary" disabled={!isBulkFactoresValid || bulkFactoresSaving}>
+                    {bulkFactoresSaving ? "Guardando..." : "Guardar Pesos"}
+                  </button>
+                </div>
               </div>
             </form>
           </div>

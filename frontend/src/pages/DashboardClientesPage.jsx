@@ -520,9 +520,25 @@ const DashboardClientesPage = () => {
 
                 {/* BCRA Block */}
                 <div className="glass-panel" style={{ padding: '24px', borderRadius: '12px' }}>
-                  <h3 style={{ margin: '0 0 20px 0', display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--accent-primary)' }}>
-                    🏦 Situación BCRA (Central de Deudores)
-                  </h3>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
+                    <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--accent-primary)' }}>
+                      🏦 Situación BCRA (Central de Deudores)
+                    </h3>
+                    {!loadingBcra && bcraData && (
+                      <div style={{ display: 'flex', gap: '12px' }}>
+                        <span style={{ 
+                          padding: '6px 12px', borderRadius: '20px', fontSize: '0.9rem', fontWeight: 'bold',
+                          background: bcraData.Estado === 'Sin Deudas' || bcraData.Estado === 'Sin Deudas / Vacio' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                          color: bcraData.Estado === 'Sin Deudas' || bcraData.Estado === 'Sin Deudas / Vacio' ? '#10b981' : '#ef4444' 
+                        }}>
+                          {bcraData.Estado}
+                          {bcraData.Estado !== 'Sin Deudas' && bcraData.Estado !== 'Sin Deudas / Vacio' && bcraData.Datos_API?.results?.periodos && (
+                            ` (Sit. Máx: ${Math.max(...bcraData.Datos_API.results.periodos.flatMap(p => p.entidades.map(e => e.situacion)))})`
+                          )}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                   {loadingBcra ? (
                     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '40px 0', color: 'var(--text-secondary)' }}>
                       <div className="loading-spinner" style={{ width: '20px', height: '20px', borderWidth: '3px', marginRight: '10px' }}></div>
@@ -530,20 +546,6 @@ const DashboardClientesPage = () => {
                     </div>
                   ) : bcraData ? (
                     <div>
-                      <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
-                        <span style={{ 
-                          padding: '6px 12px', borderRadius: '20px', fontSize: '0.9rem', fontWeight: 'bold',
-                          background: bcraData.Estado === 'Sin Deudas' || bcraData.Estado === 'Sin Deudas / Vacio' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
-                          color: bcraData.Estado === 'Sin Deudas' || bcraData.Estado === 'Sin Deudas / Vacio' ? '#10b981' : '#ef4444' 
-                        }}>
-                          {bcraData.Estado}
-                        </span>
-                        {bcraData.Datos_API?.results?.denominacion && (
-                          <span style={{ fontSize: '13px', alignSelf: 'center', color: 'var(--text-secondary)' }}>
-                            Titular: <strong style={{ color: 'white' }}>{bcraData.Datos_API.results.denominacion}</strong>
-                          </span>
-                        )}
-                      </div>
                       
                       {bcraData.Datos_API?.results?.periodos && bcraData.Datos_API.results.periodos.length > 0 ? (
                         <div className="table-responsive" style={{ maxHeight: '250px', overflowY: 'auto' }}>
