@@ -10,6 +10,7 @@ class LiquidacionResponse(BaseModel):
     cobranza_id: Optional[int] = None
     tipo_liquidacion: str
     credito_id: Optional[int] = None
+    socio_comercial: Optional[str] = None
     nro_cuota: Optional[int] = None
     fecha_vencimiento: Optional[date] = None
     capital: float

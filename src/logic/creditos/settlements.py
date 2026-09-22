@@ -113,15 +113,18 @@ class SettlementManager:
             query = query.filter(Cartera.recurso == con_recurso)
 
         match identificador:
-            case "CLIENTE_ID" | "Socio ID":
+            case "CLIENTE ID" | "CLIENTE_ID" | "Socio ID":
                 id_val_int = [int(i) for i in id_val if str(i).isdigit()]
                 query = query.filter(Cartera.socio_id.in_(id_val_int))
-            case "CLIENTE_CUIT" | "Socio CUIT":
+            case "CLIENTE CUIT" | "CLIENTE_CUIT" | "Socio CUIT":
                 query = (query
                 .join(SocioComercial, Cartera.socio_id == SocioComercial.id)
                 .filter(SocioComercial.cuit.in_(id_val)))
 
         df = pd.read_sql(query.statement, self.db.get_bind(), index_col="id")
+        for col in ["capital", "interes", "iva"]:
+            if col in df.columns:
+                df[col] = df[col].astype(float)
         df.loc[~df["cartera_iva"], "iva"] = 0.0
 
         return df.sort_values(by=["fecha_vencimiento", "credito_id", "nro_cuota"])
@@ -145,6 +148,9 @@ class SettlementManager:
         df = pd.read_sql(query.statement, self.db.get_bind(), index_col="id")
         if "tipo_liquidacion" in df.columns:
             df["tipo_liquidacion"] = df["tipo_liquidacion"].apply(lambda x: getattr(x, "value", x))
+        for col in ["capital", "interes", "iva"]:
+            if col in df.columns:
+                df[col] = df[col].astype(float)
         df_group = df.groupby(["razon_social", "fecha_vencimiento", "tipo_liquidacion"])[
             ["capital", "interes", "iva"]
         ].sum()
@@ -176,6 +182,9 @@ class SettlementManager:
             LiquidacionCuotaCedida.cuota_id.in_(df_ctas.index)
         )
         df_sett = pd.read_sql(query.statement, self.db.get_bind(), index_col="id")
+        for col in ["capital", "interes", "iva"]:
+            if col in df_sett.columns:
+                df_sett[col] = df_sett[col].astype(float)
 
         df_sett = df_sett.groupby("cuota_id")[["capital", "interes", "iva"]].sum()
         df = df_ctas.merge(
@@ -234,6 +243,9 @@ class SettlementManager:
             query = query.filter(Cobranza.proceso_id.in_(procesos_cobranza_id))
 
         df_cobr = pd.read_sql(query.statement, self.db.get_bind(), index_col="id")
+        for col in ["capital", "interes", "iva"]:
+            if col in df_cobr.columns:
+                df_cobr[col] = df_cobr[col].astype(float)
         df_cobr = df_cobr.sort_values(by="cuota_id")
         df_cobr = df_cobr.merge(df_s_rec[["fecha_vencimiento", "nro_cuota", "credito_id", "cartera_iva", "cartera_id"]], left_on="cuota_id", right_index=True)
         df_cobr["fecha_vencimiento"] = pd.to_datetime(df_cobr["fecha_vencimiento"])

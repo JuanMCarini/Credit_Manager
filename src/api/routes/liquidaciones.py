@@ -18,10 +18,16 @@ router = APIRouter(prefix="/api/v1/liquidaciones", tags=["liquidaciones"])
 @router.get("", response_model=List[LiquidacionResponse])
 def listar_liquidaciones(db: Session = Depends(get_db)):
     from sqlalchemy.orm import joinedload
-    liquidaciones = db.query(LiquidacionCuotaCedida).options(joinedload(LiquidacionCuotaCedida.cuota)).all()
+    liquidaciones = (
+        db.query(LiquidacionCuotaCedida, SocioComercial.razon_social.label("socio_comercial"))
+        .options(joinedload(LiquidacionCuotaCedida.cuota))
+        .join(Cartera, LiquidacionCuotaCedida.cartera_id == Cartera.id)
+        .join(SocioComercial, Cartera.socio_id == SocioComercial.id)
+        .all()
+    )
     
     res = []
-    for l in liquidaciones:
+    for l, socio_comercial in liquidaciones:
         res.append({
             "id": l.id,
             "proceso_id": l.proceso_id,
@@ -30,6 +36,7 @@ def listar_liquidaciones(db: Session = Depends(get_db)):
             "cobranza_id": l.cobranza_id,
             "tipo_liquidacion": getattr(l.tipo_liquidacion, "value", str(l.tipo_liquidacion)),
             "credito_id": l.cuota.credito_id if l.cuota else None,
+            "socio_comercial": socio_comercial,
             "nro_cuota": l.cuota.nro_cuota if l.cuota else None,
             "fecha_vencimiento": l.cuota.fecha_vencimiento if l.cuota else None,
             "capital": l.capital,

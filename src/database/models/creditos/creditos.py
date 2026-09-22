@@ -291,12 +291,12 @@ class Cuota(Base):
         session = object_session(self)
         
         fecha_evaluacion = normalize_date(fecha_evaluacion)
-        if self.estado == EstadoCuota.NO_COMPRADA:
-            return self.estado.value
+        if self.estado in (EstadoCuota.NO_COMPRADA, EstadoCuota.NO_COMPRADA.value):
+            return self.estado.value if isinstance(self.estado, EstadoCuota) else self.estado
 
-        total_esperado = round(self.capital + self.interes + self.iva, 2)
+        total_esperado = round(float(self.capital) + float(self.interes) + float(self.iva), 2)
         total_cobrado = round(sum(
-            round(c.capital + c.interes + c.iva, 2) for c in self.cobranzas if not session or c not in session.deleted
+            round(float(c.capital) + float(c.interes) + float(c.iva), 2) for c in self.cobranzas if not session or c not in session.deleted
         ), 2)
 
         if total_cobrado >= total_esperado:
@@ -316,12 +316,14 @@ class Cuota(Base):
         if self.estado_cesion in [
             EstadoCuotaCedida.NO_COMPRADA,
             EstadoCuotaCedida.NO_VENDIDA,
+            EstadoCuotaCedida.NO_COMPRADA.value,
+            EstadoCuotaCedida.NO_VENDIDA.value,
         ]:
-            return self.estado_cesion.value
+            return self.estado_cesion.value if isinstance(self.estado_cesion, EstadoCuotaCedida) else self.estado_cesion
 
-        total_esperado = round(self.capital + self.interes + self.iva, 2)
+        total_esperado = round(float(self.capital) + float(self.interes) + float(self.iva), 2)
         total_cobrado = round(sum(
-            round(c.capital + c.interes + c.iva, 2) for c in self.liquidaciones if not session or c not in session.deleted
+            round(float(c.capital) + float(c.interes) + float(c.iva), 2) for c in self.liquidaciones if not session or c not in session.deleted
         ), 2)
 
         if total_cobrado >= total_esperado:
