@@ -216,6 +216,26 @@ def get_cliente_bcra(cuil: str, db: Session = Depends(get_db)):
     return respuesta
 
 
+@router.get("/{cuil}/riesgo")
+def get_cliente_riesgo(cuil: str, db: Session = Depends(get_db)):
+    from src.logic.uif.riesgo_cliente import calculo
+    try:
+        df, riesgo_enum = calculo(cuil)
+        puntaje_total = 0.0
+        if not df.empty:
+            puntaje_total = round(df.iloc[-1]["Puntaje"], 2)
+            # Removemos la última fila que contiene el total para que no salga doble en la tabla
+            df = df.iloc[:-1]
+            
+        return {
+            "nivel_riesgo": riesgo_enum.value if hasattr(riesgo_enum, "value") else str(riesgo_enum),
+            "puntaje_total": puntaje_total,
+            "detalles": df.to_dict(orient="records")
+        }
+    except Exception as e:
+        import traceback
+        raise HTTPException(status_code=500, detail=f"Error al calcular riesgo: {str(e)}\n{traceback.format_exc()}")
+
 @router.get("/{cuil}/cuenta_corriente")
 def get_cliente_cuenta_corriente(
     cuil: str,

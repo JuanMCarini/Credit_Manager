@@ -37,7 +37,7 @@ def _seed_db(db):
             "nacionalidad": 0.05,
             "residencia": 0.05,
             "edad": 0.20,
-            "antiguedad": 0.20,
+            "antiguedad": 0.10,
             "bcra": 0.1
         },
         "multiplicadores": {
@@ -266,6 +266,6 @@ def calculo(cuil: str, config_personalizada: dict = None) -> tuple[pd.DataFrame,
     else:
         riesgo_final = Riesgo.ALTO
 
-    df.loc[len(df)] = {"Factor": f"PUNTAJE TOTAL (Riesgo {riesgo_final.value})", "Peso Base": "", "Multiplicador": "", "Puntaje": puntaje_total}
+    df.loc[len(df)] = {"Factor": f"PUNTAJE TOTAL (Riesgo {riesgo_final.value})", "Peso Base": df["Peso Base"].sum(), "Multiplicador": "", "Puntaje": puntaje_total}
 
     return df, riesgo_final

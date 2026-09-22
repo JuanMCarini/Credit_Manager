@@ -1,13 +1,33 @@
-import React from 'react';
-import { X } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, AlertCircle } from 'lucide-react';
+import axiosClient from '../api/axiosClient';
 
 const ClientViewModal = ({ client, onClose }) => {
+  const [riesgo, setRiesgo] = useState(null);
+  const [loadingRiesgo, setLoadingRiesgo] = useState(false);
+
+  useEffect(() => {
+    if (client?.CUIL) {
+      setLoadingRiesgo(true);
+      axiosClient.get(`/api/v1/clientes/${client.CUIL}/riesgo`)
+        .then(res => setRiesgo(res.data.nivel_riesgo))
+        .catch(err => console.error("Error fetching riesgo:", err))
+        .finally(() => setLoadingRiesgo(false));
+    }
+  }, [client]);
+
   if (!client) return null;
 
   // Exclude keys that we might not want to show directly or are redundant
   const excludeKeys = ['Apellido y Nombre'];
   
   const entries = Object.entries(client).filter(([key]) => !excludeKeys.includes(key));
+  
+  if (riesgo) {
+    entries.push(["Nivel de Riesgo UIF", riesgo]);
+  } else if (loadingRiesgo) {
+    entries.push(["Nivel de Riesgo UIF", "Calculando..."]);
+  }
 
   const formatValue = (key, value) => {
     if (value === null || value === '') return '-';
@@ -34,7 +54,19 @@ const ClientViewModal = ({ client, onClose }) => {
                 <span style={{ fontSize: '12px', color: 'var(--text-color)', opacity: 0.7, fontWeight: 'bold', marginBottom: '4px' }}>
                   {key}
                 </span>
-                <span style={{ fontSize: '14px', color: 'var(--text-color)', background: 'rgba(255,255,255,0.05)', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)' }}>
+                <span style={{ 
+                  fontSize: '14px', 
+                  color: key === 'Nivel de Riesgo UIF' && typeof value === 'string' && (value.toUpperCase() === 'ALTO' || value.toUpperCase() === 'DENEGADO') ? '#f43f5e' :
+                         key === 'Nivel de Riesgo UIF' && typeof value === 'string' && value.toUpperCase() === 'MEDIO' ? '#f59e0b' : 
+                         key === 'Nivel de Riesgo UIF' && typeof value === 'string' && value.toUpperCase() === 'BAJO' ? '#10b981' : 'var(--text-color)', 
+                  background: 'rgba(255,255,255,0.05)', 
+                  padding: '8px', 
+                  borderRadius: '4px', 
+                  border: '1px solid var(--border-color)',
+                  fontWeight: key === 'Nivel de Riesgo UIF' ? 'bold' : 'normal',
+                  display: 'flex', alignItems: 'center', gap: '8px'
+                }}>
+                  {key === 'Nivel de Riesgo UIF' && value !== 'Calculando...' && <AlertCircle size={16} />}
                   {formatValue(key, value)}
                 </span>
               </div>
