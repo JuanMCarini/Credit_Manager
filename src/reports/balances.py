@@ -158,6 +158,8 @@ def saldos(
             "iva": "iva_operado"
         }
         lista_agrupadores = [mapper[g] for g in agrupadores if g in mapper]
+        if "fecha_vencimiento" in lista_agrupadores:
+            df["fecha_vencimiento"] = pd.to_datetime(df["fecha_vencimiento"]).dt.strftime('%Y-%m')
 
         # We perform the sum but skip the string formatting
         df = df.groupby(lista_agrupadores, dropna=False)[["capital", "interes", "iva", "total"]].sum()

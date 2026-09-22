@@ -291,8 +291,8 @@ class Cuota(Base):
         session = object_session(self)
         
         fecha_evaluacion = normalize_date(fecha_evaluacion)
-        if self.estado == EstadoCuota.NO_COMPRADA:
-            return self.estado.value
+        if self.estado in (EstadoCuota.NO_COMPRADA, EstadoCuota.NO_COMPRADA.value):
+            return self.estado.value if isinstance(self.estado, EstadoCuota) else self.estado
 
         total_esperado = round(float(self.capital) + float(self.interes) + float(self.iva), 2)
         total_cobrado = round(sum(
@@ -316,8 +316,10 @@ class Cuota(Base):
         if self.estado_cesion in [
             EstadoCuotaCedida.NO_COMPRADA,
             EstadoCuotaCedida.NO_VENDIDA,
+            EstadoCuotaCedida.NO_COMPRADA.value,
+            EstadoCuotaCedida.NO_VENDIDA.value,
         ]:
-            return self.estado_cesion.value
+            return self.estado_cesion.value if isinstance(self.estado_cesion, EstadoCuotaCedida) else self.estado_cesion
 
         total_esperado = round(float(self.capital) + float(self.interes) + float(self.iva), 2)
         total_cobrado = round(sum(
