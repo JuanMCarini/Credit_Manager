@@ -12,7 +12,7 @@ import src.reports.finance.cartera as cartera
 from src.logic.deuda.reportes import estado as deuda_estado
 
 from src.database import SessionLocal
-from src.database.models import LiquidacionCuotaCedida, Cobranza
+from src.database.models import LiquidacionCuotaCedida, Cobranza, TipoLiquidacionEnum, TipoCobranzaEnum, EstadoCuotaCedida, Cuota
 from src.database.models.finance.posicion_iva import PosicionIva
 from src.database.models.finance.posicion_iibb import PosicionIibb
 from src.database.models.cheques.main import Cheque, OperacionCheque, TipoOperacionCheque
@@ -136,14 +136,47 @@ def reporte(fecha_corte: str | date, n_periodos: int = 2, salto_meses: int = 1, 
             cheques_a_pagar = float(cheques_a_pagar or 0.0)
 
             query =  (db_session
-                      .query(LiquidacionCuotaCedida.capital, LiquidacionCuotaCedida.interes, LiquidacionCuotaCedida.iva, Cobranza.fecha.label("fecha_cobranza"), LiquidacionCuotaCedida.fecha_pago)
+                      .query(
+                        LiquidacionCuotaCedida.capital,
+                        LiquidacionCuotaCedida.interes,
+                        LiquidacionCuotaCedida.iva,
+                        LiquidacionCuotaCedida.tipo_liquidacion,
+                        Cobranza.id.label("id_cobranza"),
+                        Cobranza.tipo_cobranza,
+                        Cobranza.fecha.label("fecha_cobranza"),
+                        LiquidacionCuotaCedida.fecha_pago)
                       .join(Cobranza, LiquidacionCuotaCedida.cobranza_id == Cobranza.id))
             df_lqcc = pd.read_sql(query.statement, db_session.get_bind())
             df_lqcc['fecha_cobranza'] = pd.to_datetime(df_lqcc['fecha_cobranza']).dt.to_period("M")
             df_lqcc['fecha_pago'] = pd.to_datetime(df_lqcc['fecha_pago']).dt.to_period("M")
             periodo_filtro = pd.Period(fecha, freq='M')
-            filtro = (df_lqcc["fecha_pago"] > periodo_filtro) | (df_lqcc["fecha_pago"].isna())
+            filtro = (
+                (df_lqcc['fecha_cobranza'] <= periodo_filtro) & 
+                (df_lqcc['tipo_liquidacion'] != TipoLiquidacionEnum.BCA) & 
+                ((df_lqcc["fecha_pago"] > periodo_filtro) | 
+                (df_lqcc["fecha_pago"].isna()))
+                )
             cdc_inpaga = df_lqcc.loc[filtro, ["capital", "interes", "iva"]].sum().sum()
+
+            query = (db_session
+                     .query(Cobranza)
+                     .outerjoin(LiquidacionCuotaCedida, LiquidacionCuotaCedida.cobranza_id == Cobranza.id)
+                     .join(Cuota, Cobranza.cuota_id == Cuota.id)
+                     .filter(
+                         Cuota.estado_cesion.in_([
+                            EstadoCuotaCedida.MOROSA,
+                            EstadoCuotaCedida.PENDIENTE]),
+                         LiquidacionCuotaCedida.id.is_(None),
+                         Cobranza.fecha <= ultimo_dia,
+                         Cobranza.tipo_cobranza.in_([
+                             TipoCobranzaEnum.RECURSO,
+                             TipoCobranzaEnum.CA,
+                             TipoCobranzaEnum.ANTICIPO,
+                             TipoCobranzaEnum.COMUN
+                         ]))
+                    )
+            df_cobr = pd.read_sql(query.statement, db_session.get_bind())
+            cdc_inpaga += df_cobr[["capital", "interes", "iva"]].sum().sum()
 
         finally:
             db_session.close()
