@@ -33,7 +33,7 @@ const PortfolioOriginationPage = () => {
   const [showNewSocioModal, setShowNewSocioModal] = useState(false);
   const [creatingSocio, setCreatingSocio] = useState(false);
   const [newSocio, setNewSocio] = useState({
-    razon_social: '', cuit: '', domicilio_legal: '', contacto_nombre: '', mail: '', telefono: '', dia_corte: ''
+    razon_social: '', cuit: '', domicilio_legal: '', contacto_nombre: '', mail: '', telefono: '', dia_corte: '', codigo_descuento: false
   });
 
   // Form Venta
@@ -394,7 +394,7 @@ const PortfolioOriginationPage = () => {
       else setCompraData({ ...compraData, socio: res.data.id });
 
       setShowNewSocioModal(false);
-      setNewSocio({ razon_social: '', cuit: '', domicilio_legal: '', contacto_nombre: '', mail: '', telefono: '', dia_corte: '' });
+      setNewSocio({ razon_social: '', cuit: '', domicilio_legal: '', contacto_nombre: '', mail: '', telefono: '', dia_corte: '', codigo_descuento: false });
       setFeedback({ type: 'success', message: 'Socio Comercial agregado exitosamente.' });
     } catch (error) {
       const msg = error.response?.data?.detail || error.message;
@@ -680,9 +680,23 @@ const PortfolioOriginationPage = () => {
                 <label>Domicilio Legal</label>
                 <input type="text" className="input-field" value={newSocio.domicilio_legal} onChange={(e) => setNewSocio({ ...newSocio, domicilio_legal: e.target.value })} />
               </div>
-              <div className="form-group">
-                <label>Contacto (Nombre)</label>
-                <input type="text" className="input-field" value={newSocio.contacto_nombre} onChange={(e) => setNewSocio({ ...newSocio, contacto_nombre: e.target.value })} />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div className="form-group">
+                  <label>Contacto (Nombre)</label>
+                  <input type="text" className="input-field" value={newSocio.contacto_nombre} onChange={(e) => setNewSocio({ ...newSocio, contacto_nombre: e.target.value })} />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="codigo_descuento" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginBottom: 0, width: 'fit-content' }}>
+                    <div className="toggle-switch">
+                      <input type="checkbox" name="codigo_descuento" checked={!!newSocio.codigo_descuento} onChange={(e) => setNewSocio({ ...newSocio, codigo_descuento: e.target.checked })} id="codigo_descuento" />
+                      <span className="slider"></span>
+                    </div>
+                    ¿Código de Descuento?
+                    <strong style={{ color: newSocio.codigo_descuento ? 'var(--accent-primary)' : 'var(--text-secondary)' }}>
+                      {newSocio.codigo_descuento ? 'SÍ' : 'NO'}
+                    </strong>
+                  </label>
+                </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div className="form-group">

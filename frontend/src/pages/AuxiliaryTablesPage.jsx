@@ -4,8 +4,8 @@ import axiosClient from '../api/axiosClient';
 import ExportExcelButton from '../components/ExportExcelButton';
 
 const AuxiliaryTablesPage = () => {
-  const { provincias, empleadores, socios, operadores, tasasYComisiones, relaciones, comercializadores, bancos, cuentas, conceptos, clasificaciones, comisionesDeuda, fetchAuxiliares } = useAppStore();
-  
+  const { nacionalidades, provincias, empleadores, socios, operadores, tasasYComisiones, relaciones, comercializadores, bancos, cuentas, conceptos, clasificaciones, comisionesDeuda, fetchAuxiliares } = useAppStore();
+
   const [activeTable, setActiveTable] = useState('socios');
   const [isCreating, setIsCreating] = useState(false);
   const [editingRecord, setEditingRecord] = useState(null);
@@ -19,7 +19,7 @@ const AuxiliaryTablesPage = () => {
     if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
     setSortConfig({ key, direction });
   };
-  
+
   // Advance Adjustment State
   const [adjustingAdvance, setAdjustingAdvance] = useState(null);
   const [advanceAmount, setAdvanceAmount] = useState('');
@@ -41,17 +41,18 @@ const AuxiliaryTablesPage = () => {
   };
 
   const percentFields = [
-    'colocacion_originador', 'colocacion_intermediario', 
-    'cobranza_originador', 'cobranza_intermediario', 
+    'colocacion_originador', 'colocacion_intermediario',
+    'cobranza_originador', 'cobranza_intermediario',
     'colocacion_propia', 'tna_c_iva', 'tna_s_iva', 'alicuota_iva',
     'gasto_1_porcentaje', 'gasto_2_porcentaje', 'porcentaje_sellado', 'porcentaje'
   ];
-  
+
   const tablesMap = {
+    nacionalidades: { name: 'Nacionalidades', data: nacionalidades, endpoint: 'nacionalidades', schema: ['id', 'nombre', 'lista_gafi'] },
     provincias: { name: 'Provincias', data: provincias, endpoint: 'provincias', schema: ['id', 'nombre'] },
     operadores: { name: 'Operadores de Cheques', data: operadores, endpoint: 'operadores', basePath: '/api/cheques', idField: 'cuit', schema: ['cuit', 'razon_social', 'calificacion', 'telefono', 'email'] },
     empleadores: { name: 'Empleadores', data: empleadores, endpoint: 'empleadores', schema: ['id', 'cuit', 'razon_social', 'es_pasivo', 'domicilio_calle', 'domicilio_nro', 'domicilio_piso', 'domicilio_depto', 'id_provincia', 'id_codigo_postal', 'localidad', 'telefono', 'socio_comercial_id'] },
-    socios: { name: 'Socios Comerciales', data: socios, endpoint: 'socios', schema: ['id', 'razon_social', 'cuit', 'domicilio_legal', 'contacto_nombre', 'mail', 'telefono', 'dia_corte', 'cbu', 'nro_cuenta_bancaria', 'nombre_banco', 'anticipo_vigente'] },
+    socios: { name: 'Socios Comerciales', data: socios, endpoint: 'socios', schema: ['id', 'razon_social', 'cuit', 'domicilio_legal', 'contacto_nombre', 'mail', 'telefono', 'dia_corte', 'cbu', 'nro_cuenta_bancaria', 'nombre_banco', 'anticipo_vigente', 'codigo_descuento'] },
     tasasYComisiones: { name: 'Tasas y Comisiones', data: tasasYComisiones, endpoint: 'tasas_y_comisiones', schema: ['id', 'fecha', 'estado', 'socio_originador_id', 'socio_intermediario_id', 'colocacion_originador', 'colocacion_intermediario', 'cobranza_originador', 'cobranza_intermediario', 'colocacion_propia', 'gasto_1_porcentaje', 'gasto_1_socio_id', 'gasto_2_porcentaje', 'gasto_2_socio_id', 'porcentaje_sellado', 'plazo', 'tna_c_iva'] },
     relaciones: { name: 'Relaciones Mapeadas', data: relaciones, endpoint: 'relaciones', schema: ['id', 'socio_id', 'tabla', 'id_local', 'id_foraneo'] },
     comercializadores: { name: 'Comercializadores', data: comercializadores, endpoint: 'comercializadores', schema: ['id', 'nombre'] },
@@ -68,7 +69,7 @@ const AuxiliaryTablesPage = () => {
 
   const handleDelete = async (id) => {
     if (!window.confirm("¿Estás seguro de que deseas eliminar este registro?")) return;
-    
+
     setFeedback(null);
     try {
       const basePath = currentTableConfig.basePath || '/api/v1/auxiliares';
@@ -84,7 +85,7 @@ const AuxiliaryTablesPage = () => {
     if (record) {
       setIsCreating(false);
       setEditingRecord(record);
-      
+
       const editData = { ...record };
       percentFields.forEach(f => {
         if (editData[f] !== null && editData[f] !== undefined) {
@@ -120,13 +121,13 @@ const AuxiliaryTablesPage = () => {
   const openDuplicateModal = (record) => {
     setIsCreating(true);
     setEditingRecord(null);
-    
+
     const duplicateData = { ...record };
     delete duplicateData.id; // Remove ID to create a new record
     if (currentTableConfig.schema.includes('fecha')) {
       duplicateData.fecha = new Date().toISOString().split('T')[0]; // Set date to today
     }
-    
+
     percentFields.forEach(f => {
       if (duplicateData[f] !== null && duplicateData[f] !== undefined) {
         duplicateData[f] = parseFloat((duplicateData[f] * 100).toFixed(4));
@@ -162,7 +163,7 @@ const AuxiliaryTablesPage = () => {
           cleanedData[key] = parseFloat(cleanedData[key]) / 100.0;
         }
       }
-      
+
       // Remove read-only or computed fields before sending to the backend
       if (currentTableConfig.endpoint === 'socios') {
         delete cleanedData.anticipo_vigente;
@@ -223,7 +224,7 @@ const AuxiliaryTablesPage = () => {
       const clasificacion = clasificaciones.find(c => c.id === value);
       return clasificacion ? clasificacion.name : value;
     }
-    if (col === 'es_pasivo') {
+    if (col === 'es_pasivo' || col === 'codigo_descuento') {
       return value ? 'Sí' : 'No';
     }
     if (percentFields.includes(col)) {
@@ -240,11 +241,11 @@ const AuxiliaryTablesPage = () => {
       const filterValue = columnFilters[col];
       if (!filterValue) return true;
       const val = formatCellValue(col, row[col]);
-      
+
       if (col === 'clasificacion_id' && filterValue === 'Sin Clasificar') {
         return val === '-';
       }
-      
+
       return String(val).toLowerCase().includes(filterValue.toLowerCase());
     });
   });
@@ -263,12 +264,12 @@ const AuxiliaryTablesPage = () => {
         <h2>Tablas Auxiliares</h2>
         <p>Visor de tablas maestras cacheadas desde el Core Engine. Permite editar y eliminar registros siempre que no existan dependencias activas.</p>
       </header>
-      
+
       {!editingRecord && !isCreating && feedback && (
-        <div style={{ 
-          marginBottom: '20px', padding: '16px', borderRadius: '8px', fontSize: '15px', fontWeight: 500, 
-          backgroundColor: feedback.type === 'error' ? 'rgba(239,68,68,0.1)' : 'rgba(16,185,129,0.1)', 
-          color: feedback.type === 'error' ? 'var(--danger-color)' : 'var(--success-color)' 
+        <div style={{
+          marginBottom: '20px', padding: '16px', borderRadius: '8px', fontSize: '15px', fontWeight: 500,
+          backgroundColor: feedback.type === 'error' ? 'rgba(239,68,68,0.1)' : 'rgba(16,185,129,0.1)',
+          color: feedback.type === 'error' ? 'var(--danger-color)' : 'var(--success-color)'
         }}>
           {feedback.message}
         </div>
@@ -277,8 +278,8 @@ const AuxiliaryTablesPage = () => {
       <div className="content-grid" style={{ display: 'block' }}>
         <div className="glass-panel" style={{ padding: '20px', marginBottom: '24px', display: 'flex', gap: '16px', alignItems: 'center' }}>
           <label style={{ fontWeight: '600', color: 'var(--text-secondary)' }}>Seleccionar Tabla:</label>
-          <select 
-            value={activeTable} 
+          <select
+            value={activeTable}
             onChange={(e) => { setActiveTable(e.target.value); setFeedback(null); setColumnFilters({}); }}
             className="input-field"
             style={{ minWidth: '250px' }}
@@ -294,8 +295,8 @@ const AuxiliaryTablesPage = () => {
             <h3 style={{ margin: 0, fontFamily: 'var(--font-heading)' }}>Registros de {currentTableConfig.name}</h3>
             <div style={{ display: 'flex', gap: '12px' }}>
               <ExportExcelButton data={tableData} filename={`auxiliares_${currentTableConfig.endpoint}_export`} />
-              <button 
-                className="btn-primary" 
+              <button
+                className="btn-primary"
                 onClick={() => openEditModal(null)}
                 style={{ padding: '8px 16px', fontSize: '14px' }}
               >
@@ -303,7 +304,7 @@ const AuxiliaryTablesPage = () => {
               </button>
             </div>
           </div>
-          
+
           <div className="table-responsive">
             <table className="data-table">
               <thead>
@@ -328,8 +329,8 @@ const AuxiliaryTablesPage = () => {
                         </div>
                         <div onClick={e => e.stopPropagation()}>
                           {activeTable === 'tasasYComisiones' && col === 'estado' ? (
-                            <select 
-                              value={columnFilters[col] || ''} 
+                            <select
+                              value={columnFilters[col] || ''}
                               onChange={(e) => setColumnFilters(prev => ({ ...prev, [col]: e.target.value }))}
                               style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', boxSizing: 'border-box' }}
                             >
@@ -338,8 +339,8 @@ const AuxiliaryTablesPage = () => {
                               <option value="INACTIVA">INACTIVA</option>
                             </select>
                           ) : activeTable === 'tasasYComisiones' && ['socio_originador_id', 'socio_intermediario_id', 'gasto_1_socio_id', 'gasto_2_socio_id'].includes(col) ? (
-                            <select 
-                              value={columnFilters[col] || ''} 
+                            <select
+                              value={columnFilters[col] || ''}
                               onChange={(e) => setColumnFilters(prev => ({ ...prev, [col]: e.target.value }))}
                               style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', boxSizing: 'border-box' }}
                             >
@@ -347,15 +348,15 @@ const AuxiliaryTablesPage = () => {
                               {socios.map(s => <option key={s.id} value={s.razon_social}>{s.razon_social}</option>)}
                             </select>
                           ) : activeTable === 'tasasYComisiones' && col === 'fecha' ? (
-                            <input 
+                            <input
                               type="date"
                               value={columnFilters[col] || ''}
                               onChange={(e) => setColumnFilters(prev => ({ ...prev, [col]: e.target.value }))}
                               style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', boxSizing: 'border-box' }}
                             />
                           ) : activeTable === 'conceptos' && col === 'clasificacion_id' ? (
-                            <select 
-                              value={columnFilters[col] || ''} 
+                            <select
+                              value={columnFilters[col] || ''}
                               onChange={(e) => setColumnFilters(prev => ({ ...prev, [col]: e.target.value }))}
                               style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', boxSizing: 'border-box' }}
                             >
@@ -364,10 +365,10 @@ const AuxiliaryTablesPage = () => {
                               {clasificaciones.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                             </select>
                           ) : (
-                            <input 
-                              type="text" 
-                              placeholder="Filtrar..." 
-                              value={columnFilters[col] || ''} 
+                            <input
+                              type="text"
+                              placeholder="Filtrar..."
+                              value={columnFilters[col] || ''}
                               onChange={(e) => setColumnFilters(prev => ({ ...prev, [col]: e.target.value }))}
                               style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', boxSizing: 'border-box' }}
                             />
@@ -376,7 +377,7 @@ const AuxiliaryTablesPage = () => {
                       </th>
                     );
                   })}
-                  <th style={{textAlign: 'center', verticalAlign: 'top'}}>ACCIONES</th>
+                  <th style={{ textAlign: 'center', verticalAlign: 'top' }}>ACCIONES</th>
                 </tr>
               </thead>
               <tbody>
@@ -395,7 +396,7 @@ const AuxiliaryTablesPage = () => {
                       <td>
                         <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
                           {activeTable === 'socios' && (
-                            <button className="btn-secondary" style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--success-color)' }} onClick={() => {setAdjustingAdvance(row); setAdvanceAmount(''); setAdvanceDate('');}} title="Ajustar Anticipo">
+                            <button className="btn-secondary" style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--success-color)' }} onClick={() => { setAdjustingAdvance(row); setAdvanceAmount(''); setAdvanceDate(''); }} title="Ajustar Anticipo">
                               💲
                             </button>
                           )}
@@ -438,29 +439,29 @@ const AuxiliaryTablesPage = () => {
             <h3 style={{ marginBottom: '24px', fontFamily: 'var(--font-heading)' }}>
               {isCreating ? 'Agregar Nuevo Registro' : `Editar ${currentTableConfig.name}`}
             </h3>
-            
+
             {(editingRecord || isCreating) && feedback && (
-              <div style={{ 
-                marginBottom: '20px', padding: '16px', borderRadius: '8px', fontSize: '15px', fontWeight: 500, 
-                backgroundColor: feedback.type === 'error' ? 'rgba(239,68,68,0.1)' : 'rgba(16,185,129,0.1)', 
-                color: feedback.type === 'error' ? 'var(--danger-color)' : 'var(--success-color)' 
+              <div style={{
+                marginBottom: '20px', padding: '16px', borderRadius: '8px', fontSize: '15px', fontWeight: 500,
+                backgroundColor: feedback.type === 'error' ? 'rgba(239,68,68,0.1)' : 'rgba(16,185,129,0.1)',
+                color: feedback.type === 'error' ? 'var(--danger-color)' : 'var(--success-color)'
               }}>
                 {feedback.message}
               </div>
             )}
-            
+
             <form onSubmit={handleEditSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
                 {currentTableConfig.schema.map(col => {
                   if (col === 'id' && currentTableConfig.endpoint !== 'operadores') return null;
                   if (col === 'anticipo_vigente') return null;
-                  
+
                   const relation = relationMaps[col];
                   let inputElement;
 
                   if (currentTableConfig.endpoint === 'relaciones' && col === 'tabla') {
                     const tableOptions = [
-                      'codigos_postales', 'empleadores', 'provincias', 
+                      'codigos_postales', 'empleadores', 'provincias',
                       'socios_comerciales', 'tasas_y_comisiones', 'comercializadores'
                     ];
                     inputElement = (
@@ -496,7 +497,7 @@ const AuxiliaryTablesPage = () => {
                       localOptions = comercializadores;
                       localLabel = 'nombre';
                     }
-                    
+
                     if (!selectedTabla) {
                       inputElement = (
                         <select className="input-field" disabled>
@@ -513,18 +514,18 @@ const AuxiliaryTablesPage = () => {
                           <option value="">Seleccione Registro Local...</option>
                           {localOptions.map(opt => (
                             <option key={opt.id} value={opt.id}>
-                              {opt.id} - {localLabel === 'id' ? `Plazo: ${opt.plazo} TNA: ${(opt.tna_c_iva*100).toFixed(2)}%` : opt[localLabel]}
+                              {opt.id} - {localLabel === 'id' ? `Plazo: ${opt.plazo} TNA: ${(opt.tna_c_iva * 100).toFixed(2)}%` : opt[localLabel]}
                             </option>
                           ))}
                         </select>
                       );
                     } else {
                       inputElement = (
-                        <input 
-                          type="number" 
+                        <input
+                          type="number"
                           step="1"
                           placeholder="Ingrese el ID local numérico"
-                          value={editFormData[col] ?? ''} 
+                          value={editFormData[col] ?? ''}
                           onChange={(e) => handleEditChange(col, e.target.value)}
                           className="input-field" required
                         />
@@ -532,8 +533,8 @@ const AuxiliaryTablesPage = () => {
                     }
                   } else if (relation) {
                     inputElement = (
-                      <select 
-                        value={editFormData[col] ?? ''} 
+                      <select
+                        value={editFormData[col] ?? ''}
                         onChange={(e) => handleEditChange(col, e.target.value)}
                         className="input-field"
                       >
@@ -548,7 +549,7 @@ const AuxiliaryTablesPage = () => {
                   } else if (col === 'calificacion') {
                     inputElement = (
                       <select
-                        value={editFormData[col] ?? ''} 
+                        value={editFormData[col] ?? ''}
                         onChange={(e) => handleEditChange(col, e.target.value)}
                         className="input-field" required
                       >
@@ -557,12 +558,12 @@ const AuxiliaryTablesPage = () => {
                       </select>
                     );
                   } else if (col === 'estado') {
-                    const estadoOptions = currentTableConfig.endpoint === 'tasas_y_comisiones' 
+                    const estadoOptions = currentTableConfig.endpoint === 'tasas_y_comisiones'
                       ? ['ACTIVA', 'INACTIVA', 'SEMI ACTIVA']
                       : ['ACTIVO', 'INACTIVO'];
                     inputElement = (
                       <select
-                        value={editFormData[col] ?? ''} 
+                        value={editFormData[col] ?? ''}
                         onChange={(e) => handleEditChange(col, e.target.value)}
                         className="input-field" required
                       >
@@ -573,7 +574,7 @@ const AuxiliaryTablesPage = () => {
                   } else if (col === 'tipo_cuenta') {
                     inputElement = (
                       <select
-                        value={editFormData[col] ?? ''} 
+                        value={editFormData[col] ?? ''}
                         onChange={(e) => handleEditChange(col, e.target.value)}
                         className="input-field" required
                       >
@@ -584,7 +585,7 @@ const AuxiliaryTablesPage = () => {
                   } else if (col === 'moneda') {
                     inputElement = (
                       <select
-                        value={editFormData[col] ?? ''} 
+                        value={editFormData[col] ?? ''}
                         onChange={(e) => handleEditChange(col, e.target.value)}
                         className="input-field" required
                       >
@@ -595,7 +596,7 @@ const AuxiliaryTablesPage = () => {
                   } else if (col === 'tipo_movimiento') {
                     inputElement = (
                       <select
-                        value={editFormData[col] ?? ''} 
+                        value={editFormData[col] ?? ''}
                         onChange={(e) => handleEditChange(col, e.target.value)}
                         className="input-field" required
                       >
@@ -603,10 +604,22 @@ const AuxiliaryTablesPage = () => {
                         {["Ingreso", "Egreso", "Suscripción FCI", "Rescate FCI", "Ingresos a plazo fijo", "Egresos de plazo fijo"].map(opt => <option key={opt} value={opt}>{opt}</option>)}
                       </select>
                     );
+                  } else if (col === 'lista_gafi') {
+                    inputElement = (
+                      <select
+                        value={editFormData[col] ?? 'Lista Blanca'}
+                        onChange={(e) => handleEditChange(col, e.target.value)}
+                        className="input-field" required
+                      >
+                        <option value="Lista Blanca">Lista Blanca</option>
+                        <option value="Lista Gris">Lista Gris</option>
+                        <option value="Lista Negra">Lista Negra</option>
+                      </select>
+                    );
                   } else if (col === 'parser_type') {
                     inputElement = (
                       <select
-                        value={editFormData[col] ?? ''} 
+                        value={editFormData[col] ?? ''}
                         onChange={(e) => handleEditChange(col, e.target.value)}
                         className="input-field"
                       >
@@ -618,19 +631,19 @@ const AuxiliaryTablesPage = () => {
                     );
                   } else if (col === 'fecha') {
                     inputElement = (
-                      <input 
-                        type="date" 
-                        value={editFormData[col] ?? ''} 
+                      <input
+                        type="date"
+                        value={editFormData[col] ?? ''}
                         onChange={(e) => handleEditChange(col, e.target.value)}
                         className="input-field" required
                       />
                     );
                   } else if (col === 'plazo') {
                     inputElement = (
-                      <input 
-                        type="number" 
+                      <input
+                        type="number"
                         step="1"
-                        value={editFormData[col] ?? ''} 
+                        value={editFormData[col] ?? ''}
                         onChange={(e) => handleEditChange(col, e.target.value)}
                         className="input-field" required
                       />
@@ -638,10 +651,10 @@ const AuxiliaryTablesPage = () => {
                   } else if (percentFields.includes(col)) {
                     inputElement = (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <input 
-                          type="number" 
+                        <input
+                          type="number"
                           step="any"
-                          value={editFormData[col] ?? ''} 
+                          value={editFormData[col] ?? ''}
                           onChange={(e) => handleEditChange(col, e.target.value)}
                           className="input-field" required
                         />
@@ -652,21 +665,35 @@ const AuxiliaryTablesPage = () => {
                     inputElement = (
                       <label style={{ display: 'flex', alignItems: 'center', gap: '12px', fontWeight: 500, cursor: 'pointer', height: '100%' }}>
                         <div className="toggle-switch">
-                          <input 
-                            type="checkbox" 
-                            checked={editFormData[col] ?? false} 
-                            onChange={(e) => handleEditChange(col, e.target.checked)} 
+                          <input
+                            type="checkbox"
+                            checked={editFormData[col] ?? false}
+                            onChange={(e) => handleEditChange(col, e.target.checked)}
                           />
                           <span className="slider"></span>
                         </div>
                         {editFormData[col] ? 'Sí (Jubilado/Pensionado)' : 'No'}
                       </label>
                     );
+                  } else if (col === 'codigo_descuento') {
+                    inputElement = (
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '12px', fontWeight: 500, cursor: 'pointer', height: '100%' }}>
+                        <div className="toggle-switch">
+                          <input
+                            type="checkbox"
+                            checked={editFormData[col] ?? false}
+                            onChange={(e) => handleEditChange(col, e.target.checked)}
+                          />
+                          <span className="slider"></span>
+                        </div>
+                        {editFormData[col] ? 'SÍ' : 'NO'}
+                      </label>
+                    );
                   } else {
                     inputElement = (
-                      <input 
-                        type="text" 
-                        value={editFormData[col] ?? ''} 
+                      <input
+                        type="text"
+                        value={editFormData[col] ?? ''}
                         onChange={(e) => handleEditChange(col, e.target.value)}
                         className="input-field"
                       />
@@ -711,7 +738,7 @@ const AuxiliaryTablesPage = () => {
             width: '100%', maxWidth: '400px',
             position: 'relative', padding: '32px'
           }}>
-            <button 
+            <button
               onClick={() => setAdjustingAdvance(null)}
               style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '20px' }}
             >
@@ -726,24 +753,24 @@ const AuxiliaryTablesPage = () => {
             <form onSubmit={handleAdvanceSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div className="form-group">
                 <label>Monto</label>
-                <input 
-                  type="number" 
-                  step="0.01" 
-                  className="input-field" 
-                  value={advanceAmount} 
-                  onChange={e => setAdvanceAmount(e.target.value)} 
+                <input
+                  type="number"
+                  step="0.01"
+                  className="input-field"
+                  value={advanceAmount}
+                  onChange={e => setAdvanceAmount(e.target.value)}
                   placeholder="Ej: 50000 o -25000"
-                  required 
+                  required
                 />
               </div>
               <div className="form-group">
                 <label>Fecha del Movimiento</label>
-                <input 
-                  type="date" 
-                  className="input-field" 
-                  value={advanceDate} 
-                  onChange={e => setAdvanceDate(e.target.value)} 
-                  required 
+                <input
+                  type="date"
+                  className="input-field"
+                  value={advanceDate}
+                  onChange={e => setAdvanceDate(e.target.value)}
+                  required
                 />
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '16px' }}>

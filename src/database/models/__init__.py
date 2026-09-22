@@ -1,4 +1,4 @@
-from .creditos.clientes import SexoEnum, EstadoClienteEnum, Empleador, Provincia, Cliente
+from .creditos.clientes import SexoEnum, EstadoClienteEnum, Empleador, Provincia, Cliente, Nacionalidad
 from .deuda.series import Serie, Comision, ComisionesSerie
 from .socios import SocioComercial, AnticiposSinAplicar, Relacion, EstadoComisionEnum, TasaYComision, PoliticaCrediticia, Comercializador
 from .creditos.creditos import OrigenCredito, EstadoCredito, TipoCredito, Credito, EstadoCuota, EstadoCuotaCedida, Cuota
@@ -19,7 +19,7 @@ from .system import ModuloSistema
 
 
 __all__ = [
-    "SexoEnum", "EstadoClienteEnum", "Empleador", "Provincia", "Cliente",
+    "SexoEnum", "EstadoClienteEnum", "Empleador", "Provincia", "Cliente", "Nacionalidad",
     "SocioComercial", "AnticiposSinAplicar", "Relacion", "EstadoComisionEnum", "TasaYComision", "PoliticaCrediticia", "Comercializador",
     "OrigenCredito", "EstadoCredito", "TipoCredito", "Credito", "EstadoCuota", "EstadoCuotaCedida", "Cuota",
     "TipoOperacionCartera", "EstadoCartera", "Cartera", "OperacionCartera",

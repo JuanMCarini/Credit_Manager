@@ -62,6 +62,23 @@ class Empleador(Base):
     def __repr__(self):
         return f"<Empleador(cuit='{self.cuit}', razon_social='{self.razon_social}')>"
 
+class ListaGAFI(enum.Enum):
+    BLANCA = "Lista Blanca"
+    GRIS = "Lista Gris"
+    NEGRA = "Lista Negra"
+
+class Nacionalidad(Base):
+    __tablename__ = "nacionalidades"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    nombre = Column(String(100), unique=True, nullable=False)
+    lista_gafi = Column(Enum(ListaGAFI, values_callable=lambda obj: [e.value for e in obj]), nullable=False, default=ListaGAFI.BLANCA)
+
+    # Relationships
+    clientes = relationship("Cliente", back_populates="nacionalidad")
+
+    def __repr__(self):
+        return f"<Nacionalidad(id={self.id}, nombre='{self.nombre}')>"
 
 class Provincia(Base):
     """
@@ -101,7 +118,7 @@ class Cliente(Base):
     fecha_nacimiento = Column(Date, nullable=True)
     sexo = Column(Enum(SexoEnum), nullable=True)
     estado_civil = Column(String(50), nullable=True)
-    nacionalidad = Column(String(100), nullable=True)
+    id_nacionalidad = Column(Integer, ForeignKey("nacionalidades.id"), nullable=True)
 
     # Employment details / Status
     legajo = Column(String(50), nullable=True)
@@ -138,11 +155,13 @@ class Cliente(Base):
     remuneracion = Column(Numeric(15, 2), default=0.0)  # Monthly income for credit scoring
 
     # Compliance columns
+    sujeto_obligado = Column(Boolean, default=False)
     pep = Column(Boolean, default=False)
     repet = Column(Boolean, default=False)
     
     # Relationships
     creditos = relationship("Credito", back_populates="cliente")
+    nacionalidad = relationship("Nacionalidad", back_populates="clientes")
     provincia = relationship("Provincia", back_populates="clientes")
     empleador = relationship("Empleador", back_populates="empleados")
     referidos = relationship("Referido", back_populates="cliente", cascade="all, delete-orphan")

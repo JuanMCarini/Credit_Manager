@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy import cast, String, asc, desc
 
 from src.database import get_db, Provincia, Empleador, SocioComercial, TasaYComision, Relacion, Comercializador, Comision
+from src.database.models.creditos.clientes import Nacionalidad
 from src.api.schemas.auxiliares import TabulatorRequest
 
 router = APIRouter(prefix="/api/v1/auxiliares", tags=["Auxiliares"])
@@ -17,7 +18,8 @@ AUX_TABLES = {
     "tasas_y_comisiones": TasaYComision,
     "relaciones": Relacion,
     "comercializadores": Comercializador,
-    "comisiones_deuda": Comision
+    "comisiones_deuda": Comision,
+    "nacionalidades": Nacionalidad
 }
 
 def _parse_aux_payload(payload: dict) -> dict:

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import axiosClient from '../api/axiosClient';
 
 const useAppStore = create((set) => ({
+  nacionalidades: [],
   provincias: [],
   empleadores: [],
   socios: [],
@@ -24,7 +25,7 @@ const useAppStore = create((set) => ({
   fetchAuxiliares: async () => {
     set({ isLoadingAuxiliares: true, error: null });
     try {
-      const [provRes, empRes, sociosRes, operadoresRes, tasasRes, relacionesRes, comerRes, bancosRes, cuentasRes, conceptosRes, subRes, comDeudaRes] = await Promise.all([
+      const [provRes, empRes, sociosRes, operadoresRes, tasasRes, relacionesRes, comerRes, bancosRes, cuentasRes, conceptosRes, subRes, comDeudaRes, nacRes] = await Promise.all([
         axiosClient.get('/api/v1/auxiliares/provincias').catch(() => ({ data: [] })),
         axiosClient.get('/api/v1/auxiliares/empleadores').catch(() => ({ data: [] })),
         axiosClient.get('/api/v1/auxiliares/socios').catch(() => ({ data: [] })),
@@ -36,7 +37,8 @@ const useAppStore = create((set) => ({
         axiosClient.get('/api/finanzas/cuentas').catch(() => ({ data: [] })),
         axiosClient.get('/api/finanzas/conceptos').catch(() => ({ data: [] })),
         axiosClient.get('/api/finanzas/clasificaciones').catch(() => ({ data: [] })),
-        axiosClient.get('/api/v1/auxiliares/comisiones_deuda').catch(() => ({ data: [] }))
+        axiosClient.get('/api/v1/auxiliares/comisiones_deuda').catch(() => ({ data: [] })),
+        axiosClient.get('/api/v1/auxiliares/nacionalidades').catch(() => ({ data: [] }))
       ]);
 
       set({
@@ -52,6 +54,7 @@ const useAppStore = create((set) => ({
         conceptos: conceptosRes.data,
         clasificaciones: subRes.data,
         comisionesDeuda: comDeudaRes.data,
+        nacionalidades: nacRes.data,
         isLoadingAuxiliares: false,
       });
     } catch (error) {

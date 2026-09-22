@@ -73,7 +73,8 @@ def get_clientes_list(
 ):
     query = db.query(Cliente).options(
         joinedload(Cliente.provincia), 
-        joinedload(Cliente.empleador)
+        joinedload(Cliente.empleador),
+        joinedload(Cliente.nacionalidad)
     )
 
     if cuil:
@@ -111,12 +112,13 @@ def get_clientes_list(
             "Nombre": c.nombre or "-",
             "Provincia": prov,
             "Empleador": emp,
+            "Sujeto Obligado": "Sí" if c.sujeto_obligado else "No",
             "PEP": "Sí" if c.pep else "No",
             "REPET": "Sí" if c.repet else "No",
             "Fecha Nacimiento": c.fecha_nacimiento.strftime("%Y-%m-%d") if c.fecha_nacimiento else "-",
             "Sexo": c.sexo.value if hasattr(c.sexo, "value") else (str(c.sexo) if c.sexo else "-"),
             "Estado Civil": c.estado_civil or "-",
-            "Nacionalidad": c.nacionalidad or "-",
+            "Nacionalidad": c.nacionalidad.nombre if c.nacionalidad else "-",
             "Legajo": c.legajo or "-",
             "Estado": c.estado.value if hasattr(c.estado, "value") else (str(c.estado) if c.estado else "-"),
             "Fecha Estado": c.fecha_estado.strftime("%Y-%m-%d") if c.fecha_estado else "-",
@@ -164,7 +166,7 @@ def get_cliente(cuil: str, db: Session = Depends(get_db)):
         "fecha_nacimiento": cliente.fecha_nacimiento.strftime("%Y-%m-%d") if cliente.fecha_nacimiento else None,
         "sexo": cliente.sexo.value if cliente.sexo else None,
         "estado_civil": cliente.estado_civil,
-        "nacionalidad": cliente.nacionalidad,
+        "id_nacionalidad": cliente.id_nacionalidad,
         "legajo": cliente.legajo,
         "estado": cliente.estado.value if cliente.estado else None,
         "cbu": cliente.cbu,
@@ -182,6 +184,7 @@ def get_cliente(cuil: str, db: Session = Depends(get_db)):
         "remuneracion": float(cliente.remuneracion or 0.0),
         "empleador_id": cliente.empleador_id,
         "cargo": cliente.cargo,
+        "sujeto_obligado": cliente.sujeto_obligado,
         "pep": cliente.pep,
         "repet": cliente.repet,
         "referidos": [

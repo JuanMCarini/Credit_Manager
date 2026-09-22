@@ -394,6 +394,7 @@ const DashboardClientesPage = () => {
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-secondary)' }}>Estado Civil:</span> <span>{clientData["Estado Civil"] || '-'}</span></div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-secondary)' }}>Género:</span> <span>{clientData.Sexo || '-'}</span></div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-secondary)' }}>Nacionalidad:</span> <span>{clientData.Nacionalidad || '-'}</span></div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-secondary)' }}>Sujeto Obligado:</span> <span>{clientData['Sujeto Obligado'] || 'No'}</span></div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-secondary)' }}>PEP:</span> <span>{clientData.PEP || 'No'}</span></div>
                 </div>
               </div>
