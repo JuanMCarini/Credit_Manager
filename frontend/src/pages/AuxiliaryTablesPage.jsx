@@ -4,7 +4,7 @@ import axiosClient from '../api/axiosClient';
 import ExportExcelButton from '../components/ExportExcelButton';
 
 const AuxiliaryTablesPage = () => {
-  const { nacionalidades, provincias, empleadores, socios, operadores, tasasYComisiones, relaciones, comercializadores, bancos, cuentas, conceptos, clasificaciones, comisionesDeuda, fetchAuxiliares } = useAppStore();
+  const { nacionalidades, provincias, empleadores, socios, operadores, tasasYComisiones, relaciones, comercializadores, bancos, cuentas, conceptos, clasificaciones, comisionesDeuda, factoresRiesgo, multiplicadoresRiesgo, fetchAuxiliares } = useAppStore();
 
   const [activeTable, setActiveTable] = useState('socios');
   const [isCreating, setIsCreating] = useState(false);
@@ -60,7 +60,9 @@ const AuxiliaryTablesPage = () => {
     cuentas: { name: 'Cuentas Bancarias', data: cuentas, endpoint: 'cuentas', basePath: '/api/finanzas', schema: ['id', 'nombre', 'banco_id', 'nro', 'cbu', 'alias', 'tipo_cuenta', 'moneda'] },
     conceptos: { name: 'Conceptos', data: conceptos, endpoint: 'conceptos', basePath: '/api/finanzas', schema: ['id', 'name', 'clasificacion_id', 'tipo_movimiento', 'descripcion'] },
     clasificaciones: { name: 'Clasificaciones de Conceptos', data: clasificaciones, endpoint: 'clasificaciones', basePath: '/api/finanzas', schema: ['id', 'name', 'descripcion'] },
-    comisionesDeuda: { name: 'Comisiones Deuda', data: comisionesDeuda, endpoint: 'comisiones_deuda', schema: ['id', 'fecha', 'id_socio_comercial', 'porcentaje'] }
+    comisionesDeuda: { name: 'Comisiones Deuda', data: comisionesDeuda, endpoint: 'comisiones_deuda', schema: ['id', 'fecha', 'id_socio_comercial', 'porcentaje'] },
+    factoresRiesgo: { name: 'Factores de Riesgo', data: factoresRiesgo, endpoint: 'factores_riesgo', schema: ['id', 'codigo', 'detalle', 'peso'] },
+    multiplicadoresRiesgo: { name: 'Multiplicadores de Riesgo', data: multiplicadoresRiesgo, endpoint: 'multiplicadores_riesgo', schema: ['id', 'id_riesgo', 'codigo', 'detalle', 'multiplicador', 'variable'] }
   };
 
   const currentTableConfig = tablesMap[activeTable];
@@ -207,6 +209,10 @@ const AuxiliaryTablesPage = () => {
     if (['socio_comercial_id', 'socio_originador_id', 'socio_intermediario_id', 'gasto_1_socio_id', 'gasto_2_socio_id', 'id_socio_comercial'].includes(col)) {
       const socio = socios.find(s => s.id === value);
       return socio ? socio.razon_social : value;
+    }
+    if (col === 'id_riesgo') {
+      const factor = factoresRiesgo.find(f => f.id === value);
+      return factor ? factor.detalle : value;
     }
     if (col === 'id_provincia' || col === 'provincia_id') {
       const prov = provincias.find(p => p.id === value);
@@ -395,6 +401,11 @@ const AuxiliaryTablesPage = () => {
                       ))}
                       <td>
                         <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
+                          {activeTable === 'factoresRiesgo' && (
+                            <button className="btn-secondary" style={{ padding: '4px 8px', fontSize: '14px' }} onClick={() => { setActiveTable('multiplicadoresRiesgo'); setColumnFilters({ id_riesgo: row.detalle }); }} title="Ver Multiplicadores">
+                              📊
+                            </button>
+                          )}
                           {activeTable === 'socios' && (
                             <button className="btn-secondary" style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--success-color)' }} onClick={() => { setAdjustingAdvance(row); setAdvanceAmount(''); setAdvanceDate(''); }} title="Ajustar Anticipo">
                               💲

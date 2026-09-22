@@ -15,6 +15,8 @@ const useAppStore = create((set) => ({
   conceptos: [],
   clasificaciones: [],
   comisionesDeuda: [],
+  factoresRiesgo: [],
+  multiplicadoresRiesgo: [],
   
   isLoadingAuxiliares: false,
   error: null,
@@ -25,7 +27,7 @@ const useAppStore = create((set) => ({
   fetchAuxiliares: async () => {
     set({ isLoadingAuxiliares: true, error: null });
     try {
-      const [provRes, empRes, sociosRes, operadoresRes, tasasRes, relacionesRes, comerRes, bancosRes, cuentasRes, conceptosRes, subRes, comDeudaRes, nacRes] = await Promise.all([
+      const [provRes, empRes, sociosRes, operadoresRes, tasasRes, relacionesRes, comerRes, bancosRes, cuentasRes, conceptosRes, subRes, comDeudaRes, nacRes, factoresRes, multsRes] = await Promise.all([
         axiosClient.get('/api/v1/auxiliares/provincias').catch(() => ({ data: [] })),
         axiosClient.get('/api/v1/auxiliares/empleadores').catch(() => ({ data: [] })),
         axiosClient.get('/api/v1/auxiliares/socios').catch(() => ({ data: [] })),
@@ -38,7 +40,9 @@ const useAppStore = create((set) => ({
         axiosClient.get('/api/finanzas/conceptos').catch(() => ({ data: [] })),
         axiosClient.get('/api/finanzas/clasificaciones').catch(() => ({ data: [] })),
         axiosClient.get('/api/v1/auxiliares/comisiones_deuda').catch(() => ({ data: [] })),
-        axiosClient.get('/api/v1/auxiliares/nacionalidades').catch(() => ({ data: [] }))
+        axiosClient.get('/api/v1/auxiliares/nacionalidades').catch(() => ({ data: [] })),
+        axiosClient.get('/api/v1/auxiliares/factores_riesgo').catch(() => ({ data: [] })),
+        axiosClient.get('/api/v1/auxiliares/multiplicadores_riesgo').catch(() => ({ data: [] }))
       ]);
 
       set({
@@ -55,6 +59,8 @@ const useAppStore = create((set) => ({
         clasificaciones: subRes.data,
         comisionesDeuda: comDeudaRes.data,
         nacionalidades: nacRes.data,
+        factoresRiesgo: factoresRes.data,
+        multiplicadoresRiesgo: multsRes.data,
         isLoadingAuxiliares: false,
       });
     } catch (error) {
