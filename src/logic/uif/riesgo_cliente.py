@@ -199,7 +199,9 @@ EVALUADORES = {
 def calculo(
     cuil: str,
     config_personalizada: dict = None,
-    save: bool = False) -> tuple[pd.DataFrame, Riesgo]:
+    save: bool = False,
+    update_at: date = None
+    ) -> tuple[pd.DataFrame, Riesgo]:
     db = SessionLocal()
     
     base_config = _get_config_from_db(db)
@@ -270,6 +272,8 @@ def calculo(
         riesgo_final = Riesgo.ALTO
     
     if save:
+        if update_at is None:
+            update_at = date.today()
         for i, row in df.iterrows():
             registro = RiesgoCliente(
                 cuil_cliente=cuil,
@@ -277,7 +281,7 @@ def calculo(
                 peso=row["Peso Base"],
                 multiplicador=row["Multiplicador"],
                 puntaje=row["Puntaje"],
-                update_at=date.today()
+                update_at=update_at
             )
             db.add(registro)
         db.commit()

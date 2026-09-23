@@ -30,6 +30,9 @@ const CreditOriginationPage = () => {
   const [bcraData, setBcraData] = useState(null);
   const [loadingBcra, setLoadingBcra] = useState(false);
 
+  const [riesgoData, setRiesgoData] = useState(null);
+  const [loadingRiesgo, setLoadingRiesgo] = useState(false);
+
   const [ccModalData, setCcModalData] = useState(null);
   
   const [computedCapitalBruto, setComputedCapitalBruto] = useState(0);
@@ -54,6 +57,19 @@ const CreditOriginationPage = () => {
       setBcraData({ Estado: "Error de Conexión", Error: error.message });
     } finally {
       setLoadingBcra(false);
+    }
+  };
+
+  const fetchRiesgoData = async (cuil) => {
+    setLoadingRiesgo(true);
+    setRiesgoData(null);
+    try {
+      const res = await axiosClient.get(`/api/v1/clientes/${cuil}/riesgo`);
+      setRiesgoData(res.data);
+    } catch (error) {
+      console.error("Error fetching Riesgo data", error);
+    } finally {
+      setLoadingRiesgo(false);
     }
   };
 
@@ -124,6 +140,7 @@ const CreditOriginationPage = () => {
       }));
       
       fetchBcraData(cleanData.cuil || cleanData.documento);
+      fetchRiesgoData(cleanData.cuil || cleanData.documento);
       setStep(3);
     } catch (error) {
       const errorMsg = error.response?.data?.detail || error.message || "Error al guardar el cliente.";
@@ -355,70 +372,140 @@ const CreditOriginationPage = () => {
               <button className="btn-secondary" onClick={() => setStep(2)}>Volver a los datos</button>
             </div>
             
-            {/* BCRA Block */}
-            <div style={{ marginBottom: '24px', padding: '16px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-              <h4 style={{ margin: '0 0 12px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                🏦 Situación BCRA (Central de Deudores)
-              </h4>
-              {loadingBcra ? (
-                <div style={{ fontSize: '14px', color: 'var(--text-color)' }}>Consultando situación crediticia... ⏳</div>
-              ) : bcraData ? (
-                <div>
-                  <div style={{ display: 'flex', gap: '12px', marginBottom: '12px', flexWrap: 'wrap' }}>
-                    <span style={{ 
-                      padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold',
-                      background: bcraData.Estado === 'Sin Deudas' || bcraData.Estado === 'Sin Deudas / Vacio' ? 'rgba(0, 200, 83, 0.2)' : 'rgba(255, 61, 0, 0.2)',
-                      color: bcraData.Estado === 'Sin Deudas' || bcraData.Estado === 'Sin Deudas / Vacio' ? '#00e676' : '#ff5252' 
-                    }}>
-                      {bcraData.Estado}
-                    </span>
-                    {bcraData.Datos_API?.results?.denominacion && (
-                      <span style={{ fontSize: '13px', alignSelf: 'center' }}>
-                        Titular: <strong>{bcraData.Datos_API.results.denominacion}</strong>
+            {/* Context Blocks (BCRA & Riesgo) */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '20px', marginBottom: '24px' }}>
+              
+              {/* BCRA Block */}
+              <div style={{ padding: '16px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                <h4 style={{ margin: '0 0 12px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  🏦 Situación BCRA (Central de Deudores)
+                </h4>
+                {loadingBcra ? (
+                  <div style={{ fontSize: '14px', color: 'var(--text-color)' }}>Consultando situación crediticia... ⏳</div>
+                ) : bcraData ? (
+                  <div>
+                    <div style={{ display: 'flex', gap: '12px', marginBottom: '12px', flexWrap: 'wrap' }}>
+                      <span style={{ 
+                        padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold',
+                        background: bcraData.Estado === 'Sin Deudas' || bcraData.Estado === 'Sin Deudas / Vacio' ? 'rgba(0, 200, 83, 0.2)' : 'rgba(255, 61, 0, 0.2)',
+                        color: bcraData.Estado === 'Sin Deudas' || bcraData.Estado === 'Sin Deudas / Vacio' ? '#00e676' : '#ff5252' 
+                      }}>
+                        {bcraData.Estado}
                       </span>
+                      {bcraData.Datos_API?.results?.denominacion && (
+                        <span style={{ fontSize: '13px', alignSelf: 'center' }}>
+                          Titular: <strong>{bcraData.Datos_API.results.denominacion}</strong>
+                        </span>
+                      )}
+                    </div>
+                    
+                    {bcraData.Datos_API?.results?.periodos && bcraData.Datos_API.results.periodos.length > 0 && (
+                      <div className="table-responsive" style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                        <table className="data-table" style={{ fontSize: '12px' }}>
+                          <thead>
+                            <tr>
+                              <th>Período</th>
+                              <th>Entidad</th>
+                              <th>Situación</th>
+                              <th>Monto</th>
+                              <th>Días Atraso</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {bcraData.Datos_API.results.periodos.flatMap(p => 
+                              p.entidades.map((ent, idx) => (
+                                <tr key={`${p.periodo}-${idx}`}>
+                                  <td>{p.periodo}</td>
+                                  <td>{ent.entidad}</td>
+                                  <td>
+                                    <span style={{
+                                      padding: '2px 6px', borderRadius: '4px',
+                                      background: ent.situacion === 1 ? 'rgba(0, 200, 83, 0.2)' : 'rgba(255, 61, 0, 0.2)',
+                                      color: ent.situacion === 1 ? '#00e676' : '#ff5252'
+                                    }}>
+                                      {ent.situacion}
+                                    </span>
+                                  </td>
+                                  <td>{formatCurrency(ent.monto * 1000)}</td>
+                                  <td>{ent.diasAtrasoPago}</td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
                     )}
                   </div>
-                  
-                  {bcraData.Datos_API?.results?.periodos && bcraData.Datos_API.results.periodos.length > 0 && (
-                    <div className="table-responsive" style={{ maxHeight: '200px', overflowY: 'auto' }}>
-                      <table className="data-table" style={{ fontSize: '12px' }}>
-                        <thead>
-                          <tr>
-                            <th>Período</th>
-                            <th>Entidad</th>
-                            <th>Situación</th>
-                            <th>Monto</th>
-                            <th>Días Atraso</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {bcraData.Datos_API.results.periodos.flatMap(p => 
-                            p.entidades.map((ent, idx) => (
-                              <tr key={`${p.periodo}-${idx}`}>
-                                <td>{p.periodo}</td>
-                                <td>{ent.entidad}</td>
-                                <td>
-                                  <span style={{
-                                    padding: '2px 6px', borderRadius: '4px',
-                                    background: ent.situacion === 1 ? 'rgba(0, 200, 83, 0.2)' : 'rgba(255, 61, 0, 0.2)',
-                                    color: ent.situacion === 1 ? '#00e676' : '#ff5252'
-                                  }}>
-                                    {ent.situacion}
-                                  </span>
-                                </td>
-                                <td>{formatCurrency(ent.monto * 1000)}</td>
-                                <td>{ent.diasAtrasoPago}</td>
-                              </tr>
-                            ))
-                          )}
-                        </tbody>
-                      </table>
+                ) : (
+                  <div style={{ fontSize: '14px', color: 'var(--text-color)' }}>No se pudo obtener información del BCRA.</div>
+                )}
+              </div>
+
+              {/* Riesgo Block */}
+              <div style={{ padding: '16px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                <h4 style={{ margin: '0 0 12px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  📋 Perfil de Riesgo UIF
+                </h4>
+                {loadingRiesgo ? (
+                  <div style={{ fontSize: '14px', color: 'var(--text-color)' }}>Calculando perfil de riesgo... ⏳</div>
+                ) : riesgoData ? (
+                  <div>
+                    <div style={{ display: 'flex', gap: '12px', marginBottom: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+                      <span style={{ fontSize: '13px', alignSelf: 'center' }}>Puntaje Total: <strong>{riesgoData.puntaje_total}</strong></span>
+                      <span style={{ 
+                        padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold',
+                        background: riesgoData.nivel_riesgo.toUpperCase() === 'BAJO' ? 'rgba(16, 185, 129, 0.2)' : 
+                                    riesgoData.nivel_riesgo.toUpperCase() === 'MEDIO' ? 'rgba(245, 158, 11, 0.2)' : 
+                                    riesgoData.nivel_riesgo.toUpperCase() === 'ALTO' ? 'rgba(244, 63, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                        color: riesgoData.nivel_riesgo.toUpperCase() === 'BAJO' ? '#10b981' : 
+                               riesgoData.nivel_riesgo.toUpperCase() === 'MEDIO' ? '#f59e0b' : 
+                               riesgoData.nivel_riesgo.toUpperCase() === 'ALTO' ? '#f43f5e' : '#ef4444'
+                      }}>
+                        RIESGO {riesgoData.nivel_riesgo}
+                      </span>
                     </div>
-                  )}
-                </div>
-              ) : (
-                <div style={{ fontSize: '14px', color: 'var(--text-color)' }}>No se pudo obtener información del BCRA.</div>
-              )}
+
+                    {riesgoData.detalles && riesgoData.detalles.length > 0 && (
+                      <div className="table-responsive" style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                        <table className="data-table" style={{ fontSize: '12px' }}>
+                          <thead>
+                            <tr>
+                              <th>Factor</th>
+                              <th style={{ textAlign: 'center' }}>Peso Base</th>
+                              <th style={{ textAlign: 'center' }}>Mult.</th>
+                              <th style={{ textAlign: 'right' }}>Puntaje</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {riesgoData.detalles.map((d, i) => (
+                              <tr key={i}>
+                                <td>{d.Factor}</td>
+                                <td style={{ textAlign: 'center' }}>
+                                  {typeof d["Peso Base"] === 'number' ? `${(d["Peso Base"] * 100).toFixed(0)}%` : d["Peso Base"]}
+                                </td>
+                                <td style={{ textAlign: 'center' }}>
+                                  {d.Multiplicador ? (
+                                    <span style={{ 
+                                      padding: '2px 6px', borderRadius: '4px', fontSize: '11px',
+                                      background: d.Multiplicador > 1 ? 'rgba(244, 63, 94, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                                      color: d.Multiplicador > 1 ? '#f43f5e' : '#10b981'
+                                    }}>
+                                      x{d.Multiplicador}
+                                    </span>
+                                  ) : '-'}
+                                </td>
+                                <td style={{ textAlign: 'right', fontWeight: 'bold', color: 'var(--accent-primary)' }}>{d.Puntaje}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: '14px', color: 'var(--text-color)' }}>No se pudo obtener el perfil de riesgo.</div>
+                )}
+              </div>
             </div>
 
             <form onSubmit={handleSimulateCredit}>

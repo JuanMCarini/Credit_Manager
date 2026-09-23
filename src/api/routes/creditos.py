@@ -161,6 +161,13 @@ def create_credito(
             id_externo=credito_data.id_externo,
             transferencias_data=credito_data.transferencias
         )
+        # Calcular y guardar el riesgo UIF al momento de la originación
+        try:
+            from src.logic.uif.riesgo_cliente import calculo
+            calculo(cuil=credito_data.cliente_cuil, save=True, update_at=credito_data.fecha_emision)
+        except Exception as e:
+            logger.error(f"Error al calcular el riesgo UIF (alta crédito): {str(e)}")
+
         return {
             "status": "success",
             "message": "Crédito originado y cuotas generadas exitosamente.",
