@@ -44,3 +44,16 @@ class MultiplicadoresRiesgo(Base):
         "FactoRiesgo",
         back_populates="multiplicadores",
     )
+
+class RiesgoCliente(Base):
+    __tablename__ = "riesgo_clientes"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    cuil_cliente = Column(String(11), ForeignKey("clientes.cuil"), nullable=False)
+    factor = Column(String(255), nullable=False)
+    peso = Column(Numeric(10, 2), nullable=False)
+    multiplicador = Column(Numeric(10, 2), nullable=False)
+    puntaje = Column(Numeric(10, 2), nullable=False)
+    update_at = Column(Date, nullable=False)
+
+    cliente = relationship("Cliente", foreign_keys=[cuil_cliente])

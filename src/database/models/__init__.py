@@ -1,4 +1,5 @@
 from .creditos.clientes import SexoEnum, EstadoClienteEnum, Empleador, Provincia, Cliente, Nacionalidad
+from .creditos.uif import RiesgoCliente
 from .deuda.series import Serie, Comision, ComisionesSerie
 from .socios import SocioComercial, AnticiposSinAplicar, Relacion, EstadoComisionEnum, TasaYComision, PoliticaCrediticia, Comercializador
 from .creditos.creditos import OrigenCredito, EstadoCredito, TipoCredito, Credito, EstadoCuota, EstadoCuotaCedida, Cuota
@@ -29,5 +30,6 @@ __all__ = [
     "Banco", "Cuenta", "Concepto", "Clasificacion", "Movimiento", "CategoriaMovimiento", "EstadoComprobante",
     "Proveedor", "Comprobante", "Plan", "SistemaMatematico", "Denominador", "PosicionIva", "EstadoPosicionIva", "PosicionIibb", "EstadoPosicionIibb",
     "EstadoCheque", "CalificacionEmisor", "OperadorCheque", "Cheque", "TipoOperacionCheque", "OperacionCheque",
-    "ModuloSistema", "Serie", "Comision", "ComisionesSerie"
+    "ModuloSistema", "Serie", "Comision", "ComisionesSerie",
+    "RiesgoCliente"
 ]

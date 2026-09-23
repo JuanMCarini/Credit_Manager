@@ -2,12 +2,13 @@ import re
 import copy
 import pandas as pd
 
-from src.database import SocioComercial
+
 from enum import Enum
+from datetime import date
 
 from src.database import SessionLocal
-from src.database.models import Cliente, Empleador, Nacionalidad
-from src.database.models.creditos.uif import FactoRiesgo, MultiplicadoresRiesgo
+from src.database.models import Cliente, Empleador, Nacionalidad, SocioComercial
+from src.database.models.creditos.uif import FactoRiesgo, MultiplicadoresRiesgo, RiesgoCliente
 from src.services.bcra import consultar_cuit_api, procesar_respuesta_bcra
 
 class Riesgo(Enum):
@@ -195,7 +196,10 @@ EVALUADORES = {
     "bcra": _eval_bcra,
 }
 
-def calculo(cuil: str, config_personalizada: dict = None) -> tuple[pd.DataFrame, Riesgo]:
+def calculo(
+    cuil: str,
+    config_personalizada: dict = None,
+    save: bool = False) -> tuple[pd.DataFrame, Riesgo]:
     db = SessionLocal()
     
     base_config = _get_config_from_db(db)
@@ -232,7 +236,6 @@ def calculo(cuil: str, config_personalizada: dict = None) -> tuple[pd.DataFrame,
         return df, Riesgo.ALTO
 
     if datos["pep"] and datos["nacionalidad"] != "ARGENTINA":
-        db.close()
         df = pd.DataFrame([{"Factor": "Bloqueo por PEP Extranjero", "Peso Base": 99.0, "Multiplicador": 1, "Puntaje": 99.0}])
         return df, Riesgo.ALTO
 
@@ -250,7 +253,7 @@ def calculo(cuil: str, config_personalizada: dict = None) -> tuple[pd.DataFrame,
             "Factor": factor_nombre,
             "Peso Base": peso,
             "Multiplicador": mult,
-            "Puntaje": peso * mult
+            "Puntaje": round(peso * mult, 2)
         })
 
     db.close()
@@ -265,6 +268,21 @@ def calculo(cuil: str, config_personalizada: dict = None) -> tuple[pd.DataFrame,
         riesgo_final = Riesgo.MEDIO
     else:
         riesgo_final = Riesgo.ALTO
+    
+    if save:
+        for i, row in df.iterrows():
+            registro = RiesgoCliente(
+                cuil_cliente=cuil,
+                factor=row["Factor"],
+                peso=row["Peso Base"],
+                multiplicador=row["Multiplicador"],
+                puntaje=row["Puntaje"],
+                update_at=date.today()
+            )
+            db.add(registro)
+        db.commit()
+
+    db.close()
 
     df.loc[len(df)] = {"Factor": f"PUNTAJE TOTAL (Riesgo {riesgo_final.value})", "Peso Base": df["Peso Base"].sum(), "Multiplicador": "", "Puntaje": puntaje_total}
 
