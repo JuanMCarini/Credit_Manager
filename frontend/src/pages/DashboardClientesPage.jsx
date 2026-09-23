@@ -473,6 +473,16 @@ const DashboardClientesPage = () => {
                       </div>
                     </div>
                     
+                    {riesgoData.advertencias && riesgoData.advertencias.length > 0 && (
+                      <div style={{ marginBottom: '16px', padding: '12px', borderRadius: '6px', background: 'rgba(245, 158, 11, 0.1)', borderLeft: '4px solid #f59e0b' }}>
+                        {riesgoData.advertencias.map((adv, idx) => (
+                          <div key={idx} style={{ fontSize: '13px', color: '#f59e0b', marginBottom: idx < riesgoData.advertencias.length - 1 ? '6px' : '0' }}>
+                            ⚠️ {adv}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
                     <div className="table-responsive" style={{ maxHeight: '250px', overflowY: 'auto' }}>
                       <table className="data-table" style={{ fontSize: '13px' }}>
                         <thead>

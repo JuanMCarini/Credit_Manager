@@ -220,7 +220,7 @@ def get_cliente_bcra(cuil: str, db: Session = Depends(get_db)):
 def get_cliente_riesgo(cuil: str, db: Session = Depends(get_db)):
     from src.logic.uif.riesgo_cliente import calculo
     try:
-        df, riesgo_enum = calculo(cuil, save=False)
+        df, riesgo_enum, advertencias = calculo(cuil, save=False)
         puntaje_total = 0.0
         if not df.empty:
             puntaje_total = round(df.iloc[-1]["Puntaje"], 2)
@@ -230,7 +230,8 @@ def get_cliente_riesgo(cuil: str, db: Session = Depends(get_db)):
         return {
             "nivel_riesgo": riesgo_enum.value if hasattr(riesgo_enum, "value") else str(riesgo_enum),
             "puntaje_total": puntaje_total,
-            "detalles": df.to_dict(orient="records")
+            "detalles": df.to_dict(orient="records"),
+            "advertencias": advertencias
         }
     except Exception as e:
         import traceback

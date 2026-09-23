@@ -465,6 +465,16 @@ const CreditOriginationPage = () => {
                       </span>
                     </div>
 
+                    {riesgoData.advertencias && riesgoData.advertencias.length > 0 && (
+                      <div style={{ marginBottom: '12px', padding: '8px', borderRadius: '4px', background: 'rgba(245, 158, 11, 0.1)', borderLeft: '3px solid #f59e0b' }}>
+                        {riesgoData.advertencias.map((adv, idx) => (
+                          <div key={idx} style={{ fontSize: '12px', color: '#f59e0b', marginBottom: idx < riesgoData.advertencias.length - 1 ? '4px' : '0' }}>
+                            ⚠️ {adv}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
                     {riesgoData.detalles && riesgoData.detalles.length > 0 && (
                       <div className="table-responsive" style={{ maxHeight: '200px', overflowY: 'auto' }}>
                         <table className="data-table" style={{ fontSize: '12px' }}>

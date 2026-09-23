@@ -201,7 +201,7 @@ def calculo(
     config_personalizada: dict = None,
     save: bool = False,
     update_at: date = None
-    ) -> tuple[pd.DataFrame, Riesgo]:
+    ) -> tuple[pd.DataFrame, Riesgo, list]:
     db = SessionLocal()
     
     base_config = _get_config_from_db(db)
@@ -225,6 +225,16 @@ def calculo(
         datos["codigo_descuento"] = codigo_descuento
         datos["lista_gafi"] = lista_gafi
         datos["_cuil"] = cuil
+
+        nulos = [k for k, v in datos.items() if v is None]
+        advertencias = []
+        if nulos:
+            import logging
+            logger = logging.getLogger(__name__)
+            mensaje_adv = f"Faltan datos (nulos) para el cálculo de riesgo del CUIL {cuil}: {', '.join(nulos)}"
+            logger.warning(f"Advertencia: {mensaje_adv}")
+            advertencias.append(mensaje_adv)
+
     else:
         db.close()
         raise ValueError("Cliente no encontrado")
@@ -235,11 +245,11 @@ def calculo(
     if datos["repet"]:
         db.close()
         df = pd.DataFrame([{"Factor": "Bloqueo por REPET", "Peso Base": 99.0, "Multiplicador": 1, "Puntaje": 99.0}])
-        return df, Riesgo.ALTO
+        return df, Riesgo.ALTO, advertencias
 
     if datos["pep"] and datos["nacionalidad"] != "ARGENTINA":
         df = pd.DataFrame([{"Factor": "Bloqueo por PEP Extranjero", "Peso Base": 99.0, "Multiplicador": 1, "Puntaje": 99.0}])
-        return df, Riesgo.ALTO
+        return df, Riesgo.ALTO, advertencias
 
     # Evaluacion dinámica
     for factor_code, peso in pesos.items():
@@ -290,4 +300,4 @@ def calculo(
 
     df.loc[len(df)] = {"Factor": f"PUNTAJE TOTAL (Riesgo {riesgo_final.value})", "Peso Base": df["Peso Base"].sum(), "Multiplicador": "", "Puntaje": puntaje_total}
 
-    return df, riesgo_final
+    return df, riesgo_final, advertencias
