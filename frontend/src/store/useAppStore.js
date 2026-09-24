@@ -17,6 +17,7 @@ const useAppStore = create((set) => ({
   comisionesDeuda: [],
   factoresRiesgo: [],
   multiplicadoresRiesgo: [],
+  reglasPerfilesTransaccionales: [],
   
   isLoadingAuxiliares: false,
   error: null,
@@ -27,7 +28,7 @@ const useAppStore = create((set) => ({
   fetchAuxiliares: async () => {
     set({ isLoadingAuxiliares: true, error: null });
     try {
-      const [provRes, empRes, sociosRes, operadoresRes, tasasRes, relacionesRes, comerRes, bancosRes, cuentasRes, conceptosRes, subRes, comDeudaRes, nacRes, factoresRes, multsRes] = await Promise.all([
+      const [provRes, empRes, sociosRes, operadoresRes, tasasRes, relacionesRes, comerRes, bancosRes, cuentasRes, conceptosRes, subRes, comDeudaRes, nacRes, factoresRes, multsRes, reglasRes] = await Promise.all([
         axiosClient.get('/api/v1/auxiliares/provincias').catch(() => ({ data: [] })),
         axiosClient.get('/api/v1/auxiliares/empleadores').catch(() => ({ data: [] })),
         axiosClient.get('/api/v1/auxiliares/socios').catch(() => ({ data: [] })),
@@ -42,7 +43,8 @@ const useAppStore = create((set) => ({
         axiosClient.get('/api/v1/auxiliares/comisiones_deuda').catch(() => ({ data: [] })),
         axiosClient.get('/api/v1/auxiliares/nacionalidades').catch(() => ({ data: [] })),
         axiosClient.get('/api/v1/auxiliares/factores_riesgo').catch(() => ({ data: [] })),
-        axiosClient.get('/api/v1/auxiliares/multiplicadores_riesgo').catch(() => ({ data: [] }))
+        axiosClient.get('/api/v1/auxiliares/multiplicadores_riesgo').catch(() => ({ data: [] })),
+        axiosClient.get('/api/v1/auxiliares/reglas_perfiles_transaccionales').catch(() => ({ data: [] }))
       ]);
 
       set({
@@ -61,6 +63,7 @@ const useAppStore = create((set) => ({
         nacionalidades: nacRes.data,
         factoresRiesgo: factoresRes.data,
         multiplicadoresRiesgo: multsRes.data,
+        reglasPerfilesTransaccionales: reglasRes.data,
         isLoadingAuxiliares: false,
       });
     } catch (error) {

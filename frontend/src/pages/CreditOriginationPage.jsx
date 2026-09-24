@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
 import useAppStore from '../store/useAppStore';
 import ClientForm from '../components/ClientForm';
 import ClientCCModal from '../components/ClientCCModal';
 import TransfersForm from '../components/TransfersForm';
+import PerfilTransaccionalForm from '../components/PerfilTransaccionalForm';
 import CurrencyInput from '../components/CurrencyInput';
 
 const formatCurrency = (value) => {
@@ -13,7 +14,7 @@ const formatCurrency = (value) => {
 const CreditOriginationPage = () => {
   const { empleadores, socios, tasasYComisiones } = useAppStore();
   
-  const [step, setStep] = useState(1); // 1: Search, 2: ClientForm, 3: CreditForm
+  const [step, setStep] = useState(1); // 1: Search, 2: ClientForm, 3: PerfilTransaccional, 4: CreditForm, 5: Simulation
   const [searchCuil, setSearchCuil] = useState('');
   const [cliente, setCliente] = useState(null);
   const [isClientNew, setIsClientNew] = useState(false);
@@ -36,6 +37,9 @@ const CreditOriginationPage = () => {
   const [ccModalData, setCcModalData] = useState(null);
   
   const [computedCapitalBruto, setComputedCapitalBruto] = useState(0);
+
+  const [cuotaAfectableData, setCuotaAfectableData] = useState(null);
+  const [loadingCuotaAfectable, setLoadingCuotaAfectable] = useState(false);
 
   const [creditoForm, setCreditoForm] = useState({
     capital_neto: '',
@@ -72,6 +76,29 @@ const CreditOriginationPage = () => {
       setLoadingRiesgo(false);
     }
   };
+
+  useEffect(() => {
+    const fetchCuota = async () => {
+      if (!creditoForm.socio_id || !cliente) {
+        setCuotaAfectableData(null);
+        return;
+      }
+      setLoadingCuotaAfectable(true);
+      try {
+        const res = await axiosClient.get(`/api/v1/clientes/${cliente.cuil}/cuota_afectable?socio_id=${creditoForm.socio_id}`);
+        setCuotaAfectableData(res.data);
+      } catch (error) {
+        console.error("Error fetching cuota afectable", error);
+        setCuotaAfectableData({ error: 'Error al calcular cuota afectable' });
+      } finally {
+        setLoadingCuotaAfectable(false);
+      }
+    };
+    
+    if (step === 4) {
+      fetchCuota();
+    }
+  }, [creditoForm.socio_id, cliente, step]);
 
   const handleSearch = async (e) => {
     e.preventDefault();
@@ -223,7 +250,7 @@ const CreditOriginationPage = () => {
       }
       
       setTransfers(newTransfers);
-      setStep(4);
+      setStep(5);
     } catch (error) {
       alert("Error al simular crédito: " + (error.response?.data?.detail || error.message));
     } finally {
@@ -364,16 +391,34 @@ const CreditOriginationPage = () => {
         )}
 
         {step === 3 && cliente && (
-          <div className="form-container glass-panel fade-in">
+          <div className="glass-panel fade-in" style={{ padding: '20px', marginBottom: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '16px', margin: 0 }}>
-                Paso 3: Condiciones del Crédito para {cliente.nombre} {cliente.apellido}
+                Paso 3: Perfil Transaccional de {cliente.nombre} {cliente.apellido}
               </h3>
               <button className="btn-secondary" onClick={() => setStep(2)}>Volver a los datos</button>
             </div>
+            <div style={{ padding: '12px', background: 'rgba(255,255,255,0.05)', borderLeft: '4px solid var(--accent-secondary)', marginBottom: '20px', fontSize: '14px' }}>
+              Complete o verifique el perfil transaccional (sueldos y descuentos) antes de calcular las condiciones del crédito.
+            </div>
+            <PerfilTransaccionalForm 
+              cuil={cliente.cuil} 
+              onComplete={() => setStep(4)} 
+            />
+          </div>
+        )}
+
+        {step === 4 && cliente && (
+          <div className="form-container glass-panel fade-in">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '16px', margin: 0 }}>
+                Paso 4: Condiciones del Crédito para {cliente.nombre} {cliente.apellido}
+              </h3>
+              <button className="btn-secondary" onClick={() => setStep(3)}>Volver al perfil transaccional</button>
+            </div>
             
-            {/* Context Blocks (BCRA & Riesgo) */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '20px', marginBottom: '24px' }}>
+            {/* Context Blocks (BCRA & Riesgo & Cuota Afectable) */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', marginBottom: '24px' }}>
               
               {/* BCRA Block */}
               <div style={{ padding: '16px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
@@ -516,10 +561,73 @@ const CreditOriginationPage = () => {
                   <div style={{ fontSize: '14px', color: 'var(--text-color)' }}>No se pudo obtener el perfil de riesgo.</div>
                 )}
               </div>
+
+              {/* Cuota Afectable Block */}
+              <div style={{ padding: '16px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                <h4 style={{ margin: '0 0 12px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  💰 Cuota Afectable
+                </h4>
+                {!creditoForm.socio_id ? (
+                  <div style={{ fontSize: '14px', color: 'var(--text-color)' }}>Seleccione un Socio Originador abajo para calcular la cuota afectable.</div>
+                ) : loadingCuotaAfectable ? (
+                  <div style={{ fontSize: '14px', color: 'var(--text-color)' }}>Calculando cuota afectable... ⏳</div>
+                ) : cuotaAfectableData ? (
+                  cuotaAfectableData.error ? (
+                     <div style={{ fontSize: '14px', color: 'var(--danger-color)' }}>{cuotaAfectableData.error}</div>
+                  ) : (
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '14px' }}>
+                        <span>Sueldo Base (Afectable):</span>
+                        <strong>{formatCurrency(cuotaAfectableData.base)}</strong>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '15px' }}>
+                        <span>Cupo Máximo:</span>
+                        <strong style={{ color: 'var(--success-color)' }}>{formatCurrency(cuotaAfectableData.cupo)}</strong>
+                      </div>
+                      
+                      {cuotaAfectableData.maximos && cuotaAfectableData.maximos.length > 0 && (
+                        <div className="table-responsive" style={{ marginTop: '12px', maxHeight: '150px', overflowY: 'auto' }}>
+                          <table className="data-table" style={{ fontSize: '11px', minWidth: '100%' }}>
+                            <thead>
+                              <tr>
+                                <th>Plazo</th>
+                                <th>TNA</th>
+                                <th>Cap. Neto Máx</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {cuotaAfectableData.maximos.map((row, idx) => (
+                                <tr key={idx}>
+                                  <td>{row.plazo} m</td>
+                                  <td>{(row.tna_c_iva * 100).toFixed(2)}%</td>
+                                  <td style={{ color: 'var(--success-color)', fontWeight: 'bold' }}>{formatCurrency(row.cap_neto_max)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+
+                      {cuotaAfectableData.cupo === 0 && (
+                        <div style={{ marginTop: '12px', fontSize: '12px', color: '#f59e0b', padding: '8px', background: 'rgba(245, 158, 11, 0.1)', borderLeft: '3px solid #f59e0b' }}>
+                          ⚠️ No se encontraron reglas de perfil transaccional para este socio, o el sueldo base es cero.
+                        </div>
+                      )}
+                    </div>
+                  )
+                ) : null}
+              </div>
             </div>
 
             <form onSubmit={handleSimulateCredit}>
               <div className="form-row">
+                <div className="form-group">
+                  <label>Socio Originador</label>
+                  <select value={creditoForm.socio_id} onChange={(e) => setCreditoForm({...creditoForm, socio_id: e.target.value, tasa_id: ''})}>
+                    <option value="">(Ninguno / Directo)</option>
+                    {socios.map(s => <option key={s.id} value={s.id}>{s.razon_social}</option>)}
+                  </select>
+                </div>
                 <div className="form-group">
                   <label>Capital Neto (Mano) *</label>
                   <CurrencyInput 
@@ -533,7 +641,21 @@ const CreditOriginationPage = () => {
                   <select value={creditoForm.tasa_id} onChange={(e) => setCreditoForm({...creditoForm, tasa_id: e.target.value})} required>
                     <option value="">Seleccione una opción...</option>
                     {tasasYComisiones
-                      .filter(t => !creditoForm.socio_id || t.socio_originador_id == creditoForm.socio_id)
+                      .filter(t => {
+                        if (String(t.estado).toUpperCase() !== 'ACTIVA') return false;
+                        if (creditoForm.socio_id ? String(t.socio_originador_id) !== String(creditoForm.socio_id) : !!t.socio_originador_id) return false;
+                        
+                        // Filter by max capital neto if available
+                        if (creditoForm.capital_neto && cuotaAfectableData?.maximos) {
+                          const capNetoRequested = parseFloat(creditoForm.capital_neto);
+                          const maxData = cuotaAfectableData.maximos.find(m => m.id === t.id);
+                          if (maxData && !isNaN(capNetoRequested) && capNetoRequested > maxData.cap_neto_max) {
+                            return false;
+                          }
+                        }
+                        return true;
+                      })
+                      .sort((a, b) => a.plazo - b.plazo)
                       .map(t => (
                         <option key={t.id} value={t.id}>{t.plazo} meses - TNA: {(t.tna_c_iva * 100).toFixed(2)}%</option>
                       ))}
@@ -545,13 +667,6 @@ const CreditOriginationPage = () => {
                   <label>Tipo de Crédito *</label>
                   <select value={creditoForm.tipo} onChange={(e) => setCreditoForm({...creditoForm, tipo: e.target.value})} required>
                     <option value="SISTEMA FRANCES">Sistema Francés</option>
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label>Socio Originador</label>
-                  <select value={creditoForm.socio_id} onChange={(e) => setCreditoForm({...creditoForm, socio_id: e.target.value})}>
-                    <option value="">(Ninguno / Directo)</option>
-                    {socios.map(s => <option key={s.id} value={s.id}>{s.razon_social}</option>)}
                   </select>
                 </div>
                 <div className="form-group">
@@ -572,13 +687,13 @@ const CreditOriginationPage = () => {
           </div>
         )}
 
-        {step === 4 && simulation && (
+        {step === 5 && simulation && (
           <div className="form-container glass-panel fade-in">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '16px', margin: 0 }}>
-                Paso 4: Simulación y Transferencias
+                Paso 5: Simulación y Transferencias
               </h3>
-              <button className="btn-secondary" onClick={() => setStep(3)}>Volver a condiciones</button>
+              <button className="btn-secondary" onClick={() => setStep(4)}>Volver a condiciones</button>
             </div>
             
             <div className="table-responsive" style={{ marginBottom: '24px', maxHeight: '300px', overflowY: 'auto' }}>

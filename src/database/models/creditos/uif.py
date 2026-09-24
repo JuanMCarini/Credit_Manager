@@ -10,6 +10,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship, validates
 
@@ -47,6 +48,7 @@ class MultiplicadoresRiesgo(Base):
 
 class RiesgoCliente(Base):
     __tablename__ = "riesgo_clientes"
+    __table_args__ = (UniqueConstraint("cuil_cliente", "update_at", name="uq_riesgo_cliente_mes"),)
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     cuil_cliente = Column(String(11), ForeignKey("clientes.cuil"), nullable=False)

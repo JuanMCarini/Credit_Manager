@@ -4,7 +4,7 @@ import axiosClient from '../api/axiosClient';
 import ExportExcelButton from '../components/ExportExcelButton';
 
 const AuxiliaryTablesPage = () => {
-  const { nacionalidades, provincias, empleadores, socios, operadores, tasasYComisiones, relaciones, comercializadores, bancos, cuentas, conceptos, clasificaciones, comisionesDeuda, factoresRiesgo, multiplicadoresRiesgo, fetchAuxiliares } = useAppStore();
+  const { nacionalidades, provincias, empleadores, socios, operadores, tasasYComisiones, relaciones, comercializadores, bancos, cuentas, conceptos, clasificaciones, comisionesDeuda, factoresRiesgo, multiplicadoresRiesgo, reglasPerfilesTransaccionales, fetchAuxiliares } = useAppStore();
 
   const [activeTable, setActiveTable] = useState('socios');
   const [isCreating, setIsCreating] = useState(false);
@@ -49,7 +49,7 @@ const AuxiliaryTablesPage = () => {
     'colocacion_originador', 'colocacion_intermediario',
     'cobranza_originador', 'cobranza_intermediario',
     'colocacion_propia', 'tna_c_iva', 'tna_s_iva', 'alicuota_iva',
-    'gasto_1_porcentaje', 'gasto_2_porcentaje', 'porcentaje_sellado', 'porcentaje'
+    'gasto_1_porcentaje', 'gasto_2_porcentaje', 'porcentaje_sellado', 'porcentaje', 'cupo'
   ];
 
   const tablesMap = {
@@ -67,7 +67,8 @@ const AuxiliaryTablesPage = () => {
     clasificaciones: { name: 'Clasificaciones de Conceptos', data: clasificaciones, endpoint: 'clasificaciones', basePath: '/api/finanzas', schema: ['id', 'name', 'descripcion'] },
     comisionesDeuda: { name: 'Comisiones Deuda', data: comisionesDeuda, endpoint: 'comisiones_deuda', schema: ['id', 'fecha', 'id_socio_comercial', 'porcentaje'] },
     factoresRiesgo: { name: 'Factores de Riesgo', data: factoresRiesgo, endpoint: 'factores_riesgo', schema: ['id', 'codigo', 'detalle', 'peso'] },
-    multiplicadoresRiesgo: { name: 'Multiplicadores de Riesgo', data: multiplicadoresRiesgo, endpoint: 'multiplicadores_riesgo', schema: ['id', 'id_riesgo', 'codigo', 'detalle', 'multiplicador', 'variable'] }
+    multiplicadoresRiesgo: { name: 'Multiplicadores de Riesgo', data: multiplicadoresRiesgo, endpoint: 'multiplicadores_riesgo', schema: ['id', 'id_riesgo', 'codigo', 'detalle', 'multiplicador', 'variable'] },
+    reglasPerfilesTransaccionales: { name: 'Perfiles Transaccionales', data: reglasPerfilesTransaccionales, endpoint: 'reglas_perfiles_transaccionales', schema: ['id', 'id_socio_comercial', 'cupo', 'sueldo_tipo', 'asignacion_familiar', 'horas_extras', 'vacaciones', 'otros', 'descuentos_voluntarios'] }
   };
 
   const currentTableConfig = tablesMap[activeTable];
@@ -109,8 +110,10 @@ const AuxiliaryTablesPage = () => {
           emptyForm[c] = 'ACTIVA';
         } else if (c === 'estado') {
           emptyForm[c] = 'ACTIVO';
-        } else if (c === 'es_pasivo') {
+        } else if (c === 'es_pasivo' || c === 'asignacion_familiar') {
           emptyForm[c] = false;
+        } else if (['horas_extras', 'vacaciones', 'otros', 'descuentos_voluntarios'].includes(c)) {
+          emptyForm[c] = true;
         } else if (c === 'fecha') {
           emptyForm[c] = new Date().toISOString().substring(0, 10);
         } else if (c === 'moneda') {
@@ -283,7 +286,10 @@ const AuxiliaryTablesPage = () => {
       const clasificacion = clasificaciones.find(c => c.id === value);
       return clasificacion ? clasificacion.name : value;
     }
-    if (col === 'es_pasivo' || col === 'codigo_descuento') {
+    if (col === 'sueldo_tipo' && value) {
+      return String(value).toUpperCase();
+    }
+    if (['es_pasivo', 'codigo_descuento', 'asignacion_familiar', 'horas_extras', 'vacaciones', 'otros', 'descuentos_voluntarios'].includes(col)) {
       return value ? 'Sí' : 'No';
     }
     if (percentFields.includes(col)) {
@@ -303,6 +309,10 @@ const AuxiliaryTablesPage = () => {
 
       if (col === 'clasificacion_id' && filterValue === 'Sin Clasificar') {
         return val === '-';
+      }
+
+      if (col === 'estado') {
+        return String(val).toUpperCase() === String(filterValue).toUpperCase();
       }
 
       return String(val).toLowerCase().includes(filterValue.toLowerCase());
@@ -726,21 +736,19 @@ const AuxiliaryTablesPage = () => {
                         <span style={{ fontWeight: '600', color: 'var(--text-secondary)' }}>%</span>
                       </div>
                     );
-                  } else if (col === 'es_pasivo') {
+                  } else if (col === 'sueldo_tipo') {
                     inputElement = (
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '12px', fontWeight: 500, cursor: 'pointer', height: '100%' }}>
-                        <div className="toggle-switch">
-                          <input
-                            type="checkbox"
-                            checked={editFormData[col] ?? false}
-                            onChange={(e) => handleEditChange(col, e.target.checked)}
-                          />
-                          <span className="slider"></span>
-                        </div>
-                        {editFormData[col] ? 'Sí (Jubilado/Pensionado)' : 'No'}
-                      </label>
+                      <select
+                        value={editFormData[col] ?? ''}
+                        onChange={(e) => handleEditChange(col, e.target.value)}
+                        className="input-field" required
+                      >
+                        <option value="">Seleccione...</option>
+                        <option value="bruto">BRUTO</option>
+                        <option value="neto">NETO</option>
+                      </select>
                     );
-                  } else if (col === 'codigo_descuento') {
+                  } else if (['es_pasivo', 'codigo_descuento', 'asignacion_familiar', 'horas_extras', 'vacaciones', 'otros', 'descuentos_voluntarios'].includes(col)) {
                     inputElement = (
                       <label style={{ display: 'flex', alignItems: 'center', gap: '12px', fontWeight: 500, cursor: 'pointer', height: '100%' }}>
                         <div className="toggle-switch">
@@ -751,7 +759,7 @@ const AuxiliaryTablesPage = () => {
                           />
                           <span className="slider"></span>
                         </div>
-                        {editFormData[col] ? 'SÍ' : 'NO'}
+                        {col === 'es_pasivo' ? (editFormData[col] ? 'Sí (Jubilado/Pensionado)' : 'No') : (editFormData[col] ? 'SÍ' : 'NO')}
                       </label>
                     );
                   } else {
@@ -771,12 +779,34 @@ const AuxiliaryTablesPage = () => {
                   if (col === 'id_socio_comercial') labelText = 'SOCIO COMERCIAL';
                   if (col === 'es_pasivo') labelText = 'ES PASIVO';
 
-                  return (
+                  const formGroup = (
                     <div key={col} className="form-group">
                       <label>{labelText}</label>
                       {inputElement}
                     </div>
                   );
+
+                  if (col === 'asignacion_familiar') {
+                    return (
+                      <React.Fragment key={`group-${col}`}>
+                        <div style={{ gridColumn: '1 / -1', marginTop: '16px', marginBottom: '4px', fontSize: '13px', color: 'var(--text-secondary)', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '6px' }}>
+                          <strong>Descuentos sobre el sueldo:</strong> (Si es SÍ, el concepto se resta del sueldo elegido)
+                        </div>
+                        {formGroup}
+                      </React.Fragment>
+                    );
+                  } else if (col === 'descuentos_voluntarios') {
+                    return (
+                      <React.Fragment key={`group-${col}`}>
+                        <div style={{ gridColumn: '1 / -1', marginTop: '16px', marginBottom: '4px', fontSize: '13px', color: 'var(--text-secondary)', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '6px' }}>
+                          <strong>Descuentos Voluntarios:</strong> (Si es SÍ, se descuentan antes de calcular el cupo. Si es NO, se descuentan del cupo final)
+                        </div>
+                        {formGroup}
+                      </React.Fragment>
+                    );
+                  }
+
+                  return formGroup;
                 })}
               </div>
               <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px' }}>

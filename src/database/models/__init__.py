@@ -10,6 +10,7 @@ from .creditos.creditos import Transferencia, DocumentoLegajo
 from .creditos.papeleria import DocumentoPapeleria, DocumentoVariable
 from .creditos.repet import RepetPerson, RepetEntity, RepetAuditLog
 from .creditos.facturacion import Factura
+from .creditos.perfil_trans import PerfilTransaccional, ReglasPerfilTransaccional
 from .finance.bancos import Banco, Cuenta, Concepto, Clasificacion, Movimiento, CategoriaMovimiento
 from .finance.comprobantes import Proveedor, Comprobante, EstadoComprobante
 from .finance.planes import Plan, SistemaMatematico, Denominador
@@ -31,5 +32,5 @@ __all__ = [
     "Proveedor", "Comprobante", "Plan", "SistemaMatematico", "Denominador", "PosicionIva", "EstadoPosicionIva", "PosicionIibb", "EstadoPosicionIibb",
     "EstadoCheque", "CalificacionEmisor", "OperadorCheque", "Cheque", "TipoOperacionCheque", "OperacionCheque",
     "ModuloSistema", "Serie", "Comision", "ComisionesSerie",
-    "RiesgoCliente"
+    "RiesgoCliente", "PerfilTransaccional", "ReglasPerfilTransaccional"
 ]
