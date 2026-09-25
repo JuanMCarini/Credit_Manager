@@ -356,8 +356,18 @@ const AuxiliaryTablesPage = () => {
             className="input-field"
             style={{ minWidth: '250px' }}
           >
-            {Object.keys(tablesMap).map(key => (
-              <option key={key} value={key}>{tablesMap[key].name}</option>
+            {[
+              { label: "Configuración General", keys: ["nacionalidades", "provincias", "empleadores"] },
+              { label: "Créditos y Riesgo", keys: ["socios", "tasasYComisiones", "reglasPerfilesTransaccionales", "factoresRiesgo", "multiplicadoresRiesgo"] },
+              { label: "Inversores y Comercialización", keys: ["comercializadores", "relaciones", "comisionesDeuda"] },
+              { label: "Finanzas", keys: ["bancos", "cuentas", "conceptos", "clasificaciones"] },
+              { label: "Cheques", keys: ["operadores"] }
+            ].map(group => (
+              <optgroup key={group.label} label={group.label}>
+                {group.keys.map(key => (
+                  <option key={key} value={key}>{tablesMap[key].name}</option>
+                ))}
+              </optgroup>
             ))}
           </select>
         </div>
