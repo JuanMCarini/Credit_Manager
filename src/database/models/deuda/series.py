@@ -29,6 +29,7 @@ class Serie(Base):
     update_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
     movimientos = relationship("MovimientoDeuda", foreign_keys="[MovimientoDeuda.id_serie]", back_populates="serie", cascade="all, delete-orphan")
+    comisiones_asociadas = relationship("ComisionesSerie", back_populates="serie", cascade="all, delete-orphan")
 
     @property
     def fecha_vencimiento(self):
@@ -58,4 +59,4 @@ class ComisionesSerie(Base):
     update_at = Column(DateTime, default=func.now(), onupdate=func.now())
     
     comision = relationship("Comision", foreign_keys="[ComisionesSerie.id_comision]")
-    serie = relationship("Serie", foreign_keys="[ComisionesSerie.id_serie]")
+    serie = relationship("Serie", foreign_keys="[ComisionesSerie.id_serie]", back_populates="comisiones_asociadas")
