@@ -67,6 +67,8 @@ class ReglasPerfilTransaccional(Base):
     horas_extras = Column(Boolean, nullable=False, default=True)
     vacaciones = Column(Boolean, nullable=False, default=True)
     otros = Column(Boolean, nullable=False, default=True)
+    cap_min = Column(Numeric(14,2), nullable=False, default=0)
+    cap_max = Column(Numeric(14,2), nullable=False, default=999999999999.99)
 
     # Si es True se descuenta antes de calcular el cupo, de lo contrario se descuenta del cupo
     descuentos_voluntarios = Column(Boolean, nullable=False, default=True)

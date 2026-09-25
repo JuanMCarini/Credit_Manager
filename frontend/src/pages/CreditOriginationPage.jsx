@@ -13,12 +13,12 @@ const formatCurrency = (value) => {
 
 const CreditOriginationPage = () => {
   const { empleadores, socios, tasasYComisiones } = useAppStore();
-  
+
   const [step, setStep] = useState(1); // 1: Search, 2: ClientForm, 3: PerfilTransaccional, 4: CreditForm, 5: Simulation
   const [searchCuil, setSearchCuil] = useState('');
   const [cliente, setCliente] = useState(null);
   const [isClientNew, setIsClientNew] = useState(false);
-  
+
   const [loadingSearch, setLoadingSearch] = useState(false);
   const [loadingClient, setLoadingClient] = useState(false);
   const [clientFeedback, setClientFeedback] = useState(null);
@@ -27,7 +27,7 @@ const CreditOriginationPage = () => {
   const [transfers, setTransfers] = useState([]);
   const [loadingCredit, setLoadingCredit] = useState(false);
   const [loadingPreview, setLoadingPreview] = useState(false);
-  
+
   const [bcraData, setBcraData] = useState(null);
   const [loadingBcra, setLoadingBcra] = useState(false);
 
@@ -35,7 +35,7 @@ const CreditOriginationPage = () => {
   const [loadingRiesgo, setLoadingRiesgo] = useState(false);
 
   const [ccModalData, setCcModalData] = useState(null);
-  
+
   const [computedCapitalBruto, setComputedCapitalBruto] = useState(0);
 
   const [cuotaAfectableData, setCuotaAfectableData] = useState(null);
@@ -49,6 +49,15 @@ const CreditOriginationPage = () => {
     fecha_emision: new Date().toISOString().split('T')[0],
     id_externo: ''
   });
+
+  useEffect(() => {
+    const mainContent = document.querySelector('.main-content');
+    if (mainContent) {
+      mainContent.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [step]);
 
   const fetchBcraData = async (cuil) => {
     setLoadingBcra(true);
@@ -94,7 +103,7 @@ const CreditOriginationPage = () => {
         setLoadingCuotaAfectable(false);
       }
     };
-    
+
     if (step === 4) {
       fetchCuota();
     }
@@ -143,14 +152,14 @@ const CreditOriginationPage = () => {
       } else {
         res = await axiosClient.put(`/api/v1/clientes/${cliente.cuil}`, cleanData);
       }
-      
+
       cleanData.repet = res.data.repet;
-      setCliente(cleanData); 
-      
+      setCliente(cleanData);
+
       if (res.data.repet) {
         throw new Error("Operación denegada: El cliente se encuentra registrado en el RePET.");
       }
-      
+
       // Auto-select Socio Originador if Empleador has one
       let defaultSocioId = '';
       if (cleanData.empleador_id) {
@@ -159,13 +168,13 @@ const CreditOriginationPage = () => {
           defaultSocioId = String(emp.socio_comercial_id);
         }
       }
-      
+
       setCreditoForm(prev => ({
         ...prev,
         socio_id: defaultSocioId,
         tasa_id: '' // reset selected tasa
       }));
-      
+
       fetchBcraData(cleanData.cuil || cleanData.documento);
       fetchRiesgoData(cleanData.cuil || cleanData.documento);
       setStep(3);
@@ -190,11 +199,11 @@ const CreditOriginationPage = () => {
       const g2 = parseFloat(selectedTasa.gasto_2_porcentaje || 0);
       const ps = parseFloat(selectedTasa.porcentaje_sellado || 0);
       const capitalNeto = parseFloat(creditoForm.capital_neto);
-      
+
       if (1 - g1 - g2 - ps <= 0) {
         throw new Error("Los gastos superan o igualan el 100% del capital. Ajuste la tasa seleccionada.");
       }
-      
+
       const capitalBruto = capitalNeto / (1 - g1 - g2 - ps);
       setComputedCapitalBruto(capitalBruto);
 
@@ -207,7 +216,7 @@ const CreditOriginationPage = () => {
       });
       const res = await axiosClient.get(`/api/v1/creditos/simular-cuotas?${params.toString()}`);
       setSimulation(res.data);
-      
+
       const newTransfers = [];
       newTransfers.push({
         cbu: cliente.cbu || '',
@@ -248,7 +257,7 @@ const CreditOriginationPage = () => {
           monto: capitalBruto * ps
         });
       }
-      
+
       setTransfers(newTransfers);
       setStep(5);
     } catch (error) {
@@ -297,7 +306,7 @@ const CreditOriginationPage = () => {
     if (!selectedTasa) return;
 
     const currentTotal = transfers.reduce((sum, t) => sum + parseFloat(t.monto || 0), 0);
-    
+
     if (Math.abs(computedCapitalBruto - currentTotal) > 0.05) {
       alert("La suma de las transferencias debe ser igual al capital bruto a otorgar.");
       return;
@@ -320,7 +329,7 @@ const CreditOriginationPage = () => {
 
       const res = await axiosClient.post('/api/v1/creditos/originacion', payload);
       alert(`Crédito originado con éxito.`);
-      
+
       setCcModalData({ cuil: cliente.cuil, clientName: `${cliente.nombre} ${cliente.apellido}`, creditoId: res.data.credito_id });
 
       setStep(1);
@@ -345,7 +354,7 @@ const CreditOriginationPage = () => {
       </header>
 
       <div className="content-grid" style={{ gridTemplateColumns: '1fr' }}>
-        
+
         {step === 1 && (
           <div className="glass-panel" style={{ padding: '20px', marginBottom: '24px' }}>
             <h3 style={{ marginBottom: '12px', fontFamily: 'var(--font-heading)', fontSize: '16px' }}>Paso 1: Buscar Cliente</h3>
@@ -379,11 +388,11 @@ const CreditOriginationPage = () => {
                 Verifique y actualice los datos del cliente si es necesario. Debe guardar los cambios para proceder al paso 3.
               </div>
             )}
-            <ClientForm 
-              initialData={cliente} 
+            <ClientForm
+              initialData={cliente}
               isEditMode={!isClientNew}
-              onSubmit={handleClientSubmit} 
-              loading={loadingClient} 
+              onSubmit={handleClientSubmit}
+              loading={loadingClient}
               feedback={clientFeedback}
               buttonText={isClientNew ? "Crear Cliente y Continuar" : "Actualizar Datos y Continuar"}
             />
@@ -401,9 +410,9 @@ const CreditOriginationPage = () => {
             <div style={{ padding: '12px', background: 'rgba(255,255,255,0.05)', borderLeft: '4px solid var(--accent-secondary)', marginBottom: '20px', fontSize: '14px' }}>
               Complete o verifique el perfil transaccional (sueldos y descuentos) antes de calcular las condiciones del crédito.
             </div>
-            <PerfilTransaccionalForm 
-              cuil={cliente.cuil} 
-              onComplete={() => setStep(4)} 
+            <PerfilTransaccionalForm
+              cuil={cliente.cuil}
+              onComplete={() => setStep(4)}
             />
           </div>
         )}
@@ -416,10 +425,10 @@ const CreditOriginationPage = () => {
               </h3>
               <button className="btn-secondary" onClick={() => setStep(3)}>Volver al perfil transaccional</button>
             </div>
-            
+
             {/* Context Blocks (BCRA & Riesgo & Cuota Afectable) */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', marginBottom: '24px' }}>
-              
+
               {/* BCRA Block */}
               <div style={{ padding: '16px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                 <h4 style={{ margin: '0 0 12px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -430,10 +439,10 @@ const CreditOriginationPage = () => {
                 ) : bcraData ? (
                   <div>
                     <div style={{ display: 'flex', gap: '12px', marginBottom: '12px', flexWrap: 'wrap' }}>
-                      <span style={{ 
+                      <span style={{
                         padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold',
                         background: bcraData.Estado === 'Sin Deudas' || bcraData.Estado === 'Sin Deudas / Vacio' ? 'rgba(0, 200, 83, 0.2)' : 'rgba(255, 61, 0, 0.2)',
-                        color: bcraData.Estado === 'Sin Deudas' || bcraData.Estado === 'Sin Deudas / Vacio' ? '#00e676' : '#ff5252' 
+                        color: bcraData.Estado === 'Sin Deudas' || bcraData.Estado === 'Sin Deudas / Vacio' ? '#00e676' : '#ff5252'
                       }}>
                         {bcraData.Estado}
                       </span>
@@ -443,7 +452,7 @@ const CreditOriginationPage = () => {
                         </span>
                       )}
                     </div>
-                    
+
                     {bcraData.Datos_API?.results?.periodos && bcraData.Datos_API.results.periodos.length > 0 && (
                       <div className="table-responsive" style={{ maxHeight: '200px', overflowY: 'auto' }}>
                         <table className="data-table" style={{ fontSize: '12px' }}>
@@ -457,7 +466,7 @@ const CreditOriginationPage = () => {
                             </tr>
                           </thead>
                           <tbody>
-                            {bcraData.Datos_API.results.periodos.flatMap(p => 
+                            {bcraData.Datos_API.results.periodos.flatMap(p =>
                               p.entidades.map((ent, idx) => (
                                 <tr key={`${p.periodo}-${idx}`}>
                                   <td>{p.periodo}</td>
@@ -497,14 +506,14 @@ const CreditOriginationPage = () => {
                   <div>
                     <div style={{ display: 'flex', gap: '12px', marginBottom: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
                       <span style={{ fontSize: '13px', alignSelf: 'center' }}>Puntaje Total: <strong>{riesgoData.puntaje_total}</strong></span>
-                      <span style={{ 
+                      <span style={{
                         padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold',
-                        background: riesgoData.nivel_riesgo.toUpperCase() === 'BAJO' ? 'rgba(16, 185, 129, 0.2)' : 
-                                    riesgoData.nivel_riesgo.toUpperCase() === 'MEDIO' ? 'rgba(245, 158, 11, 0.2)' : 
-                                    riesgoData.nivel_riesgo.toUpperCase() === 'ALTO' ? 'rgba(244, 63, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)',
-                        color: riesgoData.nivel_riesgo.toUpperCase() === 'BAJO' ? '#10b981' : 
-                               riesgoData.nivel_riesgo.toUpperCase() === 'MEDIO' ? '#f59e0b' : 
-                               riesgoData.nivel_riesgo.toUpperCase() === 'ALTO' ? '#f43f5e' : '#ef4444'
+                        background: riesgoData.nivel_riesgo.toUpperCase() === 'BAJO' ? 'rgba(16, 185, 129, 0.2)' :
+                          riesgoData.nivel_riesgo.toUpperCase() === 'MEDIO' ? 'rgba(245, 158, 11, 0.2)' :
+                            riesgoData.nivel_riesgo.toUpperCase() === 'ALTO' ? 'rgba(244, 63, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                        color: riesgoData.nivel_riesgo.toUpperCase() === 'BAJO' ? '#10b981' :
+                          riesgoData.nivel_riesgo.toUpperCase() === 'MEDIO' ? '#f59e0b' :
+                            riesgoData.nivel_riesgo.toUpperCase() === 'ALTO' ? '#f43f5e' : '#ef4444'
                       }}>
                         RIESGO {riesgoData.nivel_riesgo}
                       </span>
@@ -540,7 +549,7 @@ const CreditOriginationPage = () => {
                                 </td>
                                 <td style={{ textAlign: 'center' }}>
                                   {d.Multiplicador ? (
-                                    <span style={{ 
+                                    <span style={{
                                       padding: '2px 6px', borderRadius: '4px', fontSize: '11px',
                                       background: d.Multiplicador > 1 ? 'rgba(244, 63, 94, 0.1)' : 'rgba(16, 185, 129, 0.1)',
                                       color: d.Multiplicador > 1 ? '#f43f5e' : '#10b981'
@@ -573,7 +582,7 @@ const CreditOriginationPage = () => {
                   <div style={{ fontSize: '14px', color: 'var(--text-color)' }}>Calculando cuota afectable... ⏳</div>
                 ) : cuotaAfectableData ? (
                   cuotaAfectableData.error ? (
-                     <div style={{ fontSize: '14px', color: 'var(--danger-color)' }}>{cuotaAfectableData.error}</div>
+                    <div style={{ fontSize: '14px', color: 'var(--danger-color)' }}>{cuotaAfectableData.error}</div>
                   ) : (
                     <div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '14px' }}>
@@ -584,7 +593,7 @@ const CreditOriginationPage = () => {
                         <span>Cupo Máximo:</span>
                         <strong style={{ color: 'var(--success-color)' }}>{formatCurrency(cuotaAfectableData.cupo)}</strong>
                       </div>
-                      
+
                       {cuotaAfectableData.maximos && cuotaAfectableData.maximos.length > 0 && (
                         <div className="table-responsive" style={{ marginTop: '12px', maxHeight: '150px', overflowY: 'auto' }}>
                           <table className="data-table" style={{ fontSize: '11px', minWidth: '100%' }}>
@@ -623,28 +632,28 @@ const CreditOriginationPage = () => {
               <div className="form-row">
                 <div className="form-group">
                   <label>Socio Originador</label>
-                  <select value={creditoForm.socio_id} onChange={(e) => setCreditoForm({...creditoForm, socio_id: e.target.value, tasa_id: ''})}>
+                  <select value={creditoForm.socio_id} onChange={(e) => setCreditoForm({ ...creditoForm, socio_id: e.target.value, tasa_id: '' })}>
                     <option value="">(Ninguno / Directo)</option>
                     {socios.map(s => <option key={s.id} value={s.id}>{s.razon_social}</option>)}
                   </select>
                 </div>
                 <div className="form-group">
                   <label>Capital Neto (Mano) *</label>
-                  <CurrencyInput 
-                    value={creditoForm.capital_neto} 
-                    onChange={(val) => setCreditoForm({...creditoForm, capital_neto: val})} 
-                    required={true} 
+                  <CurrencyInput
+                    value={creditoForm.capital_neto}
+                    onChange={(val) => setCreditoForm({ ...creditoForm, capital_neto: val })}
+                    required={true}
                   />
                 </div>
                 <div className="form-group" style={{ gridColumn: 'span 2' }}>
                   <label>Condiciones (Plazo y TNA) *</label>
-                  <select value={creditoForm.tasa_id} onChange={(e) => setCreditoForm({...creditoForm, tasa_id: e.target.value})} required>
+                  <select value={creditoForm.tasa_id} onChange={(e) => setCreditoForm({ ...creditoForm, tasa_id: e.target.value })} required>
                     <option value="">Seleccione una opción...</option>
                     {tasasYComisiones
                       .filter(t => {
                         if (String(t.estado).toUpperCase() !== 'ACTIVA') return false;
                         if (creditoForm.socio_id ? String(t.socio_originador_id) !== String(creditoForm.socio_id) : !!t.socio_originador_id) return false;
-                        
+
                         // Filter by max capital neto if available
                         if (creditoForm.capital_neto && cuotaAfectableData?.maximos) {
                           const capNetoRequested = parseFloat(creditoForm.capital_neto);
@@ -665,17 +674,17 @@ const CreditOriginationPage = () => {
               <div className="form-row">
                 <div className="form-group">
                   <label>Tipo de Crédito *</label>
-                  <select value={creditoForm.tipo} onChange={(e) => setCreditoForm({...creditoForm, tipo: e.target.value})} required>
+                  <select value={creditoForm.tipo} onChange={(e) => setCreditoForm({ ...creditoForm, tipo: e.target.value })} required>
                     <option value="SISTEMA FRANCES">Sistema Francés</option>
                   </select>
                 </div>
                 <div className="form-group">
                   <label>Fecha de Emisión</label>
-                  <input type="date" value={creditoForm.fecha_emision} onChange={(e) => setCreditoForm({...creditoForm, fecha_emision: e.target.value})} required />
+                  <input type="date" value={creditoForm.fecha_emision} onChange={(e) => setCreditoForm({ ...creditoForm, fecha_emision: e.target.value })} required />
                 </div>
                 <div className="form-group">
                   <label>ID Externo</label>
-                  <input type="text" value={creditoForm.id_externo} onChange={(e) => setCreditoForm({...creditoForm, id_externo: e.target.value})} placeholder="Opcional" />
+                  <input type="text" value={creditoForm.id_externo} onChange={(e) => setCreditoForm({ ...creditoForm, id_externo: e.target.value })} placeholder="Opcional" />
                 </div>
               </div>
               <div className="form-actions" style={{ marginTop: '24px' }}>
@@ -695,7 +704,7 @@ const CreditOriginationPage = () => {
               </h3>
               <button className="btn-secondary" onClick={() => setStep(4)}>Volver a condiciones</button>
             </div>
-            
+
             <div className="table-responsive" style={{ marginBottom: '24px', maxHeight: '300px', overflowY: 'auto' }}>
               <table className="data-table">
                 <thead>
@@ -726,27 +735,27 @@ const CreditOriginationPage = () => {
               </table>
             </div>
 
-            <TransfersForm 
+            <TransfersForm
               transfers={transfers}
               onChange={setTransfers}
               totalRequired={computedCapitalBruto}
             />
 
             <div className="form-actions" style={{ marginTop: '32px', display: 'flex', gap: '15px' }}>
-              <button 
-                type="button" 
-                className="btn-secondary" 
+              <button
+                type="button"
+                className="btn-secondary"
                 onClick={handlePreviewLegajo}
-                disabled={loadingPreview || loadingCredit || Math.abs(computedCapitalBruto - transfers.reduce((sum, t) => sum + parseFloat(t.monto || 0), 0)) > 0.05} 
+                disabled={loadingPreview || loadingCredit || Math.abs(computedCapitalBruto - transfers.reduce((sum, t) => sum + parseFloat(t.monto || 0), 0)) > 0.05}
                 style={{ flex: 1, fontSize: '16px', padding: '14px', backgroundColor: 'var(--border-color)', color: 'var(--text-color)' }}
               >
                 {loadingPreview ? "Generando..." : "Descargar Legajo (Borrador)"}
               </button>
-              <button 
-                type="button" 
-                className="btn-primary" 
+              <button
+                type="button"
+                className="btn-primary"
                 onClick={handleConfirmCredit}
-                disabled={loadingCredit || loadingPreview || Math.abs(computedCapitalBruto - transfers.reduce((sum, t) => sum + parseFloat(t.monto || 0), 0)) > 0.05} 
+                disabled={loadingCredit || loadingPreview || Math.abs(computedCapitalBruto - transfers.reduce((sum, t) => sum + parseFloat(t.monto || 0), 0)) > 0.05}
                 style={{ flex: 1, fontSize: '16px', padding: '14px' }}
               >
                 {loadingCredit ? "Procesando Originación..." : "Confirmar y Originar"}
@@ -757,11 +766,11 @@ const CreditOriginationPage = () => {
       </div>
 
       {ccModalData && (
-        <ClientCCModal 
-          cuil={ccModalData.cuil} 
-          clientName={ccModalData.clientName} 
+        <ClientCCModal
+          cuil={ccModalData.cuil}
+          clientName={ccModalData.clientName}
           initialFilterCredito={ccModalData.creditoId}
-          onClose={() => setCcModalData(null)} 
+          onClose={() => setCcModalData(null)}
         />
       )}
     </section>

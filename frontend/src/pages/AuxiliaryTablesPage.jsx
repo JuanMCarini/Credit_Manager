@@ -68,7 +68,7 @@ const AuxiliaryTablesPage = () => {
     comisionesDeuda: { name: 'Comisiones Deuda', data: comisionesDeuda, endpoint: 'comisiones_deuda', schema: ['id', 'fecha', 'id_socio_comercial', 'porcentaje'] },
     factoresRiesgo: { name: 'Factores de Riesgo', data: factoresRiesgo, endpoint: 'factores_riesgo', schema: ['id', 'codigo', 'detalle', 'peso'] },
     multiplicadoresRiesgo: { name: 'Multiplicadores de Riesgo', data: multiplicadoresRiesgo, endpoint: 'multiplicadores_riesgo', schema: ['id', 'id_riesgo', 'codigo', 'detalle', 'multiplicador', 'variable'] },
-    reglasPerfilesTransaccionales: { name: 'Perfiles Transaccionales', data: reglasPerfilesTransaccionales, endpoint: 'reglas_perfiles_transaccionales', schema: ['id', 'id_socio_comercial', 'cupo', 'sueldo_tipo', 'asignacion_familiar', 'horas_extras', 'vacaciones', 'otros', 'descuentos_voluntarios'] }
+    reglasPerfilesTransaccionales: { name: 'Perfiles Transaccionales', data: reglasPerfilesTransaccionales, endpoint: 'reglas_perfiles_transaccionales', schema: ['id', 'id_socio_comercial', 'cupo', 'sueldo_tipo', 'asignacion_familiar', 'horas_extras', 'vacaciones', 'otros', 'descuentos_voluntarios', 'cap_min', 'cap_max'] }
   };
 
   const currentTableConfig = tablesMap[activeTable];
@@ -171,6 +171,9 @@ const AuxiliaryTablesPage = () => {
           cleanedData[key] = parseInt(cleanedData[key], 10);
         } else if (percentFields.includes(key) && cleanedData[key] !== null) {
           cleanedData[key] = parseFloat(cleanedData[key]) / 100.0;
+        } else if (['cap_min', 'cap_max'].includes(key) && typeof cleanedData[key] === 'string') {
+          const parsed = parseFloat(cleanedData[key].replace(/\./g, '').replace(',', '.').replace(/[^0-9.-]/g, ''));
+          cleanedData[key] = isNaN(parsed) ? 0 : parsed;
         }
       }
 
@@ -295,8 +298,8 @@ const AuxiliaryTablesPage = () => {
     if (percentFields.includes(col)) {
       return `${(value * 100).toFixed(2)}%`;
     }
-    if (['capital', 'interes', 'iva', 'total', 'anticipo_vigente'].includes(col.toLowerCase())) {
-      return `$ ${parseFloat(value).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`;
+    if (['capital', 'interes', 'iva', 'total', 'anticipo_vigente', 'cap_min', 'cap_max'].includes(col.toLowerCase())) {
+      return `$\u00A0${parseFloat(value).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`;
     }
     return String(value);
   };
@@ -762,6 +765,35 @@ const AuxiliaryTablesPage = () => {
                         {col === 'es_pasivo' ? (editFormData[col] ? 'Sí (Jubilado/Pensionado)' : 'No') : (editFormData[col] ? 'SÍ' : 'NO')}
                       </label>
                     );
+                  } else if (['cap_min', 'cap_max'].includes(col)) {
+                    inputElement = (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontWeight: '600', color: 'var(--text-secondary)' }}>$</span>
+                        <input
+                          type="text"
+                          value={
+                            editFormData[col] !== undefined && editFormData[col] !== null 
+                              ? (typeof editFormData[col] === 'number' 
+                                  ? editFormData[col].toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) 
+                                  : editFormData[col])
+                              : ''
+                          }
+                          onChange={(e) => {
+                             handleEditChange(col, e.target.value);
+                          }}
+                          onBlur={(e) => {
+                             let val = String(e.target.value).replace(/\./g, '').replace(',', '.').replace(/[^0-9.-]/g, '');
+                             const num = parseFloat(val);
+                             if (!isNaN(num)) {
+                               handleEditChange(col, num);
+                             } else {
+                               handleEditChange(col, '');
+                             }
+                          }}
+                          className="input-field" required
+                        />
+                      </div>
+                    );
                   } else {
                     inputElement = (
                       <input
@@ -778,6 +810,8 @@ const AuxiliaryTablesPage = () => {
                   if (col === 'socio_comercial_id') labelText = 'SOCIO ORIGINADOR ASOCIADO';
                   if (col === 'id_socio_comercial') labelText = 'SOCIO COMERCIAL';
                   if (col === 'es_pasivo') labelText = 'ES PASIVO';
+                  if (col === 'cap_min') labelText = 'CAPITAL NETO MÍNIMO';
+                  if (col === 'cap_max') labelText = 'CAPITAL NETO MÁXIMO';
 
                   const formGroup = (
                     <div key={col} className="form-group">
@@ -800,6 +834,15 @@ const AuxiliaryTablesPage = () => {
                       <React.Fragment key={`group-${col}`}>
                         <div style={{ gridColumn: '1 / -1', marginTop: '16px', marginBottom: '4px', fontSize: '13px', color: 'var(--text-secondary)', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '6px' }}>
                           <strong>Descuentos Voluntarios:</strong> (Si es SÍ, se descuentan antes de calcular el cupo. Si es NO, se descuentan del cupo final)
+                        </div>
+                        {formGroup}
+                      </React.Fragment>
+                    );
+                  } else if (col === 'cap_min') {
+                    return (
+                      <React.Fragment key={`group-${col}`}>
+                        <div style={{ gridColumn: '1 / -1', marginTop: '16px', marginBottom: '4px', fontSize: '13px', color: 'var(--text-secondary)', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '6px' }}>
+                          <strong>Límites de Capital:</strong> (Aclaración: Es el capital neto en mano que se lleva el cliente y no el capital del crédito)
                         </div>
                         {formGroup}
                       </React.Fragment>
