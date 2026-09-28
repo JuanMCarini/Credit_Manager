@@ -3,7 +3,7 @@ import useAppStore from '../store/useAppStore';
 import CurrencyInput from './CurrencyInput';
 
 const ClientForm = ({ initialData, isEditMode = false, allowRepetEdit = false, onSubmit, loading, feedback, buttonText = "Guardar Cliente" }) => {
-  const { provincias, empleadores } = useAppStore();
+  const { nacionalidades, provincias, empleadores } = useAppStore();
 
   const [form, setForm] = useState({
     cuil: '',
@@ -13,7 +13,7 @@ const ClientForm = ({ initialData, isEditMode = false, allowRepetEdit = false, o
     fecha_nacimiento: '',
     sexo: '',
     estado_civil: '',
-    nacionalidad: '',
+    id_nacionalidad: '',
     telefono: '',
     telefono_2: '',
     mail: '',
@@ -34,6 +34,7 @@ const ClientForm = ({ initialData, isEditMode = false, allowRepetEdit = false, o
     estado: 'ACTIVO',
     cargo: '',
     pep: false,
+    sujeto_obligado: false,
     repet: false,
     referidos: [],
     ...initialData
@@ -104,7 +105,13 @@ const ClientForm = ({ initialData, isEditMode = false, allowRepetEdit = false, o
             <option value="Unión Convivencial">Unión Convivencial</option>
           </select>
         </div>
-        <div className="form-group"><label>Nacionalidad</label><input type="text" name="nacionalidad" value={form.nacionalidad || ''} onChange={handleChange} /></div>
+        <div className="form-group">
+          <label>Nacionalidad</label>
+          <select name="id_nacionalidad" value={form.id_nacionalidad || ''} onChange={handleChange}>
+            <option value="">(Seleccione)</option>
+            {nacionalidades?.map(n => <option key={n.id} value={n.id}>{n.nombre}</option>)}
+          </select>
+        </div>
       </div>
 
       <h3 style={{ marginTop: '24px', marginBottom: '12px', fontFamily: 'var(--font-heading)', fontSize: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
@@ -172,6 +179,18 @@ const ClientForm = ({ initialData, isEditMode = false, allowRepetEdit = false, o
       </div>
 
       <div className="form-row" style={{ marginTop: '16px' }}>
+        <div className="form-group">
+          <label htmlFor="sujeto_obligado" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginBottom: 0, width: 'fit-content' }}>
+            <div className="toggle-switch">
+              <input type="checkbox" name="sujeto_obligado" checked={!!form.sujeto_obligado} onChange={(e) => setForm({ ...form, sujeto_obligado: e.target.checked })} id="sujeto_obligado" />
+              <span className="slider"></span>
+            </div>
+            ¿Es Sujeto Obligado?
+            <strong style={{ color: form.sujeto_obligado ? 'var(--accent-primary)' : 'var(--text-secondary)' }}>
+              {form.sujeto_obligado ? 'SÍ' : 'NO'}
+            </strong>
+          </label>
+        </div>
         <div className="form-group">
           <label htmlFor="pep" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginBottom: 0, width: 'fit-content' }}>
             <div className="toggle-switch">

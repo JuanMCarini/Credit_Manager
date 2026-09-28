@@ -5,15 +5,20 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy import or_
 
 from src.database import get_db, Cliente, Credito, Cuota
+from src.database.models import SocioComercial
 from src.database.models.creditos.clientes import Referido
+from src.database.models.creditos.perfil_trans import PerfilTransaccional
 from src.api.schemas.clientes import ClienteCreate
+from src.api.dependencies.auth import get_current_user
+from src.database.models.auth import Usuario
 
 router = APIRouter(prefix="/api/v1/clientes", tags=["Clientes"])
 
 @router.post("")
 def create_cliente(
     cliente_data: ClienteCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
 ) -> Dict[str, Any]:
     try:
         data = cliente_data.dict(exclude_unset=True)
@@ -28,7 +33,7 @@ def create_cliente(
         full_name = f"{nuevo_cliente.nombre} {nuevo_cliente.apellido}"
         try:
             asyncio.run(sync_repet_data(db))
-            repet_result = screen_person(db, full_name=full_name)
+            repet_result = screen_person(db, full_name=full_name, cuil_cliente=nuevo_cliente.cuil, user_id=current_user.id)
             if repet_result.get("status") == "ALERT":
                 nuevo_cliente.repet = True
         except Exception as e:
@@ -73,7 +78,8 @@ def get_clientes_list(
 ):
     query = db.query(Cliente).options(
         joinedload(Cliente.provincia), 
-        joinedload(Cliente.empleador)
+        joinedload(Cliente.empleador),
+        joinedload(Cliente.nacionalidad)
     )
 
     if cuil:
@@ -111,12 +117,13 @@ def get_clientes_list(
             "Nombre": c.nombre or "-",
             "Provincia": prov,
             "Empleador": emp,
+            "Sujeto Obligado": "Sí" if c.sujeto_obligado else "No",
             "PEP": "Sí" if c.pep else "No",
             "REPET": "Sí" if c.repet else "No",
             "Fecha Nacimiento": c.fecha_nacimiento.strftime("%Y-%m-%d") if c.fecha_nacimiento else "-",
             "Sexo": c.sexo.value if hasattr(c.sexo, "value") else (str(c.sexo) if c.sexo else "-"),
             "Estado Civil": c.estado_civil or "-",
-            "Nacionalidad": c.nacionalidad or "-",
+            "Nacionalidad": c.nacionalidad.nombre if c.nacionalidad else "-",
             "Legajo": c.legajo or "-",
             "Estado": c.estado.value if hasattr(c.estado, "value") else (str(c.estado) if c.estado else "-"),
             "Fecha Estado": c.fecha_estado.strftime("%Y-%m-%d") if c.fecha_estado else "-",
@@ -138,7 +145,7 @@ def get_clientes_list(
     return {"items": result, "total": total}
 
 @router.get("/{cuil}")
-def get_cliente(cuil: str, db: Session = Depends(get_db)):
+def get_cliente(cuil: str, db: Session = Depends(get_db), current_user: Usuario = Depends(get_current_user)):
     cliente = db.query(Cliente).filter(or_(Cliente.cuil == cuil, Cliente.documento == cuil)).first()
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
@@ -148,7 +155,7 @@ def get_cliente(cuil: str, db: Session = Depends(get_db)):
     try:
         asyncio.run(sync_repet_data(db))
         full_name = f"{cliente.nombre} {cliente.apellido}"
-        repet_result = screen_person(db, full_name=full_name)
+        repet_result = screen_person(db, full_name=full_name, cuil_cliente=cliente.cuil, user_id=current_user.id)
         if repet_result.get("status") == "ALERT" and not cliente.repet:
             cliente.repet = True
             db.commit()
@@ -164,7 +171,7 @@ def get_cliente(cuil: str, db: Session = Depends(get_db)):
         "fecha_nacimiento": cliente.fecha_nacimiento.strftime("%Y-%m-%d") if cliente.fecha_nacimiento else None,
         "sexo": cliente.sexo.value if cliente.sexo else None,
         "estado_civil": cliente.estado_civil,
-        "nacionalidad": cliente.nacionalidad,
+        "id_nacionalidad": cliente.id_nacionalidad,
         "legajo": cliente.legajo,
         "estado": cliente.estado.value if cliente.estado else None,
         "cbu": cliente.cbu,
@@ -182,6 +189,7 @@ def get_cliente(cuil: str, db: Session = Depends(get_db)):
         "remuneracion": float(cliente.remuneracion or 0.0),
         "empleador_id": cliente.empleador_id,
         "cargo": cliente.cargo,
+        "sujeto_obligado": cliente.sujeto_obligado,
         "pep": cliente.pep,
         "repet": cliente.repet,
         "referidos": [
@@ -212,6 +220,104 @@ def get_cliente_bcra(cuil: str, db: Session = Depends(get_db)):
         
     return respuesta
 
+
+@router.get("/{cuil}/riesgo")
+def get_cliente_riesgo(cuil: str, db: Session = Depends(get_db)):
+    from src.logic.uif.riesgo_cliente import calculo
+    try:
+        df, riesgo_enum, advertencias = calculo(cuil, save=False)
+        puntaje_total = 0.0
+        if not df.empty:
+            puntaje_total = round(df.iloc[-1]["Puntaje"], 2)
+            # Removemos la última fila que contiene el total para que no salga doble en la tabla
+            df = df.iloc[:-1]
+            
+        return {
+            "nivel_riesgo": riesgo_enum.value if hasattr(riesgo_enum, "value") else str(riesgo_enum),
+            "puntaje_total": puntaje_total,
+            "detalles": df.to_dict(orient="records"),
+            "advertencias": advertencias
+        }
+    except Exception as e:
+        import traceback
+        raise HTTPException(status_code=500, detail=f"Error al calcular riesgo: {str(e)}\n{traceback.format_exc()}")
+
+@router.get("/{cuil}/perfil_transaccional")
+def get_cliente_perfil_transaccional(cuil: str, db: Session = Depends(get_db)):
+    from datetime import datetime
+    periodo = datetime.now().replace(day=1).date()
+    perfil = db.query(PerfilTransaccional).filter(PerfilTransaccional.cuil_cliente == cuil).order_by(PerfilTransaccional.id.desc()).first()
+    if not perfil:
+        return {
+            "cuil": cuil, "periodo": periodo.isoformat(), "sueldo_bruto": 0, "sueldo_neto": 0,
+            "asignacion_familiar": 0, "horas_extras": 0, "vacaciones": 0, "otros": 0, "descuentos_voluntarios": 0
+        }
+    return {
+        "cuil": perfil.cuil_cliente, "periodo": perfil.periodo.isoformat(), "sueldo_bruto": float(perfil.ingreso_bruto), "sueldo_neto": float(perfil.ingreso_neto),
+        "asignacion_familiar": float(perfil.asignacion_familiar), "horas_extras": float(perfil.horas_extras), "vacaciones": float(perfil.vacaciones),
+        "otros": float(perfil.otros), "descuentos_voluntarios": float(perfil.descuentos_voluntarios)
+    }
+
+from pydantic import BaseModel
+class PerfilTransaccionalCreate(BaseModel):
+    sueldo_bruto: float = 0.0
+    sueldo_neto: float = 0.0
+    asignacion_familiar: float = 0.0
+    horas_extras: float = 0.0
+    vacaciones: float = 0.0
+    otros: float = 0.0
+    descuentos_voluntarios: float = 0.0
+
+@router.post("/{cuil}/perfil_transaccional")
+def save_cliente_perfil_transaccional(cuil: str, payload: PerfilTransaccionalCreate, db: Session = Depends(get_db)):
+    from datetime import datetime
+    periodo = datetime.now().replace(day=1).date()
+    perfil = db.query(PerfilTransaccional).filter(PerfilTransaccional.cuil_cliente == cuil, PerfilTransaccional.periodo == periodo).first()
+    if not perfil:
+        perfil = PerfilTransaccional(cuil_cliente=cuil, periodo=periodo)
+        db.add(perfil)
+        
+    perfil.ingreso_bruto = payload.sueldo_bruto
+    perfil.ingreso_neto = payload.sueldo_neto
+    perfil.asignacion_familiar = payload.asignacion_familiar
+    perfil.horas_extras = payload.horas_extras
+    perfil.vacaciones = payload.vacaciones
+    perfil.otros = payload.otros
+    perfil.descuentos_voluntarios = payload.descuentos_voluntarios
+    
+    # Reemplazamos la remuneracion del cliente con el sueldo bruto
+    cliente = db.query(Cliente).filter(Cliente.cuil == cuil).first()
+    if cliente:
+        cliente.remuneracion = payload.sueldo_bruto
+
+    db.commit()
+    return {"status": "success", "message": "Perfil transaccional actualizado exitosamente"}
+
+from pandas import Period
+from src.logic.uif.perfil_transaccional import cuota_afectable, capital_neto_maximo
+@router.get("/{cuil}/cuota_afectable")
+def get_cuota_afectable(cuil: str, socio_id: int, db: Session = Depends(get_db)):
+    from datetime import datetime
+    import numpy as np
+    
+    socio = db.query(SocioComercial).filter(SocioComercial.id == socio_id).first()
+    if not socio:
+        raise HTTPException(status_code=404, detail="Socio comercial no encontrado")
+        
+    periodo_actual = Period(datetime.now().strftime("%Y-%m"))
+    try:
+        base, cupo = cuota_afectable(cuil, periodo_actual, socio)
+        
+        # Calculate capital maximo per tasa
+        df_max = capital_neto_maximo(cuil, periodo_actual, socio)
+        df_max = df_max.replace({np.nan: None})
+        maximos = df_max.to_dict(orient="records")
+        
+        return {"base": base, "cupo": cupo, "maximos": maximos}
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return {"base": 0.0, "cupo": 0.0, "maximos": [], "error": str(e)}
 
 @router.get("/{cuil}/cuenta_corriente")
 def get_cliente_cuenta_corriente(
@@ -319,7 +425,8 @@ def get_cliente_cuenta_corriente(
 def update_cliente(
     cuil: str,
     cliente_data: ClienteCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
 ) -> Dict[str, Any]:
     try:
         cliente = db.query(Cliente).filter(Cliente.cuil == cuil).first()
@@ -337,7 +444,7 @@ def update_cliente(
         try:
             asyncio.run(sync_repet_data(db))
             full_name = f"{cliente.nombre} {cliente.apellido}"
-            repet_result = screen_person(db, full_name=full_name)
+            repet_result = screen_person(db, full_name=full_name, cuil_cliente=cliente.cuil, user_id=current_user.id)
             if repet_result.get("status") == "ALERT":
                 cliente.repet = True
             else:

@@ -17,7 +17,7 @@ class ClienteCreate(BaseModel):
     fecha_nacimiento: Optional[date] = None
     sexo: Optional[SexoEnum] = None
     estado_civil: Optional[str] = None
-    nacionalidad: Optional[str] = None
+    id_nacionalidad: Optional[int] = None
     legajo: Optional[str] = None
     estado: Optional[EstadoClienteEnum] = EstadoClienteEnum.ACTIVO
     cbu: Optional[str] = None
@@ -37,6 +37,7 @@ class ClienteCreate(BaseModel):
     remuneracion: float = 0.0
     empleador_id: Optional[int] = None
     cargo: Optional[str] = None
+    sujeto_obligado: bool = False
     pep: bool = False
     repet: bool = False
     referidos: List[ReferidoCreate] = []

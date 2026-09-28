@@ -1,6 +1,8 @@
 import httpx
 import logging
 from sqlalchemy.orm import Session
+from sqlalchemy import cast, Date
+from datetime import date
 from unidecode import unidecode
 from rapidfuzz import process, fuzz
 from typing import Dict, Optional
@@ -106,11 +108,25 @@ async def sync_repet_data(db: Session):
         db.rollback()
         logger.error(f"Error sincronizando RePET: {str(e)}")
 
-def screen_person(db: Session, full_name: str, user_id: Optional[int] = None) -> Dict:
+def screen_person(db: Session, full_name: str, cuil_cliente: str, user_id: Optional[int] = None) -> Dict:
     """
     Busca a la persona en la base local del RePET usando Fuzzy Matching.
     Deja registro en la tabla de auditoría.
     """
+    hoy = date.today()
+    existing_log = db.query(RepetAuditLog).filter(
+        RepetAuditLog.searched_name == full_name,
+        cast(RepetAuditLog.timestamp, Date) == hoy
+    ).first()
+    
+    if existing_log:
+        return {
+            "status": "ALERT" if existing_log.is_match else "CLEAN",
+            "score": existing_log.match_score,
+            "message": "¡Coincidencia encontrada en RePET! (Caché)" if existing_log.is_match else "Sin coincidencias en RePET. (Caché)",
+            "matched_id": existing_log.matched_record_id
+        }
+
     target = normalize_text(full_name)
     
     # Extraemos nombres normalizados
@@ -143,6 +159,7 @@ def screen_person(db: Session, full_name: str, user_id: Optional[int] = None) ->
     # Guardamos Pista de Auditoría
     audit_log = RepetAuditLog(
         searched_name=full_name,
+        cuil_cliente=cuil_cliente,
         is_match=is_match,
         match_score=score,
         matched_record_id=matched_id,

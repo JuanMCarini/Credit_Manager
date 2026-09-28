@@ -5,6 +5,7 @@ import { downloadFile } from '../api/axiosClient';
 const BcraReportsPage = () => {
   const { socios } = useAppStore();
   const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('bcra');
 
   const getLastDayOfPreviousMonth = () => {
     const today = new Date();
@@ -24,6 +25,15 @@ const BcraReportsPage = () => {
     tipo_reporte: 'NORMAL',
     cliente: ''
   });
+
+  const [uifFilters, setUifFilters] = useState({
+    year: new Date().getFullYear().toString(),
+    month: (new Date().getMonth() + 1).toString().padStart(2, '0')
+  });
+
+  const handleUifChange = (e) => {
+    setUifFilters({ ...uifFilters, [e.target.name]: e.target.value });
+  };
 
   const handleChange = (e) => {
     setFilters({ ...filters, [e.target.name]: e.target.value });
@@ -70,15 +80,68 @@ const BcraReportsPage = () => {
     }
   };
 
+  const handleDownloadUIF = async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (uifFilters.year) params.append('year', uifFilters.year);
+      if (uifFilters.month) params.append('month', uifFilters.month);
+      
+      const fileName = `reporte_uif_${uifFilters.year}_${uifFilters.month || 'anual'}.xlsx`;
+      await downloadFile(`/api/v1/reports/uif/excel`, params, fileName);
+    } catch (error) {
+      alert("Error descargando reporte UIF: " + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <section className="tab-content active" style={{ animation: 'fadeIn 0.4s ease' }}>
       <header className="section-header">
-        <h2>Reportes BCRA</h2>
-        <p>Genere los archivos del Régimen Informativo BCRA 00006 - PNFC o exporte un reporte normal aplicando los filtros deseados.</p>
+        <h2>Reportes Regulados</h2>
+        <p>Genere los reportes para entidades reguladoras (BCRA, UIF).</p>
       </header>
 
+      <div className="tabs-container" style={{ display: 'flex', gap: '16px', marginBottom: '24px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
+        <button 
+          className={`tab-button ${activeTab === 'bcra' ? 'active' : ''}`}
+          onClick={() => setActiveTab('bcra')}
+          style={{
+            padding: '8px 16px',
+            background: 'none',
+            border: 'none',
+            borderBottom: activeTab === 'bcra' ? '2px solid var(--primary-color)' : '2px solid transparent',
+            color: activeTab === 'bcra' ? 'var(--primary-color)' : 'var(--text-secondary)',
+            fontWeight: activeTab === 'bcra' ? '600' : '400',
+            cursor: 'pointer',
+            fontSize: '1rem'
+          }}
+        >
+          Reporte BCRA
+        </button>
+        <button 
+          className={`tab-button ${activeTab === 'uif' ? 'active' : ''}`}
+          onClick={() => setActiveTab('uif')}
+          style={{
+            padding: '8px 16px',
+            background: 'none',
+            border: 'none',
+            borderBottom: activeTab === 'uif' ? '2px solid var(--primary-color)' : '2px solid transparent',
+            color: activeTab === 'uif' ? 'var(--primary-color)' : 'var(--text-secondary)',
+            fontWeight: activeTab === 'uif' ? '600' : '400',
+            cursor: 'pointer',
+            fontSize: '1rem'
+          }}
+        >
+          Reporte UIF
+        </button>
+      </div>
+
       <div className="glass-panel form-container" style={{ margin: '0 auto', padding: '32px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', marginBottom: '32px' }}>
+        {activeTab === 'bcra' && (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', marginBottom: '32px' }}>
           
           <div className="form-group">
             <label>Fecha de Información / Corte (Requerida)</label>
@@ -251,6 +314,55 @@ const BcraReportsPage = () => {
             {loading ? "Generando..." : "🏛️ Descargar Archivos BCRA (ZIP)"}
           </button>
         </div>
+        </>
+        )}
+
+        {activeTab === 'uif' && (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', marginBottom: '32px' }}>
+              <div className="form-group">
+                <label>Año (Requerido)</label>
+                <input 
+                  type="number" 
+                  name="year" 
+                  value={uifFilters.year} 
+                  onChange={handleUifChange} 
+                  placeholder="Ej: 2024"
+                  min="2000"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Mes (Opcional)</label>
+                <input 
+                  type="number" 
+                  name="month" 
+                  value={uifFilters.month} 
+                  onChange={handleUifChange} 
+                  placeholder="Ej: 08"
+                  min="1"
+                  max="12"
+                />
+                <small style={{ color: 'var(--text-secondary)', display: 'block', marginTop: '4px' }}>
+                  Deje en blanco para reporte anual.
+                </small>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '16px', justifyContent: 'flex-end', marginTop: '24px' }}>
+              <button 
+                type="button" 
+                className="btn-primary" 
+                onClick={handleDownloadUIF} 
+                disabled={loading}
+                style={{ minWidth: '200px', padding: '12px 24px', fontSize: '1.05rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}
+              >
+                {loading ? "Generando..." : "📊 Descargar Reporte UIF (Excel)"}
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </section>
   );

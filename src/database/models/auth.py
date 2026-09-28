@@ -36,6 +36,7 @@ class Usuario(Base):
     rol = relationship("Rol", back_populates="usuarios")
 
     logs_auditoria = relationship("RegistroAuditoria", back_populates="usuario")
+    repet_audit_logs = relationship("RepetAuditLog", back_populates="usuario")
 
 class RegistroAuditoria(Base):
     __tablename__ = "registros_auditoria"
