@@ -12,7 +12,6 @@ import pandas as pd
 from dataclasses import dataclass
 from pathlib import Path
 from src.utils.files import select_directory
-from data_imports.init_socios import ensure_socios_exist
 
 @dataclass
 class CQLData:
@@ -67,20 +66,19 @@ def load_cql_data() -> CQLData:
         )
 
     # Load the files into pandas DataFrames setting the corresponding indices
-    df_clientes = pd.read_excel(clientes, index_col="ID")
+    df_clientes = pd.read_excel(clientes, index_col="ID", dtype={"CBU": str})
+    df_clientes["CBU"] = df_clientes["CBU"].str.zfill(22)
     df_creditos = pd.read_excel(creditos, index_col="Crédito")
     df_cuotas = pd.read_excel(cuotas)
     df_cobranzas = pd.read_excel(cobranzas)
     df_inventario = pd.read_excel(inventario, index_col="Id. Op.")
     df_socios_excel = pd.read_excel(socios)
-    df_transferencias = pd.read_csv(transferencias, sep=';', header=None)
+    df_transferencias = pd.read_csv(transferencias, sep=';', header=None, dtype={0: str, 3: str})
     df_transferencias.columns = ['CBU', 'Fecha', 'monto', 'CUIT', 'credito_id', 'razon_social']
+    df_transferencias["CBU"] = df_transferencias["CBU"].str.zfill(22)
     df_transferencias.drop(columns=["Fecha"], inplace=True)
     df_transferencias["credito_id"] = df_transferencias["credito_id"].map(df_inventario["Clave Externa"])
-    
-    # Initialize commercial partners in the database automatically
-    ensure_socios_exist(df_socios_excel)
-    
+
     return CQLData(
         df_clientes=df_clientes,
         df_creditos=df_creditos,
