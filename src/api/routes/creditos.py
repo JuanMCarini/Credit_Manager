@@ -17,6 +17,8 @@ from src.database.models import EstadoCredito, Cuota, DocumentoLegajo, EstadoCuo
 from src.api.schemas.creditos import CreditoCreate, CreditoEstadoUpdate, DocumentoLegajoOut
 from src.logic.creditos.origination import LoanOriginator
 from src.logic.creditos.amortization import AmortizationEngine
+from src.api.dependencies.auth import get_current_user
+from src.database.models.auth import Usuario
 
 router = APIRouter(tags=["Créditos"])
 
@@ -117,7 +119,8 @@ def preview_legajo(
 @router.post("/api/v1/creditos/originacion")
 def create_credito(
     credito_data: CreditoCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
 ) -> Dict[str, Any]:
     # 1. Validación RePET antes de la originación
     from src.database.models import Cliente
@@ -131,7 +134,7 @@ def create_credito(
     full_name = f"{cliente.nombre} {cliente.apellido}"
     
     try:
-        repet_result = screen_person(db, full_name=full_name)
+        repet_result = screen_person(db, full_name=full_name, cuil_cliente=cliente.cuil, user_id=current_user.id)
         if repet_result.get("status") == "ALERT":
             cliente.repet = True
             db.commit()

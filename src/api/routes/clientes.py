@@ -9,13 +9,16 @@ from src.database.models import SocioComercial
 from src.database.models.creditos.clientes import Referido
 from src.database.models.creditos.perfil_trans import PerfilTransaccional
 from src.api.schemas.clientes import ClienteCreate
+from src.api.dependencies.auth import get_current_user
+from src.database.models.auth import Usuario
 
 router = APIRouter(prefix="/api/v1/clientes", tags=["Clientes"])
 
 @router.post("")
 def create_cliente(
     cliente_data: ClienteCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
 ) -> Dict[str, Any]:
     try:
         data = cliente_data.dict(exclude_unset=True)
@@ -30,7 +33,7 @@ def create_cliente(
         full_name = f"{nuevo_cliente.nombre} {nuevo_cliente.apellido}"
         try:
             asyncio.run(sync_repet_data(db))
-            repet_result = screen_person(db, full_name=full_name)
+            repet_result = screen_person(db, full_name=full_name, cuil_cliente=nuevo_cliente.cuil, user_id=current_user.id)
             if repet_result.get("status") == "ALERT":
                 nuevo_cliente.repet = True
         except Exception as e:
@@ -142,7 +145,7 @@ def get_clientes_list(
     return {"items": result, "total": total}
 
 @router.get("/{cuil}")
-def get_cliente(cuil: str, db: Session = Depends(get_db)):
+def get_cliente(cuil: str, db: Session = Depends(get_db), current_user: Usuario = Depends(get_current_user)):
     cliente = db.query(Cliente).filter(or_(Cliente.cuil == cuil, Cliente.documento == cuil)).first()
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
@@ -152,7 +155,7 @@ def get_cliente(cuil: str, db: Session = Depends(get_db)):
     try:
         asyncio.run(sync_repet_data(db))
         full_name = f"{cliente.nombre} {cliente.apellido}"
-        repet_result = screen_person(db, full_name=full_name)
+        repet_result = screen_person(db, full_name=full_name, cuil_cliente=cliente.cuil, user_id=current_user.id)
         if repet_result.get("status") == "ALERT" and not cliente.repet:
             cliente.repet = True
             db.commit()
@@ -422,7 +425,8 @@ def get_cliente_cuenta_corriente(
 def update_cliente(
     cuil: str,
     cliente_data: ClienteCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
 ) -> Dict[str, Any]:
     try:
         cliente = db.query(Cliente).filter(Cliente.cuil == cuil).first()
@@ -440,7 +444,7 @@ def update_cliente(
         try:
             asyncio.run(sync_repet_data(db))
             full_name = f"{cliente.nombre} {cliente.apellido}"
-            repet_result = screen_person(db, full_name=full_name)
+            repet_result = screen_person(db, full_name=full_name, cuil_cliente=cliente.cuil, user_id=current_user.id)
             if repet_result.get("status") == "ALERT":
                 cliente.repet = True
             else:

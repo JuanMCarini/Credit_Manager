@@ -1,3 +1,4 @@
+from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Text
 from sqlalchemy.sql import func
 from src.database import Base
@@ -37,8 +38,12 @@ class RepetAuditLog(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     timestamp = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    cuil_cliente = Column(String(11), ForeignKey("clientes.cuil"), nullable=False)
     searched_name = Column(String(255), nullable=False)
     is_match = Column(Boolean, nullable=False, default=False)
     match_score = Column(Float, nullable=True)
     matched_record_id = Column(Integer, nullable=True)
     user_id = Column(Integer, ForeignKey("usuarios.id"), nullable=True)  # Usuario interno que ejecutó la acción
+
+    cliente = relationship("Cliente", back_populates="repet_audit_logs")
+    usuario = relationship("Usuario", back_populates="repet_audit_logs")

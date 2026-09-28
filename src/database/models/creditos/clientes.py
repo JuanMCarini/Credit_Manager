@@ -165,6 +165,7 @@ class Cliente(Base):
     provincia = relationship("Provincia", back_populates="clientes")
     empleador = relationship("Empleador", back_populates="empleados")
     referidos = relationship("Referido", back_populates="cliente", cascade="all, delete-orphan")
+    repet_audit_logs = relationship("RepetAuditLog", back_populates="cliente", cascade="all, delete-orphan")
 
     @validates("cuil", "documento")
     def validate_cuil_dni(self, key, value):

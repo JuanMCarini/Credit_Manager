@@ -108,7 +108,7 @@ async def sync_repet_data(db: Session):
         db.rollback()
         logger.error(f"Error sincronizando RePET: {str(e)}")
 
-def screen_person(db: Session, full_name: str, user_id: Optional[int] = None) -> Dict:
+def screen_person(db: Session, full_name: str, cuil_cliente: str, user_id: Optional[int] = None) -> Dict:
     """
     Busca a la persona en la base local del RePET usando Fuzzy Matching.
     Deja registro en la tabla de auditoría.
@@ -159,6 +159,7 @@ def screen_person(db: Session, full_name: str, user_id: Optional[int] = None) ->
     # Guardamos Pista de Auditoría
     audit_log = RepetAuditLog(
         searched_name=full_name,
+        cuil_cliente=cuil_cliente,
         is_match=is_match,
         match_score=score,
         matched_record_id=matched_id,

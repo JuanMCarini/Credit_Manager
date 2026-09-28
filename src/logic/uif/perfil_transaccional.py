@@ -1,12 +1,14 @@
-from IPython.core import display_functions
 from pandas import Period, read_sql
 from decimal import Decimal
+from typing import Union
+from datetime import date
 
 from src.database import SessionLocal
 from src.database.models import SocioComercial, TasaYComision, EstadoComisionEnum
 from src.database.models.creditos.perfil_trans import PerfilTransaccional, ReglasPerfilTransaccional, TipoSueldo
 
-def cuota_afectable(cuil: str, periodo: Period, socio: SocioComercial) -> float:
+
+def cuota_afectable(cuil: str, periodo: Union[Period, date], socio: Union[SocioComercial, int]) -> float:
     """
     Calcula la cuota afectable máxima para un cliente y socio comercial dados, en un período específico.
 
@@ -14,8 +16,8 @@ def cuota_afectable(cuil: str, periodo: Period, socio: SocioComercial) -> float:
 
     Args:
         cuil (str): CUIL del cliente.
-        periodo (Period): Período a evaluar (mes/año).
-        socio (SocioComercial): Objeto del socio comercial con sus reglas asociadas.
+        periodo (Union[Period, date]): Período a evaluar (mes/año).
+        socio (Union[SocioComercial, int]): Objeto del socio comercial con sus reglas asociadas, o su ID numérico.
 
     Returns:
         float: El valor máximo de la cuota afectable permitida, o 0.0 si no se encuentra información.
@@ -23,11 +25,21 @@ def cuota_afectable(cuil: str, periodo: Period, socio: SocioComercial) -> float:
 
     db = SessionLocal()
 
+    socio_id = socio.id if hasattr(socio, 'id') else socio
+    
+    # Extraemos el date según el tipo de objeto que recibimos en `periodo`
+    if hasattr(periodo, 'start_time'):
+        periodo_val = periodo.start_time.date()
+    elif hasattr(periodo, 'date'):
+        periodo_val = periodo.date()
+    else:
+        periodo_val = periodo
+
     try:
-        regla = db.query(ReglasPerfilTransaccional).filter(ReglasPerfilTransaccional.id_socio_comercial == socio.id).first()
+        regla = db.query(ReglasPerfilTransaccional).filter(ReglasPerfilTransaccional.id_socio_comercial == socio_id).first()
         perfil = db.query(PerfilTransaccional).filter(
             PerfilTransaccional.cuil_cliente == cuil,
-            PerfilTransaccional.periodo == periodo.start_time.date()
+            PerfilTransaccional.periodo == periodo_val
         ).first()
 
         # Validación en caso de que no existan registros para no lanzar excepciones
@@ -55,13 +67,14 @@ def cuota_afectable(cuil: str, periodo: Period, socio: SocioComercial) -> float:
         db.close()
 
 
-def capital_neto_maximo(cuil: str, periodo: Period, socio: SocioComercial) -> float:
+def capital_neto_maximo(cuil: str, periodo: Union[Period, date], socio: Union[SocioComercial, int]) -> float:
     _, cupo = cuota_afectable(cuil, periodo, socio)
 
     db = SessionLocal()
+    socio_id = socio.id if hasattr(socio, 'id') else socio
     try:
         tasas = db.query(TasaYComision.id, TasaYComision.plazo, TasaYComision.tna_c_iva, TasaYComision.gasto_1_porcentaje , TasaYComision.gasto_2_porcentaje, TasaYComision.porcentaje_sellado).filter(
-            TasaYComision.socio_originador_id == socio.id,
+            TasaYComision.socio_originador_id == socio_id,
             TasaYComision.estado == EstadoComisionEnum.ACTIVA
         )
         df = read_sql(tasas.statement, db.get_bind())
@@ -78,7 +91,7 @@ def capital_neto_maximo(cuil: str, periodo: Period, socio: SocioComercial) -> fl
         
         df.sort_values(by=["plazo"], inplace=True)
 
-        regla = db.query(ReglasPerfilTransaccional).filter(ReglasPerfilTransaccional.id_socio_comercial == socio.id).first()
+        regla = db.query(ReglasPerfilTransaccional).filter(ReglasPerfilTransaccional.id_socio_comercial == socio_id).first()
         df = df[(df["cap_neto_max"] >= regla.cap_min) & (df["cap_neto_max"] <= regla.cap_max)]
 
     finally:
