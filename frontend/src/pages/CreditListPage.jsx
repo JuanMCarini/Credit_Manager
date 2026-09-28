@@ -251,6 +251,14 @@ const CreditListPage = () => {
         </div>
       </header>
 
+      {isError && (
+        <div style={{ padding: '20px', background: 'rgba(255,0,0,0.1)', color: 'red', border: '1px solid red', borderRadius: '4px', marginBottom: '16px' }}>
+          <strong>Error de conexión con el servidor:</strong> {error?.message}
+          <br />
+          <small>Por favor, recargue la página o revise la consola.</small>
+        </div>
+      )}
+
       <div className="results-container glass-panel">
         <div className="table-responsive">
           <table className="data-table">
