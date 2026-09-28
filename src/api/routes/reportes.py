@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from src.reports.balances import saldos, cobranzas_recibidas
+from src.logic.uif.reportes import reportes_uif
 
 router = APIRouter(prefix="/api/v1/reports", tags=["Reportes"])
 
@@ -107,6 +108,33 @@ def export_saldos_excel(
         return StreamingResponse(output, headers=headers, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generando Excel: {str(e)}")
+
+@router.get("/uif/excel")
+def export_uif_excel(
+    year: Optional[str] = Query(None, description="Año para el reporte UIF."),
+    month: Optional[str] = Query(None, description="Mes para el reporte UIF.")
+):
+    try:
+        df_clt, df_riesgo_clt, df_repet, df_perf = reportes_uif(save=False, year=year, month=month)
+        
+        # Eliminar timezones de las columnas datetime porque Excel no los soporta
+        for df in [df_clt, df_riesgo_clt, df_repet, df_perf]:
+            for col in df.select_dtypes(include=['datetimetz']).columns:
+                df[col] = df[col].dt.tz_localize(None)
+                
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df_clt.to_excel(writer, sheet_name="Clientes", index=False)
+            df_riesgo_clt.to_excel(writer, sheet_name="Riesgo Cliente", index=False)
+            df_repet.to_excel(writer, sheet_name="Repet Audit Log", index=False)
+            df_perf.to_excel(writer, sheet_name="Perfil Transaccional", index=False)
+        output.seek(0)
+        
+        file_name = f"reporte_uif_{year}_{month if month else 'anual'}.xlsx" if year else "reporte_uif_historico.xlsx"
+        headers = {'Content-Disposition': f'attachment; filename="{file_name}"'}
+        return StreamingResponse(output, headers=headers, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generando Excel UIF: {str(e)}")
 
 @router.get("/cobranzas/evolution")
 def get_cobranzas_evolution(
