@@ -12,7 +12,7 @@ import pandas as pd
 from dataclasses import dataclass
 from pathlib import Path
 from src.utils.files import select_directory
-from src.imports.init_socios import ensure_socios_exist
+from data_imports.init_socios import ensure_socios_exist
 
 @dataclass
 class CQLData:
