@@ -68,7 +68,11 @@ class SocioComercial(Base):
         "TasaYComision", foreign_keys="[TasaYComision.gasto_2_socio_id]", back_populates="socio_gasto_2"
     )
     empleadores = relationship("Empleador", back_populates="socio_comercial")
-    politicas_crediticias = relationship("PoliticaCrediticia", back_populates="socio_originador")
+    politicas_crediticias = relationship("PoliticaCrediticia", 
+    back_populates="socio_originador")
+
+    penalties = relationship("Penalty", back_populates="socio_originador", cascade="all, delete-orphan")
+
     def __repr__(self):
         return (
             f"<SocioComercial(razon_social='{self.razon_social}', cuit='{self.cuit}')>"

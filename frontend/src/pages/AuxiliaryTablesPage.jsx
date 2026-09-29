@@ -4,7 +4,7 @@ import axiosClient from '../api/axiosClient';
 import ExportExcelButton from '../components/ExportExcelButton';
 
 const AuxiliaryTablesPage = () => {
-  const { nacionalidades, provincias, empleadores, socios, operadores, tasasYComisiones, relaciones, comercializadores, bancos, cuentas, conceptos, clasificaciones, comisionesDeuda, factoresRiesgo, multiplicadoresRiesgo, reglasPerfilesTransaccionales, fetchAuxiliares } = useAppStore();
+  const { nacionalidades, provincias, empleadores, socios, operadores, tasasYComisiones, relaciones, comercializadores, bancos, cuentas, conceptos, clasificaciones, comisionesDeuda, factoresRiesgo, multiplicadoresRiesgo, reglasPerfilesTransaccionales, penalties, fetchAuxiliares } = useAppStore();
 
   const [activeTable, setActiveTable] = useState('socios');
   const [isCreating, setIsCreating] = useState(false);
@@ -68,7 +68,8 @@ const AuxiliaryTablesPage = () => {
     comisionesDeuda: { name: 'Comisiones Deuda', data: comisionesDeuda, endpoint: 'comisiones_deuda', schema: ['id', 'fecha', 'id_socio_comercial', 'porcentaje'] },
     factoresRiesgo: { name: 'Factores de Riesgo', data: factoresRiesgo, endpoint: 'factores_riesgo', schema: ['id', 'codigo', 'detalle', 'peso'] },
     multiplicadoresRiesgo: { name: 'Multiplicadores de Riesgo', data: multiplicadoresRiesgo, endpoint: 'multiplicadores_riesgo', schema: ['id', 'id_riesgo', 'codigo', 'detalle', 'multiplicador', 'variable'] },
-    reglasPerfilesTransaccionales: { name: 'Perfiles Transaccionales', data: reglasPerfilesTransaccionales, endpoint: 'reglas_perfiles_transaccionales', schema: ['id', 'id_socio_comercial', 'cupo', 'sueldo_tipo', 'asignacion_familiar', 'horas_extras', 'vacaciones', 'otros', 'descuentos_voluntarios', 'cap_min', 'cap_max'] }
+    reglasPerfilesTransaccionales: { name: 'Perfiles Transaccionales', data: reglasPerfilesTransaccionales, endpoint: 'reglas_perfiles_transaccionales', schema: ['id', 'id_socio_comercial', 'cupo', 'sueldo_tipo', 'asignacion_familiar', 'horas_extras', 'vacaciones', 'otros', 'descuentos_voluntarios', 'cap_min', 'cap_max'] },
+    penalties: { name: 'Punitorios (Penalties)', data: penalties, endpoint: 'penalties', schema: ['id', 'socio_originador_id', 'tna_c_iva', 'plazo_hasta', 'tipo_calculo'] }
   };
 
   const currentTableConfig = tablesMap[activeTable];
@@ -358,7 +359,7 @@ const AuxiliaryTablesPage = () => {
           >
             {[
               { label: "Configuración General", keys: ["nacionalidades", "provincias", "empleadores"] },
-              { label: "Créditos y Riesgo", keys: ["socios", "tasasYComisiones", "reglasPerfilesTransaccionales", "factoresRiesgo", "multiplicadoresRiesgo"] },
+              { label: "Créditos y Riesgo", keys: ["socios", "tasasYComisiones", "reglasPerfilesTransaccionales", "factoresRiesgo", "multiplicadoresRiesgo", "penalties"] },
               { label: "Inversores y Comercialización", keys: ["comercializadores", "relaciones", "comisionesDeuda"] },
               { label: "Finanzas", keys: ["bancos", "cuentas", "conceptos", "clasificaciones"] },
               { label: "Cheques", keys: ["operadores"] }
@@ -645,6 +646,17 @@ const AuxiliaryTablesPage = () => {
                         {['EXCELENTE', 'BUENO', 'REGULAR', 'MALO', 'RECHAZADO'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
                       </select>
                     );
+                  } else if (col === 'tipo_calculo') {
+                    inputElement = (
+                      <select
+                        value={editFormData[col] ?? ''}
+                        onChange={(e) => handleEditChange(col, e.target.value)}
+                        className="input-field" required
+                      >
+                        <option value="">Seleccione...</option>
+                        {['DIRECTO', 'ANUAL'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                      </select>
+                    );
                   } else if (col === 'estado') {
                     const estadoOptions = currentTableConfig.endpoint === 'tasas_y_comisiones'
                       ? ['ACTIVA', 'INACTIVA', 'SEMI ACTIVA']
@@ -782,23 +794,23 @@ const AuxiliaryTablesPage = () => {
                         <input
                           type="text"
                           value={
-                            editFormData[col] !== undefined && editFormData[col] !== null 
-                              ? (typeof editFormData[col] === 'number' 
-                                  ? editFormData[col].toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) 
-                                  : editFormData[col])
+                            editFormData[col] !== undefined && editFormData[col] !== null
+                              ? (typeof editFormData[col] === 'number'
+                                ? editFormData[col].toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                : editFormData[col])
                               : ''
                           }
                           onChange={(e) => {
-                             handleEditChange(col, e.target.value);
+                            handleEditChange(col, e.target.value);
                           }}
                           onBlur={(e) => {
-                             let val = String(e.target.value).replace(/\./g, '').replace(',', '.').replace(/[^0-9.-]/g, '');
-                             const num = parseFloat(val);
-                             if (!isNaN(num)) {
-                               handleEditChange(col, num);
-                             } else {
-                               handleEditChange(col, '');
-                             }
+                            let val = String(e.target.value).replace(/\./g, '').replace(',', '.').replace(/[^0-9.-]/g, '');
+                            const num = parseFloat(val);
+                            if (!isNaN(num)) {
+                              handleEditChange(col, num);
+                            } else {
+                              handleEditChange(col, '');
+                            }
                           }}
                           className="input-field" required
                         />
@@ -886,21 +898,21 @@ const AuxiliaryTablesPage = () => {
             <form onSubmit={handleAdvanceSubmit}>
               <div className="form-group">
                 <label>Monto del Anticipo</label>
-                <input 
-                  type="number" 
+                <input
+                  type="number"
                   step="0.01"
-                  value={advanceAmount} 
-                  onChange={(e) => setAdvanceAmount(e.target.value)} 
-                  required 
+                  value={advanceAmount}
+                  onChange={(e) => setAdvanceAmount(e.target.value)}
+                  required
                 />
               </div>
               <div className="form-group">
                 <label>Fecha</label>
-                <input 
-                  type="date" 
-                  value={advanceDate} 
-                  onChange={(e) => setAdvanceDate(e.target.value)} 
-                  required 
+                <input
+                  type="date"
+                  value={advanceDate}
+                  onChange={(e) => setAdvanceDate(e.target.value)}
+                  required
                 />
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
@@ -915,9 +927,9 @@ const AuxiliaryTablesPage = () => {
       {/* Modal Bulk Edit Factores */}
       {showBulkEditFactores && (
         <div className="modal-overlay">
-          <div className="modal-content glass-panel" style={{ 
-            width: '500px', maxWidth: '90%', 
-            maxHeight: '90vh', display: 'flex', flexDirection: 'column' 
+          <div className="modal-content glass-panel" style={{
+            width: '500px', maxWidth: '90%',
+            maxHeight: '90vh', display: 'flex', flexDirection: 'column'
           }}>
             <h3 style={{ marginTop: 0, color: 'var(--text-color)', flexShrink: 0 }}>Ajustar Pesos de Riesgo</h3>
             <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '20px', flexShrink: 0 }}>
@@ -932,12 +944,12 @@ const AuxiliaryTablesPage = () => {
                       <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Código: {f.codigo}</div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <input 
-                        type="number" 
-                        step="0.1" 
-                        min="0" 
-                        max="100" 
-                        value={f.peso_pct} 
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="100"
+                        value={f.peso_pct}
                         onChange={(e) => handleBulkFactoresChange(f.id, e.target.value)}
                         className="input-field"
                         style={{ width: '80px', padding: '8px', textAlign: 'right', margin: 0 }}
@@ -948,23 +960,23 @@ const AuxiliaryTablesPage = () => {
                   </div>
                 ))}
               </div>
-              
+
               <div style={{ flexShrink: 0 }}>
-                <div style={{ 
-                  marginTop: '16px', padding: '16px', borderRadius: '8px', 
+                <div style={{
+                  marginTop: '16px', padding: '16px', borderRadius: '8px',
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                   background: isBulkFactoresValid ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
                   border: `1px solid ${isBulkFactoresValid ? '#10b981' : '#ef4444'}`
                 }}>
                   <span style={{ fontWeight: 'bold' }}>Total Resultante:</span>
-                  <span style={{ 
+                  <span style={{
                     fontWeight: 'bold', fontSize: '1.2rem',
-                    color: isBulkFactoresValid ? '#10b981' : '#ef4444' 
+                    color: isBulkFactoresValid ? '#10b981' : '#ef4444'
                   }}>
                     {bulkFactoresTotal.toFixed(2)}%
                   </span>
                 </div>
-                
+
                 {!isBulkFactoresValid && (
                   <div style={{ color: '#ef4444', fontSize: '0.85rem', marginTop: '8px', textAlign: 'center' }}>
                     El total debe ser 100%. Por favor, ajuste los valores.

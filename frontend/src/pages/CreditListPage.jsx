@@ -107,26 +107,26 @@ const CreditListPage = () => {
     });
   };
 
-  const filteredAndSortedCreditos = useMemo(() => {
+  const getFilteredData = (ignoreKey = null) => {
     let result = [...creditos];
     
     // Filtros locales
-    if (filter.ID && filter.ID.length > 0) {
+    if (ignoreKey !== 'ID' && filter.ID && filter.ID.length > 0) {
       result = result.filter(c => filter.ID.includes(String(c.ID)));
     }
-    if (filter.IdExterno) {
+    if (ignoreKey !== 'IdExterno' && filter.IdExterno) {
       const q = filter.IdExterno.toLowerCase();
       result = result.filter(c => c["ID Externo"] && String(c["ID Externo"]).toLowerCase().includes(q));
     }
-    if (filter.Originador) {
+    if (ignoreKey !== 'Originador' && filter.Originador) {
       const q = filter.Originador.toLowerCase();
       result = result.filter(c => c["Socio Originador"] && String(c["Socio Originador"]).toLowerCase().includes(q));
     }
-    if (filter.CUIL) {
+    if (ignoreKey !== 'CUIL' && filter.CUIL) {
       const q = filter.CUIL.toLowerCase();
       result = result.filter(c => c["Cliente CUIL"] && String(c["Cliente CUIL"]).toLowerCase().includes(q));
     }
-    if (filter.Capital && (filter.Capital.min !== undefined || filter.Capital.max !== undefined)) {
+    if (ignoreKey !== 'Capital' && filter.Capital && (filter.Capital.min !== undefined || filter.Capital.max !== undefined)) {
       result = result.filter(c => {
         const val = c.Capital || 0;
         if (filter.Capital.min !== undefined && val < filter.Capital.min) return false;
@@ -134,25 +134,25 @@ const CreditListPage = () => {
         return true;
       });
     }
-    if (filter.Plazo) {
+    if (ignoreKey !== 'Plazo' && filter.Plazo) {
       const q = filter.Plazo;
       result = result.filter(c => c.Plazo && String(c.Plazo) === q);
     }
-    if (filter.TNA) {
+    if (ignoreKey !== 'TNA' && filter.TNA) {
       const q = filter.TNA;
       result = result.filter(c => c["TNA con IVA"] && String(c["TNA con IVA"]).includes(q));
     }
-    if (filter.IdTasa) {
+    if (ignoreKey !== 'IdTasa' && filter.IdTasa) {
       const q = filter.IdTasa.toLowerCase();
       result = result.filter(c => c["ID Tasa Comision"] && String(c["ID Tasa Comision"]).toLowerCase().includes(q));
     }
-    if (filter.TipoCredito && filter.TipoCredito.length > 0) {
+    if (ignoreKey !== 'TipoCredito' && filter.TipoCredito && filter.TipoCredito.length > 0) {
       result = result.filter(c => filter.TipoCredito.includes(c["Tipo Crédito"]));
     }
-    if (filter.Estado && filter.Estado.length > 0) {
+    if (ignoreKey !== 'Estado' && filter.Estado && filter.Estado.length > 0) {
       result = result.filter(c => filter.Estado.includes(c.Estado));
     }
-    if (filter.SaldoMora && (filter.SaldoMora.min !== undefined || filter.SaldoMora.max !== undefined)) {
+    if (ignoreKey !== 'SaldoMora' && filter.SaldoMora && (filter.SaldoMora.min !== undefined || filter.SaldoMora.max !== undefined)) {
       result = result.filter(c => {
         const val = c["Saldo en Mora"] || 0;
         if (filter.SaldoMora.min !== undefined && val < filter.SaldoMora.min) return false;
@@ -160,7 +160,7 @@ const CreditListPage = () => {
         return true;
       });
     }
-    if (filter.DiasMora && (filter.DiasMora.min !== undefined || filter.DiasMora.max !== undefined)) {
+    if (ignoreKey !== 'DiasMora' && filter.DiasMora && (filter.DiasMora.min !== undefined || filter.DiasMora.max !== undefined)) {
       result = result.filter(c => {
         const val = c["Días de Mora"] || 0;
         if (filter.DiasMora.min !== undefined && val < filter.DiasMora.min) return false;
@@ -168,10 +168,15 @@ const CreditListPage = () => {
         return true;
       });
     }
-    if (filter.Fecha && filter.Fecha.length > 0) {
+    if (ignoreKey !== 'Fecha' && filter.Fecha && filter.Fecha.length > 0) {
       result = result.filter(c => filter.Fecha.includes(c["Fecha Emisión"]));
     }
+    return result;
+  };
 
+  const filteredAndSortedCreditos = useMemo(() => {
+    let result = getFilteredData();
+    
     if (sortConfig.key) {
       result.sort((a, b) => {
         let valA = a[sortConfig.key] ?? '';
@@ -187,20 +192,20 @@ const CreditListPage = () => {
   }, [creditos, filter, sortConfig]);
 
   const ESTADOS_DISPONIBLES = useMemo(() => {
-    return [...new Set(creditos.map(c => c.Estado).filter(Boolean))].sort();
-  }, [creditos]);
+    return [...new Set(getFilteredData('Estado').map(c => c.Estado).filter(Boolean))].sort();
+  }, [creditos, filter]);
 
   const AVAILABLE_CREDIT_IDS = useMemo(() => {
-    return [...new Set(creditos.map(c => c.ID).filter(Boolean))].sort((a,b)=>a-b).map(String);
-  }, [creditos]);
+    return [...new Set(getFilteredData('ID').map(c => c.ID).filter(Boolean))].sort((a,b)=>a-b).map(String);
+  }, [creditos, filter]);
 
   const AVAILABLE_TIPOS_CREDITO = useMemo(() => {
-    return [...new Set(creditos.map(c => c["Tipo Crédito"]).filter(Boolean))].sort();
-  }, [creditos]);
+    return [...new Set(getFilteredData('TipoCredito').map(c => c["Tipo Crédito"]).filter(Boolean))].sort();
+  }, [creditos, filter]);
 
   const AVAILABLE_FECHAS_EMISION = useMemo(() => {
-    return [...new Set(creditos.map(c => c["Fecha Emisión"]).filter(Boolean))].sort();
-  }, [creditos]);
+    return [...new Set(getFilteredData('Fecha').map(c => c["Fecha Emisión"]).filter(Boolean))].sort();
+  }, [creditos, filter]);
 
   const totalCapital = useMemo(() => {
     return filteredAndSortedCreditos.reduce((acc, c) => acc + (c.Capital || 0), 0);

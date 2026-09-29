@@ -9,6 +9,7 @@ from src.database import get_db, Provincia, Empleador, SocioComercial, TasaYComi
 from src.database.models.creditos.clientes import Nacionalidad
 from src.database.models.creditos.uif import FactoRiesgo, MultiplicadoresRiesgo
 from src.database.models.creditos.perfil_trans import ReglasPerfilTransaccional
+from src.database.models.creditos.penalty import Penalty
 from src.api.schemas.auxiliares import TabulatorRequest
 
 router = APIRouter(prefix="/api/v1/auxiliares", tags=["Auxiliares"])
@@ -24,7 +25,8 @@ AUX_TABLES = {
     "nacionalidades": Nacionalidad,
     "factores_riesgo": FactoRiesgo,
     "multiplicadores_riesgo": MultiplicadoresRiesgo,
-    "reglas_perfiles_transaccionales": ReglasPerfilTransaccional
+    "reglas_perfiles_transaccionales": ReglasPerfilTransaccional,
+    "penalties": Penalty
 }
 
 def _parse_aux_payload(payload: dict) -> dict:

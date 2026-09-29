@@ -1,13 +1,13 @@
 import { useState, useMemo } from 'react';
 import { FilterX } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
-import { useDebounce } from '../hooks/useDebounce';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import axiosClient from '../api/axiosClient';
 import ClientEditModal from '../components/ClientEditModal';
 import ClientCCModal from '../components/ClientCCModal';
 import ClientViewModal from '../components/ClientViewModal';
 import ExportExcelButton from '../components/ExportExcelButton';
+import ExcelListFilter from '../components/ExcelListFilter';
 import { CreditCard, Eye, Edit, Trash2 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 
@@ -16,33 +16,19 @@ const ClientListPage = () => {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
   const isAuditor = user?.rol === 'Auditor / Solo Lectura';
-  const limit = 1000;
 
-  const [filter, setFilter] = useState({ CUIL: '', Documento: '', Apellido: '', Nombre: '', Estado: [], Mail: '', Teléfono: '' });
-  const debouncedFilter = useDebounce(filter, 500);
+  const [filter, setFilter] = useState({ CUIL: [], Documento: [], Apellido: [], Nombre: [], Estado: [], Mail: [], Teléfono: [] });
   
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
-  const [showEstadoFilter, setShowEstadoFilter] = useState(false);
-
-  const ESTADOS_DISPONIBLES = ['ACTIVO', 'INACTIVO', 'MOROSO', 'INCOBRABLE'];
 
   const [editCuil, setEditCuil] = useState(null);
   const [ccCuil, setCcCuil] = useState(null);
   const [viewClient, setViewClient] = useState(null);
 
-  const fetchClients = async ({ pageParam = 0, queryKey }) => {
-    const [_key, filters] = queryKey;
-    const f = { ...filters };
+  const fetchClients = async () => {
     const p = {
-      skip: pageParam * limit,
-      limit: limit,
-      ...(f.CUIL && { cuil: f.CUIL }),
-      ...(f.Documento && { documento: f.Documento }),
-      ...(f.Apellido && { apellido: f.Apellido }),
-      ...(f.Nombre && { nombre: f.Nombre }),
-      ...(f.Estado && f.Estado.length > 0 && { estado: f.Estado.join(',') }),
-      ...(f.Mail && { mail: f.Mail }),
-      ...(f.Teléfono && { telefono: f.Teléfono }),
+      skip: 0,
+      limit: 100000
     };
     const res = await axiosClient.get('/api/v1/clientes', { params: p });
     return res.data;
@@ -54,23 +40,14 @@ const ClientListPage = () => {
     isError,
     error,
     isFetching,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage
-  } = useInfiniteQuery({
-    queryKey: ['clientes', debouncedFilter],
+  } = useQuery({
+    queryKey: ['clientes'],
     queryFn: fetchClients,
-    getNextPageParam: (lastPage, pages) => {
-       const loadedItems = pages.length * limit;
-       if (loadedItems < lastPage.total) {
-           return pages.length;
-       }
-       return undefined;
-    }
+    keepPreviousData: true
   });
 
-  const clients = useMemo(() => data?.pages.flatMap(page => page.items) || [], [data]);
-  const totalItems = data?.pages[0]?.total || 0;
+  const clients = useMemo(() => data?.items || [], [data]);
+  const totalItems = data?.total || 0;
 
   const handleDelete = async (cuil) => {
     if (!window.confirm(`¿Está seguro que desea eliminar al cliente con CUIL ${cuil}?`)) return;
@@ -94,6 +71,29 @@ const ClientListPage = () => {
   const filteredAndSortedClients = useMemo(() => {
     let result = [...clients];
 
+    // Filtros locales
+    if (filter.CUIL && filter.CUIL.length > 0) {
+      result = result.filter(c => filter.CUIL.includes(c.CUIL));
+    }
+    if (filter.Documento && filter.Documento.length > 0) {
+      result = result.filter(c => filter.Documento.includes(c.Documento));
+    }
+    if (filter.Apellido && filter.Apellido.length > 0) {
+      result = result.filter(c => filter.Apellido.includes(c.Apellido));
+    }
+    if (filter.Nombre && filter.Nombre.length > 0) {
+      result = result.filter(c => filter.Nombre.includes(c.Nombre));
+    }
+    if (filter.Estado && filter.Estado.length > 0) {
+      result = result.filter(c => filter.Estado.includes(c.Estado));
+    }
+    if (filter.Mail && filter.Mail.length > 0) {
+      result = result.filter(c => filter.Mail.includes(c.Mail));
+    }
+    if (filter.Teléfono && filter.Teléfono.length > 0) {
+      result = result.filter(c => filter.Teléfono.includes(c["Teléfono"]));
+    }
+
     // Sort
     if (sortConfig.key) {
       result.sort((a, b) => {
@@ -110,20 +110,17 @@ const ClientListPage = () => {
     return result;
   }, [clients, filter, sortConfig]);
 
+  const AVAILABLE_CUIL = useMemo(() => [...new Set(clients.map(c => c.CUIL).filter(Boolean))].sort(), [clients]);
+  const AVAILABLE_DOCUMENTO = useMemo(() => [...new Set(clients.map(c => c.Documento).filter(Boolean))].sort(), [clients]);
+  const AVAILABLE_APELLIDO = useMemo(() => [...new Set(clients.map(c => c.Apellido).filter(Boolean))].sort(), [clients]);
+  const AVAILABLE_NOMBRE = useMemo(() => [...new Set(clients.map(c => c.Nombre).filter(Boolean))].sort(), [clients]);
+  const AVAILABLE_ESTADO = useMemo(() => [...new Set(clients.map(c => c.Estado).filter(Boolean))].sort(), [clients]);
+  const AVAILABLE_MAIL = useMemo(() => [...new Set(clients.map(c => c.Mail).filter(Boolean))].sort(), [clients]);
+  const AVAILABLE_TELEFONO = useMemo(() => [...new Set(clients.map(c => c["Teléfono"]).filter(Boolean))].sort(), [clients]);
+
   const SortIcon = ({ columnKey }) => {
     if (sortConfig.key !== columnKey) return <span style={{ opacity: 0.3, marginLeft: '5px' }}>↕</span>;
     return <span style={{ marginLeft: '5px' }}>{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>;
-  };
-
-  const handleEstadoToggle = (estado) => {
-    setFilter(prev => {
-      const current = prev.Estado;
-      if (current.includes(estado)) {
-        return { ...prev, Estado: current.filter(e => e !== estado) };
-      } else {
-        return { ...prev, Estado: [...current, estado] };
-      }
-    });
   };
 
   return (
@@ -139,7 +136,7 @@ const ClientListPage = () => {
           </button>
           <button 
             className="btn-secondary" 
-            onClick={() => setFilter({ CUIL: '', Documento: '', Apellido: '', Nombre: '', Estado: [], Mail: '', Teléfono: '' })}
+            onClick={() => setFilter({ CUIL: [], Documento: [], Apellido: [], Nombre: [], Estado: [], Mail: [], Teléfono: [] })}
             title="Limpiar todos los filtros"
             style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '100%', padding: '0 12px' }}
           >
@@ -153,69 +150,95 @@ const ClientListPage = () => {
         </div>
       </header>
 
+      {isError && (
+        <div style={{ padding: '20px', background: 'rgba(255,0,0,0.1)', color: 'red', border: '1px solid red', borderRadius: '4px', marginBottom: '16px' }}>
+          <strong>Error de conexión con el servidor:</strong> {error?.message}
+          <br />
+          <small>Por favor, recargue la página o revise la consola.</small>
+        </div>
+      )}
+
       <div className="results-container glass-panel">
         <div className="table-responsive">
           <table className="data-table">
             <thead>
               <tr>
-                <th onClick={() => handleSort('CUIL')} style={{ cursor: 'pointer' }}>
+                <th onClick={() => handleSort('CUIL')} style={{ cursor: 'pointer', minWidth: '130px' }}>
                   CUIL <SortIcon columnKey="CUIL" />
-                  <input type="text" placeholder="Filtrar CUIL..." value={filter.CUIL} onChange={e => setFilter({ ...filter, CUIL: e.target.value })} onClick={e => e.stopPropagation()} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
-                </th>
-                <th onClick={() => handleSort('Documento')} style={{ cursor: 'pointer' }}>
-                  Documento <SortIcon columnKey="Documento" />
-                  <input type="text" placeholder="Filtrar Doc..." value={filter.Documento} onChange={e => setFilter({ ...filter, Documento: e.target.value })} onClick={e => e.stopPropagation()} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
-                </th>
-                <th onClick={() => handleSort('Apellido')} style={{ cursor: 'pointer' }}>
-                  Apellido <SortIcon columnKey="Apellido" />
-                  <input type="text" placeholder="Filtrar Apellido..." value={filter.Apellido} onChange={e => setFilter({ ...filter, Apellido: e.target.value })} onClick={e => e.stopPropagation()} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
-                </th>
-                <th onClick={() => handleSort('Nombre')} style={{ cursor: 'pointer' }}>
-                  Nombre <SortIcon columnKey="Nombre" />
-                  <input type="text" placeholder="Filtrar Nombre..." value={filter.Nombre} onChange={e => setFilter({ ...filter, Nombre: e.target.value })} onClick={e => e.stopPropagation()} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
-                </th>
-                <th onClick={() => handleSort('Estado')} style={{ cursor: 'pointer' }}>
-                  Estado <SortIcon columnKey="Estado" />
-                  <div 
-                    onClick={e => { e.stopPropagation(); setShowEstadoFilter(!showEstadoFilter); }}
-                    style={{ 
-                      width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', 
-                      background: 'rgba(255,255,255,0.1)', border: '1px solid var(--border-color)', 
-                      borderRadius: '4px', textAlign: 'center', cursor: 'pointer' 
-                    }}
-                  >
-                    {filter.Estado.length === 0 ? "Todos" : `${filter.Estado.length} selec.`}
+                  <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
+                    <ExcelListFilter 
+                      availableOptions={AVAILABLE_CUIL} 
+                      selectedOptions={filter.CUIL} 
+                      onChange={val => setFilter({ ...filter, CUIL: val })} 
+                      title="Filtrar CUIL..." 
+                    />
                   </div>
-                  {showEstadoFilter && (
-                    <div 
-                      onClick={e => e.stopPropagation()} 
-                      style={{
-                        position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
-                        background: 'var(--surface-color)', border: '1px solid var(--border-color)',
-                        borderRadius: '4px', padding: '8px', display: 'flex', flexDirection: 'column',
-                        gap: '4px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)', marginTop: '4px'
-                      }}
-                    >
-                      {ESTADOS_DISPONIBLES.map(est => (
-                        <label key={est} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 'normal', cursor: 'pointer' }}>
-                          <input 
-                            type="checkbox" 
-                            checked={filter.Estado.includes(est)}
-                            onChange={() => handleEstadoToggle(est)}
-                          />
-                          {est}
-                        </label>
-                      ))}
-                    </div>
-                  )}
                 </th>
-                <th onClick={() => handleSort('Mail')} style={{ cursor: 'pointer' }}>
+                <th onClick={() => handleSort('Documento')} style={{ cursor: 'pointer', minWidth: '110px' }}>
+                  Documento <SortIcon columnKey="Documento" />
+                  <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
+                    <ExcelListFilter 
+                      availableOptions={AVAILABLE_DOCUMENTO} 
+                      selectedOptions={filter.Documento} 
+                      onChange={val => setFilter({ ...filter, Documento: val })} 
+                      title="Filtrar Doc..." 
+                    />
+                  </div>
+                </th>
+                <th onClick={() => handleSort('Apellido')} style={{ cursor: 'pointer', minWidth: '130px' }}>
+                  Apellido <SortIcon columnKey="Apellido" />
+                  <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
+                    <ExcelListFilter 
+                      availableOptions={AVAILABLE_APELLIDO} 
+                      selectedOptions={filter.Apellido} 
+                      onChange={val => setFilter({ ...filter, Apellido: val })} 
+                      title="Filtrar Apellido..." 
+                    />
+                  </div>
+                </th>
+                <th onClick={() => handleSort('Nombre')} style={{ cursor: 'pointer', minWidth: '130px' }}>
+                  Nombre <SortIcon columnKey="Nombre" />
+                  <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
+                    <ExcelListFilter 
+                      availableOptions={AVAILABLE_NOMBRE} 
+                      selectedOptions={filter.Nombre} 
+                      onChange={val => setFilter({ ...filter, Nombre: val })} 
+                      title="Filtrar Nombre..." 
+                    />
+                  </div>
+                </th>
+                <th onClick={() => handleSort('Estado')} style={{ cursor: 'pointer', minWidth: '120px' }}>
+                  Estado <SortIcon columnKey="Estado" />
+                  <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
+                    <ExcelListFilter 
+                      availableOptions={AVAILABLE_ESTADO} 
+                      selectedOptions={filter.Estado} 
+                      onChange={val => setFilter({ ...filter, Estado: val })} 
+                      title="Filtrar Estado..." 
+                    />
+                  </div>
+                </th>
+                <th onClick={() => handleSort('Mail')} style={{ cursor: 'pointer', minWidth: '150px' }}>
                   Email <SortIcon columnKey="Mail" />
-                  <input type="text" placeholder="Filtrar Email..." value={filter.Mail} onChange={e => setFilter({ ...filter, Mail: e.target.value })} onClick={e => e.stopPropagation()} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                  <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
+                    <ExcelListFilter 
+                      availableOptions={AVAILABLE_MAIL} 
+                      selectedOptions={filter.Mail} 
+                      onChange={val => setFilter({ ...filter, Mail: val })} 
+                      title="Filtrar Email..." 
+                    />
+                  </div>
                 </th>
-                <th onClick={() => handleSort('Teléfono')} style={{ cursor: 'pointer' }}>
+                <th onClick={() => handleSort('Teléfono')} style={{ cursor: 'pointer', minWidth: '120px' }}>
                   Teléfono <SortIcon columnKey="Teléfono" />
-                  <input type="text" placeholder="Filtrar Tel..." value={filter.Teléfono} onChange={e => setFilter({ ...filter, Teléfono: e.target.value })} onClick={e => e.stopPropagation()} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
+                  <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
+                    <ExcelListFilter 
+                      availableOptions={AVAILABLE_TELEFONO} 
+                      selectedOptions={filter.Teléfono} 
+                      onChange={val => setFilter({ ...filter, Teléfono: val })} 
+                      title="Filtrar Tel..." 
+                    />
+                  </div>
                 </th>
                 <th>Acciones</th>
               </tr>
@@ -270,25 +293,11 @@ const ClientListPage = () => {
                   </tr>
                 ))
               )}
-              {hasNextPage && (
-                <tr>
-                  <td colSpan="8" style={{ textAlign: 'center', padding: '15px' }}>
-                    <button 
-                      className="btn-primary" 
-                      onClick={() => fetchNextPage()}
-                      disabled={isFetchingNextPage}
-                      style={{ width: 'auto', padding: '8px 20px', margin: '0 auto', display: 'block' }}
-                    >
-                      {isFetchingNextPage ? "Cargando más registros..." : "Mostrar más registros"}
-                    </button>
-                  </td>
-                </tr>
-              )}
             </tbody>
             <tfoot>
               <tr>
                 <td colSpan="8" style={{ textAlign: 'right', fontWeight: 'bold' }}>
-                  TOTALES (Mostrando {clients.length} de {totalItems})
+                  TOTALES (Mostrando {filteredAndSortedClients.length} de {clients.length})
                 </td>
               </tr>
             </tfoot>
@@ -296,7 +305,7 @@ const ClientListPage = () => {
         </div>
       </div>
       
-      {editCuil && <ClientEditModal cuil={editCuil} onClose={() => setEditCuil(null)} onSuccess={fetchClients} />}
+      {editCuil && <ClientEditModal cuil={editCuil} onClose={() => setEditCuil(null)} onSuccess={() => queryClient.invalidateQueries({ queryKey: ['clientes'] })} />}
       {ccCuil && <ClientCCModal cuil={ccCuil} clientName={clients.find(c => c.CUIL === ccCuil)?.["Apellido y Nombre"]} onClose={() => setCcCuil(null)} />}
       {viewClient && <ClientViewModal client={viewClient} onClose={() => setViewClient(null)} />}
     </section>
@@ -304,3 +313,4 @@ const ClientListPage = () => {
 };
 
 export default ClientListPage;
+
