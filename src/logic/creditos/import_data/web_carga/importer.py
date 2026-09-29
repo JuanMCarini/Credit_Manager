@@ -194,6 +194,7 @@ def importar_creditos_y_transferencias(df_creditos: pd.DataFrame, df_transferenc
     nuevos_creditos = 0
     creditos_existentes = 0
     errores = []
+    observaciones_list = []
 
     # Crear diccionario para buscar el cuil por id_web_carga (usando la relación armada en el parser)
     cuil_by_id_web_carga = {}
@@ -284,7 +285,7 @@ def importar_creditos_y_transferencias(df_creditos: pd.DataFrame, df_transferenc
             continue
 
         try:
-            nuevo_credito = originator.originate(
+            nuevo_credito, obs = originator.originate(
                 client_cuil=cuil,
                 capital=capital,
                 tna_c_iva=tna,
@@ -297,9 +298,12 @@ def importar_creditos_y_transferencias(df_creditos: pd.DataFrame, df_transferenc
                 comision_id=comision_id,
                 id_externo=id_externo,
                 transferencias_data=t_data_list,
-                commit=False
+                commit=False,
+                strict_policy=False
             )
             nuevos_creditos += 1
+            if obs:
+                observaciones_list.append({"ID Externo": id_externo, "Observaciones": " | ".join(obs)})
             
             # Devolvemos el credito originado
             # originator.credit tiene el crédito generado en estado Pendiente
@@ -309,7 +313,7 @@ def importar_creditos_y_transferencias(df_creditos: pd.DataFrame, df_transferenc
             errores.append(f"Error generando crédito {id_externo}: {e}")
 
     db_session.flush()
-    return nuevos_creditos, creditos_existentes, errores
+    return nuevos_creditos, creditos_existentes, errores, observaciones_list
 
 def procesar_documentos_web_carga(file_paths: list, db_session: Session, upload_dir: str):
     """
@@ -457,7 +461,7 @@ def importar_datos_web_carga(filepath: str, db_session: Session, socio_id_web_ca
     clientes_nuevos, clientes_act = importar_clientes(df_clientes, db_session, mapeos)
 
     # 4. Importar Créditos y Transferencias
-    creditos_nuevos, creditos_existentes, errores_creditos = importar_creditos_y_transferencias(
+    creditos_nuevos, creditos_existentes, errores_creditos, observaciones_list = importar_creditos_y_transferencias(
         df_creditos, df_transferencias, df_clientes, db_session, mapeos
     )
 
@@ -475,6 +479,6 @@ def importar_datos_web_carga(filepath: str, db_session: Session, socio_id_web_ca
     
     return {
         "clientes": {"nuevos": clientes_nuevos, "actualizados": clientes_act},
-        "creditos": {"nuevos": creditos_nuevos, "existentes": creditos_existentes, "errores": errores_creditos},
+        "creditos": {"nuevos": creditos_nuevos, "existentes": creditos_existentes, "errores": errores_creditos, "observaciones": observaciones_list},
         "documentos": docs_result
     }

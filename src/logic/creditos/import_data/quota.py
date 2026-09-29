@@ -200,6 +200,7 @@ def import_credits_from_dataframe(df: pd.DataFrame, session: Session, map_socios
     creditos_existentes = 0
     errores = []
     nuevos_ids_externos = set()
+    observaciones_list = []
 
     amuf_socio = session.query(SocioComercial).filter(SocioComercial.razon_social.ilike('%AMUF%')).first()
     amuf_socio_id = amuf_socio.id if amuf_socio else None
@@ -258,34 +259,28 @@ def import_credits_from_dataframe(df: pd.DataFrame, session: Session, map_socios
                 errores.append(f"DNI {dni_val} (ID Externo {id_ext}): No se puede asignar comisión porque el socio originador es nulo.")
                 continue
 
-            # Crear crédito
-            credito = Credito(
+            # Crear crédito usando LoanOriginator para reutilizar lógica y validaciones
+            from src.logic.creditos.origination import LoanOriginator
+            originator = LoanOriginator(db_session=session)
+            credito, obs = originator.originate(
+                client_cuil=cliente.cuil,
+                capital=capital,
+                tna_c_iva=tasa,
+                term=plazo,
+                partner_id=socio_id,
+                issuance_date=emision,
+                due_day=28,
+                type=TipoCredito.FRANCES,
+                comision_id=comision_id,
                 id_externo=id_ext,
-                cliente_cuil=cliente.cuil,
-                capital=capital,
-                tna_c_iva=tasa,
-                plazo=plazo,
-                fecha_emision=emision,
-                estado=EstadoCredito.APROBADO,
-                tipo_credito=TipoCredito.FRANCES,
-                dia_vencimiento=28,
-                socio_originador_id=socio_id,
-                comision_id=comision_id
-            )
-            session.add(credito)
-            session.flush() # Para obtener el ID del crédito generado
-            
-            # Generar cuotas usando AmortizationEngine
-            cuotas = AmortizationEngine.generate_french_schedule(
-                credito_id=credito.id,
-                capital=capital,
-                tna_c_iva=tasa,
-                plazo=plazo,
-                fecha_emision=emision,
-                dia_vencimiento=28
+                commit=False,
+                strict_policy=False
             )
             
-            session.add_all(cuotas)
+            if obs:
+                observaciones_list.append({"ID Externo": id_ext, "Observaciones": " | ".join(obs)})
+                
+            session.flush()
             
             nuevos_creditos += 1
             nuevos_ids_externos.add(id_ext)
@@ -299,7 +294,8 @@ def import_credits_from_dataframe(df: pd.DataFrame, session: Session, map_socios
         "nuevos_creditos": nuevos_creditos,
         "creditos_existentes": creditos_existentes,
         "errores": errores,
-        "nuevos_ids_externos": nuevos_ids_externos
+        "nuevos_ids_externos": nuevos_ids_externos,
+        "observaciones": observaciones_list
     }
 
 def import_transfers_from_dataframe(df_transf: pd.DataFrame, df_crts: pd.DataFrame, session: Session, nuevos_ids_externos: set = None):

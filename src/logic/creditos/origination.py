@@ -74,11 +74,13 @@ class LoanOriginator:
         comercializador_id: int | None = None,
         comision_id: int | None = None,
         id_externo: str | None = None,
-    ) -> None:
+        strict_policy: bool = True,
+    ) -> list:
         """
         =============================================================================
         Method: _generate_credit_and_schedule
         Description: Internal helper to instantiate the credit and its installments.
+        Returns a list of observations if strict_policy=False.
         =============================================================================
         """
         self.credit = Credito(
@@ -116,8 +118,34 @@ class LoanOriginator:
 
         self.db.add_all(installments)
 
-        # 4. Validar las políticas crediticias antes de finalizar la originación
-        self.credit.validar_politicas(self.db)
+        observaciones = []
+        if strict_policy:
+            self.credit.validar_politicas(self.db)
+        else:
+            try:
+                self.credit.validar_politicas(self.db)
+            except ValueError as e:
+                observaciones.append(f"Política: {e}")
+                
+            try:
+                from src.logic.uif.riesgo_cliente import calculo
+                df_riesgo, riesgo_final, adv = calculo(cuil=self.client.cuil, save=True, update_at=issuance_date)
+                if riesgo_final.value == "Alto":
+                    observaciones.append("Riesgo UIF ALTO")
+            except Exception as e:
+                observaciones.append(f"Error UIF: {str(e)}")
+
+            try:
+                from src.services.repet import screen_person
+                full_name = f"{self.client.nombre} {self.client.apellido}"
+                repet_result = screen_person(self.db, full_name=full_name, cuil_cliente=self.client.cuil, user_id=None)
+                if repet_result.get("status") == "ALERT":
+                    self.client.repet = True
+                    observaciones.append("Alerta RePET")
+            except Exception as e:
+                observaciones.append(f"Error RePET: {str(e)}")
+
+        return observaciones
 
     def originate(
         self,
@@ -134,7 +162,8 @@ class LoanOriginator:
         id_externo: str | None = None,
         transferencias_data: list = None,
         commit: bool = True,
-    ) -> Credito:
+        strict_policy: bool = True,
+    ) -> tuple[Credito, list] | Credito:
         """
         =============================================================================
         Method: originate
@@ -147,8 +176,8 @@ class LoanOriginator:
         try:
             self._validate_client(client_cuil)
             cutoff_day = self._get_partner_cutoff_day(partner_id)
-            self._generate_credit_and_schedule(
-                capital, tna_c_iva, term, partner_id, issuance_date, due_day, cutoff_day, type, comercializador_id, comision_id, id_externo
+            observaciones = self._generate_credit_and_schedule(
+                capital, tna_c_iva, term, partner_id, issuance_date, due_day, cutoff_day, type, comercializador_id, comision_id, id_externo, strict_policy
             )
 
 
@@ -182,6 +211,9 @@ class LoanOriginator:
                 self.db.commit()
             else:
                 self.db.flush()
+                
+            if not strict_policy:
+                return self.credit, observaciones
             return self.credit
 
         except Exception as e:
@@ -203,7 +235,8 @@ class LoanOriginator:
         id_externo: str | None = None,
         transferencias_data: list = None,
         commit: bool = True,
-    ) -> Credito:
+        strict_policy: bool = True,
+    ) -> tuple[Credito, list] | Credito:
         """
         =============================================================================
         Method: originate_with_new_client
@@ -229,7 +262,7 @@ class LoanOriginator:
                 self.db.flush()  # Persist client to generate relationships
 
             cutoff_day = self._get_partner_cutoff_day(partner_id)
-            self._generate_credit_and_schedule(
+            observaciones = self._generate_credit_and_schedule(
                 capital,
                 tna_c_iva,
                 term,
@@ -238,8 +271,10 @@ class LoanOriginator:
                 due_day,
                 cutoff_day,
                 type,
+                None,
                 comision_id,
                 id_externo,
+                strict_policy
             )
 
 
@@ -272,6 +307,9 @@ class LoanOriginator:
                 self.db.commit()
             else:
                 self.db.flush()
+                
+            if not strict_policy:
+                return self.credit, observaciones
             return self.credit
 
         except Exception as e:

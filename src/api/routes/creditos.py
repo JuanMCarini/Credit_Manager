@@ -942,6 +942,8 @@ async def importacion_masiva_creditos(
                 res_crts = quota.import_credits_from_dataframe(df_crts, db, map_socios=map_socios_quota)
                 if res_crts.get('errores'):
                     errores_globales.extend([{"Etapa": "Créditos", "Error": err} for err in res_crts['errores']])
+                if res_crts.get('observaciones'):
+                    errores_globales.extend([{"Etapa": "Créditos (Alertas/Observaciones)", "Error": obs["Observaciones"], "ID Externo": obs["ID Externo"]} for obs in res_crts['observaciones']])
                     
                 nuevos_ids = res_crts.get('nuevos_ids_externos', set())
                 
@@ -1003,6 +1005,8 @@ async def importacion_masiva_creditos(
                 
                 if res_wc.get("creditos", {}).get("errores"):
                     errores_globales.extend([{"Etapa": "Créditos Web Carga", "Error": err} for err in res_wc["creditos"]["errores"]])
+                if res_wc.get("creditos", {}).get("observaciones"):
+                    errores_globales.extend([{"Etapa": "Créditos Web Carga (Alertas/Observaciones)", "Error": obs["Observaciones"], "ID Externo": obs["ID Externo"]} for obs in res_wc["creditos"]["observaciones"]])
                     
                 resumen = {
                     "nuevos_clientes": res_wc.get('clientes', {}).get('nuevos', 0),
