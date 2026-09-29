@@ -337,8 +337,12 @@ def get_cliente_cuenta_corriente(
         if not cliente:
             raise HTTPException(status_code=404, detail="Cliente no encontrado")
         
+        from src.database.models import Penalty
+        all_penalties = db.query(Penalty).all()
+        
         result = []
         from datetime import date
+        from dateutil.relativedelta import relativedelta
         for c in cliente.creditos:
             for cuota in c.cuotas:
                 cuota_capital = float(cuota.capital or 0.0)
@@ -378,6 +382,19 @@ def get_cliente_cuenta_corriente(
                 else:
                     hoy = date.today()
                 
+                dias_mora = (hoy - cuota.fecha_vencimiento).days if cuota.fecha_vencimiento else 0
+                int_punitorio = 0.0
+                iva_punitorio = 0.0
+                
+                if dias_mora > 0 and saldo > 0:
+                    tna = float(c.tna_c_iva or 0.0)
+                    multiplicador = float(c.comision.multiplicador_punitorio) if c.comision and c.comision.multiplicador_punitorio is not None else 1.0
+                    int_punitorio = round(saldo * (tna * multiplicador) / 365 * dias_mora / 1.21, 2)
+                    iva_punitorio = round(int_punitorio * 0.21, 2)
+                    
+                    total_esperado = round(total_esperado + int_punitorio + iva_punitorio, 2)
+                    saldo = round(saldo + int_punitorio + iva_punitorio, 2)
+                
                 movimientos_validos = [op for op in cuota.movimientos_cartera if op.fecha_registro and op.fecha_registro <= hoy]
                 if movimientos_validos:
                     last_op = sorted(movimientos_validos, key=lambda x: x.fecha_registro)[-1]
@@ -401,7 +418,8 @@ def get_cliente_cuenta_corriente(
                     "vencimiento_raw": cuota.fecha_vencimiento or date.min,
                     "capital": round(cuota_capital, 2),
                     "interes": round(cuota_interes, 2),
-                    "iva": round(cuota_iva, 2),
+                    "int_punitorio": round(int_punitorio, 2),
+                    "iva": round(cuota_iva + iva_punitorio, 2),
                     "total_esperado": total_esperado,
                     "total_cobrado": total_cobrado,
                     "saldo_pendiente": saldo,
@@ -409,6 +427,65 @@ def get_cliente_cuenta_corriente(
                     "dueno": dueno,
                     "detalle_cobranzas": detalle_cobranzas
                 })
+                
+            # PENALTY (Cancelación Anticipada) logic
+            # Solo aplica cuotas futuras (vencimiento > mes actual)
+            # Y necesitamos contar las cuotas pendientes
+            cuotas_pendientes = len([q for q in c.cuotas if q.estado and str(q.estado.value if hasattr(q.estado, "value") else q.estado) not in ["CANCELADA", "NO COMPRADA"]])
+            valid_pen = [p for p in all_penalties if p.socio_originador_id in (c.socio_originador_id, None) and p.plazo_hasta > cuotas_pendientes]
+            has_real_penalty = any(q.nro_cuota == 99 and str(q.estado.value if hasattr(q.estado, "value") else q.estado) == "PENDIENTE" for q in c.cuotas)
+            
+            if valid_pen and not has_real_penalty:
+                penalty_rule = max(valid_pen, key=lambda x: x.plazo_hasta)
+                
+                # En la lógica original, para cuotas futuras (Vencimiento > fecha actual)
+                # se anulaba Interés e IVA, por lo que Total sumaba únicamente Capital restante.
+                hoy_mes = hoy.replace(day=1)
+                total_futuro = 0.0
+                for cuota in c.cuotas:
+                    if cuota.fecha_vencimiento:
+                        vto_mes = cuota.fecha_vencimiento.replace(day=1)
+                        if vto_mes > hoy_mes:
+                            cuota_capital = float(cuota.capital or 0.0)
+                            cobrado_capital = sum([float(cob.capital or 0) for cob in cuota.cobranzas])
+                            saldo_capital = cuota_capital - cobrado_capital
+                            if saldo_capital > 0:
+                                total_futuro += saldo_capital
+                
+                if total_futuro > 0:
+                    por_penalty = float(penalty_rule.tna_c_iva)
+                    tipo_calc = str(penalty_rule.tipo_calculo.value if hasattr(penalty_rule.tipo_calculo, "value") else penalty_rule.tipo_calculo)
+                    
+                    if tipo_calc == "DIRECTO":
+                        penalty_con_iva = round(total_futuro * por_penalty, 2)
+                    else:
+                        dias_credito = (hoy - c.fecha_emision).days if c.fecha_emision else 0
+                        if dias_credito < 0: dias_credito = 0
+                        penalty_con_iva = round(total_futuro * (por_penalty / 365) * dias_credito, 2)
+                        
+                    penalty_sin_iva = round(penalty_con_iva / 1.21, 2)
+                    iva_penalty = penalty_con_iva - penalty_sin_iva
+                    
+                    if penalty_con_iva > 0:
+                        result.append({
+                            "credito_id": c.id,
+                            "id_externo": c.id_externo or "-",
+                            "tipo_credito": c.tipo_credito.value if hasattr(c.tipo_credito, "value") else str(c.tipo_credito),
+                            "estado_credito": c.estado.value if hasattr(c.estado, "value") else str(c.estado),
+                            "nro_cuota": 1,
+                            "vencimiento": hoy.strftime("%d/%m/%Y"),
+                            "vencimiento_raw": hoy,
+                            "capital": 0.0,
+                            "interes": round(penalty_sin_iva, 2),
+                            "int_punitorio": 0.0,
+                            "iva": round(iva_penalty, 2),
+                            "total_esperado": round(penalty_con_iva, 2),
+                            "total_cobrado": 0.0,
+                            "saldo_pendiente": round(penalty_con_iva, 2),
+                            "estado": "PENALTY",
+                            "dueno": empresa_nombre,
+                            "detalle_cobranzas": []
+                        })
                 
         result.sort(key=lambda x: (str(x["vencimiento_raw"]), x["credito_id"], x["nro_cuota"]))
         

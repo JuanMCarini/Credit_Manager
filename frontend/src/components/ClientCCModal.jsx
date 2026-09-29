@@ -84,6 +84,23 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '', i
     }
   };
 
+  const handleCrearPenalty = async (cuota) => {
+    if (!window.confirm(`¿Desea asentar definitivamente la penalidad de ${formatCurrency(cuota.saldo_pendiente)} al crédito #${cuota.credito_id}? Esto creará una cuota real a cobrar.`)) {
+      return;
+    }
+
+    setProcessingCobranza(true);
+    try {
+      await axiosClient.post(`/api/v1/creditos/${cuota.credito_id}/penalty`);
+      alert('Penalty generado exitosamente');
+      fetchCC();
+    } catch (err) {
+      alert(`Error al generar penalty: ${err.response?.data?.detail || err.message}`);
+    } finally {
+      setProcessingCobranza(false);
+    }
+  };
+
   const handleSort = (key) => {
     let direction = 'asc';
     if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
@@ -129,6 +146,8 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '', i
         }
         return c;
       });
+    } else {
+      result = result.filter(c => c.estado !== 'PENALTY');
     }
     return result;
   }, [data, anticipadaMode, fechaCorte]);
@@ -163,6 +182,7 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '', i
     return filteredAndSortedData.reduce((acc, curr) => {
       let netCapital = curr.capital || 0;
       let netInteres = curr.interes || 0;
+      let netPunitorio = curr.int_punitorio || 0;
       let netIva = curr.iva || 0;
       let netTotal = curr.total_esperado || 0;
 
@@ -178,12 +198,13 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '', i
       return {
         capital: acc.capital + netCapital,
         interes: acc.interes + netInteres,
+        int_punitorio: acc.int_punitorio + netPunitorio,
         iva: acc.iva + netIva,
         total_esperado: acc.total_esperado + netTotal,
         total_cobrado: acc.total_cobrado + (curr.total_cobrado || 0),
         saldo_pendiente: acc.saldo_pendiente + (curr.saldo_pendiente || 0)
       };
-    }, { capital: 0, interes: 0, iva: 0, total_esperado: 0, total_cobrado: 0, saldo_pendiente: 0 });
+    }, { capital: 0, interes: 0, int_punitorio: 0, iva: 0, total_esperado: 0, total_cobrado: 0, saldo_pendiente: 0 });
   }, [filteredAndSortedData]);
 
   const prepareExportData = React.useCallback((list) => {
@@ -200,6 +221,7 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '', i
         'Fecha Cobranza': '-',
         'Capital': c.capital,
         'Interés': c.interes,
+        'Int. Punitorio': c.int_punitorio || 0,
         'IVA': c.iva,
         'Total': c.total_esperado,
         'Total Cobrado': c.total_cobrado ? -c.total_cobrado : 0,
@@ -218,6 +240,7 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '', i
             'Fecha Cobranza': cob.fecha,
             'Capital': cob.capital ? -cob.capital : 0,
             'Interés': cob.interes ? -cob.interes : 0,
+            'Int. Punitorio': 0,
             'IVA': cob.iva ? -cob.iva : 0,
             'Total': cob.total ? -cob.total : 0,
             'Total Cobrado': 0,
@@ -331,6 +354,7 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '', i
                   </th>
                   <th onClick={() => handleSort('capital')} style={{ cursor: 'pointer' }}>Capital <SortIcon columnKey="capital" /></th>
                   <th onClick={() => handleSort('interes')} style={{ cursor: 'pointer' }}>Interés <SortIcon columnKey="interes" /></th>
+                  <th onClick={() => handleSort('int_punitorio')} style={{ cursor: 'pointer' }}>Punitorios <SortIcon columnKey="int_punitorio" /></th>
                   <th onClick={() => handleSort('iva')} style={{ cursor: 'pointer' }}>IVA <SortIcon columnKey="iva" /></th>
                   <th onClick={() => handleSort('total_esperado')} style={{ cursor: 'pointer' }}>Total <SortIcon columnKey="total_esperado" /></th>
                   <th onClick={() => handleSort('total_cobrado')} style={{ cursor: 'pointer' }}>Total Cob. <SortIcon columnKey="total_cobrado" /></th>
@@ -368,13 +392,21 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '', i
                     
                     return (
                       <React.Fragment key={`${c.credito_id}-${c.nro_cuota}-${i}`}>
-                        <tr>
+                        <tr 
+                          style={c.estado === 'PENALTY' ? { 
+                            background: 'linear-gradient(90deg, rgba(255,165,0,0.15) 0%, rgba(255,140,0,0.25) 50%, rgba(255,165,0,0.15) 100%)',
+                            boxShadow: 'inset 0 0 15px rgba(255, 140, 0, 0.2)',
+                            borderTop: '2px dashed rgba(255,165,0,0.8)',
+                            borderBottom: '2px dashed rgba(255,165,0,0.8)',
+                          } : {}}
+                        >
                           <td>{creditoLabel}</td>
                           <td>{c.nro_cuota}</td>
                           <td>{c.vencimiento}</td>
                           <td>{c.dueno || '-'}</td>
                           <td>{formatCurrency(c.capital)}</td>
                           <td>{formatCurrency(c.interes)}</td>
+                          <td>{formatCurrency(c.int_punitorio || 0)}</td>
                           <td>{formatCurrency(c.iva)}</td>
                           <td style={{ fontWeight: 600 }}>{formatCurrency(c.total_esperado)}</td>
                           <td style={{ color: 'var(--accent-secondary)', fontWeight: 600 }}>{formatCurrency(c.total_cobrado ? -c.total_cobrado : 0)}</td>
@@ -394,7 +426,7 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '', i
                             </span>
                           </td>
                           <td>
-                            {(c.estado !== 'CANCELADA' && c.estado !== 'NO COMPRADA') && (
+                            {(c.estado !== 'CANCELADA' && c.estado !== 'NO COMPRADA' && c.estado !== 'PENALTY') && (
                               <button 
                                 onClick={() => handleCobrar(c)} 
                                 disabled={processingCobranza}
@@ -411,6 +443,22 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '', i
                                 💲
                               </button>
                             )}
+                            {c.estado === 'PENALTY' && (
+                              <button
+                                onClick={() => handleCrearPenalty(c)}
+                                disabled={processingCobranza}
+                                className="btn-primary"
+                                style={{
+                                  padding: '4px 8px',
+                                  fontSize: '11px',
+                                  cursor: processingCobranza ? 'not-allowed' : 'pointer',
+                                  background: 'var(--accent-secondary)'
+                                }}
+                                title="Asentar esta penalidad como cuota real"
+                              >
+                                Crear
+                              </button>
+                            )}
                           </td>
                         </tr>
                         {c.detalle_cobranzas && c.detalle_cobranzas.map((cob, j) => (
@@ -420,6 +468,7 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '', i
                             </td>
                             <td>{formatCurrency(cob.capital ? -cob.capital : 0)}</td>
                             <td>{formatCurrency(cob.interes ? -cob.interes : 0)}</td>
+                            <td>{formatCurrency(0)}</td>
                             <td>{formatCurrency(cob.iva ? -cob.iva : 0)}</td>
                             <td style={{ color: 'var(--accent-secondary)', fontWeight: 600 }}>{formatCurrency(cob.total ? -cob.total : 0)}</td>
                             <td>{formatCurrency(0)}</td>
@@ -454,6 +503,7 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '', i
                   <td colSpan="4" style={{ textAlign: 'right' }}>TOTALES:</td>
                   <td>{formatCurrency(totals.capital)}</td>
                   <td>{formatCurrency(totals.interes)}</td>
+                  <td>{formatCurrency(totals.int_punitorio)}</td>
                   <td>{formatCurrency(totals.iva)}</td>
                   <td>{formatCurrency(totals.total_esperado)}</td>
                   <td style={{ color: 'var(--accent-secondary)' }}>{formatCurrency(totals.total_cobrado ? -totals.total_cobrado : 0)}</td>

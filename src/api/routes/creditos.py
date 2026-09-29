@@ -115,6 +115,82 @@ def preview_legajo(
             f.write(error_msg)
         raise HTTPException(status_code=500, detail=error_msg)
 
+@router.post("/api/v1/creditos/{credito_id}/penalty")
+def create_penalty_cuota(
+    credito_id: int,
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    try:
+        from src.database.models import Penalty
+        credito = db.query(Credito).options(joinedload(Credito.cuotas)).filter(Credito.id == credito_id).first()
+        if not credito:
+            raise HTTPException(status_code=404, detail="Crédito no encontrado")
+            
+        all_penalties = db.query(Penalty).all()
+        cuotas_pendientes = len([q for q in credito.cuotas if q.estado and str(q.estado.value if hasattr(q.estado, "value") else q.estado) not in ["CANCELADA", "NO COMPRADA"]])
+        valid_pen = [p for p in all_penalties if p.socio_originador_id in (credito.socio_originador_id, None) and p.plazo_hasta > cuotas_pendientes]
+        
+        if not valid_pen:
+            raise HTTPException(status_code=400, detail="No aplican reglas de Penalty para este crédito (socio o plazo incorrecto).")
+            
+        penalty_rule = max(valid_pen, key=lambda x: x.plazo_hasta)
+        hoy = date.today()
+        hoy_mes = hoy.replace(day=1)
+        
+        # Para ser precisos, busquemos todas las cuotas del credito con saldo
+        cuotas_db = db.query(Cuota).options(joinedload(Cuota.cobranzas)).filter(Cuota.credito_id == credito_id).all()
+        total_futuro = 0.0
+        for cuota in cuotas_db:
+            if cuota.fecha_vencimiento:
+                vto_mes = cuota.fecha_vencimiento.replace(day=1)
+                if vto_mes > hoy_mes:
+                    cuota_capital = float(cuota.capital or 0.0)
+                    cobrado_capital = sum([float(cob.capital or 0) for cob in cuota.cobranzas])
+                    saldo_capital = cuota_capital - cobrado_capital
+                    if saldo_capital > 0:
+                        total_futuro += saldo_capital
+                        
+        if total_futuro <= 0:
+            raise HTTPException(status_code=400, detail="No hay saldo de capital futuro a cancelar anticipadamente, no aplica Penalty.")
+            
+        por_penalty = float(penalty_rule.tna_c_iva)
+        tipo_calc = str(penalty_rule.tipo_calculo.value if hasattr(penalty_rule.tipo_calculo, "value") else penalty_rule.tipo_calculo)
+        
+        if tipo_calc == "DIRECTO":
+            penalty_con_iva = round(total_futuro * por_penalty, 2)
+        else:
+            dias_credito = (hoy - credito.fecha_emision).days if credito.fecha_emision else 0
+            if dias_credito < 0: dias_credito = 0
+            penalty_con_iva = round(total_futuro * (por_penalty / 365) * dias_credito, 2)
+            
+        penalty_sin_iva = round(penalty_con_iva / 1.21, 2)
+        iva_penalty = penalty_con_iva - penalty_sin_iva
+        
+        # Verificar si ya existe un penalty generado para hoy
+        penalty_existente = db.query(Cuota).filter(Cuota.credito_id == credito_id, Cuota.nro_cuota == 99, Cuota.estado == EstadoCuota.PENDIENTE).first()
+        if penalty_existente:
+            raise HTTPException(status_code=400, detail="Ya existe un Penalty pendiente para este crédito.")
+            
+        nueva_cuota = Cuota(
+            credito_id=credito_id,
+            nro_cuota=99,
+            fecha_vencimiento=hoy,
+            capital=0.0,
+            interes=round(penalty_sin_iva, 2),
+            iva=round(iva_penalty, 2),
+            estado=EstadoCuota.PENDIENTE
+        )
+        db.add(nueva_cuota)
+        db.commit()
+        
+        return {"status": "success", "message": "Penalty generado y aplicado a la cuenta corriente exitosamente."}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/api/v1/creditos/originacion")
 def create_credito(
