@@ -116,6 +116,9 @@ class LoanOriginator:
 
         self.db.add_all(installments)
 
+        # 4. Validar las políticas crediticias antes de finalizar la originación
+        self.credit.validar_politicas(self.db)
+
     def originate(
         self,
         client_cuil: str,

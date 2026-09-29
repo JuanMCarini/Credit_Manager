@@ -144,6 +144,9 @@ const CreditOriginationPage = () => {
         if (cleanData[key] === '') cleanData[key] = null;
         else if (cleanData[key] !== null) cleanData[key] = parseInt(cleanData[key]);
       });
+      ['fecha_ingreso', 'fecha_nacimiento'].forEach(key => {
+        if (cleanData[key] === '') cleanData[key] = null;
+      });
       if (cleanData.remuneracion === '') cleanData.remuneracion = 0;
 
       let res;
@@ -175,11 +178,25 @@ const CreditOriginationPage = () => {
         tasa_id: '' // reset selected tasa
       }));
 
+      // Validate Credit Policies before moving to Step 3
+      const url = `/api/v1/clientes/${cleanData.cuil || cleanData.documento}/validar_politicas`;
+      const params = defaultSocioId ? `?socio_id=${defaultSocioId}` : '';
+      await axiosClient.get(url + params);
+
       fetchBcraData(cleanData.cuil || cleanData.documento);
       fetchRiesgoData(cleanData.cuil || cleanData.documento);
       setStep(3);
     } catch (error) {
-      const errorMsg = error.response?.data?.detail || error.message || "Error al guardar el cliente.";
+      let errorMsg = "Error al procesar el cliente o validar las políticas.";
+      if (error.response?.data?.detail) {
+        if (Array.isArray(error.response.data.detail)) {
+          errorMsg = error.response.data.detail.map(e => e.msg || JSON.stringify(e)).join(', ');
+        } else {
+          errorMsg = error.response.data.detail;
+        }
+      } else if (error.message) {
+        errorMsg = error.message;
+      }
       setClientFeedback({ type: 'error', message: errorMsg });
     } finally {
       setLoadingClient(false);

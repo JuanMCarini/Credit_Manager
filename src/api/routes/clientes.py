@@ -144,6 +144,19 @@ def get_clientes_list(
         })
     return {"items": result, "total": total}
 
+@router.get("/{cuil}/validar_politicas")
+def validar_politicas_cliente(cuil: str, socio_id: Optional[int] = None, db: Session = Depends(get_db)):
+    cliente = db.query(Cliente).filter(or_(Cliente.cuil == cuil, Cliente.documento == cuil)).first()
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    
+    credito_dummy = Credito(cliente=cliente, socio_originador_id=socio_id)
+    try:
+        credito_dummy.validar_politicas(db)
+        return {"status": "success", "message": "Políticas validadas correctamente."}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 @router.get("/{cuil}")
 def get_cliente(cuil: str, db: Session = Depends(get_db), current_user: Usuario = Depends(get_current_user)):
     cliente = db.query(Cliente).filter(or_(Cliente.cuil == cuil, Cliente.documento == cuil)).first()

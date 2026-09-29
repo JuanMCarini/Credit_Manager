@@ -191,9 +191,11 @@ class Credito(Base):
         hoy = date.today()
         edad = hoy.year - cliente.fecha_nacimiento.year - ((hoy.month, hoy.day) < (cliente.fecha_nacimiento.month, cliente.fecha_nacimiento.day))
 
-        antiguedad_anios = 0
+        antiguedad_meses = 0
         if cliente.fecha_ingreso:
-            antiguedad_anios = hoy.year - cliente.fecha_ingreso.year - ((hoy.month, hoy.day) < (cliente.fecha_ingreso.month, cliente.fecha_ingreso.day))
+            antiguedad_meses = (hoy.year - cliente.fecha_ingreso.year) * 12 + hoy.month - cliente.fecha_ingreso.month
+            if hoy.day < cliente.fecha_ingreso.day:
+                antiguedad_meses -= 1
 
         # Determinar si es jubilado en base al tipo de empleador (es_pasivo = True)
         es_jubilado = False
@@ -202,8 +204,8 @@ class Credito(Base):
 
         # 4. Validar Edad
         if es_jubilado:
-            if edad < politica.edad_minima_jubilado or edad > politica.edad_maxima_jubilado:
-                raise ValueError(f"La edad del jubilado ({edad}) no está en el rango permitido ({politica.edad_minima_jubilado}-{politica.edad_maxima_jubilado}).")
+            if edad > politica.edad_maxima_jubilado:
+                raise ValueError(f"La edad del jubilado ({edad}) supera el máximo permitido ({politica.edad_maxima_jubilado}).")
         else:
             if cliente.sexo == SexoEnum.MASCULINO:
                 if edad < politica.edad_minima_hombre or edad > politica.edad_maxima_hombre:
@@ -219,17 +221,13 @@ class Credito(Base):
                     raise ValueError(f"La edad ({edad}) no está en el rango permitido ({min_edad}-{max_edad}).")
 
         # 5. Validar Antigüedad
-        if not cliente.fecha_ingreso:
-            # Si requiere antigüedad y no tiene fecha de ingreso
-            if (es_jubilado and politica.antiguedad_jubilado > 0) or (not es_jubilado and politica.antiguedad_empleado > 0):
-                raise ValueError("El cliente no tiene fecha de ingreso registrada y la política exige antigüedad.")
-        else:
-            if es_jubilado:
-                if antiguedad_anios < politica.antiguedad_jubilado:
-                    raise ValueError(f"La antigüedad ({antiguedad_anios} años) es menor al mínimo para jubilados ({politica.antiguedad_jubilado} años).")
+        if not es_jubilado:
+            if not cliente.fecha_ingreso:
+                if politica.antiguedad_empleado > 0:
+                    raise ValueError("El cliente no tiene fecha de ingreso registrada y la política exige antigüedad.")
             else:
-                if antiguedad_anios < politica.antiguedad_empleado:
-                    raise ValueError(f"La antigüedad ({antiguedad_anios} años) es menor al mínimo para empleados ({politica.antiguedad_empleado} años).")
+                if antiguedad_meses < politica.antiguedad_empleado:
+                    raise ValueError(f"La antigüedad ({antiguedad_meses} meses) es menor al mínimo para empleados ({politica.antiguedad_empleado} meses).")
 
         return True
 

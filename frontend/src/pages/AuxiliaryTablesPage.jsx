@@ -4,7 +4,7 @@ import axiosClient from '../api/axiosClient';
 import ExportExcelButton from '../components/ExportExcelButton';
 
 const AuxiliaryTablesPage = () => {
-  const { nacionalidades, provincias, empleadores, socios, operadores, tasasYComisiones, relaciones, comercializadores, bancos, cuentas, conceptos, clasificaciones, comisionesDeuda, factoresRiesgo, multiplicadoresRiesgo, reglasPerfilesTransaccionales, penalties, fetchAuxiliares } = useAppStore();
+  const { nacionalidades, provincias, empleadores, socios, operadores, tasasYComisiones, relaciones, comercializadores, bancos, cuentas, conceptos, clasificaciones, comisionesDeuda, factoresRiesgo, multiplicadoresRiesgo, reglasPerfilesTransaccionales, penalties, politicasCrediticias, fetchAuxiliares } = useAppStore();
 
   const [activeTable, setActiveTable] = useState('socios');
   const [isCreating, setIsCreating] = useState(false);
@@ -69,7 +69,8 @@ const AuxiliaryTablesPage = () => {
     factoresRiesgo: { name: 'Factores de Riesgo', data: factoresRiesgo, endpoint: 'factores_riesgo', schema: ['id', 'codigo', 'detalle', 'peso'] },
     multiplicadoresRiesgo: { name: 'Multiplicadores de Riesgo', data: multiplicadoresRiesgo, endpoint: 'multiplicadores_riesgo', schema: ['id', 'id_riesgo', 'codigo', 'detalle', 'multiplicador', 'variable'] },
     reglasPerfilesTransaccionales: { name: 'Perfiles Transaccionales', data: reglasPerfilesTransaccionales, endpoint: 'reglas_perfiles_transaccionales', schema: ['id', 'id_socio_comercial', 'cupo', 'sueldo_tipo', 'asignacion_familiar', 'horas_extras', 'vacaciones', 'otros', 'descuentos_voluntarios', 'cap_min', 'cap_max'] },
-    penalties: { name: 'Punitorios (Penalties)', data: penalties, endpoint: 'penalties', schema: ['id', 'socio_originador_id', 'tna_c_iva', 'plazo_hasta', 'tipo_calculo'] }
+    penalties: { name: 'Punitorios (Penalties)', data: penalties, endpoint: 'penalties', schema: ['id', 'socio_originador_id', 'tna_c_iva', 'plazo_hasta', 'tipo_calculo'] },
+    politicasCrediticias: { name: 'Políticas Crediticias', data: politicasCrediticias, endpoint: 'politicas_crediticias', schema: ['id', 'fecha', 'socio_originador_id', 'edad_minima_hombre', 'edad_maxima_hombre', 'edad_minima_mujer', 'edad_maxima_mujer', 'edad_maxima_jubilado', 'antiguedad_empleado'] }
   };
 
   const currentTableConfig = tablesMap[activeTable];
@@ -359,7 +360,7 @@ const AuxiliaryTablesPage = () => {
           >
             {[
               { label: "Configuración General", keys: ["nacionalidades", "provincias", "empleadores"] },
-              { label: "Créditos y Riesgo", keys: ["socios", "tasasYComisiones", "reglasPerfilesTransaccionales", "factoresRiesgo", "multiplicadoresRiesgo", "penalties"] },
+              { label: "Créditos y Riesgo", keys: ["socios", "tasasYComisiones", "politicasCrediticias", "reglasPerfilesTransaccionales", "factoresRiesgo", "multiplicadoresRiesgo", "penalties"] },
               { label: "Inversores y Comercialización", keys: ["comercializadores", "relaciones", "comisionesDeuda"] },
               { label: "Finanzas", keys: ["bancos", "cuentas", "conceptos", "clasificaciones"] },
               { label: "Cheques", keys: ["operadores"] }

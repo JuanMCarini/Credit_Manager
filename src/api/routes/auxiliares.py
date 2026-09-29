@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import cast, String, asc, desc
 
-from src.database import get_db, Provincia, Empleador, SocioComercial, TasaYComision, Relacion, Comercializador, Comision
+from src.database import get_db, Provincia, Empleador, SocioComercial, TasaYComision, Relacion, Comercializador, Comision, PoliticaCrediticia
 from src.database.models.creditos.clientes import Nacionalidad
 from src.database.models.creditos.uif import FactoRiesgo, MultiplicadoresRiesgo
 from src.database.models.creditos.perfil_trans import ReglasPerfilTransaccional
@@ -26,7 +26,8 @@ AUX_TABLES = {
     "factores_riesgo": FactoRiesgo,
     "multiplicadores_riesgo": MultiplicadoresRiesgo,
     "reglas_perfiles_transaccionales": ReglasPerfilTransaccional,
-    "penalties": Penalty
+    "penalties": Penalty,
+    "politicas_crediticias": PoliticaCrediticia
 }
 
 def _parse_aux_payload(payload: dict) -> dict:

@@ -287,9 +287,7 @@ class PoliticaCrediticia(Base):
     edad_maxima_hombre = Column(Integer, nullable=False)
     edad_minima_mujer = Column(Integer, nullable=False)
     edad_maxima_mujer = Column(Integer, nullable=False)
-    edad_minima_jubilado = Column(Integer, nullable=False)
     edad_maxima_jubilado = Column(Integer, nullable=False)
     antiguedad_empleado = Column(Integer, nullable=False)
-    antiguedad_jubilado = Column(Integer, nullable=False)
 
     socio_originador = relationship("SocioComercial", foreign_keys=[socio_originador_id], back_populates="politicas_crediticias")
