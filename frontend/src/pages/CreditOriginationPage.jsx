@@ -41,6 +41,9 @@ const CreditOriginationPage = () => {
   const [cuotaAfectableData, setCuotaAfectableData] = useState(null);
   const [loadingCuotaAfectable, setLoadingCuotaAfectable] = useState(false);
 
+  const [empresaCredits, setEmpresaCredits] = useState(null);
+  const [loadingEmpresaCredits, setLoadingEmpresaCredits] = useState(false);
+
   const [creditoForm, setCreditoForm] = useState({
     capital_neto: '',
     tasa_id: '',
@@ -83,6 +86,48 @@ const CreditOriginationPage = () => {
       console.error("Error fetching Riesgo data", error);
     } finally {
       setLoadingRiesgo(false);
+    }
+  };
+
+  const fetchEmpresaCredits = async (cuil) => {
+    setLoadingEmpresaCredits(true);
+    setEmpresaCredits(null);
+    try {
+      const [resCreditos, resCC] = await Promise.all([
+        axiosClient.get(`/api/v1/creditos?cuil=${cuil}`),
+        axiosClient.get(`/api/v1/clientes/${cuil}/cuenta_corriente`)
+      ]);
+      const creditos = resCreditos.data.items || [];
+      const ccData = resCC.data || [];
+      
+      const merged = creditos.map(cred => {
+        const cuotasCredito = ccData.filter(c => c.credito_id === cred.ID && c.estado !== 'CANCELADA' && c.estado !== 'NO COMPRADA');
+        const cuotasAdeudadas = cuotasCredito.filter(c => c.saldo_pendiente > 0).length;
+        const montoTotalDeuda = cuotasCredito.reduce((acc, curr) => acc + (curr.saldo_pendiente || 0), 0);
+        
+        const capitalAdeudado = cuotasCredito.reduce((acc, curr) => {
+          const capEsperado = curr.capital || 0;
+          const capCobrado = curr.detalle_cobranzas ? curr.detalle_cobranzas.reduce((sum, cob) => sum + (cob.capital || 0), 0) : 0;
+          const capPendiente = Math.max(0, capEsperado - capCobrado);
+          return acc + capPendiente;
+        }, 0);
+
+        return {
+          id: cred.ID,
+          tipo_credito: cred["Tipo Crédito"],
+          fecha_emision: cred["Fecha Emisión"],
+          estado: cred.Estado,
+          plazo: cred.Plazo,
+          cuotas_adeudadas: cuotasAdeudadas,
+          capital_adeudado: capitalAdeudado,
+          monto_total: montoTotalDeuda
+        };
+      });
+      setEmpresaCredits(merged);
+    } catch (error) {
+      console.error("Error fetching empresa credits", error);
+    } finally {
+      setLoadingEmpresaCredits(false);
     }
   };
 
@@ -185,6 +230,7 @@ const CreditOriginationPage = () => {
 
       fetchBcraData(cleanData.cuil || cleanData.documento);
       fetchRiesgoData(cleanData.cuil || cleanData.documento);
+      fetchEmpresaCredits(cleanData.cuil || cleanData.documento);
       setStep(3);
     } catch (error) {
       let errorMsg = "Error al procesar el cliente o validar las políticas.";
@@ -443,8 +489,8 @@ const CreditOriginationPage = () => {
               <button className="btn-secondary" onClick={() => setStep(3)}>Volver al perfil transaccional</button>
             </div>
 
-            {/* Context Blocks (BCRA & Riesgo & Cuota Afectable) */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', marginBottom: '24px' }}>
+            {/* Context Blocks (BCRA & Riesgo & Cuota Afectable & Empresa) */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '20px', marginBottom: '24px' }}>
 
               {/* BCRA Block */}
               <div style={{ padding: '16px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
@@ -475,11 +521,11 @@ const CreditOriginationPage = () => {
                         <table className="data-table" style={{ fontSize: '12px' }}>
                           <thead>
                             <tr>
-                              <th>Período</th>
-                              <th>Entidad</th>
-                              <th>Situación</th>
-                              <th>Monto</th>
-                              <th>Días Atraso</th>
+                              <th style={{ textAlign: 'center' }}>Período</th>
+                              <th style={{ textAlign: 'center' }}>Entidad</th>
+                              <th style={{ textAlign: 'center' }}>Situación</th>
+                              <th style={{ textAlign: 'center' }}>Monto</th>
+                              <th style={{ textAlign: 'center' }}>Días Atraso</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -551,10 +597,10 @@ const CreditOriginationPage = () => {
                         <table className="data-table" style={{ fontSize: '12px' }}>
                           <thead>
                             <tr>
-                              <th>Factor</th>
+                              <th style={{ textAlign: 'center' }}>Factor</th>
                               <th style={{ textAlign: 'center' }}>Peso Base</th>
                               <th style={{ textAlign: 'center' }}>Mult.</th>
-                              <th style={{ textAlign: 'right' }}>Puntaje</th>
+                              <th style={{ textAlign: 'center' }}>Puntaje</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -616,9 +662,9 @@ const CreditOriginationPage = () => {
                           <table className="data-table" style={{ fontSize: '11px', minWidth: '100%' }}>
                             <thead>
                               <tr>
-                                <th>Plazo</th>
-                                <th>TNA</th>
-                                <th>Cap. Neto Máx</th>
+                                <th style={{ textAlign: 'center' }}>Plazo</th>
+                                <th style={{ textAlign: 'center' }}>TNA</th>
+                                <th style={{ textAlign: 'center' }}>Cap. Neto Máx</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -642,6 +688,63 @@ const CreditOriginationPage = () => {
                     </div>
                   )
                 ) : null}
+              </div>
+
+              {/* Situación Crediticia Empresa Block */}
+              <div style={{ padding: '16px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                <h4 style={{ margin: '0 0 12px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  🏢 Situación Crediticia con la Empresa
+                </h4>
+                {loadingEmpresaCredits ? (
+                  <div style={{ fontSize: '14px', color: 'var(--text-color)' }}>Consultando situación crediticia interna... ⏳</div>
+                ) : empresaCredits && empresaCredits.length > 0 ? (
+                  <div className="table-responsive" style={{ maxHeight: '200px', overflowY: 'auto', overflowX: 'hidden' }}>
+                    <table className="data-table" style={{ fontSize: '10px', width: '100%', tableLayout: 'fixed' }}>
+                      <thead>
+                        <tr>
+                          <th style={{ width: '9%', padding: '4px', textAlign: 'center' }}>Crédito</th>
+                          <th style={{ width: '15%', padding: '4px', textAlign: 'center' }}>Tipo</th>
+                          <th style={{ width: '13%', padding: '4px', textAlign: 'center' }}>Emisión</th>
+                          <th style={{ width: '8%', padding: '4px', textAlign: 'center' }}>Plazo</th>
+                          <th style={{ width: '15%', padding: '4px', textAlign: 'center' }}>Estado</th>
+                          <th style={{ width: '12%', padding: '4px', textAlign: 'center' }}>Cuotas Ad.</th>
+                          <th style={{ width: '13%', padding: '4px', textAlign: 'center' }}>Cap. Ad.</th>
+                          <th style={{ width: '15%', padding: '4px', textAlign: 'center' }}>Total Deuda</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {empresaCredits.map(cred => (
+                          <tr key={cred.id}>
+                            <td style={{ padding: '4px' }}>#{cred.id}</td>
+                            <td style={{ padding: '4px' }}>{cred.tipo_credito}</td>
+                            <td style={{ padding: '4px' }}>{cred.fecha_emision}</td>
+                            <td style={{ padding: '4px' }}>{cred.plazo} m</td>
+                            <td style={{ padding: '4px' }}>
+                              <span style={{
+                                padding: '2px 4px', borderRadius: '4px', fontSize: '10px', whiteSpace: 'nowrap',
+                                background: cred.estado === 'ACTIVO' || cred.estado === 'NORMAL' ? 'rgba(0, 200, 83, 0.2)' : cred.estado === 'CANCELADO' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(245, 158, 11, 0.2)',
+                                color: cred.estado === 'ACTIVO' || cred.estado === 'NORMAL' ? '#00e676' : cred.estado === 'CANCELADO' ? '#aaa' : '#f59e0b'
+                              }}>
+                                {cred.estado}
+                              </span>
+                            </td>
+                            <td style={{ padding: '4px', textAlign: 'center', fontWeight: 'bold', color: cred.cuotas_adeudadas > 0 ? '#ff5252' : '#00e676' }}>
+                              {cred.cuotas_adeudadas}
+                            </td>
+                            <td style={{ padding: '4px', textAlign: 'right', fontWeight: 'bold', color: cred.capital_adeudado > 0 ? '#ff5252' : '#00e676' }}>
+                              {formatCurrency(cred.capital_adeudado)}
+                            </td>
+                            <td style={{ padding: '4px', textAlign: 'right', fontWeight: 'bold', color: cred.monto_total > 0 ? '#ff5252' : '#00e676' }}>
+                              {formatCurrency(cred.monto_total)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: '14px', color: 'var(--text-color)' }}>No se encontraron créditos registrados con la empresa para este cliente.</div>
+                )}
               </div>
             </div>
 

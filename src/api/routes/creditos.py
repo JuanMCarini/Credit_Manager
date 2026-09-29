@@ -224,6 +224,32 @@ def create_credito(
             detail="Operación denegada: El cliente se encuentra registrado en el RePET."
         )
 
+    # 1.5 Validación de Límite de Capital Neto Máximo del Socio
+    from src.database.models import SocioComercial, Credito, Cuota, EstadoCuota
+    from sqlalchemy.orm import joinedload
+    socio = db.query(SocioComercial).filter(SocioComercial.id == credito_data.socio_originador_id).first()
+    if socio and socio.capital_neto_maximo is not None:
+        creditos_activos = db.query(Credito).options(
+            joinedload(Credito.cuotas).joinedload(Cuota.cobranzas)
+        ).filter(
+            Credito.cliente_cuil == credito_data.cliente_cuil,
+            Credito.socio_originador_id == credito_data.socio_originador_id
+        ).all()
+        
+        capital_adeudado = 0.0
+        for cred in creditos_activos:
+            for cuota in cred.cuotas:
+                if cuota.estado not in (EstadoCuota.CANCELADA, EstadoCuota.NO_COMPRADA):
+                    cap_esperado = float(cuota.capital or 0.0)
+                    cap_cobrado = sum(float(cob.capital or 0.0) for cob in cuota.cobranzas)
+                    capital_adeudado += max(0.0, cap_esperado - cap_cobrado)
+        
+        if float(credito_data.capital) + capital_adeudado > float(socio.capital_neto_maximo):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Límite excedido: El capital solicitado más la deuda actual supera el límite de {float(socio.capital_neto_maximo)} establecido por el socio comercial."
+            )
+
     # 2. Originación del Crédito
     try:
         originator = LoanOriginator(db_session=db)

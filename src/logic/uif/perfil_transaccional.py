@@ -92,7 +92,9 @@ def capital_neto_maximo(cuil: str, periodo: Union[Period, date], socio: Union[So
         df.sort_values(by=["plazo"], inplace=True)
 
         regla = db.query(ReglasPerfilTransaccional).filter(ReglasPerfilTransaccional.id_socio_comercial == socio_id).first()
-        df = df[(df["cap_neto_max"] >= regla.cap_min) & (df["cap_neto_max"] <= regla.cap_max)]
+        if regla:
+            df["cap_neto_max"] = df["cap_neto_max"].clip(upper=float(regla.cap_max))
+            df = df[df["cap_neto_max"] >= float(regla.cap_min)]
 
     finally:
         db.close()

@@ -48,6 +48,7 @@ class SocioComercial(Base):
     nro_cuenta_bancaria = Column(String(50), nullable=True)
     nombre_banco = Column(String(100), nullable=True)
     codigo_descuento = Column(Boolean, default=False, nullable=False)
+    capital_neto_maximo = Column(Numeric(15, 2), nullable=True)
 
     # Relationships
     carteras = relationship("Cartera", back_populates="socio")

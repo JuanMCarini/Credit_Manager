@@ -57,7 +57,7 @@ const AuxiliaryTablesPage = () => {
     provincias: { name: 'Provincias', data: provincias, endpoint: 'provincias', schema: ['id', 'nombre'] },
     operadores: { name: 'Operadores de Cheques', data: operadores, endpoint: 'operadores', basePath: '/api/cheques', idField: 'cuit', schema: ['cuit', 'razon_social', 'calificacion', 'telefono', 'email'] },
     empleadores: { name: 'Empleadores', data: empleadores, endpoint: 'empleadores', schema: ['id', 'cuit', 'razon_social', 'es_pasivo', 'domicilio_calle', 'domicilio_nro', 'domicilio_piso', 'domicilio_depto', 'id_provincia', 'id_codigo_postal', 'localidad', 'telefono', 'socio_comercial_id'] },
-    socios: { name: 'Socios Comerciales', data: socios, endpoint: 'socios', schema: ['id', 'razon_social', 'cuit', 'domicilio_legal', 'contacto_nombre', 'mail', 'telefono', 'dia_corte', 'cbu', 'nro_cuenta_bancaria', 'nombre_banco', 'anticipo_vigente', 'codigo_descuento'] },
+    socios: { name: 'Socios Comerciales', data: socios, endpoint: 'socios', schema: ['id', 'razon_social', 'cuit', 'domicilio_legal', 'contacto_nombre', 'mail', 'telefono', 'dia_corte', 'cbu', 'nro_cuenta_bancaria', 'nombre_banco', 'anticipo_vigente', 'codigo_descuento', 'capital_neto_maximo'] },
     tasasYComisiones: { name: 'Tasas y Comisiones', data: tasasYComisiones, endpoint: 'tasas_y_comisiones', schema: ['id', 'fecha', 'estado', 'socio_originador_id', 'socio_intermediario_id', 'colocacion_originador', 'colocacion_intermediario', 'cobranza_originador', 'cobranza_intermediario', 'colocacion_propia', 'gasto_1_porcentaje', 'gasto_1_socio_id', 'gasto_2_porcentaje', 'gasto_2_socio_id', 'porcentaje_sellado', 'plazo', 'tna_c_iva', 'multiplicador_punitorio'] },
     relaciones: { name: 'Relaciones Mapeadas', data: relaciones, endpoint: 'relaciones', schema: ['id', 'socio_id', 'tabla', 'id_local', 'id_foraneo'] },
     comercializadores: { name: 'Comercializadores', data: comercializadores, endpoint: 'comercializadores', schema: ['id', 'nombre'] },
@@ -173,7 +173,7 @@ const AuxiliaryTablesPage = () => {
           cleanedData[key] = parseInt(cleanedData[key], 10);
         } else if (percentFields.includes(key) && cleanedData[key] !== null) {
           cleanedData[key] = parseFloat(cleanedData[key]) / 100.0;
-        } else if (['cap_min', 'cap_max'].includes(key) && typeof cleanedData[key] === 'string') {
+        } else if (['cap_min', 'cap_max', 'capital_neto_maximo'].includes(key) && typeof cleanedData[key] === 'string') {
           const parsed = parseFloat(cleanedData[key].replace(/\./g, '').replace(',', '.').replace(/[^0-9.-]/g, ''));
           cleanedData[key] = isNaN(parsed) ? 0 : parsed;
         }
@@ -302,6 +302,9 @@ const AuxiliaryTablesPage = () => {
     }
     if (['capital', 'interes', 'iva', 'total', 'anticipo_vigente', 'cap_min', 'cap_max'].includes(col.toLowerCase())) {
       return `$\u00A0${parseFloat(value).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`;
+    }
+    if (col.toLowerCase() === 'capital_neto_maximo') {
+      return `$\u00A0${parseFloat(value).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
     }
     return String(value);
   };
@@ -788,7 +791,8 @@ const AuxiliaryTablesPage = () => {
                         {col === 'es_pasivo' ? (editFormData[col] ? 'Sí (Jubilado/Pensionado)' : 'No') : (editFormData[col] ? 'SÍ' : 'NO')}
                       </label>
                     );
-                  } else if (['cap_min', 'cap_max'].includes(col)) {
+                  } else if (['cap_min', 'cap_max', 'capital_neto_maximo'].includes(col)) {
+                    const noDecimals = col === 'capital_neto_maximo';
                     inputElement = (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <span style={{ fontWeight: '600', color: 'var(--text-secondary)' }}>$</span>
@@ -797,7 +801,10 @@ const AuxiliaryTablesPage = () => {
                           value={
                             editFormData[col] !== undefined && editFormData[col] !== null
                               ? (typeof editFormData[col] === 'number'
-                                ? editFormData[col].toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                ? editFormData[col].toLocaleString('es-AR', { 
+                                    minimumFractionDigits: noDecimals ? 0 : 2, 
+                                    maximumFractionDigits: noDecimals ? 0 : 2 
+                                  })
                                 : editFormData[col])
                               : ''
                           }
