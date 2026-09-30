@@ -275,7 +275,7 @@ const CreditOriginationPage = () => {
         capital: capitalBruto,
         tna_c_iva: selectedTasa.tna_c_iva,
         plazo: selectedTasa.plazo,
-        fecha_emision: creditoForm.fecha_emision
+        fecha_emision: creditoForm.fecha_emision || null
       });
       const res = await axiosClient.get(`/api/v1/creditos/simular-cuotas?${params.toString()}`);
       setSimulation(res.data);
@@ -344,7 +344,7 @@ const CreditOriginationPage = () => {
         tipo_credito: creditoForm.tipo,
         socio_originador_id: creditoForm.socio_id ? parseInt(creditoForm.socio_id) : null,
         comision_id: selectedTasa.id,
-        fecha_emision: creditoForm.fecha_emision,
+        fecha_emision: creditoForm.fecha_emision || null,
         id_externo: creditoForm.id_externo || null,
         transferencias: transfers
       };
@@ -358,7 +358,8 @@ const CreditOriginationPage = () => {
       link.click();
       document.body.removeChild(link);
     } catch (error) {
-      alert("Error al generar previsualización.");
+      console.error("Error preview legajo:", error);
+      alert("Error al generar previsualización. " + (error.response?.data?.detail || error.message || ""));
     } finally {
       setLoadingPreview(false);
     }
@@ -385,7 +386,7 @@ const CreditOriginationPage = () => {
         tipo_credito: creditoForm.tipo,
         socio_originador_id: creditoForm.socio_id ? parseInt(creditoForm.socio_id) : null,
         comision_id: selectedTasa.id,
-        fecha_emision: creditoForm.fecha_emision,
+        fecha_emision: creditoForm.fecha_emision || null,
         id_externo: creditoForm.id_externo || null,
         transferencias: transfers
       };

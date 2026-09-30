@@ -228,6 +228,7 @@ def process_docx(template_path: str, output_docx: str, data: Dict[str, Any]) -> 
     Carga una plantilla, reemplaza las variables estipuladas y
     lo exporta a formato .docx.
     """
+    template_path = template_path.replace("\\", "/")
     if not os.path.exists(template_path):
         raise FileNotFoundError(f"No se encontró la plantilla en: {template_path}")
         
