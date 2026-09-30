@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 from src.database.connection import get_db
-from src.database.models.creditos.cobranzas import LiquidacionCuotaCedida
+from src.database.models.creditos.cobranzas import LiquidacionCuotaCedida, Cobranza
 from src.database.models import SocioComercial, Cartera, TipoOperacionCartera
 from src.api.schemas.liquidaciones import (
     LiquidacionResponse,
@@ -19,15 +19,16 @@ router = APIRouter(prefix="/api/v1/liquidaciones", tags=["liquidaciones"])
 def listar_liquidaciones(db: Session = Depends(get_db)):
     from sqlalchemy.orm import joinedload
     liquidaciones = (
-        db.query(LiquidacionCuotaCedida, SocioComercial.razon_social.label("socio_comercial"))
+        db.query(LiquidacionCuotaCedida, SocioComercial.razon_social.label("socio_comercial"), Cobranza.fecha.label("fecha_emision_cobranza"))
         .options(joinedload(LiquidacionCuotaCedida.cuota))
         .join(Cartera, LiquidacionCuotaCedida.cartera_id == Cartera.id)
         .join(SocioComercial, Cartera.socio_id == SocioComercial.id)
+        .outerjoin(Cobranza, LiquidacionCuotaCedida.cobranza_id == Cobranza.id)
         .all()
     )
     
     res = []
-    for l, socio_comercial in liquidaciones:
+    for l, socio_comercial, fecha_emision_cobranza in liquidaciones:
         res.append({
             "id": l.id,
             "proceso_id": l.proceso_id,
@@ -44,7 +45,8 @@ def listar_liquidaciones(db: Session = Depends(get_db)):
             "iva": l.iva,
             "importe_total": l.importe_total,
             "fecha_pago": l.fecha_pago,
-            "cancelada": l.cancelada
+            "cancelada": l.cancelada,
+            "fecha_emision_cobranza": fecha_emision_cobranza
         })
     return res
 

@@ -24,7 +24,7 @@ const PortfolioLiquidationsPage = () => {
   const [filter, setFilter] = useState({
     id: '', proceso_id: '', socio_comercial: [], cartera_id: '', cuota_id: '', cobranza_id: '',
     tipo_liquidacion: [], credito_id: [], nro_cuota: '', fecha_vencimiento: [],
-    capital: '', interes: '', iva: '', importe_total: '', fecha_pago: [], cancelada: ''
+    capital: '', interes: '', iva: '', importe_total: '', fecha_pago: [], cancelada: '', fecha_emision_cobranza: []
   });
 
   const [showTipoFilter, setShowTipoFilter] = useState(false);
@@ -33,6 +33,7 @@ const PortfolioLiquidationsPage = () => {
   const AVAILABLE_FECHAS_PAGO = useMemo(() => [...new Set(liquidaciones.map(l => l.fecha_pago).filter(Boolean))], [liquidaciones]);
   const AVAILABLE_CREDIT_IDS = useMemo(() => [...new Set(liquidaciones.map(l => l.credito_id).filter(Boolean))].sort((a,b)=>a-b).map(String), [liquidaciones]);
   const AVAILABLE_SOCIOS = useMemo(() => [...new Set(liquidaciones.map(l => l.socio_comercial).filter(Boolean))].sort(), [liquidaciones]);
+  const AVAILABLE_FECHAS_EMISION_COBRANZA = useMemo(() => [...new Set(liquidaciones.map(l => l.fecha_emision_cobranza).filter(Boolean))], [liquidaciones]);
 
   const handleTipoToggle = (tipo) => {
     setFilter(prev => {
@@ -66,6 +67,7 @@ const PortfolioLiquidationsPage = () => {
       const isCancelada = filter.cancelada === 'true';
       result = result.filter(l => l.cancelada === isCancelada);
     }
+    if (filter.fecha_emision_cobranza && filter.fecha_emision_cobranza.length > 0) result = result.filter(l => filter.fecha_emision_cobranza.includes(l.fecha_emision_cobranza));
     return result;
   }, [liquidaciones, filter]);
 
@@ -194,7 +196,7 @@ const PortfolioLiquidationsPage = () => {
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
               <button 
                 className="btn-secondary" 
-                onClick={() => setFilter({ id: '', proceso_id: '', socio_comercial: [], cartera_id: '', credito_id: [], cuota_id: '', capital: '', interes: '', iva: '', total: '', estado: '' })}
+                onClick={() => setFilter({ id: '', proceso_id: '', socio_comercial: [], cartera_id: '', cuota_id: '', cobranza_id: '', tipo_liquidacion: [], credito_id: [], nro_cuota: '', fecha_vencimiento: [], capital: '', interes: '', iva: '', importe_total: '', fecha_pago: [], cancelada: '', fecha_emision_cobranza: [] })}
                 title="Limpiar todos los filtros"
                 style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '100%' }}
               >
@@ -243,6 +245,14 @@ const PortfolioLiquidationsPage = () => {
                 <th style={{minWidth: '90px'}}>Cartera ID <br/>{renderInput('cartera_id', '...')}</th>
                 <th style={{minWidth: '90px'}}>Cuota ID <br/>{renderInput('cuota_id', '...')}</th>
                 <th style={{minWidth: '100px'}}>Cobranza ID <br/>{renderInput('cobranza_id', '...')}</th>
+                <th style={{minWidth: '110px'}}>
+                  Fecha Emisión Cob. <br/>
+                  <ExcelDateFilter 
+                    availableDates={AVAILABLE_FECHAS_EMISION_COBRANZA}
+                    selectedDates={filter.fecha_emision_cobranza}
+                    onChange={dates => handleFilterChange('fecha_emision_cobranza', dates)}
+                  />
+                </th>
                 <th style={{minWidth: '100px'}}>
                   Tipo <br/>
                   <div 
@@ -327,7 +337,7 @@ const PortfolioLiquidationsPage = () => {
             </thead>
             <tbody>
               {filteredLiquidaciones.length === 0 ? (
-                <tr><td colSpan="16" className="text-center empty-state">{loading ? "Cargando..." : "No hay liquidaciones."}</td></tr>
+                <tr><td colSpan="17" className="text-center empty-state">{loading ? "Cargando..." : "No hay liquidaciones."}</td></tr>
               ) : (
                 filteredLiquidaciones.map(l => (
                   <tr key={l.id}>
@@ -337,6 +347,7 @@ const PortfolioLiquidationsPage = () => {
                     <td>{l.cartera_id}</td>
                     <td>{l.cuota_id}</td>
                     <td>{l.cobranza_id || '-'}</td>
+                    <td>{l.fecha_emision_cobranza || '-'}</td>
                     <td>{l.tipo_liquidacion}</td>
                     <td>{l.credito_id || '-'}</td>
                     <td>{l.nro_cuota || '-'}</td>
@@ -357,7 +368,7 @@ const PortfolioLiquidationsPage = () => {
             </tbody>
             <tfoot>
               <tr>
-                <td colSpan="10" style={{ textAlign: 'right', fontWeight: 'bold' }}>Totales Filtrados:</td>
+                <td colSpan="11" style={{ textAlign: 'right', fontWeight: 'bold' }}>Totales Filtrados:</td>
                 <td style={{ fontWeight: 'bold' }}>{formatMoney(totalCapital)}</td>
                 <td style={{ fontWeight: 'bold' }}>{formatMoney(totalInteres)}</td>
                 <td style={{ fontWeight: 'bold' }}>{formatMoney(totalIva)}</td>
@@ -398,7 +409,7 @@ const PortfolioLiquidationsPage = () => {
                         className="btn-secondary" 
                         title="Ver Liquidaciones"
                         onClick={() => {
-                          setFilter({ id: '', proceso_id: String(p.ID), socio_comercial: [], cartera_id: '', cuota_id: '', cobranza_id: '', tipo_liquidacion: [], credito_id: [], nro_cuota: '', fecha_vencimiento: [], capital: '', interes: '', iva: '', importe_total: '', fecha_pago: [], cancelada: '' });
+                          setFilter({ id: '', proceso_id: String(p.ID), socio_comercial: [], cartera_id: '', cuota_id: '', cobranza_id: '', tipo_liquidacion: [], credito_id: [], nro_cuota: '', fecha_vencimiento: [], capital: '', interes: '', iva: '', importe_total: '', fecha_pago: [], cancelada: '', fecha_emision_cobranza: [] });
                           setActiveTab('liquidaciones');
                         }}
                         style={{ padding: '4px 8px', fontSize: '14px' }}

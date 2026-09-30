@@ -215,8 +215,9 @@ class SettlementManager:
         df["tipo_liquidacion"] = TipoLiquidacionEnum.RECURSO
         df["fecha_vencimiento"] = pd.to_datetime(df["fecha_vencimiento"]).dt.date
         df["cobranza_id"] = None
+        df["fecha_emision_cobranza"] = None
         df = df[
-            ["cuota_id", "credito_id", "cartera_id", "tipo_liquidacion", "nro_cuota", "fecha_vencimiento", "capital", "interes", "iva", "cobranza_id"]
+            ["cuota_id", "credito_id", "cartera_id", "tipo_liquidacion", "nro_cuota", "fecha_vencimiento", "capital", "interes", "iva", "cobranza_id", "fecha_emision_cobranza"]
         ]
 
         self.settlements = df
@@ -262,6 +263,11 @@ class SettlementManager:
 
         mask = (df_cobr["tipo_cobranza"] == TipoCobranzaEnum.CA)
         df_cobr.loc[mask, "tipo_liquidacion"] = TipoLiquidacionEnum.CA
+
+        if "fecha" in df_cobr.columns:
+            df_cobr.rename(columns={"fecha": "fecha_emision_cobranza"}, inplace=True)
+        else:
+            df_cobr["fecha_emision_cobranza"] = None
 
         df_cobr = df_cobr[self.settlements.columns.drop("cobranza_id")].reset_index()
         df_cobr.rename(columns={"id": "cobranza_id"}, inplace=True)

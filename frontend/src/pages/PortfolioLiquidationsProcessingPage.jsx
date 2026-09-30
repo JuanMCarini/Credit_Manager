@@ -89,7 +89,8 @@ const PortfolioLiquidationsProcessingPage = () => {
     nro_cuota: '',
     fecha_vencimiento: [],
     cartera_id: '',
-    tipo_liquidacion: []
+    tipo_liquidacion: [],
+    fecha_emision_cobranza: []
   });
 
   useEffect(() => {
@@ -208,11 +209,17 @@ const PortfolioLiquidationsProcessingPage = () => {
     return [...new Set(previewData.map(d => d.fecha_vencimiento))].sort();
   }, [previewData]);
 
+  const uniqueFechasEmisionCobranza = useMemo(() => {
+    if (!previewData) return [];
+    return [...new Set(previewData.map(d => d.fecha_emision_cobranza).filter(Boolean))].sort();
+  }, [previewData]);
+
   const filteredData = previewData ? previewData.filter(item => {
     return (
       (filters.credito_id.length === 0 || filters.credito_id.includes(String(item.credito_id))) &&
       (filters.nro_cuota === '' || String(item.nro_cuota).includes(filters.nro_cuota)) &&
       (filters.fecha_vencimiento.length === 0 || filters.fecha_vencimiento.includes(item.fecha_vencimiento)) &&
+      (filters.fecha_emision_cobranza.length === 0 || filters.fecha_emision_cobranza.includes(item.fecha_emision_cobranza)) &&
       (filters.cartera_id === '' || String(item.cartera_id).includes(filters.cartera_id)) &&
       (filters.tipo_liquidacion.length === 0 || filters.tipo_liquidacion.includes(item.tipo_liquidacion))
     );
@@ -321,7 +328,7 @@ const PortfolioLiquidationsProcessingPage = () => {
             <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
               <button 
                 className="btn-secondary" 
-                onClick={() => setFilters({ credito_id: [], nro_cuota: '', fecha_vencimiento: [], cartera_id: '', tipo_liquidacion: [] })}
+                onClick={() => setFilters({ credito_id: [], nro_cuota: '', fecha_vencimiento: [], cartera_id: '', tipo_liquidacion: [], fecha_emision_cobranza: [] })}
                 title="Limpiar todos los filtros"
                 style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '100%', padding: '0 12px' }}
               >
@@ -377,6 +384,18 @@ const PortfolioLiquidationsProcessingPage = () => {
                     <input type="text" placeholder="Filtrar..." value={filters.cartera_id} onChange={(e) => handleFilterChange(e, 'cartera_id')} style={{ display: 'block', width: '100%', marginTop: '4px', padding: '4px', fontSize: '0.8rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-primary)', borderRadius: '4px' }} />
                   </th>
                   <th>Cobranza ID</th>
+                  <th style={{minWidth: '220px'}}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      Fecha Emisión Cob.
+                    </div>
+                    {uniqueFechasEmisionCobranza.length > 0 && (
+                      <ExcelDateFilter 
+                        availableDates={uniqueFechasEmisionCobranza}
+                        selectedDates={filters.fecha_emision_cobranza}
+                        onChange={(newDates) => setFilters(prev => ({ ...prev, fecha_emision_cobranza: newDates }))}
+                      />
+                    )}
+                  </th>
                   <th>
                     Tipo Liquidación
                     {uniqueTipos.length > 0 && (
@@ -428,7 +447,7 @@ const PortfolioLiquidationsProcessingPage = () => {
               <tbody>
                 {filteredData.length === 0 ? (
                   <tr>
-                    <td colSpan="11" className="text-center" style={{ padding: '32px 0' }}>
+                    <td colSpan="12" className="text-center" style={{ padding: '32px 0' }}>
                       <div className="empty-state">No se encontraron liquidaciones con esos filtros.</div>
                     </td>
                   </tr>
@@ -438,6 +457,7 @@ const PortfolioLiquidationsProcessingPage = () => {
                       <td>{l.cuota_id}</td>
                       <td>{l.cartera_id}</td>
                       <td>{l.cobranza_id || '-'}</td>
+                      <td>{l.fecha_emision_cobranza || '-'}</td>
                       <td>{l.tipo_liquidacion}</td>
                       <td>{l.credito_id}</td>
                       <td>{l.nro_cuota}</td>
@@ -452,7 +472,7 @@ const PortfolioLiquidationsProcessingPage = () => {
               </tbody>
               <tfoot>
                 <tr>
-                  <td colSpan="7" style={{ textAlign: 'right' }}>Totales:</td>
+                  <td colSpan="8" style={{ textAlign: 'right' }}>Totales:</td>
                   <td>{formatMoney(totalCapital)}</td>
                   <td>{formatMoney(totalInteres)}</td>
                   <td>{formatMoney(totalIva)}</td>

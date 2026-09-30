@@ -19,6 +19,7 @@ class LiquidacionResponse(BaseModel):
     importe_total: float
     fecha_pago: Optional[date] = None
     cancelada: bool
+    fecha_emision_cobranza: Optional[date] = None
 
     class Config:
         from_attributes = True
@@ -43,6 +44,7 @@ class LiquidacionPreviewResponse(BaseModel):
     interes: float
     iva: float
     cobranza_id: Optional[int] = None
+    fecha_emision_cobranza: Optional[date] = None
 
 class CompradorResponse(BaseModel):
     id: int
