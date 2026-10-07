@@ -42,10 +42,10 @@ def consultar_cuit_api(cuit: str) -> dict:
     """
     Consulta la API del BCRA utilizando curl_cffi con una sesión persistente.
     """
+    global session_bcra
     url = f"https://api.bcra.gob.ar/CentralDeDeudores/v1.0/Deudas/{cuit}"
     
-    try:
-        # Usamos la sesión global en vez de requests.get()
+    def _intentar():
         respuesta = session_bcra.get(url, timeout=15)
         
         if respuesta.status_code not in (200, 404):
@@ -69,9 +69,31 @@ def consultar_cuit_api(cuit: str) -> dict:
                 
         except json.JSONDecodeError:
             return {"CUIT": cuit, "Estado": "Error Decodificando JSON", "Datos_API": None, "Error": texto_respuesta[:100]}
+
+    try:
+        resultado = _intentar()
+        # Si falló por HTTP, intentamos recrear la sesión una vez
+        if resultado.get("Error") is not None:
+            try:
+                session_bcra.close()
+            except Exception:
+                pass
+            session_bcra = crear_sesion_bcra()
+            resultado = _intentar()
+            
+        return resultado
             
     except requests.errors.RequestsError as e:
-        return {"CUIT": cuit, "Estado": "Error de Red (curl_cffi)", "Datos_API": None, "Error": str(e)}
+        # Si falló la red, recreamos la sesión e intentamos de nuevo
+        try:
+            try:
+                session_bcra.close()
+            except Exception:
+                pass
+            session_bcra = crear_sesion_bcra()
+            return _intentar()
+        except Exception as retry_e:
+            return {"CUIT": cuit, "Estado": "Error de Red (curl_cffi)", "Datos_API": None, "Error": f"{str(e)} | {str(retry_e)}"}
     except Exception as e:
         return {"CUIT": cuit, "Estado": "Error Desconocido", "Datos_API": None, "Error": str(e)}
 

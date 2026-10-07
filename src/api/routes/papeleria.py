@@ -37,16 +37,30 @@ def format_currency(monto: float) -> str:
         return "$ 0,00"
 
 def calcular_gastos_credito(credito) -> float:
+    # 1. Forma general: basada en las transferencias generadas
+    if getattr(credito, 'transferencias', None):
+        # Todo lo que no va al cliente (cuit != cliente.cuil) se considera gasto
+        gastos = sum(
+            float(t.monto) for t in credito.transferencias 
+            if getattr(t, 'cuit', None) != credito.cliente.cuil
+        )
+        # Solo retornamos si hay transferencias (podria ser 0 si no hay gastos)
+        return gastos
+    
+    # 2. Fallback si no hay transferencias
     gastos = 0.0
     if getattr(credito, 'comision', None):
         gasto_1 = float(credito.comision.gasto_1_porcentaje or 0.0)
         gasto_2 = float(credito.comision.gasto_2_porcentaje or 0.0)
         sellado = float(getattr(credito.comision, 'porcentaje_sellado', 0) or 0.0)
-        gastos = float(credito.capital) * (gasto_1 + gasto_2 + sellado) / 100.0
-    else:
-        # Fallback para creditos originados antes del parche de comision_id
-        if getattr(credito, 'transferencias', None):
-            gastos = sum(float(t.monto) for t in credito.transferencias if t.razon_social in ["AMUF", "DALVI CULTURAL SRL"])
+        
+        total_porcentaje = gasto_1 + gasto_2 + sellado
+        # Precaución: si se guardó como > 1 (ej 8.0 en lugar de 0.08), dividimos por 100
+        if total_porcentaje >= 1.0:
+            total_porcentaje = total_porcentaje / 100.0
+            
+        gastos = float(credito.capital) * total_porcentaje
+        
     return gastos
 
 from src.database import get_db, SocioComercial, Credito, Cliente, Cartera
@@ -379,11 +393,12 @@ def download_document(doc_id: int, db: Session = Depends(get_db)):
     if not doc:
         raise HTTPException(status_code=404, detail="Documento no encontrado.")
     
-    if not os.path.exists(doc.ruta_archivo):
+    normalized_path = doc.ruta_archivo.replace("\\", "/")
+    if not os.path.exists(normalized_path):
         raise HTTPException(status_code=404, detail="El archivo físico no existe en el servidor.")
     
     return FileResponse(
-        path=doc.ruta_archivo,
+        path=normalized_path,
         filename=doc.nombre_archivo,
         media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
     )
@@ -541,13 +556,25 @@ def resolve_system_field(credito: Credito, field: str):
     elif field == "credito.gastos_otorgamiento_letras":
         return monto_a_letras(calcular_gastos_credito(credito))
     elif field == "credito.sellado":
+        if getattr(credito, 'transferencias', None):
+            monto_sellado = sum(float(t.monto) for t in credito.transferencias if t.razon_social == "Sellado")
+            if monto_sellado > 0:
+                return format_currency(monto_sellado)
         if getattr(credito, 'comision', None) and getattr(credito.comision, 'porcentaje_sellado', 0):
-            sellado = float(credito.capital) * float(credito.comision.porcentaje_sellado) / 100.0
+            porcentaje = float(credito.comision.porcentaje_sellado)
+            if porcentaje >= 1.0: porcentaje /= 100.0
+            sellado = float(credito.capital) * porcentaje
             return format_currency(sellado)
         return "$ 0,00"
     elif field == "credito.sellado_letras":
+        if getattr(credito, 'transferencias', None):
+            monto_sellado = sum(float(t.monto) for t in credito.transferencias if t.razon_social == "Sellado")
+            if monto_sellado > 0:
+                return monto_a_letras(monto_sellado)
         if getattr(credito, 'comision', None) and getattr(credito.comision, 'porcentaje_sellado', 0):
-            sellado = float(credito.capital) * float(credito.comision.porcentaje_sellado) / 100.0
+            porcentaje = float(credito.comision.porcentaje_sellado)
+            if porcentaje >= 1.0: porcentaje /= 100.0
+            sellado = float(credito.capital) * porcentaje
             return monto_a_letras(sellado)
         return monto_a_letras(0)
     elif field == "credito.interes":

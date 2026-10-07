@@ -102,6 +102,37 @@ def saldos(
 
     df["total"] = df[["capital", "interes", "iva"]].sum(axis=1)
 
+    # 3.5. Recalcular estados a la fecha de corte
+    df["_vencida"] = pd.to_datetime(df["fecha_vencimiento"]) < pd.to_datetime(fecha_str)
+    
+    # Estado de la cuota
+    df.loc[df["total"].round(2) <= 0, "estado"] = "PAGADA"
+    df.loc[(df["total"].round(2) > 0) & df["_vencida"], "estado"] = "VENCIDA"
+    df.loc[(df["total"].round(2) > 0) & ~df["_vencida"], "estado"] = "PENDIENTE"
+    
+    # Estado del crédito
+    agg_states = df.assign(
+        vencida_con_saldo=lambda x: x["_vencida"] & (x["total"].round(2) > 0)
+    ).groupby("credito_id").agg(
+        cred_total=("total", "sum"),
+        any_vencida=("vencida_con_saldo", "any")
+    )
+    
+    df["_cred_total"] = df["credito_id"].map(agg_states["cred_total"])
+    df["_any_vencida"] = df["credito_id"].map(agg_states["any_vencida"])
+    
+    mask_cancelado = df["_cred_total"].round(2) <= 0
+    mask_moroso = (df["_cred_total"].round(2) > 0) & df["_any_vencida"]
+    mask_activo = (df["_cred_total"].round(2) > 0) & ~df["_any_vencida"]
+    
+    mask_keep_special = df["estado_credito"].isin(["INCOBRABLE", "JUDICIALIZADO"])
+    
+    df.loc[mask_cancelado, "estado_credito"] = "CANCELADO"
+    df.loc[mask_moroso & ~mask_keep_special, "estado_credito"] = "MOROSO"
+    df.loc[mask_activo & ~mask_keep_special, "estado_credito"] = "ACTIVO"
+    
+    df.drop(columns=["_vencida", "_cred_total", "_any_vencida"], inplace=True)
+
     if con_saldo:
         df = df[df["total"].round(2) != 0.0]
 
