@@ -534,7 +534,7 @@ def resolve_system_field(credito: Credito, field: str):
     elif field == "cliente.provincia":
         return credito.cliente.provincia.nombre if credito.cliente.provincia else ""
     elif field == "cliente.nacionalidad":
-        return credito.cliente.nacionalidad or ""
+        return credito.cliente.nacionalidad.nombre if credito.cliente.nacionalidad else ""
     elif field == "credito.monto_otorgado":
         return format_currency(credito.capital)
     elif field == "credito.monto_otorgado_letras":
