@@ -226,3 +226,26 @@ data/
 .env
 .env.*
 !.env.example
+
+# LaTeX
+*.aux
+*.bcf
+*.bbl
+*.blg
+*.idx
+*.ind
+*.lof
+*.lot
+*.out
+*.toc
+*.acn
+*.acr
+*.alg
+*.glg
+*.glo
+*.gls
+*.fls
+*.log
+*.fdb_latexmk
+*.synctex.gz
+*.run.xml
