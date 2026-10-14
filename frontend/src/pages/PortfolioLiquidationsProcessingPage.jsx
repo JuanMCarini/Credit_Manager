@@ -1,72 +1,10 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { FilterX } from 'lucide-react';
 import axiosClient from '../api/axiosClient';
 import ExcelDateFilter from '../components/ExcelDateFilter';
 import ExcelListFilter from '../components/ExcelListFilter';
 import ExportExcelButton from '../components/ExportExcelButton';
-
-const MultiSelectDropdown = ({ options, selectedValues, onChange, placeholder }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const containerRef = useRef(null);
-
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (containerRef.current && !containerRef.current.contains(e.target)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const toggleOption = (val) => {
-    let newValues;
-    if (selectedValues.includes(val)) {
-      newValues = selectedValues.filter(v => v !== val);
-    } else {
-      newValues = [...selectedValues, val];
-    }
-    onChange(newValues);
-  };
-
-  return (
-    <div ref={containerRef} style={{ position: 'relative', width: '100%' }}>
-      <div 
-        onClick={() => setIsOpen(!isOpen)} 
-        className="form-control" 
-        style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-input)' }}
-      >
-        <span>
-          {selectedValues.length === 0 
-            ? placeholder 
-            : `${selectedValues.length} proceso(s) seleccionado(s)`}
-        </span>
-        <span style={{ fontSize: '0.8rem', opacity: 0.7 }}>▼</span>
-      </div>
-      {isOpen && (
-        <div style={{
-          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100, 
-          background: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', 
-          borderRadius: '4px', maxHeight: '200px', overflowY: 'auto',
-          marginTop: '4px', boxShadow: '0 8px 16px rgba(0,0,0,0.5)'
-        }}>
-          {options.map(opt => (
-            <label key={opt.value} style={{ display: 'flex', alignItems: 'center', padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)', margin: 0 }}>
-              <input 
-                type="checkbox" 
-                checked={selectedValues.includes(opt.value)} 
-                onChange={() => toggleOption(opt.value)} 
-                style={{ marginRight: '8px', cursor: 'pointer' }} 
-              />
-              <span style={{ fontSize: '0.9rem', color: 'var(--text-primary)' }}>{opt.label}</span>
-            </label>
-          ))}
-          {options.length === 0 && <div style={{ padding: '8px 12px', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>No hay opciones</div>}
-        </div>
-      )}
-    </div>
-  );
-};
+import ProcesosCobranzaSelector from '../components/ProcesosCobranzaSelector';
 
 const PortfolioLiquidationsProcessingPage = () => {
   const [formData, setFormData] = useState({
@@ -93,32 +31,47 @@ const PortfolioLiquidationsProcessingPage = () => {
     fecha_emision_cobranza: []
   });
 
-  useEffect(() => {
-    const fetchCompradores = async () => {
-      try {
-        const res = await axiosClient.get('/api/v1/liquidaciones/compradores');
-        setCompradores(res.data);
-        if (res.data.length > 0) {
-          setFormData(prev => ({ ...prev, id_val: res.data[0].id.toString() }));
-        }
-      } catch (error) {
-        console.error("Error fetching compradores:", error);
+  const fetchCompradores = useCallback(async () => {
+    try {
+      const res = await axiosClient.get('/api/v1/liquidaciones/compradores');
+      setCompradores(res.data);
+      if (res.data.length > 0) {
+        setFormData(prev => ({ 
+          ...prev, 
+          id_val: prev.id_val || res.data[0].id.toString() 
+        }));
       }
-    };
-    
-    const fetchProcesos = async () => {
-      try {
-        const res = await axiosClient.get('/api/v1/procesos');
-        // Filter out processes that don't make sense or just show all
-        setProcesos(res.data);
-      } catch (error) {
-        console.error("Error fetching procesos:", error);
-      }
-    };
+    } catch (error) {
+      console.error("Error fetching compradores:", error);
+    }
+  }, []);
 
+  const fetchProcesos = useCallback(async () => {
+    try {
+      const res = await axiosClient.get(`/api/v1/procesos?t=${Date.now()}`);
+      // Filter only actual collection processes (MASIVO_CSV, INDIVIDUAL, RECURSO), excluding liquidation processes and reverted/failed ones
+      const validProcesos = (res.data || []).filter(p => 
+        ['MASIVO_CSV', 'INDIVIDUAL', 'RECURSO'].includes(p.Tipo) &&
+        p.Estado !== 'REVERTIDO' &&
+        p.Estado !== 'FALLIDO'
+      );
+      setProcesos(validProcesos);
+    } catch (error) {
+      console.error("Error fetching procesos:", error);
+    }
+  }, []);
+
+  useEffect(() => {
     fetchCompradores();
     fetchProcesos();
-  }, []);
+  }, [fetchCompradores, fetchProcesos]);
+
+  // Keep id_val in sync whenever compradores load
+  useEffect(() => {
+    if (compradores.length > 0 && !formData.id_val) {
+      setFormData(prev => ({ ...prev, id_val: compradores[0].id.toString() }));
+    }
+  }, [compradores, formData.id_val]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -130,16 +83,38 @@ const PortfolioLiquidationsProcessingPage = () => {
     setFormData(prev => ({ ...prev, procesos_cobranza_id: values }));
   };
 
+  const initialFilters = {
+    credito_id: [],
+    nro_cuota: '',
+    fecha_vencimiento: [],
+    cartera_id: '',
+    tipo_liquidacion: [],
+    fecha_emision_cobranza: []
+  };
+
   const handlePreview = async (e) => {
     e.preventDefault();
     setLoading(true);
     setPreviewData(null);
+    setFilters(initialFilters);
+
+    const targetIdVal = formData.id_val || (compradores.length > 0 ? compradores[0].id.toString() : '');
+    if (!targetIdVal) {
+      alert("Por favor seleccione un socio comprador.");
+      setLoading(false);
+      return;
+    }
+
+    if (formData.id_val !== targetIdVal) {
+      setFormData(prev => ({ ...prev, id_val: targetIdVal }));
+    }
+
     try {
       const payload = {
         ...formData,
-        id_val: formData.id_val.includes(',') 
-          ? formData.id_val.split(',').map(s => s.trim()) 
-          : formData.id_val,
+        id_val: targetIdVal.includes(',') 
+          ? targetIdVal.split(',').map(s => s.trim()) 
+          : targetIdVal,
         fecha_corte: formData.fecha_corte || null,
         fecha_vencimiento_desde: formData.fecha_vencimiento_desde || null,
         fecha_vencimiento_hasta: formData.fecha_vencimiento_hasta || null,
@@ -163,12 +138,13 @@ const PortfolioLiquidationsProcessingPage = () => {
     }
     
     setProcessing(true);
+    const targetIdVal = formData.id_val || (compradores.length > 0 ? compradores[0].id.toString() : '');
     try {
       const payload = {
         ...formData,
-        id_val: formData.id_val.includes(',') 
-          ? formData.id_val.split(',').map(s => s.trim()) 
-          : formData.id_val,
+        id_val: targetIdVal.includes(',') 
+          ? targetIdVal.split(',').map(s => s.trim()) 
+          : targetIdVal,
         fecha_corte: formData.fecha_corte || null,
         fecha_vencimiento_desde: formData.fecha_vencimiento_desde || null,
         fecha_vencimiento_hasta: formData.fecha_vencimiento_hasta || null,
@@ -180,16 +156,19 @@ const PortfolioLiquidationsProcessingPage = () => {
       await axiosClient.post('/api/v1/liquidaciones/procesar', payload);
       alert("Liquidaciones procesadas exitosamente.");
       setPreviewData(null);
-      // Reset form
+      setFilters(initialFilters);
+      // Reset form maintaining first comprador selected
       setFormData({
         identificador: 'CLIENTE ID',
-        id_val: '',
+        id_val: compradores.length > 0 ? compradores[0].id.toString() : '',
         fecha_corte: '',
         fecha_vencimiento_desde: '',
         fecha_vencimiento_hasta: '',
         con_recurso: false,
         procesos_cobranza_id: []
       });
+      // Refresh processes
+      fetchProcesos();
     } catch (error) {
       alert("Error al procesar: " + (error.response?.data?.detail || error.message));
     } finally {
@@ -201,29 +180,41 @@ const PortfolioLiquidationsProcessingPage = () => {
     setFilters(prev => ({ ...prev, [field]: e.target.value }));
   };
 
-  const uniqueTipos = previewData ? [...new Set(previewData.map(item => item.tipo_liquidacion))] : [];
-  const uniqueCreditos = previewData ? [...new Set(previewData.map(item => item.credito_id))].sort((a,b)=>a-b).map(String) : [];
+  const matchesPreviewFilter = (item, currentFilters, excludeField = null) => {
+    if (excludeField !== 'credito_id' && currentFilters.credito_id.length > 0 && !currentFilters.credito_id.includes(String(item.credito_id))) return false;
+    if (excludeField !== 'nro_cuota' && currentFilters.nro_cuota !== '' && !String(item.nro_cuota).includes(currentFilters.nro_cuota)) return false;
+    if (excludeField !== 'fecha_vencimiento' && currentFilters.fecha_vencimiento.length > 0 && !currentFilters.fecha_vencimiento.includes(item.fecha_vencimiento)) return false;
+    if (excludeField !== 'fecha_emision_cobranza' && currentFilters.fecha_emision_cobranza.length > 0 && !currentFilters.fecha_emision_cobranza.includes(item.fecha_emision_cobranza)) return false;
+    if (excludeField !== 'cartera_id' && currentFilters.cartera_id !== '' && !String(item.cartera_id).includes(currentFilters.cartera_id)) return false;
+    if (excludeField !== 'tipo_liquidacion' && currentFilters.tipo_liquidacion.length > 0 && !currentFilters.tipo_liquidacion.includes(item.tipo_liquidacion)) return false;
+    return true;
+  };
+
+  const uniqueTipos = useMemo(() => {
+    if (!previewData) return [];
+    const subset = previewData.filter(item => matchesPreviewFilter(item, filters, 'tipo_liquidacion'));
+    return [...new Set(subset.map(item => item.tipo_liquidacion))];
+  }, [previewData, filters]);
+
+  const uniqueCreditos = useMemo(() => {
+    if (!previewData) return [];
+    const subset = previewData.filter(item => matchesPreviewFilter(item, filters, 'credito_id'));
+    return [...new Set(subset.map(item => item.credito_id))].sort((a,b)=>a-b).map(String);
+  }, [previewData, filters]);
 
   const uniqueVencimientos = useMemo(() => {
     if (!previewData) return [];
-    return [...new Set(previewData.map(d => d.fecha_vencimiento))].sort();
-  }, [previewData]);
+    const subset = previewData.filter(item => matchesPreviewFilter(item, filters, 'fecha_vencimiento'));
+    return [...new Set(subset.map(d => d.fecha_vencimiento))].sort();
+  }, [previewData, filters]);
 
   const uniqueFechasEmisionCobranza = useMemo(() => {
     if (!previewData) return [];
-    return [...new Set(previewData.map(d => d.fecha_emision_cobranza).filter(Boolean))].sort();
-  }, [previewData]);
+    const subset = previewData.filter(item => matchesPreviewFilter(item, filters, 'fecha_emision_cobranza'));
+    return [...new Set(subset.map(d => d.fecha_emision_cobranza).filter(Boolean))].sort();
+  }, [previewData, filters]);
 
-  const filteredData = previewData ? previewData.filter(item => {
-    return (
-      (filters.credito_id.length === 0 || filters.credito_id.includes(String(item.credito_id))) &&
-      (filters.nro_cuota === '' || String(item.nro_cuota).includes(filters.nro_cuota)) &&
-      (filters.fecha_vencimiento.length === 0 || filters.fecha_vencimiento.includes(item.fecha_vencimiento)) &&
-      (filters.fecha_emision_cobranza.length === 0 || filters.fecha_emision_cobranza.includes(item.fecha_emision_cobranza)) &&
-      (filters.cartera_id === '' || String(item.cartera_id).includes(filters.cartera_id)) &&
-      (filters.tipo_liquidacion.length === 0 || filters.tipo_liquidacion.includes(item.tipo_liquidacion))
-    );
-  }) : [];
+  const filteredData = previewData ? previewData.filter(item => matchesPreviewFilter(item, filters)) : [];
 
   const totalCapital = filteredData.reduce((acc, curr) => acc + Number(curr.capital), 0);
   const totalInteres = filteredData.reduce((acc, curr) => acc + Number(curr.interes), 0);
@@ -258,9 +249,15 @@ const PortfolioLiquidationsProcessingPage = () => {
 
           <div className="form-group">
             <label>Socio Comprador</label>
-            <select name="id_val" value={formData.id_val} onChange={handleInputChange} required className="form-control">
+            <select 
+              name="id_val" 
+              value={formData.id_val || (compradores.length > 0 ? compradores[0].id.toString() : '')} 
+              onChange={handleInputChange} 
+              required 
+              className="form-control"
+            >
               {compradores.map(c => (
-                <option key={c.id} value={c.id}>
+                <option key={c.id} value={c.id.toString()}>
                   {c.razon_social} (CUIT: {c.cuit})
                 </option>
               ))}
@@ -300,15 +297,17 @@ const PortfolioLiquidationsProcessingPage = () => {
           </div>
 
           <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-            <label>Procesos de Cobranza (Opcional)</label>
-            <MultiSelectDropdown 
-              options={procesos.map(p => ({
-                value: p.ID,
-                label: `[${p.ID}] ${p.Tipo} - ${p.Descripción} (${p["Fecha Ejecución"]})`
-              }))}
-              selectedValues={formData.procesos_cobranza_id}
-              onChange={(newValues) => setFormData(prev => ({ ...prev, procesos_cobranza_id: newValues }))}
-              placeholder="Todos los procesos (Seleccionar para filtrar)"
+            <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>Procesos de Cobranza (Opcional)</span>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                {procesos.length} proceso{procesos.length !== 1 ? 's' : ''} disponible{procesos.length !== 1 ? 's' : ''}
+              </span>
+            </label>
+            <ProcesosCobranzaSelector 
+              procesos={procesos}
+              selectedIds={formData.procesos_cobranza_id}
+              onChange={(newIds) => setFormData(prev => ({ ...prev, procesos_cobranza_id: newIds }))}
+              placeholder="Todos los procesos (Sin filtro - se procesarán todas las cobranzas pendientes)"
             />
           </div>
 
@@ -447,8 +446,26 @@ const PortfolioLiquidationsProcessingPage = () => {
               <tbody>
                 {filteredData.length === 0 ? (
                   <tr>
-                    <td colSpan="12" className="text-center" style={{ padding: '32px 0' }}>
-                      <div className="empty-state">No se encontraron liquidaciones con esos filtros.</div>
+                    <td colSpan="12" className="text-center" style={{ padding: '32px 16px' }}>
+                      {previewData.length > 0 ? (
+                        <div className="empty-state" style={{ color: '#f59e0b', maxWidth: '640px', margin: '0 auto', textAlign: 'center' }}>
+                          <p style={{ margin: '0 0 12px 0', fontSize: '1rem', fontWeight: '500' }}>
+                            ⚠️ Se obtuvieron <strong>{previewData.length}</strong> liquidaciones, pero están ocultas por los filtros aplicados en las columnas.
+                          </p>
+                          <button 
+                            type="button"
+                            className="btn-secondary" 
+                            onClick={() => setFilters(initialFilters)} 
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', margin: '0 auto' }}
+                          >
+                            <FilterX size={16} /> Limpiar Filtros de Columnas
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="empty-state">
+                          No se encontraron liquidaciones para los criterios seleccionados. Verifique que existan cobranzas pendientes para este socio y fecha de corte.
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ) : (

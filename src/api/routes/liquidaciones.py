@@ -63,6 +63,8 @@ def listar_compradores(db: Session = Depends(get_db)):
 
 @router.post("/preview", response_model=List[LiquidacionPreviewResponse])
 def preview_liquidaciones(req: LiquidacionProcessRequest, db: Session = Depends(get_db)):
+    if not req.id_val or (isinstance(req.id_val, str) and not req.id_val.strip()) or (isinstance(req.id_val, list) and len(req.id_val) == 0):
+        raise HTTPException(status_code=400, detail="Debe especificar un socio comprador válido.")
     sm = SettlementManager(db)
     try:
         df_rec, df_s_rec = sm.obtain_settlement_of_transferred_quota(
@@ -94,6 +96,8 @@ def preview_liquidaciones(req: LiquidacionProcessRequest, db: Session = Depends(
 
 @router.post("/procesar")
 def procesar_liquidaciones(req: LiquidacionProcessRequest, db: Session = Depends(get_db)):
+    if not req.id_val or (isinstance(req.id_val, str) and not req.id_val.strip()) or (isinstance(req.id_val, list) and len(req.id_val) == 0):
+        raise HTTPException(status_code=400, detail="Debe especificar un socio comprador válido.")
     sm = SettlementManager(db)
     try:
         df_rec, df_s_rec = sm.obtain_settlement_of_transferred_quota(
