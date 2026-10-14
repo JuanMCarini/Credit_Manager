@@ -1,7 +1,12 @@
 \documentclass[12pt,a4paper]{article}
 \usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{amsmath}
 \usepackage[spanish]{babel}
+\usepackage{microtype}
 \usepackage{hyperref}
+\usepackage{bookmark}
 \usepackage{graphicx}
 \usepackage{geometry}
 \geometry{a4paper, margin=1in}
@@ -75,7 +80,7 @@ docker-compose -f docker-compose.yml \
 
 \section{Uso del Sistema}
 
-\subsubsection{Dashboard}
+\subsection{Dashboard}
 Permite visualizar un resumen general y detallado del estado de la cartera de créditos a través de múltiples gráficos interactivos y tablas.
 
 \textbf{Interacción con Filtros:}
@@ -118,29 +123,221 @@ Es la vista principal para consultar y administrar la cartera completa. Cuenta c
 \begin{itemize}
     \item \textbf{Filtros y Búsqueda:} Posibilidad de filtrar y ordenar las columnas por CUIL, Documento, Apellido, Nombre, Estado, Email y Teléfono.
     \item \textbf{Acciones Rápidas:} Cada fila incluye una botonera para operar sobre el cliente de forma directa:
-    \begin{itemize}
-        \item \textbf{Dashboard de Cliente:} Redirige a la ficha del cliente cargando toda su información financiera.
-        \item \textbf{Ver Detalles:} Abre una ventana modal con los datos completos del legajo.
-        \item \textbf{Créditos:} Redirige al Listado de Créditos aplicando automáticamente un filtro por el CUIL seleccionado.
-        \item \textbf{Ver Cuenta Corriente:} Abre un modal para inspeccionar los movimientos de cuenta corriente del cliente sin salir de la pantalla actual.
-        \item \textbf{Editar / Eliminar:} Opciones de administración del registro (estas acciones se ocultan por seguridad si el usuario tiene rol de Auditor/Solo lectura).
-    \end{itemize}
+          \begin{itemize}
+              \item \textbf{Dashboard de Cliente:} Redirige a la ficha del cliente cargando toda su información financiera.
+              \item \textbf{Ver Detalles:} Abre una ventana modal con los datos completos del legajo.
+              \item \textbf{Créditos:} Redirige al Listado de Créditos aplicando automáticamente un filtro por el CUIL seleccionado.
+              \item \textbf{Ver Cuenta Corriente:} Abre un modal para inspeccionar los movimientos de cuenta corriente del cliente sin salir de la pantalla actual.
+              \item \textbf{Editar / Eliminar:} Opciones de administración del registro (estas acciones se ocultan por seguridad si el usuario tiene rol de Auditor/Solo lectura).
+          \end{itemize}
 \end{itemize}
 
 \textbf{Alta de Cliente:}
 Formulario para dar de alta nuevos prospectos. El sistema procesa los datos y realiza validaciones automáticas de seguridad, incluyendo un cruce con bases de datos para alertar en pantalla si la persona se encuentra en el RePET (Registro Público de Personas y Entidades vinculadas al Terrorismo).
 
 \subsubsection{Créditos}
-Administración de los préstamos. Contiene el Listado de Créditos, la opción para el Alta de Crédito y la ejecución de Procesos.
+Este submódulo centraliza el ciclo de vida completo de los préstamos, abarcando desde la evaluación crediticia y originación asistida hasta el monitoreo de la cartera y la ejecución de procesos masivos.
+
+\textbf{Listado de Créditos:}
+Es la pantalla principal para la consulta, supervisión y administración de la cartera de préstamos otorgados. Cuenta con:
+\begin{itemize}
+    \item \textbf{Filtros Avanzados y Búsqueda:} Posibilidad de filtrar y ordenar las columnas por ID de crédito, ID Externo, Socio Originador, CUIL del cliente, Plazo, TNA con IVA, Esquema de Tasa/Comisión y Tipo de Crédito. Incluye filtros numéricos por rango para Capital, Saldo en Mora y Días de Mora, así como un selector por fechas de emisión.
+    \item \textbf{Fecha de Corte Dinámica:} Selector de fecha que recalcula en tiempo real los saldos adeudados, cuotas devengadas y días de mora a cualquier fecha histórica o actual de corte.
+    \item \textbf{Métricas y Totales:} Barra inferior que consolida en tiempo real el Capital total colocado y el Saldo total en Mora según los registros filtrados.
+    \item \textbf{Exportación:} Opción para exportar la selección de créditos directamente a planillas Excel.
+    \item \textbf{Acciones Operativas por Fila:} Botonera con accesos directos sobre cada operación:
+          \begin{itemize}
+              \item \textbf{Dashboard de Cliente:} Redirige a la ficha integral del cliente prefiltrando por el crédito.
+              \item \textbf{Ver Cuenta Corriente:} Abre un modal para auditar las cuotas, vencimientos, cobros y saldos pendientes sin salir del listado.
+              \item \textbf{Ver Transferencias:} Permite inspeccionar los desembolsos bancarios asociados al crédito (monto, CBU, CUIT de destino y comprobantes).
+              \item \textbf{Ver Legajo:} Visualizador digital de los documentos y archivos adjuntos asociados al legajo del préstamo.
+              \item \textbf{Editar Estado / Eliminar:} Permite actualizar el estado de la operación o darla de baja (acciones restringidas para usuarios con rol de Auditor / Solo Lectura).
+          \end{itemize}
+\end{itemize}
+
+\textbf{Alta de Crédito (Originación):}
+Asistente guiado en 5 pasos (Wizard) para la evaluación de riesgo y el otorgamiento riguroso de operaciones:
+\begin{itemize}
+    \item \textbf{Paso 1 - Búsqueda de Cliente:} Localización rápida por DNI o CUIL, identificando si se trata de un cliente existente o un nuevo prospecto.
+    \item \textbf{Paso 2 - Datos y Cumplimiento:} Carga o validación de datos personales y laborales, ejecutando la verificación obligatoria contra el RePET (Registro Público de Personas y Entidades vinculadas al Terrorismo) y el control de políticas crediticias.
+    \item \textbf{Paso 3 - Perfil Transaccional y Riesgo:} Consulta automática de la Central de Deudores del BCRA, scoring interno de riesgo, verificación de endeudamiento vigente en la entidad y cálculo de la capacidad de pago / cuota máxima afectable.
+    \item \textbf{Paso 4 - Condiciones Financieras:} Definición del capital neto a liquidar, selección del esquema de tasas y comisiones (desglosando automáticamente gastos y sellados para el cálculo del capital bruto), determinación del socio originador y sistema de amortización.
+    \item \textbf{Paso 5 - Simulación, Distribución y Confirmación:} Proyección detallada del cronograma de cuotas bajo el Sistema Francés, desglose y validación de las transferencias bancarias de fondos (tanto al cliente como comisiones/gastos a socios), previsualización del legajo en formato PDF y confirmación final de la operación.
+\end{itemize}
+
+\textbf{Procesos de Crédito:}
+Herramientas para la ejecución de operaciones masivas sobre la cartera:
+\begin{itemize}
+    \item \textbf{Carga Masiva de Archivos:} Permite subir lotes de archivos (PDF, JPG, PNG o paquetes comprimidos en .ZIP) de contratos y transferencias. El sistema interpreta la nomenclatura de los nombres de archivo para asociarlos automáticamente a sus respectivos créditos y transferencias, emitiendo un reporte de procesados y errores.
+    \item \textbf{Importación Masiva de Créditos:} Módulo de ingesta desde sistemas externos (como Quota de Estudio CFL o Web Carga CFL). Permite importar en bloque archivos de clientes, créditos y transferencias junto a sus legajos digitales, con control de duplicados y descarga de reportes de inconsistencias en Excel.
+\end{itemize}
 
 \subsubsection{Cobranzas}
-Control de los pagos recibidos. Permite Ver el Listado de cobranzas y realizar el Ingreso de Cobranzas.
+Este submódulo gestiona integralmente la recaudación, imputación contable y trazabilidad de los pagos recibidos sobre la cartera de créditos. Incorpora un motor financiero de imputación por cascada (\textit{waterfall}) que cancela cuotas en riguroso orden cronológico y distribuye los fondos respetando la prelación tributaria y financiera (IVA $\rightarrow$ Interés $\rightarrow$ Capital).
+
+\textbf{Listado de Cobranzas y Procesos:}
+Pantalla de consulta y control organizada en dos solapas especializadas:
+\begin{itemize}
+    \item \textbf{Solapa Cobranzas (Detalle de Imputaciones):} Vista analítica de cada movimiento de cobro individual registrado en la base de datos:
+          \begin{itemize}
+              \item \textbf{Información Detallada:} Muestra ID de Cobranza, ID de Proceso, CUIL, ID de Crédito, N° de Cuota, Fechas (Vto. y Pago), Tipo de Cobranza (Común, Anticipo, Cancelación Anticipada, Bonificación, Recurso, Ajuste o Penalty) y el desglose de Capital, Interés, IVA y Total.
+              \item \textbf{Filtros Avanzados:} Filtros dinámicos por ID, Lote/Proceso, CUIL, lista de créditos y tipo de cobro, acompañados por selectores de fecha (pago/vencimiento) y filtros de rango numérico para Capital, Interés, IVA y Total.
+              \item \textbf{Paginación Optimizada y Totales:} Carga progresiva (\textit{infinite scrolling}) de alto rendimiento y una barra de totales que consolida en tiempo real la recaudación global de la consulta.
+              \item \textbf{Acciones Rápidas:} Opciones directas para saltar a la ficha del cliente, auditar la cuenta corriente asociada o eliminar una cobranza individual con confirmación de seguridad.
+          \end{itemize}
+    \item \textbf{Solapa Procesos (Lotes de Ingesta):} Registro maestro y trazabilidad de cada corrida de cobranzas (sean individuales o importadas masivamente):
+          \begin{itemize}
+              \item \textbf{Monitoreo de Estado:} Muestra el estado del lote (Completado, Revertido, Procesando, Fallido), fecha exacta de ejecución, tipo de ingreso y descripción.
+              \item \textbf{Gestión y Reversión Atómica:} Permite auditar las cobranzas hijas de cada proceso prefiltrando el listado, modificar estados/notas, o ejecutar una eliminación en cascada que revierte de forma íntegra todas las imputaciones del lote y restaura los saldos originales de las cuotas.
+          \end{itemize}
+\end{itemize}
+
+\textbf{Ingreso de Cobranzas (Procesamiento):}
+Centro operativo para procesar e imputar pagos en la cartera a través de tres modalidades:
+\begin{itemize}
+    \item \textbf{Cobranza Individual:} Registro ágil de pagos puntuales. Permite localizar la deuda mediante múltiples identificadores (DNI, CUIL, ID de Crédito o ID Externo), especificando el monto percibido, la fecha efectiva de pago, la fecha de corte y el tipo de cancelación (pago común/anticipo o cancelación anticipada con quita de intereses futuros).
+    \item \textbf{Cobranza Masiva por Lote:} Procesamiento automatizado de recaudaciones mediante planillas Excel (.xlsx). Permite configurar de forma dinámica las columnas del archivo donde se encuentran los identificadores y los montos (ej. columnas A y B), admitiendo referencias por DNI, CUIL, ID de Crédito, ID Externo o ID de Cartera. El sistema aplica validaciones atómicas y ejecuta la imputación encadenada sobre toda la cartera.
+    \item \textbf{Cobranza con Recurso:} Modalidad especializada para carteras cedidas con cláusula de responsabilidad comercial. Permite imputar cobros liquidados por el socio originador o proveedor (seleccionado por CUIT) o por ID de Cartera, aplicando la recaudación a operaciones en mora y etiquetando los registros bajo cobranza con recurso.
+\end{itemize}
 
 \subsubsection{Facturación}
-Módulo para la generación y consulta de la facturación de las operaciones.
+Este módulo administra la facturación electrónica y el cumplimiento tributario ante ARCA (ex AFIP) de las cobranzas percibidas. Discrimina automáticamente los conceptos fiscales de cada pago (imputando el recupero de capital como concepto \textbf{No Gravado} y los intereses devengados como concepto \textbf{Gravado} sujeto a IVA) y gestiona la obtención de comprobantes con Código de Autorización Electrónico (CAE).
+
+\textbf{Cobranzas Pendientes de Facturar:}
+Vista principal para el control y emisión de comprobantes sobre las cobranzas que aún no han sido facturadas:
+\begin{itemize}
+    \item \textbf{Filtros Multicriterio:} Permite filtrar el universo de cobranzas por uno o varios Socios Originadores, Lotes o Procesos de Cobranza específicos, rango de fechas de recaudación y rango de fechas de vencimiento de la cuota.
+    \item \textbf{Grilla Analítica y Totales:} Presenta el detalle de cada cobro con el desglose exacto de No Gravado (Capital), Gravado (Intereses), IVA y el Importe Total. Incluye totalizadores en el pie de tabla que consolidan los importes fiscales de las filas filtradas y soporte para paginación progresiva.
+    \item \textbf{Exportación:} Botón para descargar el listado de cobranzas pendientes directamente a planillas de Excel.
+\end{itemize}
+
+\textbf{Emisión y Procesamiento Automático (ARCA):}
+Herramienta de facturación electrónica masiva con validaciones fiscales incorporadas:
+\begin{itemize}
+    \item \textbf{Control de Fechas Fiscales:} Selector de fecha de emisión con límites automáticos para asegurar el cumplimiento de la normativa fiscal vigente (restringiendo la emisión hasta un máximo de 10 días hacia atrás y garantizando la correlatividad temporal respecto al último comprobante emitido).
+    \item \textbf{Procesamiento por Lote:} Envío y autorización electrónica de las cobranzas seleccionadas. El sistema genera los comprobantes (ej. Factura B para consumidores finales o clientes identificados por CUIT), asigna punto de venta y número correlativo, almacena el CAE y su fecha de vencimiento, y actualiza el estado de las cobranzas a facturadas bajo una transacción atómica.
+\end{itemize}
+
+\textbf{Reportes y Descargas Fiscales:}
+Panel inferior destinado a la auditoría contable y obtención de documentación de respaldo para un período configurable (Fecha Desde / Hasta):
+\begin{itemize}
+    \item \textbf{Libro IVA Ventas (Excel):} Genera y exporta la planilla oficial del Libro IVA Ventas con el detalle reglamentario exigido: fecha, tipo de comprobante, punto de venta, numeración, CUIT del receptor, neto no gravado, neto gravado, débito fiscal de IVA, importe total, número de crédito, cuota, CAE y vencimiento de CAE.
+    \item \textbf{Descarga Masiva de Facturas (ZIP):} Genera en lote los comprobantes fiscales individuales en formato PDF con diseño normalizado (membrete institucional, desglose de ítems, totales e información de CAE) empaquetados en un archivo comprimido .ZIP listo para su archivo o remisión a clientes.
+\end{itemize}
 
 \subsubsection{Carteras}
-Gestión de Operaciones de cesión de cartera, creación de Nueva Operación y manejo de Liquidaciones.
+Este módulo administra integralmente el ciclo de vida de cesión, adquisición y negociación de carteras de créditos con socios comerciales e instituciones financieras. Permite originar compras y ventas de carteras bajo esquemas de descuento a Valor Actual (VA), gestionar el régimen de responsabilidad (con o sin recurso), generar la papelería legal contractual y efectuar el seguimiento y liquidación periódica de las cuotas y cobranzas correspondientes.
+
+\textbf{Gestión de Operaciones de Cartera:}
+Panel central para la visualización, control operativo y auditoría de todas las operaciones registradas:
+\begin{itemize}
+    \item \textbf{Grilla de Control y Filtros:} Presenta el inventario completo de operaciones indicando ID, Nombre de Cartera, Tipo de Operación (\textit{COMPRA} o \textit{VENTA}), Estado (\textit{PENDIENTE}, \textit{CONFIRMADA} o \textit{CANCELADA}), Socio Comercial contraparte, Fecha de Operación, Tasa Nominal Anual de Descuento (TNA), Cláusula de Recurso (Sí/No) e IVA (Sí/No). Incluye filtros interactivos por fecha y exportación total a Excel.
+    \item \textbf{Gestión del Ciclo de Vida:} Permite confirmar operaciones pendientes (asentando el traspaso definitivo de las cuotas y derechos crediticios), revertir operaciones a estado cancelado o eliminar registros de manera permanente con validación de seguridad.
+    \item \textbf{Visualización y Edición Detallada:} Acceso a la ficha analítica de la cartera mediante modal de previsualización para auditar los créditos incluidos, vencimientos y flujo financiero proyectado.
+    \item \textbf{Exportación de Entregables y Paquetes de Datos:}
+          \begin{itemize}
+              \item \textbf{Excel de la Operación:} Genera una planilla multidimensional con tres solapas: \textit{Créditos} (nómina de préstamos cedidos con capital y saldos), \textit{Cuotas} (cronograma detallado de vencimientos y valores descontados) y \textit{Vencimientos} (resumen consolidado por mes de cobro).
+              \item \textbf{Paquete de Archivos CSV (.ZIP):} Descarga masiva de los archivos de datos normalizados para facilitar la ingesta técnica en plataformas de contrapartes.
+              \item \textbf{Exportación de Legajos Digitales (.ZIP):} Empaqueta y descarga en un único archivo comprimido la totalidad de los documentos respaldatorios digitalizados (DNI, comprobantes de ingresos y transferencias) de todos los créditos que integran la operación.
+              \item \textbf{Generación de Contratos de Cesión:} Emisión automatizada del contrato formal de cesión de cartera en formatos PDF y Word (.docx), integrando membretes, cláusulas legales y cuadros de marcha financiera mediante el subsistema de papelería institucional.
+          \end{itemize}
+\end{itemize}
+
+\textbf{Nueva Operación de Cartera (Originación):}
+Asistente especializado para estructurar y cotizar operaciones de compra y venta:
+\begin{itemize}
+    \item \textbf{Modalidad Venta (Cesión de Cartera):}
+          \begin{itemize}
+              \item \textbf{Parametrización Comercial:} Selección del Socio Comercial adquirente (con posibilidad de registrar nuevos socios en tiempo real), definición de la fecha de corte, TNA de descuento, condición de recurso, tratamiento de IVA y selección de cuotas (completas o remanentes de créditos activos).
+              \item \textbf{Filtros de Elegibilidad Crediticia:} Permite acotar el universo de cuotas a ceder mediante rangos de fecha de emisión del crédito original, rangos de fecha de vencimiento de las cuotas e inclusión o exclusión de cartera en mora.
+              \item \textbf{Simulación Dinámica y Descuento Financiero:} Calcula el Valor Actual de cada cuota mediante descuento comercial en función de los días corridos al vencimiento. Despliega una interfaz de previsualización con solapas de \textit{Resumen}, \textit{Créditos} y \textit{Cuotas}, permitiendo desestimar o excluir créditos puntuales antes de comprometer la cesión definitiva.
+              \item \textbf{Confirmación de Venta:} Asienta la operación en la base de datos, asignando el estado inicial y vinculando los identificadores de cuota cedida.
+          \end{itemize}
+    \item \textbf{Modalidad Compra (Adquisición e Ingesta):}
+          \begin{itemize}
+              \item \textbf{Carga de Archivos de Cartera:} Permite incorporar carteras originadas por terceros mediante la subida de archivos CSV estandarizados de Personas (titulares), Préstamos (condiciones de otorgamiento) y Cuotas (calendario de pagos).
+              \item \textbf{Validación de Integridad y Consistencia:} Verifica la ausencia de duplicados, la coherencia de fechas y montos, y la concordancia de tasas y esquemas de amortización antes de incorporar los créditos al activo del sistema.
+          \end{itemize}
+\end{itemize}
+
+\textbf{Especificación y Formato de Archivos CSV (Compra y Venta):}
+Tanto el proceso de ingesta (compra) como el paquete de exportación (venta) operan bajo una estructura normalizada de tres archivos CSV posicionales sin fila de encabezado (\textit{headerless}), delimitados por comas (,) y codificados en formato \textit{latin-1} o UTF-8. La coherencia de la base de datos se garantiza mediante la clave relacional \texttt{ID Operación}:
+\begin{enumerate}
+    \item \textbf{Archivo PERSONAS.CSV (18 campos posicionales):}
+          Registra los datos filiatorios, de localización y laborales de los titulares de los créditos:
+          \begin{itemize}
+              \item \textbf{Campo 1 - ID Operación:} Identificador unívoco del crédito que vincula al titular con sus préstamos y cuotas.
+              \item \textbf{Campo 2 - CUIL:} Código Único de Identificación Laboral (numérico, sin guiones).
+              \item \textbf{Campo 3 - Documento:} Número de documento nacional de identidad (DNI).
+              \item \textbf{Campos 4 y 5 - Apellido y Nombre:} Datos patronímicos del deudor.
+              \item \textbf{Campos 6 a 9 - Domicilio:} Calle, Calle Nro, Piso y Depto.
+              \item \textbf{Campo 10 - ID Provincia:} Código numérico de jurisdicción, homologado contra la tabla de equivalencias foráneas (\texttt{external\_mappings}).
+              \item \textbf{Campos 11 y 12 - Código Postal y Localidad:} ID Código Postal y nombre de la localidad.
+              \item \textbf{Campo 13 - Fecha Nacimiento:} Fecha en formato \texttt{AAAA-MM-DD}.
+              \item \textbf{Campo 14 - Teléfono:} Teléfono primario de contacto.
+              \item \textbf{Campo 15 - Sexo:} Identificador de género (\texttt{M} o \texttt{F}).
+              \item \textbf{Campo 16 - Remuneración:} Ingreso mensual del titular con dos decimales.
+              \item \textbf{Campos 17 y 18 - Teléfono 2 y Mail:} Vías complementarias de contacto.
+          \end{itemize}
+
+    \item \textbf{Archivo CREDITOS.csv / PRESTAMOS.CSV (15 campos posicionales):}
+          Define los términos financieros, el originador y los montos globales del préstamo:
+          \begin{itemize}
+              \item \textbf{Campo 1 - ID Operación:} Identificador único de la operación crediticia.
+              \item \textbf{Campo 2 - ID Entidad:} Código foráneo del socio originador o comercial, homologado contra la base de datos institucional.
+              \item \textbf{Campo 3 - ID Tipo Operación:} Identificador del tipo o línea de crédito.
+              \item \textbf{Campo 4 - Importe Cuota:} Monto de referencia de la cuota.
+              \item \textbf{Campos 5 a 7 - Capital, Interés e IVA:} Importes totales pactados en el otorgamiento original.
+              \item \textbf{Campos 8 a 10 - Capital Vendido, Interés Vendido e IVA Vendido:} Importes efectivamente transferidos o comprometidos en la transacción.
+              \item \textbf{Campo 11 - Fecha Compra / Operación:} Fecha de corte o emisión de la cesión (\texttt{AAAA-MM-DD}).
+              \item \textbf{Campo 12 - Tasa Compra:} Tasa Nominal Anual de descuento en formato porcentual (ej. \texttt{45.00}).
+              \item \textbf{Campo 13 - Valor Actual:} Importe presente total descontado resultante de la sumatoria de las cuotas transferidas.
+              \item \textbf{Campo 14 - Ente Pagador:} Razón social del empleador o entidad retenedora de haberes.
+              \item \textbf{Campo 15 - CBU / CVU:} Clave bancaria o virtual uniforme asociada al crédito.
+          \end{itemize}
+
+    \item \textbf{Archivo CUOTAS.CSV (9 campos posicionales):}
+          Contiene el calendario de amortización detallado y el valor descontado de cada cuota:
+          \begin{itemize}
+              \item \textbf{Campo 1 - ID Operación:} Identificador del crédito correspondiente.
+              \item \textbf{Campo 2 - ID Cuota:} Número secuencial de cuota (1, 2, 3\dots).
+              \item \textbf{Campo 3 - Fecha Vto.:} Fecha contractual de vencimiento de la cuota.
+              \item \textbf{Campo 4 - Fecha Vto. Pago:} Fecha estimada o efectiva de percepción de fondos.
+              \item \textbf{Campos 5 a 7 - Capital, Interés e IVA:} Desglose financiero de la cuota en dos decimales.
+              \item \textbf{Campo 8 - Saldo Pendiente:} Importe exigible pendiente de cobro neto de cobranzas previas.
+              \item \textbf{Campo 9 - Valor Actual:} Valor presente descontado a la fecha de cesión calculado según la fórmula comercial:
+                    \begin{equation}
+                        VA = \frac{\text{Capital} + \text{Inter\'es}}{\left(1 + \frac{\text{TNA} \times 30}{365}\right)^{\frac{\text{D\'ias Vto.}}{30}}}
+                    \end{equation}
+                    Si una cuota del crédito no formó parte de la cesión (y/o fue cobrada previamente), su Valor Actual se consigna en \texttt{0.00}.
+          \end{itemize}
+\end{enumerate}
+
+\textbf{Controles de Integridad y Validación del Pipeline ETL:}
+Durante la ingesta de estos archivos, el motor de carga ejecuta controles automatizados en memoria:
+\begin{itemize}
+    \item \textbf{Integridad Referencial Cruzada:} Comprueba que no existan préstamos o cuotas huérfanas carentes de titular en \texttt{PERSONAS.CSV}.
+    \item \textbf{Cuadratura de Capital:} Exige concordancia exacta entre el campo \texttt{Capital} del crédito y la sumatoria del capital de todas sus cuotas ($\sum \text{Capital}_{\text{cuotas}} - \text{Capital} = 0$).
+    \item \textbf{Homologación de Tablas Foráneas:} Valida y traduce automáticamente los códigos foráneos de provincia y entidad originadora según el padrón de relaciones activas.
+    \item \textbf{Tolerancia Financiera de Valor Actual:} Recalcula el Valor Actual de cada cuota contrastándolo contra el archivo; desviaciones mayores a \$1.00 son rechazadas de inmediato.
+    \item \textbf{Emisión de Reporte de Inconsistencias:} Ante cualquier discrepancia, la carga se revierte de forma atómica y se genera automáticamente una planilla Excel (\texttt{REPORTE\_ERRORES\_IMPORTACION\_*.xlsx}) con el detalle exacto de las observaciones para su saneamiento.
+\end{itemize}
+
+\textbf{Liquidaciones de Cartera:}
+Módulo dedicado al seguimiento, rendición de cuentas y conciliación financiera de las cobranzas percibidas sobre carteras cedidas:
+\begin{itemize}
+    \item \textbf{Mecánica Financiera y Cláusula de Recurso:} Discrimina automáticamente las liquidaciones según la naturaleza del contrato:
+          \begin{itemize}
+              \item \textit{Con Recurso:} El socio originador o cedente mantiene la responsabilidad por la mora de los deudores, compensando cuotas impagas o asumiendo el pasivo de cobro.
+              \item \textit{Sin Recurso:} La entidad adquirente asume plenamente el riesgo crediticio, rindiendo exclusivamente las cuotas efectivamente recaudadas.
+          \end{itemize}
+    \item \textbf{Procesamiento de Nuevas Liquidaciones:} Asistente para generar rendiciones a socios comerciales delimitando fecha de corte, períodos de vencimiento de cuota y filtros sobre procesos de cobranza específicos. Incluye simulación previa y confirmación atómica con creación de lotes identificados (\texttt{LIQUIDACIONES\_*}).
+    \item \textbf{Listado Analítico y Control de Lotes:}
+          \begin{itemize}
+              \item \textbf{Solapa Liquidaciones:} Visualización granular de cada cuota y cobranza liquidada con desglose de Capital, Interés, IVA e Importe Total, junto a su estado de cancelación y filtros multifactoriales tipo Excel. Barra inferior con totalizadores consolidados.
+              \item \textbf{Solapa Procesos de Liquidaciones:} Tablero maestro de lotes generados, permitiendo auditar el volumen rendido, dar de baja procesos con reversión total o disparar el registro de pagos efectivos al socio comercial informando fecha e importe transferido.
+          \end{itemize}
+\end{itemize}
 
 \subsubsection{Reportes}
 Generación de Reportes de Saldos y Reportes Regulados (ej. BCRA).
