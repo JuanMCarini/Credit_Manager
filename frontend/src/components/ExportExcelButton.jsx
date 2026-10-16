@@ -2,7 +2,59 @@ import { useState, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { Download } from 'lucide-react';
 
-const ExportExcelButton = ({ data, filteredData, filename = 'exportacion', fetchData }) => {
+const formatExcelValue = (value) => {
+  if (value === undefined || value === null) return '';
+  if (typeof value === 'number' || typeof value === 'boolean') return value;
+  if (value instanceof Date) return value;
+  
+  if (typeof value === 'string') {
+    const strVal = value.trim();
+    if (strVal === '-' || strVal === '') {
+      return '';
+    }
+    
+    // Regex para fechas YYYY-MM-DD o YYYY-MM-DD HH:mm:ss o ISO
+    const dateRegex = /^\d{4}-\d{2}-\d{2}(T|\s)\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?$|^\d{4}-\d{2}-\d{2}$/;
+    // Regex para números (enteros o decimales)
+    const numRegex = /^-?\d+(\.\d+)?$/;
+
+    if (dateRegex.test(strVal)) {
+      if (strVal.length === 10) {
+        // "YYYY-MM-DD" exactly - parse manually to avoid timezone shifting
+        const [year, month, day] = strVal.split('-');
+        const parsedDate = new Date(Number(year), Number(month) - 1, Number(day));
+        
+        // Compensar el bug de SheetJS (xlsx) con las zonas horarias históricas.
+        const epoch = new Date(1899, 11, 30);
+        const offsetDiff = epoch.getTimezoneOffset() - parsedDate.getTimezoneOffset();
+        parsedDate.setMinutes(parsedDate.getMinutes() + offsetDiff);
+        
+        return parsedDate;
+      } else {
+        const parsedDate = new Date(strVal);
+        if (!isNaN(parsedDate.getTime())) {
+          return parsedDate;
+        } else {
+          return value;
+        }
+      }
+    } else if (numRegex.test(strVal)) {
+      // Evitar quitar ceros a la izquierda (ej: '0123') y evitar pérdida de precisión en números muy largos
+      if (strVal.length > 1 && strVal.startsWith('0') && !strVal.startsWith('0.')) {
+        return value;
+      } else if (strVal.length > 15) {
+        return value;
+      } else {
+        return Number(strVal);
+      }
+    } else {
+      return value;
+    }
+  }
+  return value;
+};
+
+const ExportExcelButton = ({ data, filteredData, filename = 'exportacion', fetchData, columns }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const dropdownRef = useRef(null);
@@ -37,56 +89,19 @@ const ExportExcelButton = ({ data, filteredData, filename = 'exportacion', fetch
       // Preprocesar datos para que Excel identifique correctamente fechas y números
       const processedData = dataToExport.map(row => {
         const newRow = {};
-        for (const [key, value] of Object.entries(row)) {
-          if (typeof value === 'string') {
-            const strVal = value.trim();
-            // Evitar procesar celdas vacías o con guiones
-            if (strVal === '-' || strVal === '') {
-              newRow[key] = value;
-              continue;
+        if (columns && columns.length > 0) {
+          for (const col of columns) {
+            const colKey = typeof col === 'string' ? col : col.key;
+            const colLabel = typeof col === 'string' ? col : (col.label || col.header || col.key);
+            let rawValue = row[colKey];
+            if (col.format && typeof col.format === 'function') {
+              rawValue = col.format(rawValue, row);
             }
-            
-            // Regex para fechas YYYY-MM-DD o YYYY-MM-DD HH:mm:ss o ISO
-            const dateRegex = /^\d{4}-\d{2}-\d{2}(T|\s)\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?$|^\d{4}-\d{2}-\d{2}$/;
-            // Regex para números (enteros o decimales)
-            const numRegex = /^-?\d+(\.\d+)?$/;
-
-            if (dateRegex.test(strVal)) {
-              if (strVal.length === 10) {
-                // "YYYY-MM-DD" exactly - parse manually to avoid timezone shifting
-                const [year, month, day] = strVal.split('-');
-                const parsedDate = new Date(Number(year), Number(month) - 1, Number(day));
-                
-                // Compensar el bug de SheetJS (xlsx) con las zonas horarias históricas.
-                // Excel usa la época 1899-12-30. Como el offset UTC en Argentina en 1899 era distinto al de hoy,
-                // la resta de milisegundos genera un desfase de fracciones de día (ej: 23:59:12 del día anterior).
-                const epoch = new Date(1899, 11, 30);
-                const offsetDiff = epoch.getTimezoneOffset() - parsedDate.getTimezoneOffset();
-                parsedDate.setMinutes(parsedDate.getMinutes() + offsetDiff);
-                
-                newRow[key] = parsedDate;
-              } else {
-                const parsedDate = new Date(strVal);
-                if (!isNaN(parsedDate.getTime())) {
-                  newRow[key] = parsedDate;
-                } else {
-                  newRow[key] = value;
-                }
-              }
-            } else if (numRegex.test(strVal)) {
-              // Evitar quitar ceros a la izquierda (ej: '0123') y evitar pérdida de precisión en números muy largos
-              if (strVal.length > 1 && strVal.startsWith('0') && !strVal.startsWith('0.')) {
-                newRow[key] = value;
-              } else if (strVal.length > 15) {
-                newRow[key] = value;
-              } else {
-                newRow[key] = Number(strVal);
-              }
-            } else {
-              newRow[key] = value;
-            }
-          } else {
-            newRow[key] = value;
+            newRow[colLabel] = formatExcelValue(rawValue);
+          }
+        } else {
+          for (const [key, value] of Object.entries(row)) {
+            newRow[key] = formatExcelValue(value);
           }
         }
         return newRow;

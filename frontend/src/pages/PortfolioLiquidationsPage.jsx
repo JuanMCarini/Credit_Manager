@@ -5,6 +5,35 @@ import ExcelDateFilter from '../components/ExcelDateFilter';
 import ExcelListFilter from '../components/ExcelListFilter';
 import ExportExcelButton from '../components/ExportExcelButton';
 
+const LIQUIDACIONES_COLUMNS = [
+  { key: 'id', label: 'ID' },
+  { key: 'proceso_id', label: 'Proceso ID' },
+  { key: 'socio_comercial', label: 'Socio Comercial' },
+  { key: 'cartera_id', label: 'Cartera ID' },
+  { key: 'cuota_id', label: 'Cuota ID' },
+  { key: 'cobranza_id', label: 'Cobranza ID' },
+  { key: 'fecha_emision_cobranza', label: 'Fecha Emisión Cob.' },
+  { key: 'tipo_liquidacion', label: 'Tipo' },
+  { key: 'credito_id', label: 'ID Crédito' },
+  { key: 'id_externo', label: 'ID Externo' },
+  { key: 'nro_cuota', label: 'Nro. Cuota' },
+  { key: 'fecha_vencimiento', label: 'Vencimiento' },
+  { key: 'capital', label: 'Capital' },
+  { key: 'interes', label: 'Interés' },
+  { key: 'iva', label: 'IVA' },
+  { key: 'importe_total', label: 'Total' },
+  { key: 'fecha_pago', label: 'Fecha Pago' },
+  { key: 'cancelada', label: 'Estado', format: (val, row) => (row.cancelada ? 'Cancelada' : 'Pendiente') }
+];
+
+const PROCESOS_LIQUIDACION_COLUMNS = [
+  { key: 'ID', label: 'ID Proceso' },
+  { key: 'Tipo', label: 'Tipo' },
+  { key: 'Estado', label: 'Estado' },
+  { key: 'Descripción', label: 'Descripción' },
+  { key: 'Fecha Ejecución', label: 'Fecha Ejecución' }
+];
+
 const PortfolioLiquidationsPage = () => {
   const [activeTab, setActiveTab] = useState('liquidaciones');
   const [liquidaciones, setLiquidaciones] = useState([]);
@@ -30,6 +59,7 @@ const PortfolioLiquidationsPage = () => {
     cobranza_id: '',
     tipo_liquidacion: [], 
     credito_id: [], 
+    id_externo: [],
     nro_cuota: '', 
     fecha_vencimiento: [],
     capital: '', 
@@ -51,6 +81,7 @@ const PortfolioLiquidationsPage = () => {
     if (excludeField !== 'cobranza_id' && currentFilter.cobranza_id && !String(item.cobranza_id || '').includes(currentFilter.cobranza_id)) return false;
     if (excludeField !== 'tipo_liquidacion' && currentFilter.tipo_liquidacion && currentFilter.tipo_liquidacion.length > 0 && !currentFilter.tipo_liquidacion.includes(item.tipo_liquidacion)) return false;
     if (excludeField !== 'credito_id' && currentFilter.credito_id && currentFilter.credito_id.length > 0 && !currentFilter.credito_id.includes(String(item.credito_id))) return false;
+    if (excludeField !== 'id_externo' && currentFilter.id_externo && currentFilter.id_externo.length > 0 && !currentFilter.id_externo.includes(String(item.id_externo))) return false;
     if (excludeField !== 'nro_cuota' && currentFilter.nro_cuota && !String(item.nro_cuota || '').includes(currentFilter.nro_cuota)) return false;
     if (excludeField !== 'fecha_vencimiento' && currentFilter.fecha_vencimiento && currentFilter.fecha_vencimiento.length > 0 && !currentFilter.fecha_vencimiento.includes(item.fecha_vencimiento)) return false;
     if (excludeField !== 'capital' && currentFilter.capital && !String(item.capital || '').includes(currentFilter.capital)) return false;
@@ -86,6 +117,11 @@ const PortfolioLiquidationsPage = () => {
   const AVAILABLE_CREDIT_IDS = useMemo(() => {
     const data = liquidaciones.filter(l => matchesFilter(l, filter, 'credito_id'));
     return [...new Set(data.map(l => l.credito_id).filter(Boolean))].sort((a,b)=>a-b).map(String);
+  }, [liquidaciones, filter]);
+
+  const AVAILABLE_ID_EXTERNO = useMemo(() => {
+    const data = liquidaciones.filter(l => matchesFilter(l, filter, 'id_externo'));
+    return [...new Set(data.map(l => l.id_externo).filter(Boolean))].sort();
   }, [liquidaciones, filter]);
 
   const AVAILABLE_SOCIOS = useMemo(() => {
@@ -253,6 +289,7 @@ const PortfolioLiquidationsPage = () => {
                 data={liquidaciones} 
                 filteredData={filteredLiquidaciones} 
                 filename="liquidaciones_cartera_export" 
+                columns={LIQUIDACIONES_COLUMNS}
               />
             </div>
           )}
@@ -261,6 +298,7 @@ const PortfolioLiquidationsPage = () => {
               data={procesos} 
               filteredData={procesos} 
               filename="procesos_liquidaciones_export" 
+              columns={PROCESOS_LIQUIDACION_COLUMNS}
             />
           )}
         </div>
@@ -357,6 +395,17 @@ const PortfolioLiquidationsPage = () => {
                     />
                   </div>
                 </th>
+                <th style={{minWidth: '110px'}}>
+                  ID Externo <br/>
+                  <div style={{ marginTop: '5px' }}>
+                    <ExcelListFilter 
+                      availableOptions={AVAILABLE_ID_EXTERNO}
+                      selectedOptions={filter.id_externo}
+                      onChange={val => handleFilterChange('id_externo', val)}
+                      title="Filtrar Ext..."
+                    />
+                  </div>
+                </th>
                 <th style={{minWidth: '90px'}}>Nro. Cuota <br/>{renderInput('nro_cuota', '...')}</th>
                 <th style={{minWidth: '110px'}}>
                   Vencimiento <br/>
@@ -394,7 +443,7 @@ const PortfolioLiquidationsPage = () => {
             </thead>
             <tbody>
               {filteredLiquidaciones.length === 0 ? (
-                <tr><td colSpan="17" className="text-center empty-state">{loading ? "Cargando..." : "No hay liquidaciones."}</td></tr>
+                <tr><td colSpan="18" className="text-center empty-state">{loading ? "Cargando..." : "No hay liquidaciones."}</td></tr>
               ) : (
                 filteredLiquidaciones.map(l => (
                   <tr key={l.id}>
@@ -407,6 +456,7 @@ const PortfolioLiquidationsPage = () => {
                     <td>{l.fecha_emision_cobranza || '-'}</td>
                     <td>{l.tipo_liquidacion}</td>
                     <td>{l.credito_id || '-'}</td>
+                    <td>{l.id_externo || '-'}</td>
                     <td>{l.nro_cuota || '-'}</td>
                     <td>{l.fecha_vencimiento || '-'}</td>
                     <td>${Number(l.capital).toFixed(2)}</td>
@@ -425,7 +475,7 @@ const PortfolioLiquidationsPage = () => {
             </tbody>
             <tfoot>
               <tr>
-                <td colSpan="11" style={{ textAlign: 'right', fontWeight: 'bold' }}>Totales Filtrados:</td>
+                <td colSpan="12" style={{ textAlign: 'right', fontWeight: 'bold' }}>Totales Filtrados:</td>
                 <td style={{ fontWeight: 'bold' }}>{formatMoney(totalCapital)}</td>
                 <td style={{ fontWeight: 'bold' }}>{formatMoney(totalInteres)}</td>
                 <td style={{ fontWeight: 'bold' }}>{formatMoney(totalIva)}</td>

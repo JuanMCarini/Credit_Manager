@@ -6,6 +6,22 @@ import ExcelListFilter from '../components/ExcelListFilter';
 import ExportExcelButton from '../components/ExportExcelButton';
 import ProcesosCobranzaSelector from '../components/ProcesosCobranzaSelector';
 
+const PREVIEW_LIQUIDACIONES_COLUMNS = [
+  { key: 'cuota_id', label: 'Cuota ID' },
+  { key: 'cartera_id', label: 'Cartera ID' },
+  { key: 'cobranza_id', label: 'Cobranza ID' },
+  { key: 'fecha_emision_cobranza', label: 'Fecha Emisión Cob.' },
+  { key: 'tipo_liquidacion', label: 'Tipo Liquidación' },
+  { key: 'credito_id', label: 'Crédito ID' },
+  { key: 'id_externo', label: 'ID Externo' },
+  { key: 'nro_cuota', label: 'Nro Cuota' },
+  { key: 'fecha_vencimiento', label: 'Vencimiento' },
+  { key: 'capital', label: 'Capital' },
+  { key: 'interes', label: 'Interés' },
+  { key: 'iva', label: 'IVA' },
+  { key: 'total', label: 'Total', format: (_, row) => Number(row.capital || 0) + Number(row.interes || 0) + Number(row.iva || 0) }
+];
+
 const PortfolioLiquidationsProcessingPage = () => {
   const [formData, setFormData] = useState({
     identificador: 'CLIENTE ID',
@@ -85,7 +101,8 @@ const PortfolioLiquidationsProcessingPage = () => {
 
   const initialFilters = {
     credito_id: [],
-    nro_cuota: '',
+    id_externo: [],
+    nro_cuota: '', 
     fecha_vencimiento: [],
     cartera_id: '',
     tipo_liquidacion: [],
@@ -182,6 +199,7 @@ const PortfolioLiquidationsProcessingPage = () => {
 
   const matchesPreviewFilter = (item, currentFilters, excludeField = null) => {
     if (excludeField !== 'credito_id' && currentFilters.credito_id.length > 0 && !currentFilters.credito_id.includes(String(item.credito_id))) return false;
+    if (excludeField !== 'id_externo' && currentFilters.id_externo && currentFilters.id_externo.length > 0 && !currentFilters.id_externo.includes(String(item.id_externo))) return false;
     if (excludeField !== 'nro_cuota' && currentFilters.nro_cuota !== '' && !String(item.nro_cuota).includes(currentFilters.nro_cuota)) return false;
     if (excludeField !== 'fecha_vencimiento' && currentFilters.fecha_vencimiento.length > 0 && !currentFilters.fecha_vencimiento.includes(item.fecha_vencimiento)) return false;
     if (excludeField !== 'fecha_emision_cobranza' && currentFilters.fecha_emision_cobranza.length > 0 && !currentFilters.fecha_emision_cobranza.includes(item.fecha_emision_cobranza)) return false;
@@ -200,6 +218,12 @@ const PortfolioLiquidationsProcessingPage = () => {
     if (!previewData) return [];
     const subset = previewData.filter(item => matchesPreviewFilter(item, filters, 'credito_id'));
     return [...new Set(subset.map(item => item.credito_id))].sort((a,b)=>a-b).map(String);
+  }, [previewData, filters]);
+
+  const uniqueIdExterno = useMemo(() => {
+    if (!previewData) return [];
+    const subset = previewData.filter(item => matchesPreviewFilter(item, filters, 'id_externo'));
+    return [...new Set(subset.map(item => item.id_externo).filter(Boolean))].sort();
   }, [previewData, filters]);
 
   const uniqueVencimientos = useMemo(() => {
@@ -337,6 +361,7 @@ const PortfolioLiquidationsProcessingPage = () => {
                 data={previewData} 
                 filteredData={filteredData} 
                 filename="preview_liquidaciones_export" 
+                columns={PREVIEW_LIQUIDACIONES_COLUMNS}
               />
               <button 
                 className="btn-primary" 
@@ -421,6 +446,19 @@ const PortfolioLiquidationsProcessingPage = () => {
                       </div>
                     )}
                   </th>
+                  <th style={{minWidth: '120px'}}>
+                    ID Externo
+                    {uniqueIdExterno.length > 0 && (
+                      <div style={{ marginTop: '5px' }}>
+                        <ExcelListFilter 
+                          availableOptions={uniqueIdExterno}
+                          selectedOptions={filters.id_externo}
+                          onChange={(newIds) => setFilters(prev => ({ ...prev, id_externo: newIds }))}
+                          title="Filtrar Ext..."
+                        />
+                      </div>
+                    )}
+                  </th>
                   <th>
                     Nro Cuota
                     <input type="text" placeholder="Filtrar..." value={filters.nro_cuota} onChange={(e) => handleFilterChange(e, 'nro_cuota')} style={{ display: 'block', width: '100%', marginTop: '4px', padding: '4px', fontSize: '0.8rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-primary)', borderRadius: '4px' }} />
@@ -446,7 +484,7 @@ const PortfolioLiquidationsProcessingPage = () => {
               <tbody>
                 {filteredData.length === 0 ? (
                   <tr>
-                    <td colSpan="12" className="text-center" style={{ padding: '32px 16px' }}>
+                    <td colSpan="13" className="text-center" style={{ padding: '32px 16px' }}>
                       {previewData.length > 0 ? (
                         <div className="empty-state" style={{ color: '#f59e0b', maxWidth: '640px', margin: '0 auto', textAlign: 'center' }}>
                           <p style={{ margin: '0 0 12px 0', fontSize: '1rem', fontWeight: '500' }}>
@@ -477,6 +515,7 @@ const PortfolioLiquidationsProcessingPage = () => {
                       <td>{l.fecha_emision_cobranza || '-'}</td>
                       <td>{l.tipo_liquidacion}</td>
                       <td>{l.credito_id}</td>
+                      <td>{l.id_externo || '-'}</td>
                       <td>{l.nro_cuota}</td>
                       <td>{l.fecha_vencimiento}</td>
                       <td>{formatMoney(l.capital)}</td>
@@ -489,7 +528,7 @@ const PortfolioLiquidationsProcessingPage = () => {
               </tbody>
               <tfoot>
                 <tr>
-                  <td colSpan="8" style={{ textAlign: 'right' }}>Totales:</td>
+                  <td colSpan="9" style={{ textAlign: 'right' }}>Totales:</td>
                   <td>{formatMoney(totalCapital)}</td>
                   <td>{formatMoney(totalInteres)}</td>
                   <td>{formatMoney(totalIva)}</td>

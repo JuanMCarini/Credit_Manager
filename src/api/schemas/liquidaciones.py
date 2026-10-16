@@ -10,6 +10,7 @@ class LiquidacionResponse(BaseModel):
     cobranza_id: Optional[int] = None
     tipo_liquidacion: str
     credito_id: Optional[int] = None
+    id_externo: Optional[str] = None
     socio_comercial: Optional[str] = None
     nro_cuota: Optional[int] = None
     fecha_vencimiento: Optional[date] = None
@@ -36,6 +37,7 @@ class LiquidacionProcessRequest(BaseModel):
 class LiquidacionPreviewResponse(BaseModel):
     cuota_id: int
     credito_id: int
+    id_externo: Optional[str] = None
     cartera_id: int
     tipo_liquidacion: str
     nro_cuota: int
