@@ -285,7 +285,7 @@ def create_credito(
 
 @router.patch("/api/v1/creditos/{credito_id:int}/estado")
 def update_credito_estado(credito_id: int, data: CreditoEstadoUpdate, db: Session = Depends(get_db)):
-    credito = db.query(Credito).filter(Credito.id == credito_id).first()
+    credito = db.query(Credito).options(joinedload(Credito.cuotas)).filter(Credito.id == credito_id).first()
     if not credito:
         raise HTTPException(status_code=404, detail="Crédito no encontrado")
     
@@ -295,6 +295,19 @@ def update_credito_estado(credito_id: int, data: CreditoEstadoUpdate, db: Sessio
         raise HTTPException(status_code=400, detail="Estado inválido.")
         
     credito.estado = nuevo_estado
+    if nuevo_estado == EstadoCredito.INCOBRABLE:
+        for cuota in credito.cuotas:
+            cuota_est = cuota.estado.value if hasattr(cuota.estado, "value") else str(cuota.estado)
+            if cuota_est not in [EstadoCuota.CANCELADA.value, EstadoCuota.NO_COMPRADA.value]:
+                cuota.estado = EstadoCuota.INCOBRABLE.value
+    elif nuevo_estado == EstadoCredito.ACTIVO:
+        from datetime import date
+        hoy = date.today()
+        for cuota in credito.cuotas:
+            cuota_est = cuota.estado.value if hasattr(cuota.estado, "value") else str(cuota.estado)
+            if cuota_est == EstadoCuota.INCOBRABLE.value:
+                cuota.actualizar_estado(hoy)
+
     db.commit()
     return {"status": "success", "message": "Estado actualizado"}
 

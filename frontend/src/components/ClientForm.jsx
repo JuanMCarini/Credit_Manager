@@ -172,8 +172,20 @@ const ClientForm = ({ initialData, isEditMode = false, allowRepetEdit = false, o
               <option value="ACTIVO">ACTIVO</option>
               <option value="INACTIVO">INACTIVO</option>
               <option value="MOROSO">MOROSO</option>
-              <option value="INCOBRABLE">INCOBRABLE</option>
+              <option value="INCOBRABLE" disabled={initialData?.tiene_deuda_activa === false}>
+                INCOBRABLE {initialData?.tiene_deuda_activa === false ? '(Sin deuda activa)' : ''}
+              </option>
             </select>
+            {form.estado === 'INCOBRABLE' && initialData?.tiene_deuda_activa !== false && (
+              <small style={{ color: 'var(--danger-color)', display: 'block', marginTop: '4px', fontSize: '11px' }}>
+                ⚠️ Al guardar como INCOBRABLE, sus créditos vigentes pasarán automáticamente a Incobrable.
+              </small>
+            )}
+            {initialData?.tiene_deuda_activa === false && (
+              <small style={{ color: 'var(--text-secondary)', display: 'block', marginTop: '4px', fontSize: '11px' }}>
+                ℹ️ Todos los créditos están cancelados. No corresponde asignar estado Incobrable.
+              </small>
+            )}
           </div>
         )}
       </div>

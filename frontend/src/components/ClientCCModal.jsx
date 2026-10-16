@@ -21,7 +21,7 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '', i
   const [fechaPago, setFechaPago] = useState(new Date().toISOString().split('T')[0]);
   const [tipoCobranza, setTipoCobranza] = useState('COMUN');
 
-  const ESTADOS_DISPONIBLES = ['PENDIENTE', 'CANCELADA', 'MOROSA', 'NO COMPRADA'];
+  const ESTADOS_DISPONIBLES = ['PENDIENTE', 'CANCELADA', 'MOROSA', 'INCOBRABLE', 'NO COMPRADA'];
   const AVAILABLE_FECHAS_VTO = React.useMemo(() => [...new Set(data.map(c => c.vencimiento).filter(Boolean))], [data]);
 
   const fetchCC = React.useCallback(async () => {
@@ -411,7 +411,7 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '', i
                           <td style={{ fontWeight: 600 }}>{formatCurrency(c.total_esperado)}</td>
                           <td style={{ color: 'var(--accent-secondary)', fontWeight: 600 }}>{formatCurrency(c.total_cobrado ? -c.total_cobrado : 0)}</td>
                           <td style={{
-                            color: c.estado === 'MOROSA' ? 'var(--error)' : c.estado === 'PENDIENTE' ? 'var(--accent-secondary)' : 'inherit',
+                            color: (c.estado === 'MOROSA' || c.estado === 'INCOBRABLE') ? 'var(--error)' : c.estado === 'PENDIENTE' ? 'var(--accent-secondary)' : 'inherit',
                             fontWeight: 500
                           }}>
                             {c.estado === 'CANCELADA' || c.estado === 'NO COMPRADA' ? '-' : formatCurrency(c.saldo_pendiente)}
@@ -419,7 +419,7 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '', i
                           <td>
                             <span style={{
                               padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600,
-                              background: c.estado === 'CANCELADA' ? 'var(--accent-secondary)' : c.estado === 'MOROSA' ? 'var(--error)' : c.estado === 'NO COMPRADA' ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.1)',
+                              background: c.estado === 'CANCELADA' ? 'var(--accent-secondary)' : (c.estado === 'MOROSA' || c.estado === 'INCOBRABLE') ? 'var(--error)' : c.estado === 'NO COMPRADA' ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.1)',
                               color: '#fff'
                             }}>
                               {c.estado}

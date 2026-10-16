@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import or_
 
-from src.database import get_db, Cliente, Credito, Cuota
+from src.database import get_db, Cliente, Credito, Cuota, EstadoCredito, EstadoClienteEnum, EstadoCuota
 from src.database.models import SocioComercial
 from src.database.models.creditos.clientes import Referido
 from src.database.models.creditos.perfil_trans import PerfilTransaccional
@@ -212,7 +212,11 @@ def get_cliente(cuil: str, db: Session = Depends(get_db), current_user: Usuario 
                 "telefono": r.telefono,
                 "email": r.email
             } for r in cliente.referidos
-        ]
+        ],
+        "tiene_deuda_activa": any(
+            (c.estado.value if hasattr(c.estado, "value") else str(c.estado)) not in [EstadoCredito.CANCELADO.value, EstadoCredito.RECHAZADO.value]
+            for c in cliente.creditos
+        ) if cliente.creditos else False
     }
 
 @router.get("/{cuil}/bcra")
@@ -519,7 +523,7 @@ def update_cliente(
     current_user: Usuario = Depends(get_current_user)
 ) -> Dict[str, Any]:
     try:
-        cliente = db.query(Cliente).filter(Cliente.cuil == cuil).first()
+        cliente = db.query(Cliente).options(joinedload(Cliente.creditos).joinedload(Credito.cuotas)).filter(Cliente.cuil == cuil).first()
         if not cliente:
             raise HTTPException(status_code=404, detail="Cliente no encontrado")
             
@@ -528,6 +532,37 @@ def update_cliente(
         
         for key, value in update_data.items():
             setattr(cliente, key, value)
+
+        nuevo_estado = update_data.get("estado")
+        if nuevo_estado:
+            nuevo_estado_str = nuevo_estado.value if hasattr(nuevo_estado, "value") else str(nuevo_estado)
+            if nuevo_estado_str == EstadoClienteEnum.INCOBRABLE.value:
+                creditos_vivos = [
+                    cred for cred in cliente.creditos
+                    if (cred.estado.value if hasattr(cred.estado, "value") else str(cred.estado)) not in [EstadoCredito.CANCELADO.value, EstadoCredito.RECHAZADO.value]
+                ]
+                if not creditos_vivos:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="No se puede establecer el estado como INCOBRABLE porque el cliente no posee créditos activos o todos sus créditos y cuotas se encuentran cancelados."
+                    )
+                for cred in creditos_vivos:
+                    cred.estado = EstadoCredito.INCOBRABLE.value
+                    for cuota in cred.cuotas:
+                        cuota_est = cuota.estado.value if hasattr(cuota.estado, "value") else str(cuota.estado)
+                        if cuota_est not in [EstadoCuota.CANCELADA.value, EstadoCuota.NO_COMPRADA.value]:
+                            cuota.estado = EstadoCuota.INCOBRABLE.value
+            elif nuevo_estado_str == EstadoClienteEnum.ACTIVO.value:
+                from datetime import date
+                hoy = date.today()
+                for cred in cliente.creditos:
+                    c_est = cred.estado.value if hasattr(cred.estado, "value") else str(cred.estado)
+                    if c_est == EstadoCredito.INCOBRABLE.value:
+                        for cuota in cred.cuotas:
+                            cuota_est = cuota.estado.value if hasattr(cuota.estado, "value") else str(cuota.estado)
+                            if cuota_est == EstadoCuota.INCOBRABLE.value:
+                                cuota.actualizar_estado(hoy)
+                        cred.actualizar_estado()
             
         import asyncio
         from src.services.repet import screen_person, sync_repet_data
@@ -558,8 +593,9 @@ def update_cliente(
             raise HTTPException(status_code=400, detail="El ID de Provincia o Empleador ingresado no existe en la base de datos.")
         elif "unique" in error_msg:
             raise HTTPException(status_code=400, detail="Error de integridad. El CUIL o Documento ingresado ya está registrado por otro cliente.")
-        else:
-            raise HTTPException(status_code=400, detail=f"Error de base de datos: {str(e.orig)}")
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
