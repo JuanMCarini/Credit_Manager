@@ -426,6 +426,33 @@ input:focus, select:focus {
     background: rgba(255, 255, 255, 0.02);
 }
 
+/* Compact Table Variant for Simulations and Previews */
+.data-table.compact th,
+.data-table.compact td {
+    padding: 7px 10px;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+}
+
+.data-table.compact th {
+    padding-top: 6px;
+    padding-bottom: 6px;
+    font-size: 11px;
+}
+
+.data-table.compact tbody tr:nth-child(even) {
+    background-color: rgba(255, 255, 255, 0.015);
+}
+
+.data-table.compact tbody tr:hover {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+.data-table.compact tfoot td {
+    padding: 9px 10px;
+    font-variant-numeric: tabular-nums;
+}
+
 .empty-state {
     text-align: center !important;
     padding: 40px !important;

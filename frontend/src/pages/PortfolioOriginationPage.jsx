@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { FilterX } from 'lucide-react';
+import { FilterX, Maximize2, Minimize2, X } from 'lucide-react';
 import axiosClient from '../api/axiosClient';
 import useAppStore from '../store/useAppStore';
 import ExportExcelButton from '../components/ExportExcelButton';
@@ -16,6 +16,7 @@ const PortfolioOriginationPage = () => {
 
   // Preview Modal State
   const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [isModalMaximized, setIsModalMaximized] = useState(false);
   const [previewData, setPreviewData] = useState(null);
   const [previewTab, setPreviewTab] = useState('resumen'); // 'creditos', 'cuotas', 'resumen'
   const [filterCreditos, setFilterCreditos] = useState({});
@@ -415,10 +416,21 @@ const PortfolioOriginationPage = () => {
   }, [previewData?.cuotas]);
 
   const availableMesesResumen = useMemo(() => {
-    if (!previewData?.resumen) return [];
-    const key = tipoOperacion === 'VENTA' ? 'fecha_vencimiento' : 'mes';
-    return Array.from(new Set(previewData.resumen.map(r => r[key]).filter(Boolean))).sort();
-  }, [previewData?.resumen, tipoOperacion]);
+    if (!previewData) return [];
+    if (tipoOperacion === 'VENTA') {
+      if (!previewData.cuotas) return [];
+      return Array.from(new Set(previewData.cuotas.map(c => c.fecha_vencimiento ? c.fecha_vencimiento.substring(0, 7) : null).filter(Boolean))).sort();
+    }
+    if (!previewData.resumen) return [];
+    return Array.from(new Set(previewData.resumen.map(r => r.mes).filter(Boolean))).sort();
+  }, [previewData, tipoOperacion]);
+
+  const formatMes = (mesStr) => {
+    if (!mesStr || mesStr === 'Sin Fecha') return mesStr || '-';
+    const parts = mesStr.split('-');
+    if (parts.length === 2) return `${parts[1]}/${parts[0]}`;
+    return mesStr;
+  };
 
 
   const handleSort = (key, config, setConfig) => {
@@ -719,674 +731,801 @@ const PortfolioOriginationPage = () => {
         </div>
       )}
 
-      {showPreviewModal && previewData && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 1000,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px',
-          backdropFilter: 'blur(8px)'
-        }}>
-          <div className="glass-panel" style={{
-            width: '100%', height: '95vh', display: 'flex', flexDirection: 'column', position: 'relative'
+      {showPreviewModal && previewData && (() => {
+        const activeCreditosCount = tipoOperacion === 'VENTA'
+          ? previewData.creditos.filter(c => !creditosExcluidos.includes(c.id)).length
+          : previewData.creditos.length;
+        const activeCuotasCount = tipoOperacion === 'VENTA'
+          ? previewData.cuotas.filter(c => c.incluida && !creditosExcluidos.includes(c.credito_id)).length
+          : previewData.cuotas.filter(c => c.comprada).length;
+        const totalPrecio = tipoOperacion === 'VENTA'
+          ? previewData.creditos.filter(c => !creditosExcluidos.includes(c.id)).reduce((acc, c) => acc + (c.valor_actual || 0), 0)
+          : previewData.resumen.reduce((acc, r) => acc + (r.valor_actual || 0), 0);
+
+        return (
+          <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 1000,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: isModalMaximized ? 0 : '16px',
+            backdropFilter: 'blur(8px)'
           }}>
-            <button onClick={() => setShowPreviewModal(false)} className="btn-secondary" style={{
-              position: 'absolute', top: '16px', right: '16px', padding: '4px 12px', zIndex: 10
-            }}>X</button>
-
-            <div style={{ padding: '16px 24px 0' }}>
-              <h3 style={{ marginBottom: '8px', fontFamily: 'var(--font-heading)' }}>
-                Simulación de {tipoOperacion === 'VENTA' ? 'Venta' : 'Compra'} de Cartera
-              </h3>
-              <p style={{ color: 'var(--text-secondary)', marginBottom: '16px' }}>
-                Revise los créditos y cuotas {tipoOperacion === 'VENTA' ? 'que serán cedidos' : 'importados'} antes de confirmar la operación.
-              </p>
-
-              <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
-                <span className="badge" style={{ backgroundColor: 'rgba(255,255,255,0.08)', padding: '6px 14px', borderRadius: '20px', fontSize: '13px' }}>
-                  <strong>Régimen:</strong> {(tipoOperacion === 'VENTA' ? ventaData.recurso : compraData.recurso) ? 'Con Recurso' : 'Sin Recurso'}
-                </span>
-                <span className="badge" style={{ backgroundColor: 'rgba(255,255,255,0.08)', padding: '6px 14px', borderRadius: '20px', fontSize: '13px' }}>
-                  <strong>IVA:</strong> {(tipoOperacion === 'VENTA' ? ventaData.iva : compraData.iva) ? 'Incluye IVA' : 'Sin IVA'}
-                </span>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '24px' }}>
-                <div style={{ background: 'rgba(255,255,255,0.05)', padding: '16px', borderRadius: '8px', textAlign: 'center' }}>
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Créditos Involucrados</div>
-                  <div style={{ fontSize: '24px', fontWeight: 'bold' }}>
-                    {tipoOperacion === 'VENTA' ? previewData.creditos.filter(c => !creditosExcluidos.includes(c.id)).length : previewData.creditos.length}
+            <div className="glass-panel" style={{
+              width: isModalMaximized ? '100vw' : '96vw',
+              maxWidth: isModalMaximized ? '100vw' : '1600px',
+              height: isModalMaximized ? '100vh' : '94vh',
+              borderRadius: isModalMaximized ? 0 : 'var(--radius-lg)',
+              display: 'flex', flexDirection: 'column', position: 'relative',
+              overflow: 'hidden',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.6)'
+            }}>
+              {/* Header: Title, Badges & Controls */}
+              <div style={{ padding: '14px 24px 10px', borderBottom: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                    <h3 style={{ margin: 0, fontFamily: 'var(--font-heading)', fontSize: '1.2rem' }}>
+                      Simulación de {tipoOperacion === 'VENTA' ? 'Venta' : 'Compra'} de Cartera
+                    </h3>
+                    <span className="badge" style={{ backgroundColor: 'rgba(255,255,255,0.08)', padding: '4px 10px', borderRadius: '16px', fontSize: '12px' }}>
+                      <strong>Régimen:</strong> {(tipoOperacion === 'VENTA' ? ventaData.recurso : compraData.recurso) ? 'Con Recurso' : 'Sin Recurso'}
+                    </span>
+                    <span className="badge" style={{ backgroundColor: 'rgba(255,255,255,0.08)', padding: '4px 10px', borderRadius: '16px', fontSize: '12px' }}>
+                      <strong>IVA:</strong> {(tipoOperacion === 'VENTA' ? ventaData.iva : compraData.iva) ? 'Incluye IVA' : 'Sin IVA'}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setIsModalMaximized(!isModalMaximized)}
+                      className="btn-secondary"
+                      style={{ padding: '6px 10px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}
+                      title={isModalMaximized ? "Restaurar ventana" : "Pantalla completa"}
+                    >
+                      {isModalMaximized ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowPreviewModal(false)}
+                      className="btn-secondary"
+                      style={{ padding: '6px 10px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      title="Cerrar"
+                    >
+                      <X size={16} />
+                    </button>
                   </div>
                 </div>
-                <div style={{ background: 'rgba(255,255,255,0.05)', padding: '16px', borderRadius: '8px', textAlign: 'center' }}>
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Cuotas a {tipoOperacion === 'VENTA' ? 'Ceder' : 'Adquirir'}</div>
-                  <div style={{ fontSize: '24px', fontWeight: 'bold' }}>
-                    {tipoOperacion === 'VENTA' ? previewData.cuotas.filter(c => c.incluida && !creditosExcluidos.includes(c.credito_id)).length : previewData.cuotas.filter(c => c.comprada).length}
+
+                {/* Compact KPI ribbon */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                  gap: '10px',
+                  marginBottom: '10px'
+                }}>
+                  <div style={{ background: 'rgba(255,255,255,0.04)', padding: '8px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Créditos Involucrados</span>
+                    <span style={{ fontSize: '17px', fontWeight: 'bold' }}>{activeCreditosCount}</span>
+                  </div>
+                  <div style={{ background: 'rgba(255,255,255,0.04)', padding: '8px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Cuotas a {tipoOperacion === 'VENTA' ? 'Ceder' : 'Adquirir'}</span>
+                    <span style={{ fontSize: '17px', fontWeight: 'bold' }}>{activeCuotasCount}</span>
+                  </div>
+                  <div style={{ background: 'var(--accent-glow)', padding: '8px 14px', borderRadius: '8px', border: '1px solid var(--accent-primary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '12px', color: 'var(--text-primary)', fontWeight: '500' }}>Valor Actual (Precio)</span>
+                    <span style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--accent-primary)' }}>
+                      {new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(totalPrecio)}
+                    </span>
                   </div>
                 </div>
-                <div style={{ background: 'var(--accent-glow)', padding: '16px', borderRadius: '8px', textAlign: 'center', border: '1px solid var(--accent-primary)' }}>
-                  <div style={{ fontSize: '12px', color: 'var(--text-primary)' }}>Valor Actual (Precio)</div>
-                  <div style={{ fontSize: '24px', fontWeight: 'bold', color: 'var(--text-primary)' }}>
-                    {new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(
-                      tipoOperacion === 'VENTA'
-                        ? previewData.creditos.filter(c => !creditosExcluidos.includes(c.id)).reduce((acc, c) => acc + (c.valor_actual || 0), 0)
-                        : previewData.resumen.reduce((acc, r) => acc + (r.valor_actual || 0), 0)
-                    )}
-                  </div>
+
+                {/* Segmented Tabs Bar */}
+                <div style={{ display: 'flex', gap: '6px', background: 'rgba(0,0,0,0.3)', padding: '4px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)', width: 'fit-content' }}>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewTab('creditos')}
+                    style={{
+                      padding: '5px 14px',
+                      borderRadius: '6px',
+                      fontSize: '13px',
+                      fontWeight: previewTab === 'creditos' ? '600' : 'normal',
+                      backgroundColor: previewTab === 'creditos' ? 'var(--accent-primary)' : 'transparent',
+                      color: previewTab === 'creditos' ? '#fff' : 'var(--text-secondary)',
+                      border: 'none',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    Créditos
+                    <span style={{ fontSize: '11px', padding: '1px 6px', borderRadius: '10px', background: previewTab === 'creditos' ? 'rgba(0,0,0,0.25)' : 'rgba(255,255,255,0.1)' }}>
+                      {activeCreditosCount}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewTab('cuotas')}
+                    style={{
+                      padding: '5px 14px',
+                      borderRadius: '6px',
+                      fontSize: '13px',
+                      fontWeight: previewTab === 'cuotas' ? '600' : 'normal',
+                      backgroundColor: previewTab === 'cuotas' ? 'var(--accent-primary)' : 'transparent',
+                      color: previewTab === 'cuotas' ? '#fff' : 'var(--text-secondary)',
+                      border: 'none',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    Cuotas
+                    <span style={{ fontSize: '11px', padding: '1px 6px', borderRadius: '10px', background: previewTab === 'cuotas' ? 'rgba(0,0,0,0.25)' : 'rgba(255,255,255,0.1)' }}>
+                      {activeCuotasCount}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewTab('resumen')}
+                    style={{
+                      padding: '5px 14px',
+                      borderRadius: '6px',
+                      fontSize: '13px',
+                      fontWeight: previewTab === 'resumen' ? '600' : 'normal',
+                      backgroundColor: previewTab === 'resumen' ? 'var(--accent-primary)' : 'transparent',
+                      color: previewTab === 'resumen' ? '#fff' : 'var(--text-secondary)',
+                      border: 'none',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    Vencimientos
+                  </button>
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-                <button type="button" onClick={() => setPreviewTab('creditos')} className={previewTab === 'creditos' ? 'btn-primary' : 'btn-secondary'} style={{ flex: 1 }}>Créditos</button>
-                <button type="button" onClick={() => setPreviewTab('cuotas')} className={previewTab === 'cuotas' ? 'btn-primary' : 'btn-secondary'} style={{ flex: 1 }}>Cuotas</button>
-                <button type="button" onClick={() => setPreviewTab('resumen')} className={previewTab === 'resumen' ? 'btn-primary' : 'btn-secondary'} style={{ flex: 1 }}>Vencimientos</button>
-              </div>
-            </div>
-
-            <div style={{ flex: 1, overflowY: 'auto', padding: '0 24px 16px', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-              {previewTab === 'creditos' && (() => {
-                const filtered = previewData.creditos.filter(c => {
-                  return Object.keys(filterCreditos).every(key => {
-                    const filterVal = filterCreditos[key];
-                    if (filterVal === undefined || filterVal === null || filterVal === '' || (Array.isArray(filterVal) && filterVal.length === 0)) return true;
-                    if (typeof filterVal === 'object' && !Array.isArray(filterVal) && ('min' in filterVal || 'max' in filterVal)) {
-                      const val = Number(c[key] || 0);
-                      if (filterVal.min !== undefined && filterVal.min !== null && filterVal.min !== '' && val < Number(filterVal.min)) return false;
-                      if (filterVal.max !== undefined && filterVal.max !== null && filterVal.max !== '' && val > Number(filterVal.max)) return false;
-                      return true;
-                    }
-                    if (Array.isArray(filterVal)) {
-                      return filterVal.includes(String(c[key] || ''));
-                    }
-                    return String(c[key] || '').toLowerCase().includes(filterVal.toLowerCase());
+              {/* Modal Body: Active Tab Content */}
+              <div style={{ flex: 1, minHeight: 0, padding: '12px 24px 12px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                {previewTab === 'creditos' && (() => {
+                  const filtered = previewData.creditos.filter(c => {
+                    return Object.keys(filterCreditos).every(key => {
+                      const filterVal = filterCreditos[key];
+                      if (filterVal === undefined || filterVal === null || filterVal === '' || (Array.isArray(filterVal) && filterVal.length === 0)) return true;
+                      if (typeof filterVal === 'object' && !Array.isArray(filterVal) && ('min' in filterVal || 'max' in filterVal)) {
+                        const val = Number(c[key] || 0);
+                        if (filterVal.min !== undefined && filterVal.min !== null && filterVal.min !== '' && val < Number(filterVal.min)) return false;
+                        if (filterVal.max !== undefined && filterVal.max !== null && filterVal.max !== '' && val > Number(filterVal.max)) return false;
+                        return true;
+                      }
+                      if (Array.isArray(filterVal)) {
+                        return filterVal.includes(String(c[key] || ''));
+                      }
+                      return String(c[key] || '').toLowerCase().includes(filterVal.toLowerCase());
+                    });
                   });
-                });
-                const activeFiltered = filtered.filter(c => tipoOperacion === 'COMPRA' || !creditosExcluidos.includes(c.id));
-                const sortedCreditos = sortData(filtered, sortConfigCreditos);
-                const totalMonto = activeFiltered.reduce((acc, c) => acc + (tipoOperacion === 'VENTA' ? c.monto_otorgado : c.capital_vendido) || 0, 0);
-                const totalCuotas = activeFiltered.reduce((acc, c) => acc + (tipoOperacion === 'VENTA' ? c.total_cuotas : c.plazo) || 0, 0);
-                const totalCeder = activeFiltered.reduce((acc, c) => acc + (tipoOperacion === 'VENTA' ? c.cuotas_a_ceder : c.cuotas_compradas) || 0, 0);
-                const totalVa = activeFiltered.reduce((acc, c) => acc + (c.valor_actual || 0), 0);
+                  const activeFiltered = filtered.filter(c => tipoOperacion === 'COMPRA' || !creditosExcluidos.includes(c.id));
+                  const sortedCreditos = sortData(filtered, sortConfigCreditos);
+                  const totalMonto = activeFiltered.reduce((acc, c) => acc + (tipoOperacion === 'VENTA' ? c.monto_otorgado : c.capital_vendido) || 0, 0);
+                  const totalCuotas = activeFiltered.reduce((acc, c) => acc + (tipoOperacion === 'VENTA' ? c.total_cuotas : c.plazo) || 0, 0);
+                  const totalCeder = activeFiltered.reduce((acc, c) => acc + (tipoOperacion === 'VENTA' ? c.cuotas_a_ceder : c.cuotas_compradas) || 0, 0);
+                  const totalVa = activeFiltered.reduce((acc, c) => acc + (c.valor_actual || 0), 0);
 
-                const handleFilterChange = (key, value) => {
-                  setFilterCreditos(prev => ({ ...prev, [key]: value }));
-                };
+                  const handleFilterChange = (key, value) => {
+                    setFilterCreditos(prev => ({ ...prev, [key]: value }));
+                  };
 
-                return (
-                  <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
-                      <button
-                        className="btn-secondary"
-                        onClick={() => setFilterCreditos({})}
-                        title="Limpiar todos los filtros"
-                        style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '100%', padding: '0 12px' }}
-                      >
-                        <FilterX size={16} /> Limpiar Filtros
-                      </button>
-                      <ExportExcelButton data={previewData.creditos} filteredData={filtered} filename="preview_creditos" />
-                    </div>
-                    <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', overflowY: 'auto', flex: 1 }}>
-                      <table className="data-table" style={{ width: '100%', fontSize: '13px' }}>
-                        <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-panel)', boxShadow: '0 2px 4px rgba(0,0,0,0.2)' }}>
-                          {tipoOperacion === 'VENTA' ? (
-                            <tr>
-                              <th style={{ textAlign: 'left', padding: '12px', verticalAlign: 'top' }}>
-                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content' }} onClick={() => handleSort('id', sortConfigCreditos, setSortConfigCreditos)}>ID {renderSortIcon(sortConfigCreditos, 'id')}</div>
-                                <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
-                                  <ExcelListFilter
-                                    availableOptions={Array.from(new Set(previewData.creditos.map(c => c.id))).map(String)}
-                                    selectedOptions={filterCreditos.id || []}
-                                    onChange={val => handleFilterChange('id', val)}
-                                    title="Filtrar IDs..."
-                                  />
-                                </div>
-                              </th>
-                              <th style={{ textAlign: 'left', padding: '12px', verticalAlign: 'top' }}>
-                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content' }} onClick={() => handleSort('cliente', sortConfigCreditos, setSortConfigCreditos)}>Cliente {renderSortIcon(sortConfigCreditos, 'cliente')}</div>
-                                <input type="text" placeholder="Filtrar..." value={filterCreditos.cliente || ''} onChange={e => handleFilterChange('cliente', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
-                              </th>
-                              <th style={{ textAlign: 'center', padding: '12px', verticalAlign: 'top' }}>
-                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', margin: '0 auto' }} onClick={() => handleSort('fecha_emision', sortConfigCreditos, setSortConfigCreditos)}>F. Emisión {renderSortIcon(sortConfigCreditos, 'fecha_emision')}</div>
-                                <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
-                                  <ExcelDateFilter
-                                    availableDates={availableFechasEmision}
-                                    selectedDates={filterCreditos.fecha_emision || []}
-                                    onChange={dates => handleFilterChange('fecha_emision', dates)}
-                                  />
-                                </div>
-                              </th>
-                              <th style={{ textAlign: 'left', padding: '12px', verticalAlign: 'top' }}>
-                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content' }} onClick={() => handleSort('estado', sortConfigCreditos, setSortConfigCreditos)}>Estado {renderSortIcon(sortConfigCreditos, 'estado')}</div>
-                                <div onClick={e => { e.stopPropagation(); setShowPreviewEstadoFilter(!showPreviewEstadoFilter); }} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', background: 'rgba(255,255,255,0.1)', border: '1px solid var(--border-color)', borderRadius: '4px', textAlign: 'center', cursor: 'pointer' }}>
-                                  {!(filterCreditos.estado?.length) ? "Todos" : `${filterCreditos.estado.length} selec.`}
-                                </div>
-                                {showPreviewEstadoFilter && (
-                                  <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', top: '100%', left: 0, zIndex: 100, background: 'var(--surface-color)', border: '1px solid var(--border-color)', borderRadius: '4px', padding: '8px', display: 'flex', flexDirection: 'column', gap: '4px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)', marginTop: '4px', minWidth: '120px' }}>
-                                    {Array.from(new Set(previewData.creditos.map(c => c.estado))).filter(Boolean).map(est => (
-                                      <label key={est} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 'normal', cursor: 'pointer', margin: 0 }}>
-                                        <input type="checkbox" checked={filterCreditos.estado?.includes(est) || false} onChange={() => {
-                                          const current = filterCreditos.estado || [];
-                                          handleFilterChange('estado', current.includes(est) ? current.filter(x => x !== est) : [...current, est]);
-                                        }} />
-                                        {est}
-                                      </label>
-                                    ))}
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px', flexShrink: 0 }}>
+                        <button
+                          className="btn-secondary"
+                          onClick={() => setFilterCreditos({})}
+                          title="Limpiar todos los filtros"
+                          style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '32px', padding: '0 12px', fontSize: '12px' }}
+                        >
+                          <FilterX size={14} /> Limpiar Filtros
+                        </button>
+                        <ExportExcelButton data={previewData.creditos} filteredData={filtered} filename="preview_creditos" />
+                        <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: 'auto' }}>
+                          Mostrando {filtered.length} de {previewData.creditos.length} créditos
+                        </span>
+                      </div>
+                      <div style={{ background: 'rgba(0,0,0,0.25)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)', overflow: 'auto', flex: 1, minHeight: 0 }}>
+                        <table className="data-table compact" style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
+                          <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-panel)', boxShadow: '0 2px 4px rgba(0,0,0,0.3)' }}>
+                            {tipoOperacion === 'VENTA' ? (
+                              <tr>
+                                <th style={{ textAlign: 'left', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                  <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content' }} onClick={() => handleSort('id', sortConfigCreditos, setSortConfigCreditos)}>ID {renderSortIcon(sortConfigCreditos, 'id')}</div>
+                                  <div style={{ marginTop: '4px' }} onClick={e => e.stopPropagation()}>
+                                    <ExcelListFilter
+                                      availableOptions={Array.from(new Set(previewData.creditos.map(c => c.id))).map(String)}
+                                      selectedOptions={filterCreditos.id || []}
+                                      onChange={val => handleFilterChange('id', val)}
+                                      title="Filtrar IDs..."
+                                    />
                                   </div>
-                                )}
-                              </th>
-                              <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
-                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort('monto_otorgado', sortConfigCreditos, setSortConfigCreditos)}>Monto Orig. {renderSortIcon(sortConfigCreditos, 'monto_otorgado')}</div>
-                                <ExcelNumberRangeFilter selectedRange={filterCreditos.monto_otorgado || {}} onChange={r => handleFilterChange('monto_otorgado', r)} />
-                              </th>
-                              <th style={{ textAlign: 'center', padding: '12px', verticalAlign: 'top' }}>
-                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', margin: '0 auto' }} onClick={() => handleSort('total_cuotas', sortConfigCreditos, setSortConfigCreditos)}>Cuotas {renderSortIcon(sortConfigCreditos, 'total_cuotas')}</div>
-                                <ExcelNumberRangeFilter selectedRange={filterCreditos.total_cuotas || {}} onChange={r => handleFilterChange('total_cuotas', r)} />
-                              </th>
-                              <th style={{ textAlign: 'center', padding: '12px', verticalAlign: 'top' }}>
-                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', margin: '0 auto' }} onClick={() => handleSort('cuotas_a_ceder', sortConfigCreditos, setSortConfigCreditos)}>A Ceder {renderSortIcon(sortConfigCreditos, 'cuotas_a_ceder')}</div>
-                                <ExcelNumberRangeFilter selectedRange={filterCreditos.cuotas_a_ceder || {}} onChange={r => handleFilterChange('cuotas_a_ceder', r)} />
-                              </th>
-                              <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
-                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort('valor_actual', sortConfigCreditos, setSortConfigCreditos)}>Valor Actual {renderSortIcon(sortConfigCreditos, 'valor_actual')}</div>
-                                <ExcelNumberRangeFilter selectedRange={filterCreditos.valor_actual || {}} onChange={r => handleFilterChange('valor_actual', r)} />
-                              </th>
-                              <th style={{ textAlign: 'center', padding: '12px', verticalAlign: 'top' }}>
-                                Acciones
-                              </th>
-                            </tr>
-                          ) : (
-                            <tr>
-                              <th style={{ textAlign: 'left', padding: '12px', verticalAlign: 'top' }}>
-                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content' }} onClick={() => handleSort('id_externo', sortConfigCreditos, setSortConfigCreditos)}>ID Externo {renderSortIcon(sortConfigCreditos, 'id_externo')}</div>
-                                <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
-                                  <ExcelListFilter
-                                    availableOptions={Array.from(new Set(previewData.creditos.map(c => c.id_externo).filter(Boolean))).map(String)}
-                                    selectedOptions={filterCreditos.id_externo || []}
-                                    onChange={val => handleFilterChange('id_externo', val)}
-                                    title="Filtrar IDs..."
-                                  />
-                                </div>
-                              </th>
-                              <th style={{ textAlign: 'left', padding: '12px', verticalAlign: 'top' }}>
-                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content' }} onClick={() => handleSort('cliente', sortConfigCreditos, setSortConfigCreditos)}>Cliente {renderSortIcon(sortConfigCreditos, 'cliente')}</div>
-                                <input type="text" placeholder="Filtrar..." value={filterCreditos.cliente_nombre || ''} onChange={e => handleFilterChange('cliente_nombre', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
-                              </th>
-                              <th style={{ textAlign: 'center', padding: '12px', verticalAlign: 'top' }}>
-                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', margin: '0 auto' }} onClick={() => handleSort('fecha_emision', sortConfigCreditos, setSortConfigCreditos)}>F. Emisión {renderSortIcon(sortConfigCreditos, 'fecha_emision')}</div>
-                                <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
-                                  <ExcelDateFilter
-                                    availableDates={availableFechasEmision}
-                                    selectedDates={filterCreditos.fecha_emision || []}
-                                    onChange={dates => handleFilterChange('fecha_emision', dates)}
-                                  />
-                                </div>
-                              </th>
-                              <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
-                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort('capital_vendido', sortConfigCreditos, setSortConfigCreditos)}>Cap. Vendido {renderSortIcon(sortConfigCreditos, 'capital_vendido')}</div>
-                                <ExcelNumberRangeFilter selectedRange={filterCreditos.capital_vendido || {}} onChange={r => handleFilterChange('capital_vendido', r)} />
-                              </th>
-                              <th style={{ textAlign: 'center', padding: '12px', verticalAlign: 'top' }}>
-                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', margin: '0 auto' }} onClick={() => handleSort('plazo', sortConfigCreditos, setSortConfigCreditos)}>Plazo {renderSortIcon(sortConfigCreditos, 'plazo')}</div>
-                                <ExcelNumberRangeFilter selectedRange={filterCreditos.plazo || {}} onChange={r => handleFilterChange('plazo', r)} />
-                              </th>
-                              <th style={{ textAlign: 'center', padding: '12px', verticalAlign: 'top' }}>
-                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', margin: '0 auto' }} onClick={() => handleSort('cuotas_compradas', sortConfigCreditos, setSortConfigCreditos)}>Adquiridas {renderSortIcon(sortConfigCreditos, 'cuotas_compradas')}</div>
-                                <ExcelNumberRangeFilter selectedRange={filterCreditos.cuotas_compradas || {}} onChange={r => handleFilterChange('cuotas_compradas', r)} />
-                              </th>
-                              <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
-                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort('valor_actual', sortConfigCreditos, setSortConfigCreditos)}>Valor Actual {renderSortIcon(sortConfigCreditos, 'valor_actual')}</div>
-                                <ExcelNumberRangeFilter selectedRange={filterCreditos.valor_actual || {}} onChange={r => handleFilterChange('valor_actual', r)} />
-                              </th>
-                            </tr>
-                          )}
-                        </thead>
-                        <tbody>
-                          {sortedCreditos.length === 0 && (
-                            <tr><td colSpan={tipoOperacion === 'VENTA' ? 9 : 7} style={{ textAlign: 'center', padding: '16px' }}>No hay créditos que coincidan.</td></tr>
-                          )}
-                          {sortedCreditos.map((c, i) => (
-                            tipoOperacion === 'VENTA' ? (
-                              <tr key={i} style={{ opacity: creditosExcluidos.includes(c.id) ? 0.5 : 1 }}>
-                                <td style={{ textAlign: 'left', padding: '12px' }}>{c.id}</td>
-                                <td style={{ textAlign: 'left', padding: '12px' }}>{c.cliente}</td>
-                                <td style={{ textAlign: 'center', padding: '12px' }}>{c.fecha_emision || '-'}</td>
-                                <td style={{ textAlign: 'left', padding: '12px' }}>{c.estado}</td>
-                                <td style={{ textAlign: 'right', padding: '12px' }}>${(c.monto_otorgado || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
-                                <td style={{ textAlign: 'center', padding: '12px' }}>{c.total_cuotas}</td>
-                                <td style={{ textAlign: 'center', padding: '12px' }}>{creditosExcluidos.includes(c.id) ? 0 : c.cuotas_a_ceder}</td>
-                                <td style={{ textAlign: 'right', padding: '12px', color: 'var(--accent-secondary)' }}>${(creditosExcluidos.includes(c.id) ? 0 : (c.valor_actual || 0)).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
-                                <td style={{ textAlign: 'center', padding: '12px' }}>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleToggleExcluir(c.id)}
-                                    style={{
-                                      padding: '4px 8px',
-                                      fontSize: '12px',
-                                      borderRadius: '4px',
-                                      border: '1px solid',
-                                      cursor: 'pointer',
-                                      transition: 'all 0.2s ease',
-                                      backgroundColor: creditosExcluidos.includes(c.id) ? 'var(--bg-panel)' : 'rgba(239, 68, 68, 0.1)',
-                                      borderColor: creditosExcluidos.includes(c.id) ? 'var(--border-color)' : 'var(--danger-color)',
-                                      color: creditosExcluidos.includes(c.id) ? 'var(--text-secondary)' : 'var(--danger-color)'
-                                    }}
-                                  >
-                                    {creditosExcluidos.includes(c.id) ? 'Incluir' : 'Excluir'}
-                                  </button>
-                                </td>
+                                </th>
+                                <th style={{ textAlign: 'left', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                  <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content' }} onClick={() => handleSort('cliente', sortConfigCreditos, setSortConfigCreditos)}>Cliente {renderSortIcon(sortConfigCreditos, 'cliente')}</div>
+                                  <input type="text" placeholder="Filtrar..." value={filterCreditos.cliente || ''} onChange={e => handleFilterChange('cliente', e.target.value)} style={{ width: '100%', marginTop: '4px', padding: '3px 6px', fontSize: '11px' }} />
+                                </th>
+                                <th style={{ textAlign: 'center', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                  <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', margin: '0 auto' }} onClick={() => handleSort('fecha_emision', sortConfigCreditos, setSortConfigCreditos)}>F. Emisión {renderSortIcon(sortConfigCreditos, 'fecha_emision')}</div>
+                                  <div style={{ marginTop: '4px' }} onClick={e => e.stopPropagation()}>
+                                    <ExcelDateFilter
+                                      availableDates={availableFechasEmision}
+                                      selectedDates={filterCreditos.fecha_emision || []}
+                                      onChange={dates => handleFilterChange('fecha_emision', dates)}
+                                    />
+                                  </div>
+                                </th>
+                                <th style={{ textAlign: 'left', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                  <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content' }} onClick={() => handleSort('estado', sortConfigCreditos, setSortConfigCreditos)}>Estado {renderSortIcon(sortConfigCreditos, 'estado')}</div>
+                                  <div onClick={e => { e.stopPropagation(); setShowPreviewEstadoFilter(!showPreviewEstadoFilter); }} style={{ width: '100%', marginTop: '4px', padding: '3px 6px', fontSize: '11px', background: 'rgba(255,255,255,0.1)', border: '1px solid var(--border-color)', borderRadius: '4px', textAlign: 'center', cursor: 'pointer' }}>
+                                    {!(filterCreditos.estado?.length) ? "Todos" : `${filterCreditos.estado.length} selec.`}
+                                  </div>
+                                  {showPreviewEstadoFilter && (
+                                    <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', top: '100%', left: 0, zIndex: 100, background: 'var(--surface-color)', border: '1px solid var(--border-color)', borderRadius: '4px', padding: '8px', display: 'flex', flexDirection: 'column', gap: '4px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)', marginTop: '4px', minWidth: '120px' }}>
+                                      {Array.from(new Set(previewData.creditos.map(c => c.estado))).filter(Boolean).map(est => (
+                                        <label key={est} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 'normal', cursor: 'pointer', margin: 0 }}>
+                                          <input type="checkbox" checked={filterCreditos.estado?.includes(est) || false} onChange={() => {
+                                            const current = filterCreditos.estado || [];
+                                            handleFilterChange('estado', current.includes(est) ? current.filter(x => x !== est) : [...current, est]);
+                                          }} />
+                                          {est}
+                                        </label>
+                                      ))}
+                                    </div>
+                                  )}
+                                </th>
+                                <th style={{ textAlign: 'right', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                  <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort('monto_otorgado', sortConfigCreditos, setSortConfigCreditos)}>Monto Orig. {renderSortIcon(sortConfigCreditos, 'monto_otorgado')}</div>
+                                  <ExcelNumberRangeFilter selectedRange={filterCreditos.monto_otorgado || {}} onChange={r => handleFilterChange('monto_otorgado', r)} />
+                                </th>
+                                <th style={{ textAlign: 'center', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                  <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', margin: '0 auto' }} onClick={() => handleSort('total_cuotas', sortConfigCreditos, setSortConfigCreditos)}>Cuotas {renderSortIcon(sortConfigCreditos, 'total_cuotas')}</div>
+                                  <ExcelNumberRangeFilter selectedRange={filterCreditos.total_cuotas || {}} onChange={r => handleFilterChange('total_cuotas', r)} />
+                                </th>
+                                <th style={{ textAlign: 'center', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                  <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', margin: '0 auto' }} onClick={() => handleSort('cuotas_a_ceder', sortConfigCreditos, setSortConfigCreditos)}>A Ceder {renderSortIcon(sortConfigCreditos, 'cuotas_a_ceder')}</div>
+                                  <ExcelNumberRangeFilter selectedRange={filterCreditos.cuotas_a_ceder || {}} onChange={r => handleFilterChange('cuotas_a_ceder', r)} />
+                                </th>
+                                <th style={{ textAlign: 'right', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                  <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort('valor_actual', sortConfigCreditos, setSortConfigCreditos)}>Valor Actual {renderSortIcon(sortConfigCreditos, 'valor_actual')}</div>
+                                  <ExcelNumberRangeFilter selectedRange={filterCreditos.valor_actual || {}} onChange={r => handleFilterChange('valor_actual', r)} />
+                                </th>
+                                <th style={{ textAlign: 'center', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                  Acciones
+                                </th>
                               </tr>
                             ) : (
-                              <tr key={i}>
-                                <td style={{ textAlign: 'left', padding: '12px' }}>{c.id_externo}</td>
-                                <td style={{ textAlign: 'left', padding: '12px' }}>{c.cliente_nombre}</td>
-                                <td style={{ textAlign: 'center', padding: '12px' }}>{c.fecha_emision || '-'}</td>
-                                <td style={{ textAlign: 'right', padding: '12px' }}>${(c.capital_vendido || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
-                                <td style={{ textAlign: 'center', padding: '12px' }}>{c.plazo}</td>
-                                <td style={{ textAlign: 'center', padding: '12px' }}>{c.cuotas_compradas}</td>
-                                <td style={{ textAlign: 'right', padding: '12px', color: 'var(--accent-secondary)' }}>${(c.valor_actual || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                              <tr>
+                                <th style={{ textAlign: 'left', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                  <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content' }} onClick={() => handleSort('id_externo', sortConfigCreditos, setSortConfigCreditos)}>ID Externo {renderSortIcon(sortConfigCreditos, 'id_externo')}</div>
+                                  <div style={{ marginTop: '4px' }} onClick={e => e.stopPropagation()}>
+                                    <ExcelListFilter
+                                      availableOptions={Array.from(new Set(previewData.creditos.map(c => c.id_externo).filter(Boolean))).map(String)}
+                                      selectedOptions={filterCreditos.id_externo || []}
+                                      onChange={val => handleFilterChange('id_externo', val)}
+                                      title="Filtrar IDs..."
+                                    />
+                                  </div>
+                                </th>
+                                <th style={{ textAlign: 'left', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                  <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content' }} onClick={() => handleSort('cliente', sortConfigCreditos, setSortConfigCreditos)}>Cliente {renderSortIcon(sortConfigCreditos, 'cliente')}</div>
+                                  <input type="text" placeholder="Filtrar..." value={filterCreditos.cliente_nombre || ''} onChange={e => handleFilterChange('cliente_nombre', e.target.value)} style={{ width: '100%', marginTop: '4px', padding: '3px 6px', fontSize: '11px' }} />
+                                </th>
+                                <th style={{ textAlign: 'center', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                  <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', margin: '0 auto' }} onClick={() => handleSort('fecha_emision', sortConfigCreditos, setSortConfigCreditos)}>F. Emisión {renderSortIcon(sortConfigCreditos, 'fecha_emision')}</div>
+                                  <div style={{ marginTop: '4px' }} onClick={e => e.stopPropagation()}>
+                                    <ExcelDateFilter
+                                      availableDates={availableFechasEmision}
+                                      selectedDates={filterCreditos.fecha_emision || []}
+                                      onChange={dates => handleFilterChange('fecha_emision', dates)}
+                                    />
+                                  </div>
+                                </th>
+                                <th style={{ textAlign: 'right', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                  <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort('capital_vendido', sortConfigCreditos, setSortConfigCreditos)}>Cap. Vendido {renderSortIcon(sortConfigCreditos, 'capital_vendido')}</div>
+                                  <ExcelNumberRangeFilter selectedRange={filterCreditos.capital_vendido || {}} onChange={r => handleFilterChange('capital_vendido', r)} />
+                                </th>
+                                <th style={{ textAlign: 'center', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                  <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', margin: '0 auto' }} onClick={() => handleSort('plazo', sortConfigCreditos, setSortConfigCreditos)}>Plazo {renderSortIcon(sortConfigCreditos, 'plazo')}</div>
+                                  <ExcelNumberRangeFilter selectedRange={filterCreditos.plazo || {}} onChange={r => handleFilterChange('plazo', r)} />
+                                </th>
+                                <th style={{ textAlign: 'center', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                  <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', margin: '0 auto' }} onClick={() => handleSort('cuotas_compradas', sortConfigCreditos, setSortConfigCreditos)}>Adquiridas {renderSortIcon(sortConfigCreditos, 'cuotas_compradas')}</div>
+                                  <ExcelNumberRangeFilter selectedRange={filterCreditos.cuotas_compradas || {}} onChange={r => handleFilterChange('cuotas_compradas', r)} />
+                                </th>
+                                <th style={{ textAlign: 'right', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                  <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort('valor_actual', sortConfigCreditos, setSortConfigCreditos)}>Valor Actual {renderSortIcon(sortConfigCreditos, 'valor_actual')}</div>
+                                  <ExcelNumberRangeFilter selectedRange={filterCreditos.valor_actual || {}} onChange={r => handleFilterChange('valor_actual', r)} />
+                                </th>
                               </tr>
-                            )
-                          ))}
-                        </tbody>
-                        <tfoot>
-                          <tr>
-                            <td colSpan={tipoOperacion === 'VENTA' ? 4 : 3} style={{ textAlign: 'right', padding: '12px', fontWeight: 'bold' }}>Totales:</td>
-                            <td style={{ textAlign: 'right', padding: '12px', fontWeight: 'bold' }}>${totalMonto.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
-                            <td style={{ textAlign: 'center', padding: '12px', fontWeight: 'bold' }}>{totalCuotas}</td>
-                            <td style={{ textAlign: 'center', padding: '12px', fontWeight: 'bold' }}>{totalCeder}</td>
-                            <td style={{ textAlign: 'right', padding: '12px', fontWeight: 'bold', color: 'var(--accent-secondary)' }}>${totalVa.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
-                            {tipoOperacion === 'VENTA' && <td></td>}
-                          </tr>
-                        </tfoot>
-                      </table>
+                            )}
+                          </thead>
+                          <tbody>
+                            {sortedCreditos.length === 0 && (
+                              <tr><td colSpan={tipoOperacion === 'VENTA' ? 9 : 7} style={{ textAlign: 'center', padding: '16px' }}>No hay créditos que coincidan.</td></tr>
+                            )}
+                            {sortedCreditos.map((c, i) => (
+                              tipoOperacion === 'VENTA' ? (
+                                <tr key={i} style={{ opacity: creditosExcluidos.includes(c.id) ? 0.45 : 1 }}>
+                                  <td style={{ textAlign: 'left', padding: '7px 10px' }}>{c.id}</td>
+                                  <td style={{ textAlign: 'left', padding: '7px 10px' }}>{c.cliente}</td>
+                                  <td style={{ textAlign: 'center', padding: '7px 10px' }}>{c.fecha_emision || '-'}</td>
+                                  <td style={{ textAlign: 'left', padding: '7px 10px' }}>{c.estado}</td>
+                                  <td style={{ textAlign: 'right', padding: '7px 10px' }}>${(c.monto_otorgado || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                                  <td style={{ textAlign: 'center', padding: '7px 10px' }}>{c.total_cuotas}</td>
+                                  <td style={{ textAlign: 'center', padding: '7px 10px' }}>{creditosExcluidos.includes(c.id) ? 0 : c.cuotas_a_ceder}</td>
+                                  <td style={{ textAlign: 'right', padding: '7px 10px', color: 'var(--accent-secondary)' }}>${(creditosExcluidos.includes(c.id) ? 0 : (c.valor_actual || 0)).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                                  <td style={{ textAlign: 'center', padding: '7px 10px' }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleExcluir(c.id)}
+                                      style={{
+                                        padding: '3px 8px',
+                                        fontSize: '11px',
+                                        borderRadius: '4px',
+                                        border: '1px solid',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s ease',
+                                        backgroundColor: creditosExcluidos.includes(c.id) ? 'var(--bg-panel)' : 'rgba(239, 68, 68, 0.12)',
+                                        borderColor: creditosExcluidos.includes(c.id) ? 'var(--border-color)' : 'var(--danger-color)',
+                                        color: creditosExcluidos.includes(c.id) ? 'var(--text-secondary)' : 'var(--danger-color)'
+                                      }}
+                                    >
+                                      {creditosExcluidos.includes(c.id) ? 'Incluir' : 'Excluir'}
+                                    </button>
+                                  </td>
+                                </tr>
+                              ) : (
+                                <tr key={i}>
+                                  <td style={{ textAlign: 'left', padding: '7px 10px' }}>{c.id_externo}</td>
+                                  <td style={{ textAlign: 'left', padding: '7px 10px' }}>{c.cliente_nombre}</td>
+                                  <td style={{ textAlign: 'center', padding: '7px 10px' }}>{c.fecha_emision || '-'}</td>
+                                  <td style={{ textAlign: 'right', padding: '7px 10px' }}>${(c.capital_vendido || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                                  <td style={{ textAlign: 'center', padding: '7px 10px' }}>{c.plazo}</td>
+                                  <td style={{ textAlign: 'center', padding: '7px 10px' }}>{c.cuotas_compradas}</td>
+                                  <td style={{ textAlign: 'right', padding: '7px 10px', color: 'var(--accent-secondary)' }}>${(c.valor_actual || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                                </tr>
+                              )
+                            ))}
+                          </tbody>
+                          <tfoot style={{ position: 'sticky', bottom: 0, zIndex: 10, background: '#0e1217', boxShadow: '0 -2px 6px rgba(0,0,0,0.4)', borderTop: '2px solid rgba(255,255,255,0.15)' }}>
+                            <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
+                              <td colSpan={tipoOperacion === 'VENTA' ? 4 : 3} style={{ textAlign: 'right', padding: '9px 10px', fontWeight: 'bold' }}>Totales:</td>
+                              <td style={{ textAlign: 'right', padding: '9px 10px', fontWeight: 'bold' }}>${totalMonto.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                              <td style={{ textAlign: 'center', padding: '9px 10px', fontWeight: 'bold' }}>{totalCuotas}</td>
+                              <td style={{ textAlign: 'center', padding: '9px 10px', fontWeight: 'bold' }}>{totalCeder}</td>
+                              <td style={{ textAlign: 'right', padding: '9px 10px', fontWeight: 'bold', color: 'var(--accent-secondary)' }}>${totalVa.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                              {tipoOperacion === 'VENTA' && <td></td>}
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
                     </div>
-                  </div>
-                );
-              })()}
+                  );
+                })()}
 
-              {previewTab === 'cuotas' && (() => {
-                const filtered = previewData.cuotas.filter(c => {
-                  return Object.keys(filterCuotas).every(key => {
-                    const filterVal = filterCuotas[key];
-                    if (filterVal === undefined || filterVal === null || filterVal === '' || (Array.isArray(filterVal) && filterVal.length === 0)) return true;
-                    if (typeof filterVal === 'object' && !Array.isArray(filterVal) && ('min' in filterVal || 'max' in filterVal)) {
-                      const val = Number(c[key] || 0);
-                      if (filterVal.min !== undefined && filterVal.min !== null && filterVal.min !== '' && val < Number(filterVal.min)) return false;
-                      if (filterVal.max !== undefined && filterVal.max !== null && filterVal.max !== '' && val > Number(filterVal.max)) return false;
-                      return true;
-                    }
-                    if (Array.isArray(filterVal)) {
-                      if (key === 'incluida' || key === 'comprada') return filterVal.includes(c[key] ? 'Sí' : 'No');
-                      return filterVal.includes(String(c[key] || ''));
-                    }
-                    return String(c[key] || '').toLowerCase().includes(filterVal.toLowerCase());
+                {previewTab === 'cuotas' && (() => {
+                  const filtered = previewData.cuotas.filter(c => {
+                    return Object.keys(filterCuotas).every(key => {
+                      const filterVal = filterCuotas[key];
+                      if (filterVal === undefined || filterVal === null || filterVal === '' || (Array.isArray(filterVal) && filterVal.length === 0)) return true;
+                      if (typeof filterVal === 'object' && !Array.isArray(filterVal) && ('min' in filterVal || 'max' in filterVal)) {
+                        const val = Number(c[key] || 0);
+                        if (filterVal.min !== undefined && filterVal.min !== null && filterVal.min !== '' && val < Number(filterVal.min)) return false;
+                        if (filterVal.max !== undefined && filterVal.max !== null && filterVal.max !== '' && val > Number(filterVal.max)) return false;
+                        return true;
+                      }
+                      if (Array.isArray(filterVal)) {
+                        if (key === 'incluida' || key === 'comprada') return filterVal.includes(c[key] ? 'Sí' : 'No');
+                        return filterVal.includes(String(c[key] || ''));
+                      }
+                      return String(c[key] || '').toLowerCase().includes(filterVal.toLowerCase());
+                    });
                   });
-                });
-                const activeFilteredCuotas = filtered.filter(c => tipoOperacion === 'COMPRA' || !creditosExcluidos.includes(c.credito_id));
-                const sortedCuotas = sortData(filtered, sortConfigCuotas);
-                const totalCap = activeFilteredCuotas.reduce((acc, c) => acc + (c.capital || 0), 0);
-                const totalInt = activeFilteredCuotas.reduce((acc, c) => acc + (c.interes || 0), 0);
-                const totalIva = activeFilteredCuotas.reduce((acc, c) => acc + (c.iva || 0), 0);
-                const totalTotal = activeFilteredCuotas.reduce((acc, c) => acc + (tipoOperacion === 'VENTA' ? c.total_cuota : c.total) || 0, 0);
-                const totalVa = activeFilteredCuotas.reduce((acc, c) => acc + (c.valor_actual || 0), 0);
+                  const activeFilteredCuotas = filtered.filter(c => tipoOperacion === 'COMPRA' || !creditosExcluidos.includes(c.credito_id));
+                  const sortedCuotas = sortData(filtered, sortConfigCuotas);
+                  const totalCap = activeFilteredCuotas.reduce((acc, c) => acc + (c.capital || 0), 0);
+                  const totalInt = activeFilteredCuotas.reduce((acc, c) => acc + (c.interes || 0), 0);
+                  const totalIva = activeFilteredCuotas.reduce((acc, c) => acc + (c.iva || 0), 0);
+                  const totalTotal = activeFilteredCuotas.reduce((acc, c) => acc + (tipoOperacion === 'VENTA' ? c.total_cuota : c.total) || 0, 0);
+                  const totalVa = activeFilteredCuotas.reduce((acc, c) => acc + (c.valor_actual || 0), 0);
 
-                const handleFilterChange = (key, value) => {
-                  setFilterCuotas(prev => ({ ...prev, [key]: value }));
-                };
+                  const handleFilterChange = (key, value) => {
+                    setFilterCuotas(prev => ({ ...prev, [key]: value }));
+                  };
 
-                return (
-                  <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
-                      <button
-                        className="btn-secondary"
-                        onClick={() => setFilterCuotas({})}
-                        title="Limpiar todos los filtros"
-                        style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '100%', padding: '0 12px' }}
-                      >
-                        <FilterX size={16} /> Limpiar Filtros
-                      </button>
-                      <ExportExcelButton data={previewData.cuotas} filteredData={filtered} filename="preview_cuotas" />
-                    </div>
-                    <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', overflowY: 'auto', flex: 1 }}>
-                      <table className="data-table" style={{ width: '100%', fontSize: '13px' }}>
-                        <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-panel)', boxShadow: '0 2px 4px rgba(0,0,0,0.2)' }}>
-                          {tipoOperacion === 'VENTA' ? (
-                            <tr>
-                              <th style={{ textAlign: 'left', padding: '12px', verticalAlign: 'top' }}>
-                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content' }} onClick={() => handleSort('credito_id', sortConfigCuotas, setSortConfigCuotas)}>Crédito ID {renderSortIcon(sortConfigCuotas, 'credito_id')}</div>
-                                <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
-                                  <ExcelListFilter
-                                    availableOptions={Array.from(new Set(previewData.cuotas.map(c => c.credito_id))).map(String)}
-                                    selectedOptions={filterCuotas.credito_id || []}
-                                    onChange={val => handleFilterChange('credito_id', val)}
-                                    title="Filtrar IDs..."
-                                  />
-                                </div>
-                              </th>
-                              <th style={{ textAlign: 'center', padding: '12px', verticalAlign: 'top' }}>
-                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', margin: '0 auto' }} onClick={() => handleSort('nro_cuota', sortConfigCuotas, setSortConfigCuotas)}>Nro Cuota {renderSortIcon(sortConfigCuotas, 'nro_cuota')}</div>
-                                <ExcelNumberRangeFilter selectedRange={filterCuotas.nro_cuota || {}} onChange={r => handleFilterChange('nro_cuota', r)} />
-                              </th>
-                              <th style={{ textAlign: 'left', padding: '12px', verticalAlign: 'top' }}>
-                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content' }} onClick={() => handleSort('fecha_vencimiento', sortConfigCuotas, setSortConfigCuotas)}>Vencimiento {renderSortIcon(sortConfigCuotas, 'fecha_vencimiento')}</div>
-                                <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
-                                  <ExcelDateFilter
-                                    availableDates={availableVencimientosCuotas}
-                                    selectedDates={filterCuotas.fecha_vencimiento || []}
-                                    onChange={dates => handleFilterChange('fecha_vencimiento', dates)}
-                                  />
-                                </div>
-                              </th>
-                              <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
-                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort('capital', sortConfigCuotas, setSortConfigCuotas)}>Capital {renderSortIcon(sortConfigCuotas, 'capital')}</div>
-                                <ExcelNumberRangeFilter selectedRange={filterCuotas.capital || {}} onChange={r => handleFilterChange('capital', r)} />
-                              </th>
-                              <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
-                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort('interes', sortConfigCuotas, setSortConfigCuotas)}>Interés {renderSortIcon(sortConfigCuotas, 'interes')}</div>
-                                <ExcelNumberRangeFilter selectedRange={filterCuotas.interes || {}} onChange={r => handleFilterChange('interes', r)} />
-                              </th>
-                              <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
-                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort('iva', sortConfigCuotas, setSortConfigCuotas)}>IVA {renderSortIcon(sortConfigCuotas, 'iva')}</div>
-                                <ExcelNumberRangeFilter selectedRange={filterCuotas.iva || {}} onChange={r => handleFilterChange('iva', r)} />
-                              </th>
-                              <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
-                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort('total_cuota', sortConfigCuotas, setSortConfigCuotas)}>Total Cuota {renderSortIcon(sortConfigCuotas, 'total_cuota')}</div>
-                                <ExcelNumberRangeFilter selectedRange={filterCuotas.total_cuota || {}} onChange={r => handleFilterChange('total_cuota', r)} />
-                              </th>
-                              <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
-                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort('valor_actual', sortConfigCreditos, setSortConfigCreditos)}>Valor Actual {renderSortIcon(sortConfigCreditos, 'valor_actual')}</div>
-                                <ExcelNumberRangeFilter selectedRange={filterCuotas.valor_actual || {}} onChange={r => handleFilterChange('valor_actual', r)} />
-                              </th>
-                              <th style={{ textAlign: 'center', padding: '12px', verticalAlign: 'top' }}>
-                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', margin: '0 auto' }} onClick={() => handleSort('incluida', sortConfigCuotas, setSortConfigCuotas)}>Incluida {renderSortIcon(sortConfigCuotas, 'incluida')}</div>
-                                <div onClick={e => { e.stopPropagation(); setShowPreviewIncluidaFilter(!showPreviewIncluidaFilter); }} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', background: 'rgba(255,255,255,0.1)', border: '1px solid var(--border-color)', borderRadius: '4px', textAlign: 'center', cursor: 'pointer' }}>
-                                  {!(filterCuotas.incluida?.length) ? "Todos" : `${filterCuotas.incluida.length} selec.`}
-                                </div>
-                                {showPreviewIncluidaFilter && (
-                                  <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', top: '100%', right: 0, zIndex: 100, background: 'var(--surface-color)', border: '1px solid var(--border-color)', borderRadius: '4px', padding: '8px', display: 'flex', flexDirection: 'column', gap: '4px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)', marginTop: '4px', minWidth: '80px', textAlign: 'left' }}>
-                                    {['Sí', 'No'].map(est => (
-                                      <label key={est} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 'normal', cursor: 'pointer', margin: 0 }}>
-                                        <input type="checkbox" checked={filterCuotas.incluida?.includes(est) || false} onChange={() => {
-                                          const current = filterCuotas.incluida || [];
-                                          handleFilterChange('incluida', current.includes(est) ? current.filter(x => x !== est) : [...current, est]);
-                                        }} />
-                                        {est}
-                                      </label>
-                                    ))}
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px', flexShrink: 0 }}>
+                        <button
+                          className="btn-secondary"
+                          onClick={() => setFilterCuotas({})}
+                          title="Limpiar todos los filtros"
+                          style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '32px', padding: '0 12px', fontSize: '12px' }}
+                        >
+                          <FilterX size={14} /> Limpiar Filtros
+                        </button>
+                        <ExportExcelButton data={previewData.cuotas} filteredData={filtered} filename="preview_cuotas" />
+                        <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: 'auto' }}>
+                          Mostrando {filtered.length} de {previewData.cuotas.length} cuotas
+                        </span>
+                      </div>
+                      <div style={{ background: 'rgba(0,0,0,0.25)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)', overflow: 'auto', flex: 1, minHeight: 0 }}>
+                        <table className="data-table compact" style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
+                          <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-panel)', boxShadow: '0 2px 4px rgba(0,0,0,0.3)' }}>
+                            {tipoOperacion === 'VENTA' ? (
+                              <tr>
+                                <th style={{ textAlign: 'left', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                  <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content' }} onClick={() => handleSort('credito_id', sortConfigCuotas, setSortConfigCuotas)}>Crédito ID {renderSortIcon(sortConfigCuotas, 'credito_id')}</div>
+                                  <div style={{ marginTop: '4px' }} onClick={e => e.stopPropagation()}>
+                                    <ExcelListFilter
+                                      availableOptions={Array.from(new Set(previewData.cuotas.map(c => c.credito_id))).map(String)}
+                                      selectedOptions={filterCuotas.credito_id || []}
+                                      onChange={val => handleFilterChange('credito_id', val)}
+                                      title="Filtrar IDs..."
+                                    />
                                   </div>
-                                )}
-                              </th>
-                            </tr>
-                          ) : (
-                            <tr>
-                              <th style={{ textAlign: 'left', padding: '12px', verticalAlign: 'top' }}>
-                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content' }} onClick={() => handleSort('credito_id_externo', sortConfigCuotas, setSortConfigCuotas)}>ID Ext. {renderSortIcon(sortConfigCuotas, 'credito_id_externo')}</div>
-                                <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
-                                  <ExcelListFilter
-                                    availableOptions={Array.from(new Set(previewData.cuotas.map(c => c.credito_id_externo).filter(Boolean))).map(String)}
-                                    selectedOptions={filterCuotas.credito_id_externo || []}
-                                    onChange={val => handleFilterChange('credito_id_externo', val)}
-                                    title="Filtrar IDs..."
-                                  />
-                                </div>
-                              </th>
-                              <th style={{ textAlign: 'center', padding: '12px', verticalAlign: 'top' }}>
-                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', margin: '0 auto' }} onClick={() => handleSort('nro_cuota', sortConfigCuotas, setSortConfigCuotas)}>Cuota {renderSortIcon(sortConfigCuotas, 'nro_cuota')}</div>
-                                <ExcelNumberRangeFilter selectedRange={filterCuotas.nro_cuota || {}} onChange={r => handleFilterChange('nro_cuota', r)} />
-                              </th>
-                              <th style={{ textAlign: 'left', padding: '12px', verticalAlign: 'top' }}>
-                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content' }} onClick={() => handleSort('fecha_vencimiento', sortConfigCuotas, setSortConfigCuotas)}>Vencimiento {renderSortIcon(sortConfigCuotas, 'fecha_vencimiento')}</div>
-                                <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
-                                  <ExcelDateFilter
-                                    availableDates={availableVencimientosCuotas}
-                                    selectedDates={filterCuotas.fecha_vencimiento || []}
-                                    onChange={dates => handleFilterChange('fecha_vencimiento', dates)}
-                                  />
-                                </div>
-                              </th>
-                              <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
-                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort('capital', sortConfigCuotas, setSortConfigCuotas)}>Capital {renderSortIcon(sortConfigCuotas, 'capital')}</div>
-                                <ExcelNumberRangeFilter selectedRange={filterCuotas.capital || {}} onChange={r => handleFilterChange('capital', r)} />
-                              </th>
-                              <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
-                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort('interes', sortConfigCuotas, setSortConfigCuotas)}>Interés {renderSortIcon(sortConfigCuotas, 'interes')}</div>
-                                <ExcelNumberRangeFilter selectedRange={filterCuotas.interes || {}} onChange={r => handleFilterChange('interes', r)} />
-                              </th>
-                              <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
-                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort('iva', sortConfigCuotas, setSortConfigCuotas)}>IVA {renderSortIcon(sortConfigCuotas, 'iva')}</div>
-                                <ExcelNumberRangeFilter selectedRange={filterCuotas.iva || {}} onChange={r => handleFilterChange('iva', r)} />
-                              </th>
-                              <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
-                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort('total', sortConfigCuotas, setSortConfigCuotas)}>Total {renderSortIcon(sortConfigCuotas, 'total')}</div>
-                                <ExcelNumberRangeFilter selectedRange={filterCuotas.total || {}} onChange={r => handleFilterChange('total', r)} />
-                              </th>
-                              <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
-                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort('valor_actual', sortConfigCuotas, setSortConfigCuotas)}>V. Actual {renderSortIcon(sortConfigCuotas, 'valor_actual')}</div>
-                                <ExcelNumberRangeFilter selectedRange={filterCuotas.valor_actual || {}} onChange={r => handleFilterChange('valor_actual', r)} />
-                              </th>
-                              <th style={{ textAlign: 'center', padding: '12px', verticalAlign: 'top' }}>
-                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', margin: '0 auto' }} onClick={() => handleSort('comprada', sortConfigCuotas, setSortConfigCuotas)}>Comprada {renderSortIcon(sortConfigCuotas, 'comprada')}</div>
-                                <div onClick={e => { e.stopPropagation(); setShowPreviewCompradaFilter(!showPreviewCompradaFilter); }} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px', background: 'rgba(255,255,255,0.1)', border: '1px solid var(--border-color)', borderRadius: '4px', textAlign: 'center', cursor: 'pointer' }}>
-                                  {!(filterCuotas.comprada?.length) ? "Todos" : `${filterCuotas.comprada.length} selec.`}
-                                </div>
-                                {showPreviewCompradaFilter && (
-                                  <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', top: '100%', right: 0, zIndex: 100, background: 'var(--surface-color)', border: '1px solid var(--border-color)', borderRadius: '4px', padding: '8px', display: 'flex', flexDirection: 'column', gap: '4px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)', marginTop: '4px', minWidth: '80px', textAlign: 'left' }}>
-                                    {['Sí', 'No'].map(est => (
-                                      <label key={est} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 'normal', cursor: 'pointer', margin: 0 }}>
-                                        <input type="checkbox" checked={filterCuotas.comprada?.includes(est) || false} onChange={() => {
-                                          const current = filterCuotas.comprada || [];
-                                          handleFilterChange('comprada', current.includes(est) ? current.filter(x => x !== est) : [...current, est]);
-                                        }} />
-                                        {est}
-                                      </label>
-                                    ))}
+                                </th>
+                                <th style={{ textAlign: 'center', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                  <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', margin: '0 auto' }} onClick={() => handleSort('nro_cuota', sortConfigCuotas, setSortConfigCuotas)}>Nro Cuota {renderSortIcon(sortConfigCuotas, 'nro_cuota')}</div>
+                                  <ExcelNumberRangeFilter selectedRange={filterCuotas.nro_cuota || {}} onChange={r => handleFilterChange('nro_cuota', r)} />
+                                </th>
+                                <th style={{ textAlign: 'left', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                  <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content' }} onClick={() => handleSort('fecha_vencimiento', sortConfigCuotas, setSortConfigCuotas)}>Vencimiento {renderSortIcon(sortConfigCuotas, 'fecha_vencimiento')}</div>
+                                  <div style={{ marginTop: '4px' }} onClick={e => e.stopPropagation()}>
+                                    <ExcelDateFilter
+                                      availableDates={availableVencimientosCuotas}
+                                      selectedDates={filterCuotas.fecha_vencimiento || []}
+                                      onChange={dates => handleFilterChange('fecha_vencimiento', dates)}
+                                    />
                                   </div>
-                                )}
-                              </th>
-                            </tr>
-                          )}
-                        </thead>
-                        <tbody>
-                          {sortedCuotas.length === 0 && (
-                            <tr><td colSpan="9" style={{ textAlign: 'center', padding: '16px' }}>No hay cuotas que coincidan.</td></tr>
-                          )}
-                          {sortedCuotas.map((c, i) => (
-                            tipoOperacion === 'VENTA' ? (
-                              <tr key={i} style={{ opacity: (c.incluida && !creditosExcluidos.includes(c.credito_id)) ? 1 : 0.5 }}>
-                                <td style={{ textAlign: 'left', padding: '12px' }}>{c.credito_id}</td>
-                                <td style={{ textAlign: 'center', padding: '12px' }}>{c.nro_cuota}</td>
-                                <td style={{ textAlign: 'left', padding: '12px' }}>{c.fecha_vencimiento}</td>
-                                <td style={{ textAlign: 'right', padding: '12px' }}>${(c.capital || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
-                                <td style={{ textAlign: 'right', padding: '12px' }}>${(c.interes || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
-                                <td style={{ textAlign: 'right', padding: '12px' }}>${(c.iva || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
-                                <td style={{ textAlign: 'right', padding: '12px' }}>${(c.total_cuota || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
-                                <td style={{ textAlign: 'right', padding: '12px', color: 'var(--accent-secondary)' }}>${(creditosExcluidos.includes(c.credito_id) ? 0 : (c.valor_actual || 0)).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
-                                <td style={{ textAlign: 'center', padding: '12px' }}>
-                                  <span className={`badge ${c.incluida && !creditosExcluidos.includes(c.credito_id) ? 'success' : 'danger'}`}>
-                                    {c.incluida && !creditosExcluidos.includes(c.credito_id) ? 'Sí' : 'No'}
-                                  </span>
-                                </td>
+                                </th>
+                                <th style={{ textAlign: 'right', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                  <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort('capital', sortConfigCuotas, setSortConfigCuotas)}>Capital {renderSortIcon(sortConfigCuotas, 'capital')}</div>
+                                  <ExcelNumberRangeFilter selectedRange={filterCuotas.capital || {}} onChange={r => handleFilterChange('capital', r)} />
+                                </th>
+                                <th style={{ textAlign: 'right', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                  <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort('interes', sortConfigCuotas, setSortConfigCuotas)}>Interés {renderSortIcon(sortConfigCuotas, 'interes')}</div>
+                                  <ExcelNumberRangeFilter selectedRange={filterCuotas.interes || {}} onChange={r => handleFilterChange('interes', r)} />
+                                </th>
+                                <th style={{ textAlign: 'right', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                  <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort('iva', sortConfigCuotas, setSortConfigCuotas)}>IVA {renderSortIcon(sortConfigCuotas, 'iva')}</div>
+                                  <ExcelNumberRangeFilter selectedRange={filterCuotas.iva || {}} onChange={r => handleFilterChange('iva', r)} />
+                                </th>
+                                <th style={{ textAlign: 'right', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                  <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort('total_cuota', sortConfigCuotas, setSortConfigCuotas)}>Total Cuota {renderSortIcon(sortConfigCuotas, 'total_cuota')}</div>
+                                  <ExcelNumberRangeFilter selectedRange={filterCuotas.total_cuota || {}} onChange={r => handleFilterChange('total_cuota', r)} />
+                                </th>
+                                <th style={{ textAlign: 'right', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                  <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort('valor_actual', sortConfigCuotas, setSortConfigCuotas)}>Valor Actual {renderSortIcon(sortConfigCuotas, 'valor_actual')}</div>
+                                  <ExcelNumberRangeFilter selectedRange={filterCuotas.valor_actual || {}} onChange={r => handleFilterChange('valor_actual', r)} />
+                                </th>
+                                <th style={{ textAlign: 'center', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                  <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', margin: '0 auto' }} onClick={() => handleSort('incluida', sortConfigCuotas, setSortConfigCuotas)}>Incluida {renderSortIcon(sortConfigCuotas, 'incluida')}</div>
+                                  <div onClick={e => { e.stopPropagation(); setShowPreviewIncluidaFilter(!showPreviewIncluidaFilter); }} style={{ width: '100%', marginTop: '4px', padding: '3px 6px', fontSize: '11px', background: 'rgba(255,255,255,0.1)', border: '1px solid var(--border-color)', borderRadius: '4px', textAlign: 'center', cursor: 'pointer' }}>
+                                    {!(filterCuotas.incluida?.length) ? "Todos" : `${filterCuotas.incluida.length} selec.`}
+                                  </div>
+                                  {showPreviewIncluidaFilter && (
+                                    <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', top: '100%', right: 0, zIndex: 100, background: 'var(--surface-color)', border: '1px solid var(--border-color)', borderRadius: '4px', padding: '8px', display: 'flex', flexDirection: 'column', gap: '4px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)', marginTop: '4px', minWidth: '80px', textAlign: 'left' }}>
+                                      {['Sí', 'No'].map(est => (
+                                        <label key={est} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 'normal', cursor: 'pointer', margin: 0 }}>
+                                          <input type="checkbox" checked={filterCuotas.incluida?.includes(est) || false} onChange={() => {
+                                            const current = filterCuotas.incluida || [];
+                                            handleFilterChange('incluida', current.includes(est) ? current.filter(x => x !== est) : [...current, est]);
+                                          }} />
+                                          {est}
+                                        </label>
+                                      ))}
+                                    </div>
+                                  )}
+                                </th>
                               </tr>
                             ) : (
-                              <tr key={i} style={{ opacity: c.comprada ? 1 : 0.5 }}>
-                                <td style={{ textAlign: 'left', padding: '12px' }}>{c.credito_id_externo}</td>
-                                <td style={{ textAlign: 'center', padding: '12px' }}>{c.nro_cuota}</td>
-                                <td style={{ textAlign: 'left', padding: '12px' }}>{c.fecha_vencimiento}</td>
-                                <td style={{ textAlign: 'right', padding: '12px' }}>${(c.capital || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
-                                <td style={{ textAlign: 'right', padding: '12px' }}>${(c.interes || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
-                                <td style={{ textAlign: 'right', padding: '12px' }}>${(c.iva || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
-                                <td style={{ textAlign: 'right', padding: '12px' }}>${(c.total || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
-                                <td style={{ textAlign: 'right', padding: '12px', color: 'var(--accent-secondary)' }}>${(c.valor_actual || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
-                                <td style={{ textAlign: 'center', padding: '12px' }}>{c.comprada ? 'Sí' : 'No'}</td>
+                              <tr>
+                                <th style={{ textAlign: 'left', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                  <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content' }} onClick={() => handleSort('credito_id_externo', sortConfigCuotas, setSortConfigCuotas)}>ID Ext. {renderSortIcon(sortConfigCuotas, 'credito_id_externo')}</div>
+                                  <div style={{ marginTop: '4px' }} onClick={e => e.stopPropagation()}>
+                                    <ExcelListFilter
+                                      availableOptions={Array.from(new Set(previewData.cuotas.map(c => c.credito_id_externo).filter(Boolean))).map(String)}
+                                      selectedOptions={filterCuotas.credito_id_externo || []}
+                                      onChange={val => handleFilterChange('credito_id_externo', val)}
+                                      title="Filtrar IDs..."
+                                    />
+                                  </div>
+                                </th>
+                                <th style={{ textAlign: 'center', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                  <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', margin: '0 auto' }} onClick={() => handleSort('nro_cuota', sortConfigCuotas, setSortConfigCuotas)}>Cuota {renderSortIcon(sortConfigCuotas, 'nro_cuota')}</div>
+                                  <ExcelNumberRangeFilter selectedRange={filterCuotas.nro_cuota || {}} onChange={r => handleFilterChange('nro_cuota', r)} />
+                                </th>
+                                <th style={{ textAlign: 'left', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                  <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content' }} onClick={() => handleSort('fecha_vencimiento', sortConfigCuotas, setSortConfigCuotas)}>Vencimiento {renderSortIcon(sortConfigCuotas, 'fecha_vencimiento')}</div>
+                                  <div style={{ marginTop: '4px' }} onClick={e => e.stopPropagation()}>
+                                    <ExcelDateFilter
+                                      availableDates={availableVencimientosCuotas}
+                                      selectedDates={filterCuotas.fecha_vencimiento || []}
+                                      onChange={dates => handleFilterChange('fecha_vencimiento', dates)}
+                                    />
+                                  </div>
+                                </th>
+                                <th style={{ textAlign: 'right', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                  <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort('capital', sortConfigCuotas, setSortConfigCuotas)}>Capital {renderSortIcon(sortConfigCuotas, 'capital')}</div>
+                                  <ExcelNumberRangeFilter selectedRange={filterCuotas.capital || {}} onChange={r => handleFilterChange('capital', r)} />
+                                </th>
+                                <th style={{ textAlign: 'right', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                  <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort('interes', sortConfigCuotas, setSortConfigCuotas)}>Interés {renderSortIcon(sortConfigCuotas, 'interes')}</div>
+                                  <ExcelNumberRangeFilter selectedRange={filterCuotas.interes || {}} onChange={r => handleFilterChange('interes', r)} />
+                                </th>
+                                <th style={{ textAlign: 'right', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                  <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort('iva', sortConfigCuotas, setSortConfigCuotas)}>IVA {renderSortIcon(sortConfigCuotas, 'iva')}</div>
+                                  <ExcelNumberRangeFilter selectedRange={filterCuotas.iva || {}} onChange={r => handleFilterChange('iva', r)} />
+                                </th>
+                                <th style={{ textAlign: 'right', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                  <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort('total', sortConfigCuotas, setSortConfigCuotas)}>Total {renderSortIcon(sortConfigCuotas, 'total')}</div>
+                                  <ExcelNumberRangeFilter selectedRange={filterCuotas.total || {}} onChange={r => handleFilterChange('total', r)} />
+                                </th>
+                                <th style={{ textAlign: 'right', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                  <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort('valor_actual', sortConfigCuotas, setSortConfigCuotas)}>Valor Actual {renderSortIcon(sortConfigCuotas, 'valor_actual')}</div>
+                                  <ExcelNumberRangeFilter selectedRange={filterCuotas.valor_actual || {}} onChange={r => handleFilterChange('valor_actual', r)} />
+                                </th>
+                                <th style={{ textAlign: 'center', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                  <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', margin: '0 auto' }} onClick={() => handleSort('comprada', sortConfigCuotas, setSortConfigCuotas)}>Comprada {renderSortIcon(sortConfigCuotas, 'comprada')}</div>
+                                  <div onClick={e => { e.stopPropagation(); setShowPreviewCompradaFilter(!showPreviewCompradaFilter); }} style={{ width: '100%', marginTop: '4px', padding: '3px 6px', fontSize: '11px', background: 'rgba(255,255,255,0.1)', border: '1px solid var(--border-color)', borderRadius: '4px', textAlign: 'center', cursor: 'pointer' }}>
+                                    {!(filterCuotas.comprada?.length) ? "Todos" : `${filterCuotas.comprada.length} selec.`}
+                                  </div>
+                                  {showPreviewCompradaFilter && (
+                                    <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', top: '100%', right: 0, zIndex: 100, background: 'var(--surface-color)', border: '1px solid var(--border-color)', borderRadius: '4px', padding: '8px', display: 'flex', flexDirection: 'column', gap: '4px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)', marginTop: '4px', minWidth: '80px', textAlign: 'left' }}>
+                                      {['Sí', 'No'].map(est => (
+                                        <label key={est} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 'normal', cursor: 'pointer', margin: 0 }}>
+                                          <input type="checkbox" checked={filterCuotas.comprada?.includes(est) || false} onChange={() => {
+                                            const current = filterCuotas.comprada || [];
+                                            handleFilterChange('comprada', current.includes(est) ? current.filter(x => x !== est) : [...current, est]);
+                                          }} />
+                                          {est}
+                                        </label>
+                                      ))}
+                                    </div>
+                                  )}
+                                </th>
                               </tr>
-                            )
-                          ))}
-                        </tbody>
-                        <tfoot>
-                          <tr>
-                            <td colSpan={3} style={{ textAlign: 'right', padding: '12px', fontWeight: 'bold' }}>Totales:</td>
-                            <td style={{ textAlign: 'right', padding: '12px', fontWeight: 'bold' }}>${totalCap.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
-                            <td style={{ textAlign: 'right', padding: '12px', fontWeight: 'bold' }}>${totalInt.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
-                            <td style={{ textAlign: 'right', padding: '12px', fontWeight: 'bold' }}>${totalIva.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
-                            <td style={{ textAlign: 'right', padding: '12px', fontWeight: 'bold' }}>${totalTotal.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
-                            <td style={{ textAlign: 'right', padding: '12px', fontWeight: 'bold', color: 'var(--accent-secondary)' }}>${totalVa.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
-                            <td></td>
-                          </tr>
-                        </tfoot>
-                      </table>
+                            )}
+                          </thead>
+                          <tbody>
+                            {sortedCuotas.length === 0 && (
+                              <tr><td colSpan={tipoOperacion === 'VENTA' ? 9 : 9} style={{ textAlign: 'center', padding: '16px' }}>No hay cuotas que coincidan.</td></tr>
+                            )}
+                            {sortedCuotas.map((c, i) => (
+                              tipoOperacion === 'VENTA' ? (
+                                <tr key={i} style={{ opacity: c.incluida && !creditosExcluidos.includes(c.credito_id) ? 1 : 0.45 }}>
+                                  <td style={{ textAlign: 'left', padding: '7px 10px' }}>{c.credito_id}</td>
+                                  <td style={{ textAlign: 'center', padding: '7px 10px' }}>{c.nro_cuota}</td>
+                                  <td style={{ textAlign: 'left', padding: '7px 10px' }}>{c.fecha_vencimiento}</td>
+                                  <td style={{ textAlign: 'right', padding: '7px 10px' }}>${(c.capital || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                                  <td style={{ textAlign: 'right', padding: '7px 10px' }}>${(c.interes || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                                  <td style={{ textAlign: 'right', padding: '7px 10px' }}>${(c.iva || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                                  <td style={{ textAlign: 'right', padding: '7px 10px' }}>${(c.total_cuota || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                                  <td style={{ textAlign: 'right', padding: '7px 10px', color: 'var(--accent-secondary)' }}>${(creditosExcluidos.includes(c.credito_id) ? 0 : (c.valor_actual || 0)).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                                  <td style={{ textAlign: 'center', padding: '7px 10px' }}>
+                                    <span className={`badge ${c.incluida && !creditosExcluidos.includes(c.credito_id) ? 'success' : 'danger'}`}>
+                                      {c.incluida && !creditosExcluidos.includes(c.credito_id) ? 'Sí' : 'No'}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ) : (
+                                <tr key={i} style={{ opacity: c.comprada ? 1 : 0.45 }}>
+                                  <td style={{ textAlign: 'left', padding: '7px 10px' }}>{c.credito_id_externo}</td>
+                                  <td style={{ textAlign: 'center', padding: '7px 10px' }}>{c.nro_cuota}</td>
+                                  <td style={{ textAlign: 'left', padding: '7px 10px' }}>{c.fecha_vencimiento}</td>
+                                  <td style={{ textAlign: 'right', padding: '7px 10px' }}>${(c.capital || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                                  <td style={{ textAlign: 'right', padding: '7px 10px' }}>${(c.interes || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                                  <td style={{ textAlign: 'right', padding: '7px 10px' }}>${(c.iva || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                                  <td style={{ textAlign: 'right', padding: '7px 10px' }}>${(c.total || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                                  <td style={{ textAlign: 'right', padding: '7px 10px', color: 'var(--accent-secondary)' }}>${(c.valor_actual || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                                  <td style={{ textAlign: 'center', padding: '7px 10px' }}>{c.comprada ? 'Sí' : 'No'}</td>
+                                </tr>
+                              )
+                            ))}
+                          </tbody>
+                          <tfoot style={{ position: 'sticky', bottom: 0, zIndex: 10, background: '#0e1217', boxShadow: '0 -2px 6px rgba(0,0,0,0.4)', borderTop: '2px solid rgba(255,255,255,0.15)' }}>
+                            <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
+                              <td colSpan={3} style={{ textAlign: 'right', padding: '9px 10px', fontWeight: 'bold' }}>Totales:</td>
+                              <td style={{ textAlign: 'right', padding: '9px 10px', fontWeight: 'bold' }}>${totalCap.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                              <td style={{ textAlign: 'right', padding: '9px 10px', fontWeight: 'bold' }}>${totalInt.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                              <td style={{ textAlign: 'right', padding: '9px 10px', fontWeight: 'bold' }}>${totalIva.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                              <td style={{ textAlign: 'right', padding: '9px 10px', fontWeight: 'bold' }}>${totalTotal.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                              <td style={{ textAlign: 'right', padding: '9px 10px', fontWeight: 'bold', color: 'var(--accent-secondary)' }}>${totalVa.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                              <td></td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
                     </div>
-                  </div>
-                );
-              })()}
+                  );
+                })()}
 
-              {previewTab === 'resumen' && (() => {
-                let resumenData = previewData.resumen;
-                if (tipoOperacion === 'VENTA') {
-                  const activeCuotas = previewData.cuotas.filter(c => c.incluida && !creditosExcluidos.includes(c.credito_id));
-                  const grouped = {};
-                  activeCuotas.forEach(c => {
-                    const mes = c.fecha_vencimiento ? c.fecha_vencimiento.substring(0, 7) : 'Sin Fecha';
-                    if (!grouped[mes]) grouped[mes] = { fecha_vencimiento: mes, cantidad: 0, capital: 0, interes: 0, iva: 0, total_cuota: 0, valor_actual: 0 };
-                    grouped[mes].cantidad++;
-                    grouped[mes].capital += (c.capital || 0);
-                    grouped[mes].interes += (c.interes || 0);
-                    grouped[mes].iva += (c.iva || 0);
-                    grouped[mes].total_cuota += (c.total_cuota || 0);
-                    grouped[mes].valor_actual += (c.valor_actual || 0);
+                {previewTab === 'resumen' && (() => {
+                  let resumenData = previewData.resumen;
+                  if (tipoOperacion === 'VENTA') {
+                    const activeCuotas = previewData.cuotas.filter(c => c.incluida && !creditosExcluidos.includes(c.credito_id));
+                    const grouped = {};
+                    activeCuotas.forEach(c => {
+                      const mes = c.fecha_vencimiento ? c.fecha_vencimiento.substring(0, 7) : 'Sin Fecha';
+                      if (!grouped[mes]) grouped[mes] = { fecha_vencimiento: mes, cantidad: 0, capital: 0, interes: 0, iva: 0, total_cuota: 0, valor_actual: 0 };
+                      grouped[mes].cantidad++;
+                      grouped[mes].capital += (c.capital || 0);
+                      grouped[mes].interes += (c.interes || 0);
+                      grouped[mes].iva += (c.iva || 0);
+                      grouped[mes].total_cuota += (c.total_cuota || 0);
+                      grouped[mes].valor_actual += (c.valor_actual || 0);
+                    });
+                    resumenData = Object.values(grouped).sort((a, b) => a.fecha_vencimiento.localeCompare(b.fecha_vencimiento));
+                  }
+
+                  const filtered = resumenData.filter(c => {
+                    return Object.keys(filterResumen).every(key => {
+                      const filterVal = filterResumen[key];
+                      if (filterVal === undefined || filterVal === null || filterVal === '' || (Array.isArray(filterVal) && filterVal.length === 0)) return true;
+                      if (typeof filterVal === 'object' && !Array.isArray(filterVal) && ('min' in filterVal || 'max' in filterVal)) {
+                        const val = Number(c[key] || 0);
+                        if (filterVal.min !== undefined && filterVal.min !== null && filterVal.min !== '' && val < Number(filterVal.min)) return false;
+                        if (filterVal.max !== undefined && filterVal.max !== null && filterVal.max !== '' && val > Number(filterVal.max)) return false;
+                        return true;
+                      }
+                      if (Array.isArray(filterVal)) {
+                        return filterVal.includes(String(c[key] || ''));
+                      }
+                      return String(c[key] || '').toLowerCase().includes(String(filterVal).toLowerCase());
+                    });
                   });
-                  resumenData = Object.values(grouped).sort((a, b) => a.fecha_vencimiento.localeCompare(b.fecha_vencimiento));
-                }
+                  const sortedResumen = sortData(filtered, sortConfigResumen);
+                  const totalCuotas = filtered.reduce((acc, r) => acc + (tipoOperacion === 'VENTA' ? r.cantidad : r.cantidad_cuotas) || 0, 0);
+                  const totalCap = filtered.reduce((acc, r) => acc + (tipoOperacion === 'VENTA' ? r.capital : r.capital_total) || 0, 0);
+                  const totalInt = filtered.reduce((acc, r) => acc + (tipoOperacion === 'VENTA' ? r.interes : r.interes_total) || 0, 0);
+                  const totalIva = filtered.reduce((acc, r) => acc + (tipoOperacion === 'VENTA' ? r.iva : r.iva_total) || 0, 0);
+                  const totalTot = filtered.reduce((acc, r) => acc + (tipoOperacion === 'VENTA' ? r.total_cuota : r.monto_total) || 0, 0);
+                  const totalVa = filtered.reduce((acc, r) => acc + (r.valor_actual || 0), 0);
 
-                const filtered = resumenData.filter(c => {
-                  return Object.keys(filterResumen).every(key => {
-                    const filterVal = filterResumen[key];
-                    if (filterVal === undefined || filterVal === null || filterVal === '' || (Array.isArray(filterVal) && filterVal.length === 0)) return true;
-                    if (typeof filterVal === 'object' && !Array.isArray(filterVal) && ('min' in filterVal || 'max' in filterVal)) {
-                      const val = Number(c[key] || 0);
-                      if (filterVal.min !== undefined && filterVal.min !== null && filterVal.min !== '' && val < Number(filterVal.min)) return false;
-                      if (filterVal.max !== undefined && filterVal.max !== null && filterVal.max !== '' && val > Number(filterVal.max)) return false;
-                      return true;
-                    }
-                    if (Array.isArray(filterVal)) {
-                      return filterVal.includes(String(c[key] || ''));
-                    }
-                    return String(c[key] || '').toLowerCase().includes(String(filterVal).toLowerCase());
-                  });
-                });
-                const sortedResumen = sortData(filtered, sortConfigResumen);
-                const totalCuotas = filtered.reduce((acc, r) => acc + (tipoOperacion === 'VENTA' ? r.cantidad : r.cantidad_cuotas) || 0, 0);
-                const totalCap = filtered.reduce((acc, r) => acc + (tipoOperacion === 'VENTA' ? r.capital : r.capital_total) || 0, 0);
-                const totalInt = filtered.reduce((acc, r) => acc + (tipoOperacion === 'VENTA' ? r.interes : r.interes_total) || 0, 0);
-                const totalIva = filtered.reduce((acc, r) => acc + (tipoOperacion === 'VENTA' ? r.iva : r.iva_total) || 0, 0);
-                const totalTot = filtered.reduce((acc, r) => acc + (tipoOperacion === 'VENTA' ? r.total_cuota : r.monto_total) || 0, 0);
-                const totalVa = filtered.reduce((acc, r) => acc + (r.valor_actual || 0), 0);
+                  const handleFilterChange = (key, value) => {
+                    setFilterResumen(prev => ({ ...prev, [key]: value }));
+                  };
 
-                const handleFilterChange = (key, value) => {
-                  setFilterResumen(prev => ({ ...prev, [key]: value }));
-                };
-
-                return (
-                  <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
-                      <button
-                        className="btn-secondary"
-                        onClick={() => setFilterResumen({})}
-                        title="Limpiar todos los filtros"
-                        style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '100%', padding: '0 12px' }}
-                      >
-                        <FilterX size={16} /> Limpiar Filtros
-                      </button>
-                      <ExportExcelButton data={resumenData} filteredData={filtered} filename="preview_vencimientos" />
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px', flexShrink: 0 }}>
+                        <button
+                          className="btn-secondary"
+                          onClick={() => setFilterResumen({})}
+                          title="Limpiar todos los filtros"
+                          style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '32px', padding: '0 12px', fontSize: '12px' }}
+                        >
+                          <FilterX size={14} /> Limpiar Filtros
+                        </button>
+                        <ExportExcelButton data={resumenData} filteredData={filtered} filename="preview_vencimientos" />
+                        <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: 'auto' }}>
+                          Mostrando {filtered.length} de {resumenData.length} períodos de vencimiento
+                        </span>
+                      </div>
+                      <div style={{ background: 'rgba(0,0,0,0.25)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)', overflow: 'auto', flex: 1, minHeight: 0 }}>
+                        <table className="data-table compact" style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
+                          <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-panel)', boxShadow: '0 2px 4px rgba(0,0,0,0.3)' }}>
+                            <tr>
+                              <th style={{ textAlign: 'left', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content' }} onClick={() => handleSort(tipoOperacion === 'VENTA' ? 'fecha_vencimiento' : 'mes', sortConfigResumen, setSortConfigResumen)}>{tipoOperacion === 'VENTA' ? 'Mes Vto.' : 'Mes'} {renderSortIcon(sortConfigResumen, tipoOperacion === 'VENTA' ? 'fecha_vencimiento' : 'mes')}</div>
+                                <div style={{ marginTop: '4px' }} onClick={e => e.stopPropagation()}>
+                                  <ExcelDateFilter
+                                    availableDates={availableMesesResumen}
+                                    selectedDates={tipoOperacion === 'VENTA' ? (filterResumen.fecha_vencimiento || []) : (filterResumen.mes || [])}
+                                    onChange={dates => handleFilterChange(tipoOperacion === 'VENTA' ? 'fecha_vencimiento' : 'mes', dates)}
+                                  />
+                                </div>
+                              </th>
+                              <th style={{ textAlign: 'right', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort(tipoOperacion === 'VENTA' ? 'cantidad' : 'cantidad_cuotas', sortConfigResumen, setSortConfigResumen)}>Cuotas {renderSortIcon(sortConfigResumen, tipoOperacion === 'VENTA' ? 'cantidad' : 'cantidad_cuotas')}</div>
+                                <ExcelNumberRangeFilter selectedRange={tipoOperacion === 'VENTA' ? (filterResumen.cantidad || {}) : (filterResumen.cantidad_cuotas || {})} onChange={r => handleFilterChange(tipoOperacion === 'VENTA' ? 'cantidad' : 'cantidad_cuotas', r)} />
+                              </th>
+                              <th style={{ textAlign: 'right', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort(tipoOperacion === 'VENTA' ? 'capital' : 'capital_total', sortConfigResumen, setSortConfigResumen)}>Capital Total {renderSortIcon(sortConfigResumen, tipoOperacion === 'VENTA' ? 'capital' : 'capital_total')}</div>
+                                <ExcelNumberRangeFilter selectedRange={tipoOperacion === 'VENTA' ? (filterResumen.capital || {}) : (filterResumen.capital_total || {})} onChange={r => handleFilterChange(tipoOperacion === 'VENTA' ? 'capital' : 'capital_total', r)} />
+                              </th>
+                              <th style={{ textAlign: 'right', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort(tipoOperacion === 'VENTA' ? 'interes' : 'interes_total', sortConfigResumen, setSortConfigResumen)}>Interés Total {renderSortIcon(sortConfigResumen, tipoOperacion === 'VENTA' ? 'interes' : 'interes_total')}</div>
+                                <ExcelNumberRangeFilter selectedRange={tipoOperacion === 'VENTA' ? (filterResumen.interes || {}) : (filterResumen.interes_total || {})} onChange={r => handleFilterChange(tipoOperacion === 'VENTA' ? 'interes' : 'interes_total', r)} />
+                              </th>
+                              <th style={{ textAlign: 'right', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort(tipoOperacion === 'VENTA' ? 'iva' : 'iva_total', sortConfigResumen, setSortConfigResumen)}>IVA Total {renderSortIcon(sortConfigResumen, tipoOperacion === 'VENTA' ? 'iva' : 'iva_total')}</div>
+                                <ExcelNumberRangeFilter selectedRange={tipoOperacion === 'VENTA' ? (filterResumen.iva || {}) : (filterResumen.iva_total || {})} onChange={r => handleFilterChange(tipoOperacion === 'VENTA' ? 'iva' : 'iva_total', r)} />
+                              </th>
+                              <th style={{ textAlign: 'right', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort(tipoOperacion === 'VENTA' ? 'total_cuota' : 'monto_total', sortConfigResumen, setSortConfigResumen)}>Monto Total {renderSortIcon(sortConfigResumen, tipoOperacion === 'VENTA' ? 'total_cuota' : 'monto_total')}</div>
+                                <ExcelNumberRangeFilter selectedRange={tipoOperacion === 'VENTA' ? (filterResumen.total_cuota || {}) : (filterResumen.monto_total || {})} onChange={r => handleFilterChange(tipoOperacion === 'VENTA' ? 'total_cuota' : 'monto_total', r)} />
+                              </th>
+                              <th style={{ textAlign: 'right', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort('valor_actual', sortConfigResumen, setSortConfigResumen)}>Valor Actual {renderSortIcon(sortConfigResumen, 'valor_actual')}</div>
+                                <ExcelNumberRangeFilter selectedRange={filterResumen.valor_actual || {}} onChange={r => handleFilterChange('valor_actual', r)} />
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {sortedResumen.length === 0 && (
+                              <tr><td colSpan="7" style={{ textAlign: 'center', padding: '16px' }}>No hay vencimientos que coincidan.</td></tr>
+                            )}
+                            {sortedResumen.map((r, i) => {
+                              const cant = tipoOperacion === 'VENTA' ? r.cantidad : r.cantidad_cuotas;
+                              const cap = tipoOperacion === 'VENTA' ? r.capital : r.capital_total;
+                              const int = tipoOperacion === 'VENTA' ? r.interes : r.interes_total;
+                              const iva = tipoOperacion === 'VENTA' ? r.iva : r.iva_total;
+                              const tot = tipoOperacion === 'VENTA' ? r.total_cuota : r.monto_total;
+                              const mesVal = tipoOperacion === 'VENTA' ? r.fecha_vencimiento : r.mes;
+                              return (
+                                <tr key={i}>
+                                  <td style={{ textAlign: 'left', padding: '7px 10px', fontWeight: '500' }}>{formatMes(mesVal)}</td>
+                                  <td style={{ textAlign: 'right', padding: '7px 10px' }}>{cant}</td>
+                                  <td style={{ textAlign: 'right', padding: '7px 10px' }}>${(cap || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                                  <td style={{ textAlign: 'right', padding: '7px 10px' }}>${(int || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                                  <td style={{ textAlign: 'right', padding: '7px 10px' }}>${(iva || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                                  <td style={{ textAlign: 'right', padding: '7px 10px' }}>${(tot || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                                  <td style={{ textAlign: 'right', padding: '7px 10px', color: 'var(--accent-secondary)', fontWeight: '500' }}>${(r.valor_actual || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                          <tfoot style={{ position: 'sticky', bottom: 0, zIndex: 10, background: '#0e1217', boxShadow: '0 -2px 6px rgba(0,0,0,0.4)', borderTop: '2px solid rgba(255,255,255,0.15)' }}>
+                            <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
+                              <td style={{ textAlign: 'right', padding: '9px 10px', fontWeight: 'bold' }}>Totales:</td>
+                              <td style={{ textAlign: 'right', padding: '9px 10px', fontWeight: 'bold' }}>{totalCuotas}</td>
+                              <td style={{ textAlign: 'right', padding: '9px 10px', fontWeight: 'bold' }}>${totalCap.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                              <td style={{ textAlign: 'right', padding: '9px 10px', fontWeight: 'bold' }}>${totalInt.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                              <td style={{ textAlign: 'right', padding: '9px 10px', fontWeight: 'bold' }}>${totalIva.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                              <td style={{ textAlign: 'right', padding: '9px 10px', fontWeight: 'bold' }}>${totalTot.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                              <td style={{ textAlign: 'right', padding: '9px 10px', fontWeight: 'bold', color: 'var(--accent-secondary)' }}>${totalVa.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
                     </div>
-                    <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', overflowY: 'auto', flex: 1 }}>
-                      <table className="data-table" style={{ width: '100%', fontSize: '13px' }}>
-                        <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-panel)', boxShadow: '0 2px 4px rgba(0,0,0,0.2)' }}>
-                          <tr>
-                            <th style={{ textAlign: 'left', padding: '12px', verticalAlign: 'top' }}>
-                              <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content' }} onClick={() => handleSort(tipoOperacion === 'VENTA' ? 'fecha_vencimiento' : 'mes', sortConfigResumen, setSortConfigResumen)}>{tipoOperacion === 'VENTA' ? 'Mes Vto.' : 'Mes'} {renderSortIcon(sortConfigResumen, tipoOperacion === 'VENTA' ? 'fecha_vencimiento' : 'mes')}</div>
-                              <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
-                                <ExcelDateFilter
-                                  availableDates={availableMesesResumen}
-                                  selectedDates={tipoOperacion === 'VENTA' ? (filterResumen.fecha_vencimiento || []) : (filterResumen.mes || [])}
-                                  onChange={dates => handleFilterChange(tipoOperacion === 'VENTA' ? 'fecha_vencimiento' : 'mes', dates)}
-                                />
-                              </div>
-                            </th>
-                            <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
-                              <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort(tipoOperacion === 'VENTA' ? 'cantidad' : 'cantidad_cuotas', sortConfigResumen, setSortConfigResumen)}>Cuotas {renderSortIcon(sortConfigResumen, tipoOperacion === 'VENTA' ? 'cantidad' : 'cantidad_cuotas')}</div>
-                              <ExcelNumberRangeFilter selectedRange={tipoOperacion === 'VENTA' ? (filterResumen.cantidad || {}) : (filterResumen.cantidad_cuotas || {})} onChange={r => handleFilterChange(tipoOperacion === 'VENTA' ? 'cantidad' : 'cantidad_cuotas', r)} />
-                            </th>
-                            <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
-                              <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort(tipoOperacion === 'VENTA' ? 'capital' : 'capital_total', sortConfigResumen, setSortConfigResumen)}>Capital Total {renderSortIcon(sortConfigResumen, tipoOperacion === 'VENTA' ? 'capital' : 'capital_total')}</div>
-                              <ExcelNumberRangeFilter selectedRange={tipoOperacion === 'VENTA' ? (filterResumen.capital || {}) : (filterResumen.capital_total || {})} onChange={r => handleFilterChange(tipoOperacion === 'VENTA' ? 'capital' : 'capital_total', r)} />
-                            </th>
-                            <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
-                              <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort(tipoOperacion === 'VENTA' ? 'interes' : 'interes_total', sortConfigResumen, setSortConfigResumen)}>Interés Total {renderSortIcon(sortConfigResumen, tipoOperacion === 'VENTA' ? 'interes' : 'interes_total')}</div>
-                              <ExcelNumberRangeFilter selectedRange={tipoOperacion === 'VENTA' ? (filterResumen.interes || {}) : (filterResumen.interes_total || {})} onChange={r => handleFilterChange(tipoOperacion === 'VENTA' ? 'interes' : 'interes_total', r)} />
-                            </th>
-                            <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
-                              <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort(tipoOperacion === 'VENTA' ? 'iva' : 'iva_total', sortConfigResumen, setSortConfigResumen)}>IVA Total {renderSortIcon(sortConfigResumen, tipoOperacion === 'VENTA' ? 'iva' : 'iva_total')}</div>
-                              <ExcelNumberRangeFilter selectedRange={tipoOperacion === 'VENTA' ? (filterResumen.iva || {}) : (filterResumen.iva_total || {})} onChange={r => handleFilterChange(tipoOperacion === 'VENTA' ? 'iva' : 'iva_total', r)} />
-                            </th>
-                            <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
-                              <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort(tipoOperacion === 'VENTA' ? 'total_cuota' : 'monto_total', sortConfigResumen, setSortConfigResumen)}>Monto Total {renderSortIcon(sortConfigResumen, tipoOperacion === 'VENTA' ? 'total_cuota' : 'monto_total')}</div>
-                              <ExcelNumberRangeFilter selectedRange={tipoOperacion === 'VENTA' ? (filterResumen.total_cuota || {}) : (filterResumen.monto_total || {})} onChange={r => handleFilterChange(tipoOperacion === 'VENTA' ? 'total_cuota' : 'monto_total', r)} />
-                            </th>
-                            <th style={{ textAlign: 'right', padding: '12px', verticalAlign: 'top' }}>
-                              <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', marginLeft: 'auto' }} onClick={() => handleSort('valor_actual', sortConfigResumen, setSortConfigResumen)}>Valor Actual {renderSortIcon(sortConfigResumen, 'valor_actual')}</div>
-                              <ExcelNumberRangeFilter selectedRange={filterResumen.valor_actual || {}} onChange={r => handleFilterChange('valor_actual', r)} />
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {sortedResumen.length === 0 && (
-                            <tr><td colSpan="7" style={{ textAlign: 'center', padding: '16px' }}>No hay vencimientos que coincidan.</td></tr>
-                          )}
-                          {sortedResumen.map((r, i) => {
-                            const cant = tipoOperacion === 'VENTA' ? r.cantidad : r.cantidad_cuotas;
-                            const cap = tipoOperacion === 'VENTA' ? r.capital : r.capital_total;
-                            const int = tipoOperacion === 'VENTA' ? r.interes : r.interes_total;
-                            const iva = tipoOperacion === 'VENTA' ? r.iva : r.iva_total;
-                            const tot = tipoOperacion === 'VENTA' ? r.total_cuota : r.monto_total;
-                            return (
-                              <tr key={i}>
-                                <td style={{ textAlign: 'left', padding: '12px' }}>{tipoOperacion === 'VENTA' ? r.fecha_vencimiento : r.mes}</td>
-                                <td style={{ textAlign: 'right', padding: '12px' }}>{cant}</td>
-                                <td style={{ textAlign: 'right', padding: '12px' }}>${(cap || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
-                                <td style={{ textAlign: 'right', padding: '12px' }}>${(int || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
-                                <td style={{ textAlign: 'right', padding: '12px' }}>${(iva || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
-                                <td style={{ textAlign: 'right', padding: '12px' }}>${(tot || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
-                                <td style={{ textAlign: 'right', padding: '12px', color: 'var(--accent-secondary)' }}>${(r.valor_actual || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                        <tfoot>
-                          <tr>
-                            <td style={{ textAlign: 'right', padding: '12px', fontWeight: 'bold' }}>Totales:</td>
-                            <td style={{ textAlign: 'right', padding: '12px', fontWeight: 'bold' }}>{totalCuotas}</td>
-                            <td style={{ textAlign: 'right', padding: '12px', fontWeight: 'bold' }}>${totalCap.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
-                            <td style={{ textAlign: 'right', padding: '12px', fontWeight: 'bold' }}>${totalInt.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
-                            <td style={{ textAlign: 'right', padding: '12px', fontWeight: 'bold' }}>${totalIva.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
-                            <td style={{ textAlign: 'right', padding: '12px', fontWeight: 'bold' }}>${totalTot.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
-                            <td style={{ textAlign: 'right', padding: '12px', fontWeight: 'bold', color: 'var(--accent-secondary)' }}>${totalVa.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
-                          </tr>
-                        </tfoot>
-                      </table>
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
+                  );
+                })()}
+              </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', padding: '16px 32px', borderTop: '1px solid rgba(255,255,255,0.1)', background: 'var(--bg-panel)' }}>
-              <button type="button" onClick={() => setShowPreviewModal(false)} className="btn-secondary">Volver al Formulario</button>
-              <button type="button" onClick={tipoOperacion === 'VENTA' ? handleConfirmVenta : handleConfirmCompra} className="btn-primary" disabled={loading || previewData.resumen.length === 0}>
-                {loading ? 'Confirmando...' : (tipoOperacion === 'VENTA' ? 'Confirmar Venta' : (editingCompra ? 'Actualizar Compra' : 'Confirmar Compra'))}
-              </button>
+              {/* Footer Actions */}
+              <div style={{
+                display: 'flex',
+                justifyContent: 'flex-end',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '12px 24px',
+                borderTop: '1px solid rgba(255,255,255,0.08)',
+                background: 'var(--bg-panel)',
+                flexShrink: 0
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setShowPreviewModal(false)}
+                  className="btn-secondary"
+                  style={{ padding: '8px 16px', fontSize: '13px' }}
+                >
+                  Volver al Formulario
+                </button>
+                <button
+                  type="button"
+                  onClick={tipoOperacion === 'VENTA' ? handleConfirmVenta : handleConfirmCompra}
+                  className="btn-primary"
+                  disabled={loading || previewData.resumen.length === 0}
+                  style={{ padding: '8px 20px', fontSize: '13px' }}
+                >
+                  {loading ? 'Confirmando...' : (tipoOperacion === 'VENTA' ? 'Confirmar Venta' : (editingCompra ? 'Actualizar Compra' : 'Confirmar Compra'))}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </section>
   );
 };
