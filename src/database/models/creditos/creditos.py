@@ -108,6 +108,12 @@ class Credito(Base):
     comision = relationship("TasaYComision", back_populates="creditos")
     transferencias = relationship("Transferencia", back_populates="credito", cascade="all, delete-orphan")
     documentos_legajo = relationship("DocumentoLegajo", back_populates="credito", cascade="all, delete-orphan")
+    historial_estados = relationship(
+        "HistorialEstadoCredito",
+        back_populates="credito",
+        cascade="all, delete-orphan",
+        order_by="desc(HistorialEstadoCredito.fecha_cambio)",
+    )
 
     def actualizar_estado(self) -> str:
         estados_manuales = {

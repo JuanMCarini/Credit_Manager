@@ -166,6 +166,12 @@ class Cliente(Base):
     empleador = relationship("Empleador", back_populates="empleados")
     referidos = relationship("Referido", back_populates="cliente", cascade="all, delete-orphan")
     repet_audit_logs = relationship("RepetAuditLog", back_populates="cliente", cascade="all, delete-orphan")
+    historial_estados = relationship(
+        "HistorialEstadoCliente",
+        back_populates="cliente",
+        cascade="all, delete-orphan",
+        order_by="desc(HistorialEstadoCliente.fecha_cambio)",
+    )
 
     @validates("cuil", "documento")
     def validate_cuil_dni(self, key, value):

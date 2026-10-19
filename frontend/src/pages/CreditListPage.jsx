@@ -6,6 +6,7 @@ import axiosClient from '../api/axiosClient';
 import { useDebounce } from '../hooks/useDebounce';
 import ClientCCModal from '../components/ClientCCModal';
 import CreditEditEstadoModal from '../components/CreditEditEstadoModal';
+import CreditHistorialModal from '../components/CreditHistorialModal';
 import TransfersModal from '../components/TransfersModal';
 import LegajoModal from '../components/LegajoModal';
 import ExcelDateFilter from '../components/ExcelDateFilter';
@@ -39,6 +40,7 @@ const CreditListPage = () => {
   const [editCredito, setEditCredito] = useState(null);
   const [viewTransfersCredito, setViewTransfersCredito] = useState(null);
   const [viewLegajoCredito, setViewLegajoCredito] = useState(null);
+  const [viewHistorialCredito, setViewHistorialCredito] = useState(null);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -396,7 +398,12 @@ const CreditListPage = () => {
                     <td>{c["ID Tasa Comision"] || '-'}</td>
                     <td>{c["Tipo Crédito"]}</td>
                     <td>
-                       <span className={`status-badge status-${(c.Estado || 'activo').toLowerCase()}`}>
+                       <span
+                         className={`status-badge status-${(c.Estado || 'activo').toLowerCase()}`}
+                         onClick={() => setViewHistorialCredito(c.ID)}
+                         style={{ cursor: 'pointer' }}
+                         title="Clic para ver historial de cambios de estado"
+                       >
                          {c.Estado}
                        </span>
                     </td>
@@ -410,6 +417,9 @@ const CreditListPage = () => {
                         </button>
                         <button className="btn-secondary" onClick={() => setCcCuil(c["Cliente CUIL"])} style={{ padding: '4px 8px', fontSize: '14px' }} title="Ver Cuenta Corriente">
                           👁️
+                        </button>
+                        <button className="btn-secondary" onClick={() => setViewHistorialCredito(c.ID)} style={{ padding: '4px 8px', fontSize: '14px' }} title="Ver Historial de Estados">
+                          🕒
                         </button>
                         <button className="btn-secondary" onClick={() => setViewTransfersCredito(c.ID)} style={{ padding: '4px 8px', fontSize: '14px' }} title="Ver Transferencias">
                           💸
@@ -450,6 +460,7 @@ const CreditListPage = () => {
 
       {ccCuil && <ClientCCModal cuil={ccCuil} onClose={() => setCcCuil(null)} />}
       {editCredito && <CreditEditEstadoModal creditoId={editCredito.id} currentEstado={editCredito.estado} onClose={() => setEditCredito(null)} onSuccess={fetchCreditos} />}
+      {viewHistorialCredito && <CreditHistorialModal creditoId={viewHistorialCredito} onClose={() => setViewHistorialCredito(null)} />}
       {viewTransfersCredito && <TransfersModal creditoId={viewTransfersCredito} onClose={() => setViewTransfersCredito(null)} />}
       {viewLegajoCredito && <LegajoModal creditoId={viewLegajoCredito.id} creditoEstado={viewLegajoCredito.estado} onClose={() => { setViewLegajoCredito(null); fetchCreditos(); }} />}
     </section>

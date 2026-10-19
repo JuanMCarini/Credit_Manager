@@ -18,6 +18,7 @@ from .finance.planes import Plan, SistemaMatematico, Denominador
 from .finance.posicion_iva import PosicionIva, EstadoPosicionIva
 from .finance.posicion_iibb import PosicionIibb, EstadoPosicionIibb
 from .cheques import EstadoCheque, CalificacionEmisor, OperadorCheque, Cheque, TipoOperacionCheque, OperacionCheque
+from .creditos.historial import HistorialEstadoCredito, HistorialEstadoCliente
 from .system import ModuloSistema
 
 
@@ -25,6 +26,7 @@ __all__ = [
     "SexoEnum", "EstadoClienteEnum", "Empleador", "Provincia", "Cliente", "Nacionalidad",
     "SocioComercial", "AnticiposSinAplicar", "Relacion", "EstadoComisionEnum", "TasaYComision", "PoliticaCrediticia", "Comercializador",
     "OrigenCredito", "EstadoCredito", "TipoCredito", "Credito", "EstadoCuota", "EstadoCuotaCedida", "Cuota",
+    "HistorialEstadoCredito", "HistorialEstadoCliente",
     "TipoOperacionCartera", "EstadoCartera", "Cartera", "OperacionCartera",
     "TipoProcesoEnum", "EstadoProcesoEnum", "Proceso", "TipoCobranzaEnum", "Cobranza", "TipoLiquidacionEnum", "LiquidacionCuotaCedida",
     "TipoRolEnum", "Rol", "Usuario", "RegistroAuditoria", "Transferencia", "DocumentoLegajo",

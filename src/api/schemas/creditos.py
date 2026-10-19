@@ -24,6 +24,22 @@ class CreditoCreate(BaseModel):
 
 class CreditoEstadoUpdate(BaseModel):
     estado: str
+    motivo: Optional[str] = None
+
+class HistorialEstadoCreditoOut(BaseModel):
+    id: int
+    credito_id: int
+    estado_anterior: Optional[str] = None
+    estado_nuevo: str
+    fecha_cambio: datetime
+    usuario_id: Optional[int] = None
+    usuario_nombre: Optional[str] = None
+    usuario_email: Optional[str] = None
+    origen: str
+    motivo: Optional[str] = None
+
+    class Config:
+        from_attributes = True
 
 class DocumentoLegajoOut(BaseModel):
     id: int

@@ -258,7 +258,12 @@ const ClientListPage = () => {
                     <td>{c.Apellido}</td>
                     <td>{c.Nombre}</td>
                     <td>
-                      <span className={`status-badge status-${(c.Estado || 'inactivo').toLowerCase()}`}>
+                      <span
+                        className={`status-badge status-${(c.Estado || 'inactivo').toLowerCase()}`}
+                        onClick={() => setViewClient(c)}
+                        style={{ cursor: 'pointer' }}
+                        title="Clic para ver detalles e historial de estados"
+                      >
                         {c.Estado}
                       </span>
                     </td>

@@ -13,12 +13,13 @@ from pypdf import PdfWriter, PdfReader
 from PIL import Image
 
 from src.database import get_db, Credito, Transferencia
-from src.database.models import EstadoCredito, Cuota, DocumentoLegajo, EstadoCuota
-from src.api.schemas.creditos import CreditoCreate, CreditoEstadoUpdate, DocumentoLegajoOut
+from src.database.models import EstadoCredito, Cuota, DocumentoLegajo, EstadoCuota, HistorialEstadoCredito
+from src.api.schemas.creditos import CreditoCreate, CreditoEstadoUpdate, DocumentoLegajoOut, HistorialEstadoCreditoOut
 from src.logic.creditos.origination import LoanOriginator
 from src.logic.creditos.amortization import AmortizationEngine
-from src.api.dependencies.auth import get_current_user
+from src.api.dependencies.auth import get_current_user, get_current_user_optional
 from src.database.models.auth import Usuario
+from src.services.estado_audit import registrar_cambio_estado_credito
 
 router = APIRouter(tags=["Créditos"])
 
@@ -273,6 +274,18 @@ def create_credito(
         except Exception as e:
             logger.error(f"Error al calcular el riesgo UIF (alta crédito): {str(e)}")
 
+        # Registrar estado inicial en historial de auditoría
+        registrar_cambio_estado_credito(
+            db=db,
+            credito=nuevo_credito,
+            nuevo_estado=EstadoCredito.APROBADO,
+            usuario_id=current_user.id if current_user else None,
+            origen="ORIGINACION",
+            motivo="Crédito originado y aprobado",
+            forzar_registro=True
+        )
+        db.commit()
+
         return {
             "status": "success",
             "message": "Crédito originado y cuotas generadas exitosamente.",
@@ -284,7 +297,12 @@ def create_credito(
         raise HTTPException(status_code=500, detail=f"Error originando el crédito: {str(e)}")
 
 @router.patch("/api/v1/creditos/{credito_id:int}/estado")
-def update_credito_estado(credito_id: int, data: CreditoEstadoUpdate, db: Session = Depends(get_db)):
+def update_credito_estado(
+    credito_id: int,
+    data: CreditoEstadoUpdate,
+    db: Session = Depends(get_db),
+    current_user: Optional[Usuario] = Depends(get_current_user_optional)
+):
     credito = db.query(Credito).options(joinedload(Credito.cuotas)).filter(Credito.id == credito_id).first()
     if not credito:
         raise HTTPException(status_code=404, detail="Crédito no encontrado")
@@ -294,7 +312,15 @@ def update_credito_estado(credito_id: int, data: CreditoEstadoUpdate, db: Sessio
     except ValueError:
         raise HTTPException(status_code=400, detail="Estado inválido.")
         
-    credito.estado = nuevo_estado
+    registrar_cambio_estado_credito(
+        db=db,
+        credito=credito,
+        nuevo_estado=nuevo_estado,
+        usuario_id=current_user.id if current_user else None,
+        motivo=data.motivo,
+        origen="MANUAL"
+    )
+
     if nuevo_estado == EstadoCredito.INCOBRABLE:
         for cuota in credito.cuotas:
             cuota_est = cuota.estado.value if hasattr(cuota.estado, "value") else str(cuota.estado)
@@ -310,6 +336,44 @@ def update_credito_estado(credito_id: int, data: CreditoEstadoUpdate, db: Sessio
 
     db.commit()
     return {"status": "success", "message": "Estado actualizado"}
+
+@router.get("/api/v1/creditos/{credito_id:int}/historial-estados", response_model=List[HistorialEstadoCreditoOut])
+def get_historial_credito_estados(credito_id: int, db: Session = Depends(get_db)):
+    credito = db.query(Credito).filter(Credito.id == credito_id).first()
+    if not credito:
+        raise HTTPException(status_code=404, detail="Crédito no encontrado")
+
+    registros = (
+        db.query(HistorialEstadoCredito)
+        .options(joinedload(HistorialEstadoCredito.usuario))
+        .filter(HistorialEstadoCredito.credito_id == credito_id)
+        .order_by(HistorialEstadoCredito.fecha_cambio.desc())
+        .all()
+    )
+
+    result = []
+    for reg in registros:
+        u_nombre = None
+        u_email = None
+        if reg.usuario:
+            u_nombre = reg.usuario.nombre_completo
+            u_email = reg.usuario.email
+
+        result.append(
+            HistorialEstadoCreditoOut(
+                id=reg.id,
+                credito_id=reg.credito_id,
+                estado_anterior=reg.estado_anterior,
+                estado_nuevo=reg.estado_nuevo,
+                fecha_cambio=reg.fecha_cambio,
+                usuario_id=reg.usuario_id,
+                usuario_nombre=u_nombre,
+                usuario_email=u_email,
+                origen=reg.origen,
+                motivo=reg.motivo,
+            )
+        )
+    return result
 
 @router.get("/api/v1/creditos/{credito_id:int}/cuotas")
 def get_credito_cuotas(credito_id: int, db: Session = Depends(get_db)):
@@ -543,7 +607,14 @@ def delete_credito(credito_id: int, db: Session = Depends(get_db)):
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 UPLOAD_DIR = os.path.join(project_root, "data", "uploads", "legajos")
 @router.post("/api/v1/creditos/{credito_id:int}/documentos", response_model=DocumentoLegajoOut)
-async def upload_documento(credito_id: int, file: UploadFile = File(...), transferencia_id: Optional[int] = Form(None), es_legajo_firmado: bool = Form(False), db: Session = Depends(get_db)):
+async def upload_documento(
+    credito_id: int,
+    file: UploadFile = File(...),
+    transferencia_id: Optional[int] = Form(None),
+    es_legajo_firmado: bool = Form(False),
+    db: Session = Depends(get_db),
+    current_user: Optional[Usuario] = Depends(get_current_user_optional),
+):
     try:
         credito = db.query(Credito).filter(Credito.id == credito_id).first()
         if not credito:
@@ -576,7 +647,14 @@ async def upload_documento(credito_id: int, file: UploadFile = File(...), transf
             db.add(nuevo_doc)
         
         if es_legajo_firmado and credito.estado in (EstadoCredito.APROBADO, "APROBADO", "EstadoCredito.APROBADO"):
-            credito.estado = EstadoCredito.FIRMADO.value
+            registrar_cambio_estado_credito(
+                db=db,
+                credito=credito,
+                nuevo_estado=EstadoCredito.FIRMADO,
+                usuario_id=current_user.id if current_user else None,
+                origen="LEGAJO_FIRMA",
+                motivo=f"Subida de legajo firmado: {file.filename}"
+            )
 
         db.commit()
         db.refresh(nuevo_doc)
@@ -592,7 +670,14 @@ async def upload_documento(credito_id: int, file: UploadFile = File(...), transf
                         break
                 
                 if todas_con_comprobante:
-                    db.query(Credito).filter(Credito.id == credito_id).update({"estado": EstadoCredito.ACTIVO.name})
+                    registrar_cambio_estado_credito(
+                        db=db,
+                        credito=credito,
+                        nuevo_estado=EstadoCredito.ACTIVO,
+                        usuario_id=current_user.id if current_user else None,
+                        origen="DESEMBOLSO",
+                        motivo="Comprobantes de transferencia completos (Crédito activado)"
+                    )
                     db.commit()
                     db.refresh(credito)
 
