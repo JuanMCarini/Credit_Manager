@@ -354,12 +354,33 @@ input:focus, select:focus {
 }
 
 .table-responsive {
-    overflow-x: auto;
-    overflow-y: auto;
+    overflow-x: auto !important;
+    overflow-y: auto !important;
     max-height: calc(100vh - 100px);
-    min-height: 50vh;
     border-radius: var(--radius-md);
     border: 1px solid var(--border-color);
+    scrollbar-width: thin;
+    scrollbar-color: rgba(99, 102, 241, 0.5) rgba(0, 0, 0, 0.35);
+}
+
+.table-responsive::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+.table-responsive::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.35);
+    border-radius: 6px;
+}
+
+.table-responsive::-webkit-scrollbar-thumb {
+    background: rgba(99, 102, 241, 0.45);
+    border-radius: 6px;
+    border: 2px solid rgba(15, 23, 42, 0.5);
+}
+
+.table-responsive::-webkit-scrollbar-thumb:hover {
+    background: rgba(99, 102, 241, 0.8);
 }
 
 .data-table {
@@ -612,19 +633,20 @@ input:focus, select:focus {
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 10px;
+    height: 10px;
 }
 
 ::-webkit-scrollbar-track {
-    background: transparent;
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: 8px;
 }
 
 ::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.15);
-    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.25);
+    border-radius: 8px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.25);
+    background: rgba(255, 255, 255, 0.4);
 }

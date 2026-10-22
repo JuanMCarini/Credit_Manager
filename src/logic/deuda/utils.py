@@ -20,9 +20,28 @@ mov_exp = {
 def clean_money(val):
     # Aseguramos que las columnas monetarias sean numéricas (limpiando formato string de CSV)
     if isinstance(val, str):
-        val = val.replace('$', '').replace(' ', '').replace('.', '').replace(',', '.')
-        # Si el string queda vacío (por ejemplo en celdas vacías), devolvemos NaN
-        return float(val) if val else pd.NA
+        val = val.replace('$', '').replace(' ', '').strip()
+        if not val or val == '-':
+            return 0.0
+        # Si tiene coma y punto, asumimos formato es-AR (1.234,56)
+        if ',' in val and '.' in val:
+            val = val.replace('.', '').replace(',', '.')
+        elif ',' in val:
+            # Solo coma decimal (ej. 1234,56)
+            val = val.replace(',', '.')
+        elif val.count('.') > 1:
+            # Múltiples puntos como separadores de miles sin coma (ej. 1.000.000)
+            val = val.replace('.', '')
+        # Si tiene un solo punto o ninguno (ej. 0.0001 o 1234.56), es float estándar
+        try:
+            f = float(val)
+            return 0.0 if abs(f) < 0.005 else round(f, 2)
+        except ValueError:
+            return 0.0
+    elif isinstance(val, (int, float)):
+        if pd.isna(val) or abs(val) < 0.005:
+            return 0.0
+        return round(float(val), 2)
     return val
 
 def read_file(path: Path | None):
@@ -51,6 +70,7 @@ def read_file(path: Path | None):
         if col in df.columns:
             df[col] = df[col].apply(clean_money).astype(float)
             df[col] = df[col].fillna(0.0)
+            df[col] = df[col].apply(lambda x: 0.0 if abs(x) < 0.005 else round(x, 2))
 
     # Limpiamos filas completamente vacías al final del archivo
     df = df.dropna(subset=["ID Cta. Cte.", "CUIT/CUIL", "Capital"])

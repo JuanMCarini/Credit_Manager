@@ -5,8 +5,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy import or_
 import tempfile
 from pathlib import Path
-from src.logic.deuda.suscripcion import nueva_serie
-from src.logic.deuda.vencimiento import renovación
+from src.logic.deuda.suscripcion import nueva_serie, preview_nueva_serie
+from src.logic.deuda.vencimiento import renovación, preview_renovacion
 from src.logic.deuda.series import resumen as buscar_resumen_serie
 
 from src.database import get_db
@@ -283,12 +283,44 @@ def create_serie(
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/series/preview-upload", response_model=Dict[str, Any])
+def preview_upload_serie(
+    name: str = Form(...),
+    fecha_suscripcion: str = Form(...),
+    tna: float = Form(...),
+    plazo: int = Form(...),
+    file: UploadFile = File(...)
+):
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename).suffix) as tmp:
+            tmp.write(file.file.read())
+            tmp_path = Path(tmp.name)
+
+        preview = preview_nueva_serie(
+            nombre=name,
+            fecha=fecha_suscripcion,
+            tna=tna,
+            plazo=plazo,
+            path=tmp_path
+        )
+        tmp_path.unlink(missing_ok=True)
+
+        return {
+            "status": "success",
+            "preview": preview
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/series/upload", response_model=Dict[str, Any])
 def upload_serie(
     name: str = Form(...),
     fecha_suscripcion: str = Form(...),
     tna: float = Form(...),
     plazo: int = Form(...),
+    comision: bool = Form(False),
     file: UploadFile = File(...)
 ):
     try:
@@ -303,7 +335,8 @@ def upload_serie(
             fecha=fecha_suscripcion, 
             tna=tna, 
             plazo=plazo, 
-            path=tmp_path
+            path=tmp_path,
+            comision=comision
         )
         
         # Cleanup
@@ -319,9 +352,44 @@ def upload_serie(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/series/preview-renovacion", response_model=Dict[str, Any])
+def preview_renovacion_serie(
+    serie_vieja: str = Form(...),
+    series_viejas: Optional[str] = Form(None),
+    serie_nueva: str = Form(...),
+    fecha_suscripcion: str = Form(...),
+    tna: float = Form(...),
+    plazo: int = Form(...),
+    file: UploadFile = File(...)
+):
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename).suffix) as tmp:
+            tmp.write(file.file.read())
+            tmp_path = Path(tmp.name)
+
+        preview = preview_renovacion(
+            serie_vieja=series_viejas if series_viejas else serie_vieja,
+            serie_nueva=serie_nueva,
+            fecha=fecha_suscripcion,
+            tna=tna,
+            plazo=plazo,
+            path=tmp_path
+        )
+        tmp_path.unlink(missing_ok=True)
+
+        return {
+            "status": "success",
+            "preview": preview
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/series/renovacion", response_model=Dict[str, Any])
 def renovacion_serie(
     serie_vieja: str = Form(...),
+    series_viejas: Optional[str] = Form(None),
     serie_nueva: str = Form(...),
     fecha_suscripcion: str = Form(...),
     tna: float = Form(...),
@@ -336,7 +404,7 @@ def renovacion_serie(
             
         # Call the business logic
         df_ei = renovación(
-            serie_vieja=serie_vieja,
+            serie_vieja=series_viejas if series_viejas else serie_vieja,
             serie_nueva=serie_nueva, 
             fecha=fecha_suscripcion, 
             tna=tna, 

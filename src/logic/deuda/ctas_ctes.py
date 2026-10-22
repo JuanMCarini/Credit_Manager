@@ -61,7 +61,7 @@ def buscar(id_cuenta_comitente: str | int):
                 "fecha_suscripcion": m.serie.fecha_suscripcion,
                 "tna": float(m.serie.tna) if m.serie.tna else 0.0,
                 "plazo": m.serie.plazo,
-                "id_cuenta_comitente": m.id_cuenta_comitente,
+                "id_cuenta_comitente": m.cuenta_comitente.id_externo if (m.cuenta_comitente and m.cuenta_comitente.id_externo) else m.id_cuenta_comitente,
                 "fecha": m.fecha,
                 "tipo_movimiento": m.tipo_movimiento,
                 "monto": m.monto,
@@ -90,8 +90,9 @@ def buscar(id_cuenta_comitente: str | int):
                   inplace=True)
 
         df["Capital"] = df.apply(lambda row: row["Movimiento"] if row["Tipo Movimiento"] in ["SUSCRIPCION", "RENOVACION_SUSCRIPCION"] else row["Movimiento"] / (1 + row['tna']/365 * row['plazo']), axis=1)
-        df["Interés"] = df["Capital"] * df["tna"]/365 * df["plazo"]
-        df["Total"] = df[["Capital", "Interés"]].sum(axis=1)
+        df["Capital"] = df["Capital"].apply(lambda x: 0.0 if abs(x) < 0.005 else round(float(x), 2))
+        df["Interés"] = (df["Capital"] * df["tna"] / 365 * df["plazo"]).apply(lambda x: 0.0 if abs(x) < 0.005 else round(float(x), 2))
+        df["Total"] = (df["Capital"] + df["Interés"]).apply(lambda x: 0.0 if abs(x) < 0.005 else round(float(x), 2))
         df.sort_values(by="Fecha", inplace=True)
         df = df[['ID', 'Serie', 'Fecha Suscripción', 'Fecha Vencimiento', 'Fecha', 'Cta. Cte.', 'Inversores', 'Tipo Movimiento', 'Capital', "Interés", "Total"]]
 
