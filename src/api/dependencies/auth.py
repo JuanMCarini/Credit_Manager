@@ -48,6 +48,20 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
         raise credentials_exception
     return user
 
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="api/auth/login", auto_error=False)
+
+async def get_current_user_optional(token: str | None = Depends(oauth2_scheme_optional), db: Session = Depends(get_db)):
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            return None
+        return db.query(Usuario).filter(Usuario.email == email).first()
+    except Exception:
+        return None
+
 def require_role(allowed_roles: list[TipoRolEnum]):
     def role_checker(current_user: Usuario = Depends(get_current_user)):
         if current_user.rol.nombre not in allowed_roles and current_user.rol.nombre != TipoRolEnum.ADMINISTRADOR:

@@ -27,7 +27,7 @@ def sync_system_states(db: Session = Depends(get_db)):
         if _LAST_SYNC_DATE == hoy and _LAST_SYNC_STATE_HASH == current_state_hash:
             return {"status": "success", "message": "Estados ya se encontraban sincronizados."}
 
-        cuotas = db.query(Cuota).options(joinedload(Cuota.cobranzas)).all()
+        cuotas = db.query(Cuota).options(joinedload(Cuota.cobranzas), joinedload(Cuota.credito)).all()
         for c in cuotas:
             c.actualizar_estado(hoy)
 
@@ -52,18 +52,18 @@ def sync_system_states(db: Session = Depends(get_db)):
                 else:
                     estados_str.append(str(e))
 
-            if EstadoCredito.JUDICIAL.value in estados_str or "JUDICIAL" in estados_str:
+            all_cancelado = all(e in [EstadoCredito.CANCELADO.value, "CANCELADO", EstadoCredito.RECHAZADO.value, "RECHAZADO"] for e in estados_str)
+            if all_cancelado:
+                cli.estado = EstadoClienteEnum.INACTIVO
+            elif (
+                EstadoCredito.JUDICIAL.value in estados_str
+                or "JUDICIAL" in estados_str
+                or EstadoCredito.INCOBRABLE.value in estados_str
+                or "INCOBRABLE" in estados_str
+            ):
                 cli.estado = EstadoClienteEnum.INCOBRABLE
             elif EstadoCredito.MOROSO.value in estados_str or "MOROSO" in estados_str:
                 cli.estado = EstadoClienteEnum.MOROSO
-            elif EstadoCredito.CANCELADO.value in estados_str or "CANCELADO" in estados_str:
-                all_cancelado = all(e == EstadoCredito.CANCELADO.value or e == "CANCELADO" for e in estados_str)
-                if all_cancelado:
-                    cli.estado = EstadoClienteEnum.INACTIVO
-                else:
-                    cli.estado = EstadoClienteEnum.ACTIVO
-            elif EstadoCredito.FIRMADO.value in estados_str or "FIRMADO" in estados_str:
-                cli.estado = EstadoClienteEnum.ACTIVO
             else:
                 cli.estado = EstadoClienteEnum.ACTIVO
 

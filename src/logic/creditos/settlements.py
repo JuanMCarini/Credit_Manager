@@ -21,6 +21,7 @@ from src.database.models import (
     Cartera,
     Cobranza,
     Cuota,
+    Credito,
     EstadoCartera,
     EstadoCuotaCedida,
     LiquidacionCuotaCedida,
@@ -89,10 +90,12 @@ class SettlementManager:
         query = (
             self.db.query(
                 Cuota,
+                Credito.id_externo.label("id_externo"),
                 Cartera.id.label("cartera_id"),
                 Cartera.recurso,
                 Cartera.iva.label("cartera_iva"),
             )
+            .join(Credito, Cuota.credito_id == Credito.id)
             .join(OperacionCartera, Cuota.id == OperacionCartera.cuota_id)
             .join(Cartera, OperacionCartera.cartera_id == Cartera.id)
             .filter(OperacionCartera.fecha_registro == subquery)
@@ -216,8 +219,10 @@ class SettlementManager:
         df["fecha_vencimiento"] = pd.to_datetime(df["fecha_vencimiento"]).dt.date
         df["cobranza_id"] = None
         df["fecha_emision_cobranza"] = None
+        if "id_externo" not in df.columns:
+            df["id_externo"] = None
         df = df[
-            ["cuota_id", "credito_id", "cartera_id", "tipo_liquidacion", "nro_cuota", "fecha_vencimiento", "capital", "interes", "iva", "cobranza_id", "fecha_emision_cobranza"]
+            ["cuota_id", "credito_id", "id_externo", "cartera_id", "tipo_liquidacion", "nro_cuota", "fecha_vencimiento", "capital", "interes", "iva", "cobranza_id", "fecha_emision_cobranza"]
         ]
 
         self.settlements = df
@@ -248,7 +253,7 @@ class SettlementManager:
             if col in df_cobr.columns:
                 df_cobr[col] = df_cobr[col].astype(float)
         df_cobr = df_cobr.sort_values(by="cuota_id")
-        df_cobr = df_cobr.merge(df_s_rec[["fecha_vencimiento", "nro_cuota", "credito_id", "cartera_iva", "cartera_id"]], left_on="cuota_id", right_index=True)
+        df_cobr = df_cobr.merge(df_s_rec[["fecha_vencimiento", "nro_cuota", "credito_id", "id_externo", "cartera_iva", "cartera_id"]], left_on="cuota_id", right_index=True)
         df_cobr["fecha_vencimiento"] = pd.to_datetime(df_cobr["fecha_vencimiento"])
         df_cobr.loc[~df_cobr["cartera_iva"], "iva"] = 0.0
         df_cobr["total"] = df_cobr[["capital", "interes", "iva"]].sum(axis=1)

@@ -18,9 +18,12 @@ router = APIRouter(prefix="/api/v1/liquidaciones", tags=["liquidaciones"])
 @router.get("", response_model=List[LiquidacionResponse])
 def listar_liquidaciones(db: Session = Depends(get_db)):
     from sqlalchemy.orm import joinedload
+    from src.database.models import Cuota
     liquidaciones = (
         db.query(LiquidacionCuotaCedida, SocioComercial.razon_social.label("socio_comercial"), Cobranza.fecha.label("fecha_emision_cobranza"))
-        .options(joinedload(LiquidacionCuotaCedida.cuota))
+        .options(
+            joinedload(LiquidacionCuotaCedida.cuota).joinedload(Cuota.credito)
+        )
         .join(Cartera, LiquidacionCuotaCedida.cartera_id == Cartera.id)
         .join(SocioComercial, Cartera.socio_id == SocioComercial.id)
         .outerjoin(Cobranza, LiquidacionCuotaCedida.cobranza_id == Cobranza.id)
@@ -29,6 +32,7 @@ def listar_liquidaciones(db: Session = Depends(get_db)):
     
     res = []
     for l, socio_comercial, fecha_emision_cobranza in liquidaciones:
+        credito = l.cuota.credito if l.cuota else None
         res.append({
             "id": l.id,
             "proceso_id": l.proceso_id,
@@ -37,6 +41,7 @@ def listar_liquidaciones(db: Session = Depends(get_db)):
             "cobranza_id": l.cobranza_id,
             "tipo_liquidacion": getattr(l.tipo_liquidacion, "value", str(l.tipo_liquidacion)),
             "credito_id": l.cuota.credito_id if l.cuota else None,
+            "id_externo": credito.id_externo if credito else None,
             "socio_comercial": socio_comercial,
             "nro_cuota": l.cuota.nro_cuota if l.cuota else None,
             "fecha_vencimiento": l.cuota.fecha_vencimiento if l.cuota else None,
@@ -63,6 +68,8 @@ def listar_compradores(db: Session = Depends(get_db)):
 
 @router.post("/preview", response_model=List[LiquidacionPreviewResponse])
 def preview_liquidaciones(req: LiquidacionProcessRequest, db: Session = Depends(get_db)):
+    if not req.id_val or (isinstance(req.id_val, str) and not req.id_val.strip()) or (isinstance(req.id_val, list) and len(req.id_val) == 0):
+        raise HTTPException(status_code=400, detail="Debe especificar un socio comprador válido.")
     sm = SettlementManager(db)
     try:
         df_rec, df_s_rec = sm.obtain_settlement_of_transferred_quota(
@@ -94,6 +101,8 @@ def preview_liquidaciones(req: LiquidacionProcessRequest, db: Session = Depends(
 
 @router.post("/procesar")
 def procesar_liquidaciones(req: LiquidacionProcessRequest, db: Session = Depends(get_db)):
+    if not req.id_val or (isinstance(req.id_val, str) and not req.id_val.strip()) or (isinstance(req.id_val, list) and len(req.id_val) == 0):
+        raise HTTPException(status_code=400, detail="Debe especificar un socio comprador válido.")
     sm = SettlementManager(db)
     try:
         df_rec, df_s_rec = sm.obtain_settlement_of_transferred_quota(

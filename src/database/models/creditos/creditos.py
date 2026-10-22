@@ -34,6 +34,7 @@ class EstadoCredito(enum.Enum):
     CANCELADO = "CANCELADO"
     MOROSO = "MOROSO"
     JUDICIAL = "JUDICIAL"
+    INCOBRABLE = "INCOBRABLE"
 
 
 class TipoCredito(enum.Enum):
@@ -107,20 +108,30 @@ class Credito(Base):
     comision = relationship("TasaYComision", back_populates="creditos")
     transferencias = relationship("Transferencia", back_populates="credito", cascade="all, delete-orphan")
     documentos_legajo = relationship("DocumentoLegajo", back_populates="credito", cascade="all, delete-orphan")
+    historial_estados = relationship(
+        "HistorialEstadoCredito",
+        back_populates="credito",
+        cascade="all, delete-orphan",
+        order_by="desc(HistorialEstadoCredito.fecha_cambio)",
+    )
 
     def actualizar_estado(self) -> str:
-        estados_manuales = [EstadoCredito.RECHAZADO, EstadoCredito.JUDICIAL]
+        estados_manuales = {
+            EstadoCredito.RECHAZADO.value,
+            EstadoCredito.JUDICIAL.value,
+            EstadoCredito.INCOBRABLE.value,
+        }
         estado_actual = (
             self.estado.value
             if isinstance(self.estado, EstadoCredito)
-            else self.estado
+            else str(self.estado)
         )
 
         if estado_actual in estados_manuales:
-            mensaje_alerta = f"⚠️ Warning: Automatic update attempt skipped for Credito ID {self.id}. State blocked: {estado_actual.value}."
+            mensaje_alerta = f"⚠️ Warning: Automatic update attempt skipped for Credito ID {self.id}. State blocked: {estado_actual}."
             print(mensaje_alerta)
             logging.warning(mensaje_alerta)
-            return estado_actual.value
+            return estado_actual
 
         cuotas_activas = [c for c in self.cuotas if (c.estado.value if isinstance(c.estado, EstadoCuota) else c.estado) != EstadoCuota.NO_COMPRADA.value]
 
@@ -130,7 +141,9 @@ class Credito(Base):
 
         estados_cuotas = [(c.estado.value if isinstance(c.estado, EstadoCuota) else c.estado) for c in cuotas_activas]
 
-        if any(e == EstadoCuota.MOROSA.value for e in estados_cuotas):
+        if any(e == EstadoCuota.INCOBRABLE.value for e in estados_cuotas):
+            self.estado = EstadoCredito.INCOBRABLE.value
+        elif any(e == EstadoCuota.MOROSA.value for e in estados_cuotas):
             self.estado = EstadoCredito.MOROSO.value
         elif all(e == EstadoCuota.CANCELADA.value for e in estados_cuotas):
             self.estado = EstadoCredito.CANCELADO.value
@@ -243,6 +256,7 @@ class EstadoCuota(enum.Enum):
     PENDIENTE = "PENDIENTE"
     MOROSA = "MOROSA"
     CANCELADA = "CANCELADA"
+    INCOBRABLE = "INCOBRABLE"
 
 
 class EstadoCuotaCedida(enum.Enum):
@@ -299,7 +313,15 @@ class Cuota(Base):
 
         if total_cobrado >= total_esperado:
             self.estado = EstadoCuota.CANCELADA.value
-        elif fecha_evaluacion > normalize_date(self.fecha_vencimiento):
+            return self.estado.value if isinstance(self.estado, EstadoCuota) else self.estado
+
+        c_est = self.estado.value if isinstance(self.estado, EstadoCuota) else str(self.estado)
+        cred_est = (self.credito.estado.value if hasattr(self.credito.estado, "value") else str(self.credito.estado)) if self.credito else None
+        if c_est == EstadoCuota.INCOBRABLE.value or cred_est == "INCOBRABLE":
+            self.estado = EstadoCuota.INCOBRABLE.value
+            return self.estado.value if isinstance(self.estado, EstadoCuota) else self.estado
+
+        if fecha_evaluacion > normalize_date(self.fecha_vencimiento):
             self.estado = EstadoCuota.MOROSA.value
         else:
             self.estado = EstadoCuota.PENDIENTE.value

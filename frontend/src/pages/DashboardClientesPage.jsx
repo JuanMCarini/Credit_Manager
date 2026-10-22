@@ -156,12 +156,15 @@ const DashboardClientesPage = () => {
     let montoTotal = 0;
     let saldoPendiente = 0;
     let montoEnMora = 0;
+    let montoIncobrable = 0;
     let cuotasCanceladas = 0;
     let cuotasEnMora = 0;
     let cuotasPendientes = 0;
+    let cuotasIncobrables = 0;
 
     let capitalAdeudado = 0;
-    let interesAdeudado = 0;
+    let interesComunAdeudado = 0;
+    let interesPunitorioAdeudado = 0;
     let ivaAdeudado = 0;
 
     const creditosFirstCuota = {};
@@ -182,16 +185,22 @@ const DashboardClientesPage = () => {
       montoTotal += parseFloat(quota.total_esperado || quota.capital || 0);
       saldoPendiente += parseFloat(quota.saldo_pendiente || 0);
 
-      if (estado === 'CANCELADA') cuotasCanceladas++;
-      else if (estado === 'MOROSA') {
+      if (estado === 'CANCELADA') {
+        cuotasCanceladas++;
+      } else if (estado === 'INCOBRABLE') {
+        cuotasIncobrables++;
+        montoIncobrable += parseFloat(quota.saldo_pendiente || 0);
+      } else if (estado === 'MOROSA') {
         cuotasEnMora++;
         montoEnMora += parseFloat(quota.saldo_pendiente || 0);
+      } else if (estado === 'PENDIENTE') {
+        cuotasPendientes++;
       }
-      else if (estado === 'PENDIENTE') cuotasPendientes++;
 
       if (estado !== 'NO COMPRADA' && estado !== 'CANCELADA') {
         let netCapital = parseFloat(quota.capital || 0);
         let netInteres = parseFloat(quota.interes || 0);
+        let netPunitorio = parseFloat(quota.int_punitorio || 0);
         let netIva = parseFloat(quota.iva || 0);
         
         if (quota.detalle_cobranzas && quota.detalle_cobranzas.length > 0) {
@@ -203,7 +212,8 @@ const DashboardClientesPage = () => {
         }
         
         capitalAdeudado += Math.max(0, netCapital);
-        interesAdeudado += Math.max(0, netInteres);
+        interesComunAdeudado += Math.max(0, netInteres);
+        interesPunitorioAdeudado += Math.max(0, netPunitorio);
         ivaAdeudado += Math.max(0, netIva);
 
         if (quota.vencimiento && quota.vencimiento !== '-') {
@@ -227,12 +237,16 @@ const DashboardClientesPage = () => {
       montoTotal, 
       saldoPendiente,
       montoEnMora,
+      montoIncobrable,
       cuotasCanceladas,
       cuotasEnMora,
       cuotasPendientes,
+      cuotasIncobrables,
       totalCuotas: filteredCcData.length,
       capitalAdeudado,
-      interesAdeudado,
+      interesAdeudado: interesComunAdeudado + interesPunitorioAdeudado,
+      interesComunAdeudado,
+      interesPunitorioAdeudado,
       ivaAdeudado,
       valorCuotaTotal,
       maxDiasMora
@@ -243,7 +257,8 @@ const DashboardClientesPage = () => {
     return [
       { name: 'Canceladas', value: kpisCreditos.cuotasCanceladas, fill: '#10b981' },
       { name: 'Pendientes', value: kpisCreditos.cuotasPendientes, fill: '#f59e0b' },
-      { name: 'Morosas', value: kpisCreditos.cuotasEnMora, fill: '#ef4444' }
+      { name: 'Morosas', value: kpisCreditos.cuotasEnMora, fill: '#ef4444' },
+      { name: 'Incobrables', value: kpisCreditos.cuotasIncobrables, fill: '#ff6b6b' }
     ].filter(item => item.value > 0);
   }, [kpisCreditos]);
 
@@ -334,7 +349,19 @@ const DashboardClientesPage = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           
           {/* Client Header Card */}
-          <div className="glass-panel" style={{ padding: '24px', borderRadius: '12px', display: 'flex', flexWrap: 'wrap', gap: '24px', alignItems: 'center', borderLeft: `6px solid ${clientData.Estado === 'ACTIVO' ? '#10b981' : '#ef4444'}` }}>
+          <div className="glass-panel" style={{ 
+            padding: '24px', 
+            borderRadius: '12px', 
+            display: 'flex', 
+            flexWrap: 'wrap', 
+            gap: '24px', 
+            alignItems: 'center', 
+            borderLeft: `6px solid ${
+              (clientData.Estado || '').toUpperCase() === 'ACTIVO' ? '#10b981' : 
+              (clientData.Estado || '').toUpperCase() === 'INCOBRABLE' ? '#ff6b6b' : 
+              (clientData.Estado || '').toUpperCase() === 'INACTIVO' ? '#94a3b8' : '#ef4444'
+            }` 
+          }}>
             <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <User size={40} color="var(--text-secondary)" />
             </div>
@@ -346,13 +373,20 @@ const DashboardClientesPage = () => {
               </div>
             </div>
             <div>
-              <span style={{ 
-                padding: '8px 16px', borderRadius: '20px', fontWeight: 'bold', letterSpacing: '1px',
-                background: clientData.Estado === 'ACTIVO' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
-                color: clientData.Estado === 'ACTIVO' ? '#10b981' : '#ef4444'
-              }}>
-                {clientData.Estado}
-              </span>
+              {(() => {
+                const est = (clientData.Estado || '').toUpperCase();
+                const color = est === 'ACTIVO' ? '#10b981' : est === 'INCOBRABLE' ? '#ff6b6b' : est === 'INACTIVO' ? '#94a3b8' : '#ef4444';
+                const bg = est === 'ACTIVO' ? 'rgba(16, 185, 129, 0.2)' : est === 'INCOBRABLE' ? 'rgba(255, 107, 107, 0.2)' : est === 'INACTIVO' ? 'rgba(148, 163, 184, 0.2)' : 'rgba(239, 68, 68, 0.2)';
+                return (
+                  <span style={{ 
+                    padding: '8px 16px', borderRadius: '20px', fontWeight: 'bold', letterSpacing: '1px',
+                    background: bg,
+                    color: color
+                  }}>
+                    {clientData.Estado}
+                  </span>
+                );
+              })()}
             </div>
           </div>
 
@@ -626,6 +660,7 @@ const DashboardClientesPage = () => {
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
                       {uniqueCreditos.map(cred => {
                         const isSelected = selectedCreditos.length === 0 || selectedCreditos.includes(cred.id);
+                        const isIncobrable = (cred.estado || '').toUpperCase() === 'INCOBRABLE';
                         return (
                           <div 
                             key={cred.id}
@@ -644,8 +679,12 @@ const DashboardClientesPage = () => {
                               padding: '12px 16px',
                               borderRadius: '10px',
                               cursor: 'pointer',
-                              border: isSelected ? '2px solid #3b82f6' : '1px solid rgba(255,255,255,0.1)',
-                              background: isSelected ? 'rgba(59, 130, 246, 0.15)' : 'rgba(0,0,0,0.2)',
+                              border: isSelected 
+                                ? (isIncobrable ? '2px solid #ff6b6b' : '2px solid #3b82f6') 
+                                : (isIncobrable ? '1px solid rgba(255, 107, 107, 0.4)' : '1px solid rgba(255,255,255,0.1)'),
+                              background: isSelected 
+                                ? (isIncobrable ? 'rgba(255, 107, 107, 0.2)' : 'rgba(59, 130, 246, 0.15)') 
+                                : (isIncobrable ? 'rgba(255, 107, 107, 0.05)' : 'rgba(0,0,0,0.2)'),
                               color: isSelected ? 'white' : 'var(--text-muted)',
                               display: 'flex',
                               flexDirection: 'column',
@@ -656,7 +695,9 @@ const DashboardClientesPage = () => {
                             }}
                           >
                             <span style={{ fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '4px' }}>Op. #{cred.id}</span>
-                            <span style={{ fontSize: '0.85rem' }}>{cred.tipo} • {cred.estado}</span>
+                            <span style={{ fontSize: '0.85rem', color: isIncobrable ? '#ff6b6b' : 'inherit' }}>
+                              {cred.tipo} • {cred.estado}
+                            </span>
                           </div>
                         );
                       })}
@@ -692,6 +733,14 @@ const DashboardClientesPage = () => {
                     {formatCurrency(kpisCreditos.montoEnMora)}
                   </div>
                 </div>
+                {kpisCreditos.montoIncobrable > 0 && (
+                  <div className="glass-panel" style={{ padding: '20px', borderRadius: '12px', borderTop: '4px solid #ff6b6b', textAlign: 'center' }}>
+                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '10px' }}>Monto Incobrable</div>
+                    <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#ff6b6b' }}>
+                      {formatCurrency(kpisCreditos.montoIncobrable)}
+                    </div>
+                  </div>
+                )}
                 <div className="glass-panel" style={{ padding: '20px', borderRadius: '12px', borderTop: `4px solid ${kpisCreditos.maxDiasMora > 0 ? '#ef4444' : '#10b981'}`, textAlign: 'center' }}>
                   <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '10px' }}>Días en Mora (Máx)</div>
                   <div style={{ fontSize: '2rem', fontWeight: 'bold', color: kpisCreditos.maxDiasMora > 0 ? '#ef4444' : '#10b981' }}>
@@ -707,8 +756,14 @@ const DashboardClientesPage = () => {
                   <div style={{ fontSize: '1.4rem', fontWeight: 'bold', marginTop: '5px' }}>{formatCurrency(kpisCreditos.capitalAdeudado)}</div>
                 </div>
                 <div className="glass-panel" style={{ padding: '15px', borderRadius: '12px', borderLeft: '3px solid #f59e0b' }}>
-                  <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', textTransform: 'uppercase' }}>Interés Adeudado</div>
-                  <div style={{ fontSize: '1.4rem', fontWeight: 'bold', marginTop: '5px' }}>{formatCurrency(kpisCreditos.interesAdeudado)}</div>
+                  <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', textTransform: 'uppercase' }}>Interés Común Adeudado</div>
+                  <div style={{ fontSize: '1.4rem', fontWeight: 'bold', marginTop: '5px' }}>{formatCurrency(kpisCreditos.interesComunAdeudado)}</div>
+                </div>
+                <div className="glass-panel" style={{ padding: '15px', borderRadius: '12px', borderLeft: '3px solid #f97316' }}>
+                  <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', textTransform: 'uppercase' }}>Interés Punitorio</div>
+                  <div style={{ fontSize: '1.4rem', fontWeight: 'bold', marginTop: '5px', color: kpisCreditos.interesPunitorioAdeudado > 0 ? '#f97316' : 'inherit' }}>
+                    {formatCurrency(kpisCreditos.interesPunitorioAdeudado)}
+                  </div>
                 </div>
                 <div className="glass-panel" style={{ padding: '15px', borderRadius: '12px', borderLeft: '3px solid #8b5cf6' }}>
                   <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', textTransform: 'uppercase' }}>IVA Adeudado</div>
@@ -757,12 +812,20 @@ const DashboardClientesPage = () => {
                         </span>
                         <span style={{ fontWeight: 'bold' }}>{kpisCreditos.cuotasPendientes} cuotas</span>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: kpisCreditos.cuotasIncobrables > 0 ? '10px' : '0', borderBottom: kpisCreditos.cuotasIncobrables > 0 ? '1px solid rgba(255,255,255,0.1)' : 'none' }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <span style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#ef4444' }}></span> En Mora
                         </span>
                         <span style={{ fontWeight: 'bold' }}>{kpisCreditos.cuotasEnMora} cuotas</span>
                       </div>
+                      {kpisCreditos.cuotasIncobrables > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#ff6b6b' }}></span> Incobrables
+                          </span>
+                          <span style={{ fontWeight: 'bold', color: '#ff6b6b' }}>{kpisCreditos.cuotasIncobrables} cuotas</span>
+                        </div>
+                      )}
                     </div>
 
                   </div>

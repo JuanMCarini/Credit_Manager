@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { FilterX } from 'lucide-react';
+import { FilterX, Maximize2, Minimize2, X } from 'lucide-react';
 import axiosClient from '../api/axiosClient';
 import ExportExcelButton from './ExportExcelButton';
 import ExcelNumberRangeFilter from './ExcelNumberRangeFilter';
@@ -8,6 +8,7 @@ import ExcelDateFilter from './ExcelDateFilter';
 
 const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }) => {
   const [loading, setLoading] = useState(false);
+  const [isModalMaximized, setIsModalMaximized] = useState(false);
   const [usarCuotasGuardadas, setUsarCuotasGuardadas] = useState(true);
   const [showAdvanced, setShowAdvanced] = useState(false);
   
@@ -32,6 +33,13 @@ const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }
   const [showPreviewIncluidaFilter, setShowPreviewIncluidaFilter] = useState(false);
   const [showPreviewCompradaFilter, setShowPreviewCompradaFilter] = useState(false);
 
+  const formatMes = (mesStr) => {
+    if (!mesStr || mesStr === 'Sin Fecha') return mesStr || '-';
+    const parts = mesStr.split('-');
+    if (parts.length === 2) return `${parts[1]}/${parts[0]}`;
+    return mesStr;
+  };
+
   const availableFechasEmision = useMemo(() => {
     if (!previewData?.creditos) return [];
     return Array.from(new Set(previewData.creditos.map(c => c.fecha_emision).filter(Boolean))).sort();
@@ -43,10 +51,14 @@ const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }
   }, [previewData?.cuotas]);
 
   const availableMesesResumen = useMemo(() => {
-    if (!previewData?.resumen) return [];
-    const key = cartera?.tipo_operacion === 'VENTA' ? 'fecha_vencimiento' : 'mes';
-    return Array.from(new Set(previewData.resumen.map(r => r[key]).filter(Boolean))).sort();
-  }, [previewData?.resumen, cartera?.tipo_operacion]);
+    if (!previewData) return [];
+    if (cartera?.tipo_operacion === 'VENTA') {
+      if (!previewData.cuotas) return [];
+      return Array.from(new Set(previewData.cuotas.map(c => c.fecha_vencimiento ? c.fecha_vencimiento.substring(0, 7) : null).filter(Boolean))).sort();
+    }
+    if (!previewData.resumen) return [];
+    return Array.from(new Set(previewData.resumen.map(r => r.mes).filter(Boolean))).sort();
+  }, [previewData, cartera?.tipo_operacion]);
 
   const fetchPreview = async (usar_guardadas, overrides = {}) => {
     setLoading(true);
@@ -164,52 +176,86 @@ const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }
 
   const tipoOperacion = cartera.tipo_operacion;
   
-  return (
+  const activeCreditosCount = previewData.creditos.length;
+  const activeCuotasCount = tipoOperacion === 'VENTA' ? previewData.cuotas.filter(c => c.incluida).length : previewData.cuotas.filter(c => c.comprada).length;
+  const totalPrecio = previewData.resumen.reduce((acc, r) => acc + (r.valor_actual || 0), 0);
 
+  return (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 1000,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px',
+          backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 1000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: isModalMaximized ? 0 : '16px',
           backdropFilter: 'blur(8px)'
         }}>
           <div className="glass-panel" style={{
-            width: '95vw', maxWidth: '1600px', height: '95vh', display: 'flex', flexDirection: 'column', position: 'relative'
+            width: isModalMaximized ? '100vw' : '96vw',
+            maxWidth: isModalMaximized ? '100vw' : '1600px',
+            height: isModalMaximized ? '100vh' : '94vh',
+            borderRadius: isModalMaximized ? 0 : 'var(--radius-lg)',
+            display: 'flex', flexDirection: 'column', position: 'relative',
+            overflow: 'hidden',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.6)'
           }}>
-            <button onClick={onClose} className="btn-secondary" style={{
-              position: 'absolute', top: '12px', right: '16px', padding: '4px 12px', zIndex: 10
-            }}>X</button>
-            
-            <div style={{ padding: '12px 24px 0', flexShrink: 0 }}>
-              <h3 style={{ marginBottom: '4px', fontFamily: 'var(--font-heading)' }}>
-                Simulación de {tipoOperacion === 'VENTA' ? 'Venta' : 'Compra'} de Cartera
-              </h3>
-              <p style={{ color: 'var(--text-secondary)', marginBottom: '12px', fontSize: '14px' }}>
-                Revise los créditos y cuotas {tipoOperacion === 'VENTA' ? 'que serán cedidos' : 'importados'} antes de confirmar la operación.
-              </p>
+            {/* Header: Title, Controls & Inputs */}
+            <div style={{ padding: '14px 24px 10px', borderBottom: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                  <h3 style={{ margin: 0, fontFamily: 'var(--font-heading)', fontSize: '1.2rem' }}>
+                    Simulación de {tipoOperacion === 'VENTA' ? 'Venta' : 'Compra'} de Cartera
+                  </h3>
+                  <span className="badge" style={{ backgroundColor: 'rgba(255,255,255,0.08)', padding: '4px 10px', borderRadius: '16px', fontSize: '12px' }}>
+                    <strong>Régimen:</strong> {editData.recurso ? 'Con Recurso' : 'Sin Recurso'}
+                  </span>
+                  <span className="badge" style={{ backgroundColor: 'rgba(255,255,255,0.08)', padding: '4px 10px', borderRadius: '16px', fontSize: '12px' }}>
+                    <strong>IVA:</strong> {editData.iva ? 'Incluye IVA' : 'Sin IVA'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setIsModalMaximized(!isModalMaximized)}
+                    className="btn-secondary"
+                    style={{ padding: '6px 10px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}
+                    title={isModalMaximized ? "Restaurar ventana" : "Pantalla completa"}
+                  >
+                    {isModalMaximized ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="btn-secondary"
+                    style={{ padding: '6px 10px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    title="Cerrar"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '12px' }}>
-              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                <div style={{ flex: 1, minWidth: '200px' }}>
-                  <label>Nombre de Cartera</label>
-                  <input type="text" value={editData.nombre} onChange={e => setEditData({...editData, nombre: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-color)' }} disabled={isReadOnly} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: '180px' }}>
+                  <label style={{ fontSize: '12px' }}>Nombre de Cartera</label>
+                  <input type="text" value={editData.nombre} onChange={e => setEditData({...editData, nombre: e.target.value})} style={{ width: '100%', padding: '6px 8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-color)', fontSize: '12px' }} disabled={isReadOnly} />
                 </div>
-                <div style={{ flex: 1, minWidth: '100px' }}>
-                  <label>TNA (%)</label>
-                  <input type="number" value={editData.tna} onChange={e => setEditData({...editData, tna: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-color)' }} disabled={isReadOnly} />
+                <div style={{ flex: 1, minWidth: '80px' }}>
+                  <label style={{ fontSize: '12px' }}>TNA (%)</label>
+                  <input type="number" value={editData.tna} onChange={e => setEditData({...editData, tna: e.target.value})} style={{ width: '100%', padding: '6px 8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-color)', fontSize: '12px' }} disabled={isReadOnly} />
                 </div>
-                <div style={{ flex: 1, minWidth: '200px' }}>
-                  <label>Fecha de Operación</label>
-                  <input type="date" value={editData.fecha} onChange={e => setEditData({...editData, fecha: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-color)' }} disabled={isReadOnly} />
+                <div style={{ flex: 1, minWidth: '150px' }}>
+                  <label style={{ fontSize: '12px' }}>Fecha de Operación</label>
+                  <input type="date" value={editData.fecha} onChange={e => setEditData({...editData, fecha: e.target.value})} style={{ width: '100%', padding: '6px 8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-color)', fontSize: '12px' }} disabled={isReadOnly} />
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', paddingBottom: '8px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: isReadOnly ? 'default' : 'pointer' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', paddingTop: '16px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: isReadOnly ? 'default' : 'pointer', fontSize: '12px' }}>
                     <div className="toggle-switch">
                       <input type="checkbox" checked={editData.recurso} onChange={e => setEditData({...editData, recurso: e.target.checked})} disabled={isReadOnly} />
                       <span className="slider"></span>
                     </div>
                     Con Recurso
                   </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: isReadOnly ? 'default' : 'pointer' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: isReadOnly ? 'default' : 'pointer', fontSize: '12px' }}>
                     <div className="toggle-switch">
                       <input type="checkbox" checked={editData.iva} onChange={e => setEditData({...editData, iva: e.target.checked})} disabled={isReadOnly} />
                       <span className="slider"></span>
@@ -218,96 +264,140 @@ const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }
                   </label>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px' }}>
-                  {!isReadOnly && tipoOperacion === 'VENTA' && <button type="button" className="btn-secondary" onClick={handleRecalcular}>Recalcular</button>}
-                  {!isReadOnly && tipoOperacion === 'VENTA' && <button type="button" className="btn-secondary" onClick={() => setShowAdvanced(!showAdvanced)}>Filtros Avanzados</button>}
+                  {!isReadOnly && tipoOperacion === 'VENTA' && <button type="button" className="btn-secondary" onClick={handleRecalcular} style={{ padding: '6px 12px', fontSize: '12px' }}>Recalcular</button>}
+                  {!isReadOnly && tipoOperacion === 'VENTA' && <button type="button" className="btn-secondary" onClick={() => setShowAdvanced(!showAdvanced)} style={{ padding: '6px 12px', fontSize: '12px' }}>Filtros Avanzados</button>}
                 </div>
               </div>
               {showAdvanced && (
-                <div style={{ padding: '12px', background: 'rgba(0,0,0,0.1)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                  <h4 style={{ marginBottom: '8px', fontSize: '14px' }}>Filtros Avanzados (Re-generar selección)</h4>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '12px' }}>
+                <div style={{ padding: '10px', background: 'rgba(0,0,0,0.1)', borderRadius: '8px', border: '1px solid var(--border-color)', marginTop: '4px' }}>
+                  <h4 style={{ marginBottom: '6px', fontSize: '13px' }}>Filtros Avanzados (Re-generar selección)</h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '8px', marginBottom: '8px' }}>
                     <div className="form-group">
-                      <label>Emisión Crédito Desde</label>
-                      <input type="date" value={editData.emision_desde} onChange={e => setEditData({...editData, emision_desde: e.target.value})} className="input-field" />
+                      <label style={{ fontSize: '11px' }}>Emisión Crédito Desde</label>
+                      <input type="date" value={editData.emision_desde} onChange={e => setEditData({...editData, emision_desde: e.target.value})} className="input-field" style={{ padding: '5px' }} />
                     </div>
                     <div className="form-group">
-                      <label>Emisión Crédito Hasta</label>
-                      <input type="date" value={editData.emision_hasta} onChange={e => setEditData({...editData, emision_hasta: e.target.value})} className="input-field" />
+                      <label style={{ fontSize: '11px' }}>Emisión Crédito Hasta</label>
+                      <input type="date" value={editData.emision_hasta} onChange={e => setEditData({...editData, emision_hasta: e.target.value})} className="input-field" style={{ padding: '5px' }} />
                     </div>
                     <div className="form-group">
-                      <label>Vencimiento Cuota Desde</label>
-                      <input type="date" value={editData.vto_desde} onChange={e => setEditData({...editData, vto_desde: e.target.value})} className="input-field" />
+                      <label style={{ fontSize: '11px' }}>Vencimiento Cuota Desde</label>
+                      <input type="date" value={editData.vto_desde} onChange={e => setEditData({...editData, vto_desde: e.target.value})} className="input-field" style={{ padding: '5px' }} />
                     </div>
                     <div className="form-group">
-                      <label>Vencimiento Cuota Hasta</label>
-                      <input type="date" value={editData.vto_hasta} onChange={e => setEditData({...editData, vto_hasta: e.target.value})} className="input-field" />
+                      <label style={{ fontSize: '11px' }}>Vencimiento Cuota Hasta</label>
+                      <input type="date" value={editData.vto_hasta} onChange={e => setEditData({...editData, vto_hasta: e.target.value})} className="input-field" style={{ padding: '5px' }} />
                     </div>
                   </div>
-                  <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
+                  <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', alignItems: 'center' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '12px' }}>
                       <div className="toggle-switch">
                         <input type="checkbox" checked={editData.mora} onChange={e => setEditData({...editData, mora: e.target.checked})} />
                         <span className="slider"></span>
                       </div>
                       Incluir Mora
                     </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '12px' }}>
                       <div className="toggle-switch">
                         <input type="checkbox" checked={editData.cuotas_completas} onChange={e => setEditData({...editData, cuotas_completas: e.target.checked})} />
                         <span className="slider"></span>
                       </div>
                       Cuotas Completas
                     </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                      <div className="toggle-switch">
-                        <input type="checkbox" checked={editData.recurso} onChange={e => setEditData({...editData, recurso: e.target.checked})} />
-                        <span className="slider"></span>
-                      </div>
-                      Venta con Recurso
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                      <div className="toggle-switch">
-                        <input type="checkbox" checked={editData.iva} onChange={e => setEditData({...editData, iva: e.target.checked})} />
-                        <span className="slider"></span>
-                      </div>
-                      Aplicar IVA
-                    </label>
                     <div style={{ flexGrow: 1 }} />
-                    <button type="button" className="btn-secondary" onClick={handleRegenerar}>Aplicar y Re-generar</button>
+                    <button type="button" className="btn-secondary" onClick={handleRegenerar} style={{ padding: '5px 12px', fontSize: '12px' }}>Aplicar y Re-generar</button>
                   </div>
                 </div>
               )}
             </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '12px' }}>
-                <div style={{ background: 'rgba(255,255,255,0.05)', padding: '12px', borderRadius: '8px', textAlign: 'center' }}>
-                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Créditos Involucrados</div>
-                  <div style={{ fontSize: '20px', fontWeight: 'bold' }}>{previewData.creditos.length}</div>
+              {/* Compact KPI Ribbon */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px', marginBottom: '10px' }}>
+                <div style={{ background: 'rgba(255,255,255,0.04)', padding: '8px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Créditos Involucrados</span>
+                  <span style={{ fontSize: '17px', fontWeight: 'bold' }}>{activeCreditosCount}</span>
                 </div>
-                <div style={{ background: 'rgba(255,255,255,0.05)', padding: '12px', borderRadius: '8px', textAlign: 'center' }}>
-                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Cuotas a {tipoOperacion === 'VENTA' ? 'Ceder' : 'Adquirir'}</div>
-                  <div style={{ fontSize: '20px', fontWeight: 'bold' }}>
-                    {tipoOperacion === 'VENTA' ? previewData.cuotas.filter(c => c.incluida).length : previewData.cuotas.filter(c => c.comprada).length}
-                  </div>
+                <div style={{ background: 'rgba(255,255,255,0.04)', padding: '8px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Cuotas a {tipoOperacion === 'VENTA' ? 'Ceder' : 'Adquirir'}</span>
+                  <span style={{ fontSize: '17px', fontWeight: 'bold' }}>{activeCuotasCount}</span>
                 </div>
-                <div style={{ background: 'var(--accent-glow)', padding: '12px', borderRadius: '8px', textAlign: 'center', border: '1px solid var(--accent-primary)' }}>
-                  <div style={{ fontSize: '11px', color: 'var(--text-primary)' }}>Valor Actual (Precio)</div>
-                  <div style={{ fontSize: '20px', fontWeight: 'bold', color: 'var(--text-primary)' }}>
-                    {new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(
-                      previewData.resumen.reduce((acc, r) => acc + (r.valor_actual || 0), 0)
-                    )}
-                  </div>
+                <div style={{ background: 'var(--accent-glow)', padding: '8px 14px', borderRadius: '8px', border: '1px solid var(--accent-primary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '12px', color: 'var(--text-primary)', fontWeight: '500' }}>Valor Actual (Precio)</span>
+                  <span style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--accent-primary)' }}>
+                    {new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(totalPrecio)}
+                  </span>
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-                <button type="button" onClick={() => setPreviewTab('creditos')} className={previewTab === 'creditos' ? 'btn-primary' : 'btn-secondary'} style={{ flex: 1, padding: '6px' }}>Créditos</button>
-                <button type="button" onClick={() => setPreviewTab('cuotas')} className={previewTab === 'cuotas' ? 'btn-primary' : 'btn-secondary'} style={{ flex: 1, padding: '6px' }}>Cuotas</button>
-                <button type="button" onClick={() => setPreviewTab('resumen')} className={previewTab === 'resumen' ? 'btn-primary' : 'btn-secondary'} style={{ flex: 1, padding: '6px' }}>Vencimientos</button>
+              {/* Segmented Tabs Bar */}
+              <div style={{ display: 'flex', gap: '6px', background: 'rgba(0,0,0,0.3)', padding: '4px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)', width: 'fit-content' }}>
+                <button
+                  type="button"
+                  onClick={() => setPreviewTab('creditos')}
+                  style={{
+                    padding: '5px 14px',
+                    borderRadius: '6px',
+                    fontSize: '13px',
+                    fontWeight: previewTab === 'creditos' ? '600' : 'normal',
+                    backgroundColor: previewTab === 'creditos' ? 'var(--accent-primary)' : 'transparent',
+                    color: previewTab === 'creditos' ? '#fff' : 'var(--text-secondary)',
+                    border: 'none',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  Créditos
+                  <span style={{ fontSize: '11px', padding: '1px 6px', borderRadius: '10px', background: previewTab === 'creditos' ? 'rgba(0,0,0,0.25)' : 'rgba(255,255,255,0.1)' }}>
+                    {activeCreditosCount}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewTab('cuotas')}
+                  style={{
+                    padding: '5px 14px',
+                    borderRadius: '6px',
+                    fontSize: '13px',
+                    fontWeight: previewTab === 'cuotas' ? '600' : 'normal',
+                    backgroundColor: previewTab === 'cuotas' ? 'var(--accent-primary)' : 'transparent',
+                    color: previewTab === 'cuotas' ? '#fff' : 'var(--text-secondary)',
+                    border: 'none',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  Cuotas
+                  <span style={{ fontSize: '11px', padding: '1px 6px', borderRadius: '10px', background: previewTab === 'cuotas' ? 'rgba(0,0,0,0.25)' : 'rgba(255,255,255,0.1)' }}>
+                    {activeCuotasCount}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewTab('resumen')}
+                  style={{
+                    padding: '5px 14px',
+                    borderRadius: '6px',
+                    fontSize: '13px',
+                    fontWeight: previewTab === 'resumen' ? '600' : 'normal',
+                    backgroundColor: previewTab === 'resumen' ? 'var(--accent-primary)' : 'transparent',
+                    color: previewTab === 'resumen' ? '#fff' : 'var(--text-secondary)',
+                    border: 'none',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  Vencimientos
+                </button>
               </div>
             </div>
 
-            <div style={{ flex: 1, overflowY: 'auto', padding: '0 24px 16px', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ flex: 1, minHeight: 0, padding: '12px 24px 12px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
               {previewTab === 'creditos' && (() => {
                 const filtered = previewData.creditos.filter(c => {
                   return Object.keys(filterCreditos).every(key => {
@@ -335,7 +425,7 @@ const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }
                 };
 
                 return (
-                <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
                     <button 
                       className="btn-secondary" 
@@ -347,8 +437,8 @@ const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }
                     </button>
                     <ExportExcelButton data={previewData.creditos} filteredData={filtered} filename="preview_creditos" />
                   </div>
-                  <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', overflowY: 'auto', flex: 1 }}>
-                    <table className="data-table" style={{ width: '100%', fontSize: '13px' }}>
+                  <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', overflow: 'auto', flex: 1, minHeight: 0 }}>
+                    <table className="data-table compact" style={{ width: '100%' }}>
                       <thead style={{position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-panel)', boxShadow: '0 2px 4px rgba(0,0,0,0.2)'}}>
                         {tipoOperacion === 'VENTA' ? (
                           <tr>
@@ -561,7 +651,7 @@ const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }
                 };
 
                 return (
-                <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
                     <button 
                       className="btn-secondary" 
@@ -573,8 +663,8 @@ const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }
                     </button>
                     <ExportExcelButton data={previewData.cuotas} filteredData={filtered} filename="preview_cuotas" />
                   </div>
-                  <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', overflowY: 'auto', flex: 1 }}>
-                    <table className="data-table" style={{ width: '100%', fontSize: '13px' }}>
+                  <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', overflow: 'auto', flex: 1, minHeight: 0 }}>
+                    <table className="data-table compact" style={{ width: '100%' }}>
                       <thead style={{position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-panel)', boxShadow: '0 2px 4px rgba(0,0,0,0.2)'}}>
                         {tipoOperacion === 'VENTA' ? (
                           <tr>
@@ -790,7 +880,7 @@ const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }
                 };
 
                 return (
-                <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
                     <button 
                       className="btn-secondary" 
@@ -802,8 +892,8 @@ const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }
                     </button>
                     <ExportExcelButton data={previewData.resumen} filteredData={filtered} filename="preview_vencimientos" />
                   </div>
-                  <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', overflowY: 'auto', flex: 1 }}>
-                    <table className="data-table" style={{ width: '100%', fontSize: '13px' }}>
+                  <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', overflow: 'auto', flex: 1, minHeight: 0 }}>
+                    <table className="data-table compact" style={{ width: '100%' }}>
                       <thead style={{position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-panel)', boxShadow: '0 2px 4px rgba(0,0,0,0.2)'}}>
                         <tr>
                           <th style={{textAlign: 'left', padding: '12px', verticalAlign: 'top'}}>
@@ -854,7 +944,7 @@ const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }
                           const tot = tipoOperacion === 'VENTA' ? r.total_cuota : r.monto_total;
                           return (
                             <tr key={i}>
-                              <td style={{ textAlign: 'left', padding: '12px' }}>{tipoOperacion === 'VENTA' ? r.fecha_vencimiento : r.mes}</td>
+                              <td style={{ textAlign: 'left', padding: '12px' }}>{formatMes(tipoOperacion === 'VENTA' ? r.fecha_vencimiento : r.mes)}</td>
                               <td style={{ textAlign: 'right', padding: '12px' }}>{cant}</td>
                               <td style={{ textAlign: 'right', padding: '12px' }}>${(cap||0).toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
                               <td style={{ textAlign: 'right', padding: '12px' }}>${(int||0).toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>

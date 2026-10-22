@@ -5,6 +5,35 @@ import ExcelDateFilter from '../components/ExcelDateFilter';
 import ExcelListFilter from '../components/ExcelListFilter';
 import ExportExcelButton from '../components/ExportExcelButton';
 
+const LIQUIDACIONES_COLUMNS = [
+  { key: 'id', label: 'ID' },
+  { key: 'proceso_id', label: 'Proceso ID' },
+  { key: 'socio_comercial', label: 'Socio Comercial' },
+  { key: 'cartera_id', label: 'Cartera ID' },
+  { key: 'cuota_id', label: 'Cuota ID' },
+  { key: 'cobranza_id', label: 'Cobranza ID' },
+  { key: 'fecha_emision_cobranza', label: 'Fecha Emisión Cob.' },
+  { key: 'tipo_liquidacion', label: 'Tipo' },
+  { key: 'credito_id', label: 'ID Crédito' },
+  { key: 'id_externo', label: 'ID Externo' },
+  { key: 'nro_cuota', label: 'Nro. Cuota' },
+  { key: 'fecha_vencimiento', label: 'Vencimiento' },
+  { key: 'capital', label: 'Capital' },
+  { key: 'interes', label: 'Interés' },
+  { key: 'iva', label: 'IVA' },
+  { key: 'importe_total', label: 'Total' },
+  { key: 'fecha_pago', label: 'Fecha Pago' },
+  { key: 'cancelada', label: 'Estado', format: (val, row) => (row.cancelada ? 'Cancelada' : 'Pendiente') }
+];
+
+const PROCESOS_LIQUIDACION_COLUMNS = [
+  { key: 'ID', label: 'ID Proceso' },
+  { key: 'Tipo', label: 'Tipo' },
+  { key: 'Estado', label: 'Estado' },
+  { key: 'Descripción', label: 'Descripción' },
+  { key: 'Fecha Ejecución', label: 'Fecha Ejecución' }
+];
+
 const PortfolioLiquidationsPage = () => {
   const [activeTab, setActiveTab] = useState('liquidaciones');
   const [liquidaciones, setLiquidaciones] = useState([]);
@@ -21,19 +50,94 @@ const PortfolioLiquidationsPage = () => {
     amount: 0,
     fechaPago: new Date().toISOString().split('T')[0]
   });
-  const [filter, setFilter] = useState({
-    id: '', proceso_id: '', socio_comercial: [], cartera_id: '', cuota_id: '', cobranza_id: '',
-    tipo_liquidacion: [], credito_id: [], nro_cuota: '', fecha_vencimiento: [],
-    capital: '', interes: '', iva: '', importe_total: '', fecha_pago: [], cancelada: '', fecha_emision_cobranza: []
-  });
+  const initialFilter = {
+    id: '', 
+    proceso_id: [], 
+    socio_comercial: [], 
+    cartera_id: '', 
+    cuota_id: '', 
+    cobranza_id: '',
+    tipo_liquidacion: [], 
+    credito_id: [], 
+    id_externo: [],
+    nro_cuota: '', 
+    fecha_vencimiento: [],
+    capital: '', 
+    interes: '', 
+    iva: '', 
+    importe_total: '', 
+    fecha_pago: [], 
+    cancelada: '', 
+    fecha_emision_cobranza: []
+  };
+
+  const [filter, setFilter] = useState(initialFilter);
+
+  const matchesFilter = (item, currentFilter, excludeField = null) => {
+    if (excludeField !== 'id' && currentFilter.id && !String(item.id).includes(currentFilter.id)) return false;
+    if (excludeField !== 'proceso_id' && currentFilter.proceso_id && currentFilter.proceso_id.length > 0 && !currentFilter.proceso_id.includes(String(item.proceso_id))) return false;
+    if (excludeField !== 'cartera_id' && currentFilter.cartera_id && !String(item.cartera_id || '').includes(currentFilter.cartera_id)) return false;
+    if (excludeField !== 'cuota_id' && currentFilter.cuota_id && !String(item.cuota_id || '').includes(currentFilter.cuota_id)) return false;
+    if (excludeField !== 'cobranza_id' && currentFilter.cobranza_id && !String(item.cobranza_id || '').includes(currentFilter.cobranza_id)) return false;
+    if (excludeField !== 'tipo_liquidacion' && currentFilter.tipo_liquidacion && currentFilter.tipo_liquidacion.length > 0 && !currentFilter.tipo_liquidacion.includes(item.tipo_liquidacion)) return false;
+    if (excludeField !== 'credito_id' && currentFilter.credito_id && currentFilter.credito_id.length > 0 && !currentFilter.credito_id.includes(String(item.credito_id))) return false;
+    if (excludeField !== 'id_externo' && currentFilter.id_externo && currentFilter.id_externo.length > 0 && !currentFilter.id_externo.includes(String(item.id_externo))) return false;
+    if (excludeField !== 'nro_cuota' && currentFilter.nro_cuota && !String(item.nro_cuota || '').includes(currentFilter.nro_cuota)) return false;
+    if (excludeField !== 'fecha_vencimiento' && currentFilter.fecha_vencimiento && currentFilter.fecha_vencimiento.length > 0 && !currentFilter.fecha_vencimiento.includes(item.fecha_vencimiento)) return false;
+    if (excludeField !== 'capital' && currentFilter.capital && !String(item.capital || '').includes(currentFilter.capital)) return false;
+    if (excludeField !== 'interes' && currentFilter.interes && !String(item.interes || '').includes(currentFilter.interes)) return false;
+    if (excludeField !== 'iva' && currentFilter.iva && !String(item.iva || '').includes(currentFilter.iva)) return false;
+    if (excludeField !== 'importe_total' && currentFilter.importe_total && !String(item.importe_total || '').includes(currentFilter.importe_total)) return false;
+    if (excludeField !== 'fecha_pago' && currentFilter.fecha_pago && currentFilter.fecha_pago.length > 0 && !currentFilter.fecha_pago.includes(item.fecha_pago)) return false;
+    if (excludeField !== 'socio_comercial' && currentFilter.socio_comercial && currentFilter.socio_comercial.length > 0 && !currentFilter.socio_comercial.includes(String(item.socio_comercial))) return false;
+    if (excludeField !== 'cancelada' && currentFilter.cancelada !== '') {
+      const isCancelada = currentFilter.cancelada === 'true';
+      if (item.cancelada !== isCancelada) return false;
+    }
+    if (excludeField !== 'fecha_emision_cobranza' && currentFilter.fecha_emision_cobranza && currentFilter.fecha_emision_cobranza.length > 0 && !currentFilter.fecha_emision_cobranza.includes(item.fecha_emision_cobranza)) return false;
+    return true;
+  };
 
   const [showTipoFilter, setShowTipoFilter] = useState(false);
-  const TIPOS_DISPONIBLES = useMemo(() => [...new Set(liquidaciones.map(l => l.tipo_liquidacion).filter(Boolean))], [liquidaciones]);
-  const AVAILABLE_FECHAS_VENCIMIENTO = useMemo(() => [...new Set(liquidaciones.map(l => l.fecha_vencimiento).filter(Boolean))], [liquidaciones]);
-  const AVAILABLE_FECHAS_PAGO = useMemo(() => [...new Set(liquidaciones.map(l => l.fecha_pago).filter(Boolean))], [liquidaciones]);
-  const AVAILABLE_CREDIT_IDS = useMemo(() => [...new Set(liquidaciones.map(l => l.credito_id).filter(Boolean))].sort((a,b)=>a-b).map(String), [liquidaciones]);
-  const AVAILABLE_SOCIOS = useMemo(() => [...new Set(liquidaciones.map(l => l.socio_comercial).filter(Boolean))].sort(), [liquidaciones]);
-  const AVAILABLE_FECHAS_EMISION_COBRANZA = useMemo(() => [...new Set(liquidaciones.map(l => l.fecha_emision_cobranza).filter(Boolean))], [liquidaciones]);
+  const TIPOS_DISPONIBLES = useMemo(() => {
+    const data = liquidaciones.filter(l => matchesFilter(l, filter, 'tipo_liquidacion'));
+    return [...new Set(data.map(l => l.tipo_liquidacion).filter(Boolean))];
+  }, [liquidaciones, filter]);
+
+  const AVAILABLE_FECHAS_VENCIMIENTO = useMemo(() => {
+    const data = liquidaciones.filter(l => matchesFilter(l, filter, 'fecha_vencimiento'));
+    return [...new Set(data.map(l => l.fecha_vencimiento).filter(Boolean))].sort();
+  }, [liquidaciones, filter]);
+
+  const AVAILABLE_FECHAS_PAGO = useMemo(() => {
+    const data = liquidaciones.filter(l => matchesFilter(l, filter, 'fecha_pago'));
+    return [...new Set(data.map(l => l.fecha_pago).filter(Boolean))].sort();
+  }, [liquidaciones, filter]);
+
+  const AVAILABLE_CREDIT_IDS = useMemo(() => {
+    const data = liquidaciones.filter(l => matchesFilter(l, filter, 'credito_id'));
+    return [...new Set(data.map(l => l.credito_id).filter(Boolean))].sort((a,b)=>a-b).map(String);
+  }, [liquidaciones, filter]);
+
+  const AVAILABLE_ID_EXTERNO = useMemo(() => {
+    const data = liquidaciones.filter(l => matchesFilter(l, filter, 'id_externo'));
+    return [...new Set(data.map(l => l.id_externo).filter(Boolean))].sort();
+  }, [liquidaciones, filter]);
+
+  const AVAILABLE_SOCIOS = useMemo(() => {
+    const data = liquidaciones.filter(l => matchesFilter(l, filter, 'socio_comercial'));
+    return [...new Set(data.map(l => l.socio_comercial).filter(Boolean))].sort();
+  }, [liquidaciones, filter]);
+
+  const AVAILABLE_FECHAS_EMISION_COBRANZA = useMemo(() => {
+    const data = liquidaciones.filter(l => matchesFilter(l, filter, 'fecha_emision_cobranza'));
+    return [...new Set(data.map(l => l.fecha_emision_cobranza).filter(Boolean))].sort();
+  }, [liquidaciones, filter]);
+
+  const AVAILABLE_PROCESO_IDS = useMemo(() => {
+    const data = liquidaciones.filter(l => matchesFilter(l, filter, 'proceso_id'));
+    return [...new Set(data.map(l => l.proceso_id).filter(Boolean))].sort((a, b) => Number(b) - Number(a)).map(String);
+  }, [liquidaciones, filter]);
 
   const handleTipoToggle = (tipo) => {
     setFilter(prev => {
@@ -47,28 +151,7 @@ const PortfolioLiquidationsPage = () => {
   };
 
   const filteredLiquidaciones = useMemo(() => {
-    let result = [...liquidaciones];
-    if (filter.id) result = result.filter(l => String(l.id).includes(filter.id));
-    if (filter.proceso_id) result = result.filter(l => String(l.proceso_id || '').includes(filter.proceso_id));
-    if (filter.cartera_id) result = result.filter(l => String(l.cartera_id || '').includes(filter.cartera_id));
-    if (filter.cuota_id) result = result.filter(l => String(l.cuota_id || '').includes(filter.cuota_id));
-    if (filter.cobranza_id) result = result.filter(l => String(l.cobranza_id || '').includes(filter.cobranza_id));
-    if (filter.tipo_liquidacion.length > 0) result = result.filter(l => filter.tipo_liquidacion.includes(l.tipo_liquidacion));
-    if (filter.credito_id && filter.credito_id.length > 0) result = result.filter(l => filter.credito_id.includes(String(l.credito_id)));
-    if (filter.nro_cuota) result = result.filter(l => String(l.nro_cuota || '').includes(filter.nro_cuota));
-    if (filter.fecha_vencimiento && filter.fecha_vencimiento.length > 0) result = result.filter(l => filter.fecha_vencimiento.includes(l.fecha_vencimiento));
-    if (filter.capital) result = result.filter(l => String(l.capital || '').includes(filter.capital));
-    if (filter.interes) result = result.filter(l => String(l.interes || '').includes(filter.interes));
-    if (filter.iva) result = result.filter(l => String(l.iva || '').includes(filter.iva));
-    if (filter.importe_total) result = result.filter(l => String(l.importe_total || '').includes(filter.importe_total));
-    if (filter.fecha_pago && filter.fecha_pago.length > 0) result = result.filter(l => filter.fecha_pago.includes(l.fecha_pago));
-    if (filter.socio_comercial && filter.socio_comercial.length > 0) result = result.filter(l => filter.socio_comercial.includes(String(l.socio_comercial)));
-    if (filter.cancelada !== '') {
-      const isCancelada = filter.cancelada === 'true';
-      result = result.filter(l => l.cancelada === isCancelada);
-    }
-    if (filter.fecha_emision_cobranza && filter.fecha_emision_cobranza.length > 0) result = result.filter(l => filter.fecha_emision_cobranza.includes(l.fecha_emision_cobranza));
-    return result;
+    return liquidaciones.filter(l => matchesFilter(l, filter));
   }, [liquidaciones, filter]);
 
   const handleFilterChange = (field, value) => setFilter(prev => ({ ...prev, [field]: value }));
@@ -196,7 +279,7 @@ const PortfolioLiquidationsPage = () => {
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
               <button 
                 className="btn-secondary" 
-                onClick={() => setFilter({ id: '', proceso_id: '', socio_comercial: [], cartera_id: '', cuota_id: '', cobranza_id: '', tipo_liquidacion: [], credito_id: [], nro_cuota: '', fecha_vencimiento: [], capital: '', interes: '', iva: '', importe_total: '', fecha_pago: [], cancelada: '', fecha_emision_cobranza: [] })}
+                onClick={() => setFilter(initialFilter)}
                 title="Limpiar todos los filtros"
                 style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '100%' }}
               >
@@ -206,6 +289,7 @@ const PortfolioLiquidationsPage = () => {
                 data={liquidaciones} 
                 filteredData={filteredLiquidaciones} 
                 filename="liquidaciones_cartera_export" 
+                columns={LIQUIDACIONES_COLUMNS}
               />
             </div>
           )}
@@ -214,6 +298,7 @@ const PortfolioLiquidationsPage = () => {
               data={procesos} 
               filteredData={procesos} 
               filename="procesos_liquidaciones_export" 
+              columns={PROCESOS_LIQUIDACION_COLUMNS}
             />
           )}
         </div>
@@ -230,7 +315,17 @@ const PortfolioLiquidationsPage = () => {
             <thead>
               <tr>
                 <th style={{minWidth: '70px'}}>ID <br/>{renderInput('id', '...')}</th>
-                <th style={{minWidth: '90px'}}>Proceso ID <br/>{renderInput('proceso_id', '...')}</th>
+                <th style={{minWidth: '100px'}}>
+                  Proceso ID <br/>
+                  <div style={{ marginTop: '5px' }}>
+                    <ExcelListFilter 
+                      availableOptions={AVAILABLE_PROCESO_IDS}
+                      selectedOptions={filter.proceso_id}
+                      onChange={val => handleFilterChange('proceso_id', val)}
+                      title="Filtrar Procesos..."
+                    />
+                  </div>
+                </th>
                 <th style={{minWidth: '150px'}}>
                   Socio Comercial <br/>
                   <div style={{ marginTop: '5px' }}>
@@ -300,6 +395,17 @@ const PortfolioLiquidationsPage = () => {
                     />
                   </div>
                 </th>
+                <th style={{minWidth: '110px'}}>
+                  ID Externo <br/>
+                  <div style={{ marginTop: '5px' }}>
+                    <ExcelListFilter 
+                      availableOptions={AVAILABLE_ID_EXTERNO}
+                      selectedOptions={filter.id_externo}
+                      onChange={val => handleFilterChange('id_externo', val)}
+                      title="Filtrar Ext..."
+                    />
+                  </div>
+                </th>
                 <th style={{minWidth: '90px'}}>Nro. Cuota <br/>{renderInput('nro_cuota', '...')}</th>
                 <th style={{minWidth: '110px'}}>
                   Vencimiento <br/>
@@ -337,7 +443,7 @@ const PortfolioLiquidationsPage = () => {
             </thead>
             <tbody>
               {filteredLiquidaciones.length === 0 ? (
-                <tr><td colSpan="17" className="text-center empty-state">{loading ? "Cargando..." : "No hay liquidaciones."}</td></tr>
+                <tr><td colSpan="18" className="text-center empty-state">{loading ? "Cargando..." : "No hay liquidaciones."}</td></tr>
               ) : (
                 filteredLiquidaciones.map(l => (
                   <tr key={l.id}>
@@ -350,6 +456,7 @@ const PortfolioLiquidationsPage = () => {
                     <td>{l.fecha_emision_cobranza || '-'}</td>
                     <td>{l.tipo_liquidacion}</td>
                     <td>{l.credito_id || '-'}</td>
+                    <td>{l.id_externo || '-'}</td>
                     <td>{l.nro_cuota || '-'}</td>
                     <td>{l.fecha_vencimiento || '-'}</td>
                     <td>${Number(l.capital).toFixed(2)}</td>
@@ -368,7 +475,7 @@ const PortfolioLiquidationsPage = () => {
             </tbody>
             <tfoot>
               <tr>
-                <td colSpan="11" style={{ textAlign: 'right', fontWeight: 'bold' }}>Totales Filtrados:</td>
+                <td colSpan="12" style={{ textAlign: 'right', fontWeight: 'bold' }}>Totales Filtrados:</td>
                 <td style={{ fontWeight: 'bold' }}>{formatMoney(totalCapital)}</td>
                 <td style={{ fontWeight: 'bold' }}>{formatMoney(totalInteres)}</td>
                 <td style={{ fontWeight: 'bold' }}>{formatMoney(totalIva)}</td>
@@ -409,7 +516,7 @@ const PortfolioLiquidationsPage = () => {
                         className="btn-secondary" 
                         title="Ver Liquidaciones"
                         onClick={() => {
-                          setFilter({ id: '', proceso_id: String(p.ID), socio_comercial: [], cartera_id: '', cuota_id: '', cobranza_id: '', tipo_liquidacion: [], credito_id: [], nro_cuota: '', fecha_vencimiento: [], capital: '', interes: '', iva: '', importe_total: '', fecha_pago: [], cancelada: '', fecha_emision_cobranza: [] });
+                          setFilter({ ...initialFilter, proceso_id: [String(p.ID)] });
                           setActiveTab('liquidaciones');
                         }}
                         style={{ padding: '4px 8px', fontSize: '14px' }}

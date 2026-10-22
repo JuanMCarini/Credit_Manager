@@ -4,13 +4,24 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import or_
 
-from src.database import get_db, Cliente, Credito, Cuota
+from src.database import (
+    get_db,
+    Cliente,
+    Credito,
+    Cuota,
+    EstadoCredito,
+    EstadoClienteEnum,
+    EstadoCuota,
+    HistorialEstadoCliente,
+    HistorialEstadoCredito,
+)
 from src.database.models import SocioComercial
 from src.database.models.creditos.clientes import Referido
 from src.database.models.creditos.perfil_trans import PerfilTransaccional
-from src.api.schemas.clientes import ClienteCreate
+from src.api.schemas.clientes import ClienteCreate, HistorialEstadoClienteOut
 from src.api.dependencies.auth import get_current_user
 from src.database.models.auth import Usuario
+from src.services.estado_audit import registrar_cambio_estado_cliente, registrar_cambio_estado_credito
 
 router = APIRouter(prefix="/api/v1/clientes", tags=["Clientes"])
 
@@ -23,6 +34,7 @@ def create_cliente(
     try:
         data = cliente_data.dict(exclude_unset=True)
         referidos_data = data.pop("referidos", [])
+        motivo_estado = data.pop("motivo_estado", None)
         nuevo_cliente = Cliente(**data)
         
         # Screening RePET automatizado
@@ -46,6 +58,19 @@ def create_cliente(
         db.add(nuevo_cliente)
         db.commit()
         db.refresh(nuevo_cliente)
+
+        # Registrar estado inicial en historial
+        registrar_cambio_estado_cliente(
+            db=db,
+            cliente=nuevo_cliente,
+            nuevo_estado=nuevo_cliente.estado or EstadoClienteEnum.ACTIVO,
+            usuario_id=current_user.id if current_user else None,
+            origen="ALTA_CLIENTE",
+            motivo=motivo_estado or "Alta inicial de cliente",
+            forzar_registro=True
+        )
+        db.commit()
+
         return {"status": "success", "message": "Cliente creado exitosamente", "cuil": nuevo_cliente.cuil, "repet": nuevo_cliente.repet}
     except IntegrityError as e:
         db.rollback()
@@ -212,7 +237,11 @@ def get_cliente(cuil: str, db: Session = Depends(get_db), current_user: Usuario 
                 "telefono": r.telefono,
                 "email": r.email
             } for r in cliente.referidos
-        ]
+        ],
+        "tiene_deuda_activa": any(
+            (c.estado.value if hasattr(c.estado, "value") else str(c.estado)) not in [EstadoCredito.CANCELADO.value, EstadoCredito.RECHAZADO.value]
+            for c in cliente.creditos
+        ) if cliente.creditos else False
     }
 
 @router.get("/{cuil}/bcra")
@@ -519,15 +548,62 @@ def update_cliente(
     current_user: Usuario = Depends(get_current_user)
 ) -> Dict[str, Any]:
     try:
-        cliente = db.query(Cliente).filter(Cliente.cuil == cuil).first()
+        cliente = db.query(Cliente).options(joinedload(Cliente.creditos).joinedload(Credito.cuotas)).filter(Cliente.cuil == cuil).first()
         if not cliente:
             raise HTTPException(status_code=404, detail="Cliente no encontrado")
             
         update_data = cliente_data.dict(exclude_unset=True)
         referidos_data = update_data.pop("referidos", None)
+        motivo_estado = update_data.pop("motivo_estado", None)
         
         for key, value in update_data.items():
             setattr(cliente, key, value)
+
+        nuevo_estado = update_data.get("estado")
+        if nuevo_estado:
+            nuevo_estado_str = nuevo_estado.value if hasattr(nuevo_estado, "value") else str(nuevo_estado)
+            registrar_cambio_estado_cliente(
+                db=db,
+                cliente=cliente,
+                nuevo_estado=nuevo_estado,
+                usuario_id=current_user.id if current_user else None,
+                motivo=motivo_estado,
+                origen="MANUAL"
+            )
+            if nuevo_estado_str == EstadoClienteEnum.INCOBRABLE.value:
+                creditos_vivos = [
+                    cred for cred in cliente.creditos
+                    if (cred.estado.value if hasattr(cred.estado, "value") else str(cred.estado)) not in [EstadoCredito.CANCELADO.value, EstadoCredito.RECHAZADO.value]
+                ]
+                if not creditos_vivos:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="No se puede establecer el estado como INCOBRABLE porque el cliente no posee créditos activos o todos sus créditos y cuotas se encuentran cancelados."
+                    )
+                for cred in creditos_vivos:
+                    registrar_cambio_estado_credito(
+                        db=db,
+                        credito=cred,
+                        nuevo_estado=EstadoCredito.INCOBRABLE,
+                        usuario_id=current_user.id if current_user else None,
+                        motivo=f"Propagado por estado INCOBRABLE del cliente (CUIL {cliente.cuil})",
+                        origen="CASCADA_CLIENTE"
+                    )
+                    for cuota in cred.cuotas:
+                        cuota_est = cuota.estado.value if hasattr(cuota.estado, "value") else str(cuota.estado)
+                        if cuota_est not in [EstadoCuota.CANCELADA.value, EstadoCuota.NO_COMPRADA.value]:
+                            cuota.estado = EstadoCuota.INCOBRABLE.value
+            elif nuevo_estado_str == EstadoClienteEnum.ACTIVO.value:
+                from datetime import date
+                hoy = date.today()
+                for cred in cliente.creditos:
+                    c_est = cred.estado.value if hasattr(cred.estado, "value") else str(cred.estado)
+                    if c_est == EstadoCredito.INCOBRABLE.value:
+                        for cuota in cred.cuotas:
+                            cuota_est = cuota.estado.value if hasattr(cuota.estado, "value") else str(cuota.estado)
+                            if cuota_est == EstadoCuota.INCOBRABLE.value:
+                                cuota.actualizar_estado(hoy)
+                        cred.actualizar_estado()
             
         import asyncio
         from src.services.repet import screen_person, sync_repet_data
@@ -558,11 +634,50 @@ def update_cliente(
             raise HTTPException(status_code=400, detail="El ID de Provincia o Empleador ingresado no existe en la base de datos.")
         elif "unique" in error_msg:
             raise HTTPException(status_code=400, detail="Error de integridad. El CUIL o Documento ingresado ya está registrado por otro cliente.")
-        else:
-            raise HTTPException(status_code=400, detail=f"Error de base de datos: {str(e.orig)}")
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/{cuil}/historial-estados", response_model=List[HistorialEstadoClienteOut])
+def get_historial_cliente_estados(cuil: str, db: Session = Depends(get_db)):
+    cliente = db.query(Cliente).filter(Cliente.cuil == cuil).first()
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+
+    registros = (
+        db.query(HistorialEstadoCliente)
+        .options(joinedload(HistorialEstadoCliente.usuario))
+        .filter(HistorialEstadoCliente.cliente_cuil == cuil)
+        .order_by(HistorialEstadoCliente.fecha_cambio.desc())
+        .all()
+    )
+
+    result = []
+    for reg in registros:
+        u_nombre = None
+        u_email = None
+        if reg.usuario:
+            u_nombre = reg.usuario.nombre_completo
+            u_email = reg.usuario.email
+
+        result.append(
+            HistorialEstadoClienteOut(
+                id=reg.id,
+                cliente_cuil=reg.cliente_cuil,
+                estado_anterior=reg.estado_anterior,
+                estado_nuevo=reg.estado_nuevo,
+                fecha_cambio=reg.fecha_cambio,
+                usuario_id=reg.usuario_id,
+                usuario_nombre=u_nombre,
+                usuario_email=u_email,
+                origen=reg.origen,
+                motivo=reg.motivo,
+            )
+        )
+    return result
 
 @router.delete("/{cuil}")
 def delete_cliente(cuil: str, db: Session = Depends(get_db)):

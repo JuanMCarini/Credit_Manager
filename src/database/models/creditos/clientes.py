@@ -166,6 +166,12 @@ class Cliente(Base):
     empleador = relationship("Empleador", back_populates="empleados")
     referidos = relationship("Referido", back_populates="cliente", cascade="all, delete-orphan")
     repet_audit_logs = relationship("RepetAuditLog", back_populates="cliente", cascade="all, delete-orphan")
+    historial_estados = relationship(
+        "HistorialEstadoCliente",
+        back_populates="cliente",
+        cascade="all, delete-orphan",
+        order_by="desc(HistorialEstadoCliente.fecha_cambio)",
+    )
 
     @validates("cuil", "documento")
     def validate_cuil_dni(self, key, value):
@@ -206,16 +212,15 @@ class Cliente(Base):
             else:
                 estados_str.append(str(e))
 
-        if "JUDICIAL" in estados_str:
+        all_cancelado = all(e in ["CANCELADO", "RECHAZADO"] for e in estados_str)
+        if all_cancelado:
+            self.estado = EstadoClienteEnum.INACTIVO
+        elif "JUDICIAL" in estados_str or "INCOBRABLE" in estados_str:
             self.estado = EstadoClienteEnum.INCOBRABLE
         elif "MOROSO" in estados_str:
             self.estado = EstadoClienteEnum.MOROSO
         else:
-            all_cancelado = all(e == "CANCELADO" for e in estados_str)
-            if all_cancelado:
-                self.estado = EstadoClienteEnum.INACTIVO
-            else:
-                self.estado = EstadoClienteEnum.ACTIVO
+            self.estado = EstadoClienteEnum.ACTIVO
 
         return self.estado.value if isinstance(self.estado, EstadoClienteEnum) else self.estado
 

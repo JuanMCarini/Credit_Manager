@@ -5,7 +5,7 @@ from src.database.models.deuda import Inversor, CuentaComitente, TitularidadCuen
 from src.database.models.deuda.movimientos import MovimientoDeuda, TipoMovimiento, TitularidadMovimientoDeuda
 
 
-def new_serie(db, nombre: str, fecha: date, tna: float, plazo: int):
+def new_serie(db, nombre: str, fecha: date, tna: float, plazo: int, comision: bool = False):
     serie = db.query(Serie).filter(Serie.name == nombre).first()
     if not serie:
         serie = Serie(
@@ -13,6 +13,7 @@ def new_serie(db, nombre: str, fecha: date, tna: float, plazo: int):
             fecha_suscripcion=fecha,
             tna=tna,
             plazo=plazo,
+            comision=comision,
         )
         db.add(serie)
         db.flush()  # Para obtener el serie.id

@@ -41,3 +41,21 @@ class ClienteCreate(BaseModel):
     pep: bool = False
     repet: bool = False
     referidos: List[ReferidoCreate] = []
+    motivo_estado: Optional[str] = None
+
+from datetime import datetime
+
+class HistorialEstadoClienteOut(BaseModel):
+    id: int
+    cliente_cuil: str
+    estado_anterior: Optional[str] = None
+    estado_nuevo: str
+    fecha_cambio: datetime
+    usuario_id: Optional[int] = None
+    usuario_nombre: Optional[str] = None
+    usuario_email: Optional[str] = None
+    origen: str
+    motivo: Optional[str] = None
+
+    class Config:
+        from_attributes = True

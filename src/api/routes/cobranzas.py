@@ -199,7 +199,9 @@ def get_procesos(db: Session = Depends(get_db)):
         func.sum(Cobranza.capital).label("capital"),
         func.sum(Cobranza.interes).label("interes"),
         func.sum(Cobranza.iva).label("iva"),
-        func.sum(Cobranza.capital + Cobranza.interes + Cobranza.iva).label("total")
+        func.sum(Cobranza.capital + Cobranza.interes + Cobranza.iva).label("total"),
+        func.min(Cobranza.fecha).label("fecha_min"),
+        func.max(Cobranza.fecha).label("fecha_max")
     ).group_by(Cobranza.proceso_id).all()
     
     totals_map = {
@@ -207,19 +209,31 @@ def get_procesos(db: Session = Depends(get_db)):
             "capital": float(t.capital or 0),
             "interes": float(t.interes or 0),
             "iva": float(t.iva or 0),
-            "total": float(t.total or 0)
+            "total": float(t.total or 0),
+            "fecha_min": t.fecha_min.strftime("%Y-%m-%d") if t.fecha_min else None,
+            "fecha_max": t.fecha_max.strftime("%Y-%m-%d") if t.fecha_max else None
         } for t in totals_query if t.proceso_id is not None
     }
     
     result = []
     for p in procesos:
-        p_totals = totals_map.get(p.id, {"capital": 0.0, "interes": 0.0, "iva": 0.0, "total": 0.0})
+        p_totals = totals_map.get(p.id, {"capital": 0.0, "interes": 0.0, "iva": 0.0, "total": 0.0, "fecha_min": None, "fecha_max": None})
+        f_min = p_totals.get("fecha_min")
+        f_max = p_totals.get("fecha_max")
+        if f_min and f_max:
+            fecha_emision_desc = f_min if f_min == f_max else f"{f_min} al {f_max}"
+        else:
+            fecha_emision_desc = "-"
+
         result.append({
             "ID": p.id,
             "Tipo": p.tipo.value if hasattr(p.tipo, 'value') else str(p.tipo),
             "Estado": p.estado.value if hasattr(p.estado, 'value') else str(p.estado),
             "Descripción": p.descripcion or "-",
             "Fecha Ejecución": p.fecha_ejecucion.strftime("%Y-%m-%d %H:%M:%S") if p.fecha_ejecucion else "-",
+            "Fecha Emisión Cobranza": fecha_emision_desc,
+            "Fecha Emision Min": f_min,
+            "Fecha Emision Max": f_max,
             "Capital": p_totals["capital"],
             "Interes": p_totals["interes"],
             "IVA": p_totals["iva"],

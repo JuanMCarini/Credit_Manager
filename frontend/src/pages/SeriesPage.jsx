@@ -1,11 +1,13 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axiosClient from '../api/axiosClient';
-import { Plus, X, Eye, Edit, Trash2, PlusCircle, MinusCircle } from 'lucide-react';
+import { Plus, X, Eye, Edit, Trash2, PlusCircle, MinusCircle, Layers } from 'lucide-react';
 import ExportExcelButton from '../components/ExportExcelButton';
 import ExcelListFilter from '../components/ExcelListFilter';
 import ExcelNumberRangeFilter from '../components/ExcelNumberRangeFilter';
 import ExcelDateFilter from '../components/ExcelDateFilter';
+import NuevaSeriePreviewModal from '../components/NuevaSeriePreviewModal';
+import RenovacionPreviewModal from '../components/RenovacionPreviewModal';
 import { useAuthStore } from '../store/useAuthStore';
 import useAppStore from '../store/useAppStore';
 
@@ -15,6 +17,9 @@ const SeriesPage = () => {
   const { comisionesDeuda } = useAppStore();
   const isAuditor = user?.rol === 'Auditor / Solo Lectura';
   const [showAddModal, setShowAddModal] = useState(false);
+  const [initialAddData, setInitialAddData] = useState(null);
+  const [nuevaSeriePreview, setNuevaSeriePreview] = useState(null);
+
   const [editSerieData, setEditSerieData] = useState(null);
   const [fechaCorte, setFechaCorte] = useState(new Date().toISOString().split('T')[0]);
   const [tableFilters, setTableFilters] = useState({});
@@ -32,6 +37,8 @@ const SeriesPage = () => {
 
   const [showRenovacionModal, setShowRenovacionModal] = useState(false);
   const [selectedSerieVieja, setSelectedSerieVieja] = useState(null);
+  const [initialRenovacionData, setInitialRenovacionData] = useState(null);
+  const [renovacionPreview, setRenovacionPreview] = useState(null);
   const [renovacionResults, setRenovacionResults] = useState(null);
   const [resumenData, setResumenData] = useState(null);
 
@@ -56,7 +63,12 @@ const SeriesPage = () => {
 
   const series = data?.items || [];
   const movimientos = movimientosData?.items || [];
-  const formatCurrency = (val) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(val);
+  const formatCurrency = (val) => {
+    if (val === null || val === undefined || isNaN(val)) return '$ 0,00';
+    const num = Number(val);
+    if (Math.abs(num) < 0.005) return '$ 0,00';
+    return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(num);
+  };
   const formatDate = (dateObj) => dateObj.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
   const computedSeries = useMemo(() => {
@@ -87,6 +99,9 @@ const SeriesPage = () => {
         });
       } else {
         calculatedCapital = s.capital || 0;
+      }
+      if (Math.abs(calculatedCapital) < 0.005) {
+        calculatedCapital = 0;
       }
       return { ...s, computedCapital: calculatedCapital };
     });
@@ -313,6 +328,32 @@ const SeriesPage = () => {
     return acc;
   }, { capital: 0, interes: 0, total: 0, interesDevengado: 0, interesADevengar: 0, interesMensual: 0, capitalMasDevengado: 0 });
 
+  // Preview Nueva Serie Mutation
+  const previewNuevaSerieMutation = useMutation({
+    mutationFn: async (nuevaSerieData) => {
+      const formData = new FormData();
+      formData.append('name', nuevaSerieData.name);
+      formData.append('fecha_suscripcion', nuevaSerieData.fecha_suscripcion);
+      formData.append('tna', nuevaSerieData.tna);
+      formData.append('plazo', nuevaSerieData.plazo);
+      formData.append('file', nuevaSerieData.file);
+      const res = await axiosClient.post('/api/v1/inversores/series/preview-upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      return res.data;
+    },
+    onSuccess: (data, variables) => {
+      setNuevaSeriePreview({
+        preview: data.preview,
+        formPayload: variables
+      });
+      setShowAddModal(false);
+    },
+    onError: (error) => {
+      alert(error.response?.data?.detail || 'Error al validar el archivo de la nueva serie');
+    }
+  });
+
   // Add Mutation
   const addMutation = useMutation({
     mutationFn: async (nuevaSerie) => {
@@ -323,6 +364,7 @@ const SeriesPage = () => {
         formData.append('fecha_suscripcion', nuevaSerie.fecha_suscripcion);
         formData.append('tna', nuevaSerie.tna);
         formData.append('plazo', nuevaSerie.plazo);
+        formData.append('comision', nuevaSerie.comision ? 'true' : 'false');
         formData.append('file', nuevaSerie.file);
         res = await axiosClient.post('/api/v1/inversores/series/upload', formData, {
           headers: { 'Content-Type': 'multipart/form-data' }
@@ -335,6 +377,8 @@ const SeriesPage = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['series-deuda'] });
       setShowAddModal(false);
+      setNuevaSeriePreview(null);
+      setInitialAddData(null);
       alert('Serie creada con éxito');
     },
     onError: (error) => {
@@ -370,10 +414,44 @@ const SeriesPage = () => {
     }
   });
 
+  // Preview Renovacion Mutation
+  const previewRenovacionMutation = useMutation({
+    mutationFn: async (renovacionData) => {
+      const formData = new FormData();
+      formData.append('serie_vieja', renovacionData.serie_vieja);
+      if (renovacionData.series_viejas) {
+        formData.append('series_viejas', renovacionData.series_viejas);
+      }
+      formData.append('serie_nueva', renovacionData.serie_nueva);
+      formData.append('fecha_suscripcion', renovacionData.fecha_suscripcion);
+      formData.append('tna', renovacionData.tna);
+      formData.append('plazo', renovacionData.plazo);
+      formData.append('file', renovacionData.file);
+      
+      const res = await axiosClient.post('/api/v1/inversores/series/preview-renovacion', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      return res.data;
+    },
+    onSuccess: (data, variables) => {
+      setRenovacionPreview({
+        preview: data.preview,
+        formPayload: variables
+      });
+      setShowRenovacionModal(false);
+    },
+    onError: (error) => {
+      alert(error.response?.data?.detail || 'Error al validar el archivo de renovación');
+    }
+  });
+
   const renovarMutation = useMutation({
     mutationFn: async (renovacionData) => {
       const formData = new FormData();
       formData.append('serie_vieja', renovacionData.serie_vieja);
+      if (renovacionData.series_viejas) {
+        formData.append('series_viejas', renovacionData.series_viejas);
+      }
       formData.append('serie_nueva', renovacionData.serie_nueva);
       formData.append('fecha_suscripcion', renovacionData.fecha_suscripcion);
       formData.append('tna', renovacionData.tna);
@@ -389,7 +467,10 @@ const SeriesPage = () => {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['series-deuda'] });
+      queryClient.invalidateQueries({ queryKey: ['movimientos-deuda'] });
       setShowRenovacionModal(false);
+      setRenovacionPreview(null);
+      setInitialRenovacionData(null);
       if (data.df_ei && data.df_ei.length > 0) {
         setRenovacionResults(data.df_ei);
       } else {
@@ -423,7 +504,14 @@ const SeriesPage = () => {
             Limpiar Filtros
           </button>
           {!isAuditor && (
-            <button className="btn-primary" onClick={() => setShowAddModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <button
+              className="btn-primary"
+              onClick={() => {
+                setInitialAddData(null);
+                setShowAddModal(true);
+              }}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
               <Plus size={16} /> Nueva Serie
             </button>
           )}
@@ -441,12 +529,12 @@ const SeriesPage = () => {
       </div>
 
       <div className="results-container glass-panel">
-        <div className="table-responsive">
-          <table className="data-table">
+        <div className="table-responsive" style={{ overflow: 'auto' }}>
+          <table className="data-table" style={{ minWidth: '1600px' }}>
             <thead>
               <tr>
                 {[
-                            { key: 'id', label: 'ID' },
+                  { key: 'id', label: 'ID' },
                   { key: 'name', label: 'Nombre' },
                   { key: 'fecha_suscripcion', label: 'Fecha de Susc.' },
                   { key: 'tna', label: 'TNA (%)' },
@@ -465,7 +553,7 @@ const SeriesPage = () => {
                   const isDateCol = ["fecha_suscripcion", "fecha_vencimiento"].includes(col.key);
                   
                   return (
-                    <th key={col.key} onClick={() => handleSort(col.key)} style={{ cursor: 'pointer' }}>
+                    <th key={col.key} onClick={() => handleSort(col.key)} style={{ cursor: 'pointer', whiteSpace: 'nowrap' }}>
                       <div style={{ marginBottom: '8px' }}>
                         {col.label} <SortIcon columnKey={col.key} />
                       </div>
@@ -493,7 +581,7 @@ const SeriesPage = () => {
                     </th>
                   );
                 })}
-                <th>Acciones</th>
+                <th style={{ whiteSpace: 'nowrap' }}>Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -534,20 +622,20 @@ const SeriesPage = () => {
 
                   return (
                     <tr key={s.id}>
-                      <td>{s.id}</td>
-                      <td><strong>{s.name}</strong></td>
-                      <td>{formatDate(fSuscripcion)}</td>
-                      <td>{(s.tna * 100).toFixed(2)}%</td>
-                      <td>{s.plazo}</td>
-                      <td>{formatDate(fVencimiento)}</td>
-                      <td>{formatCurrency(capital)}</td>
-                      <td>{formatCurrency(interes)}</td>
-                      <td>{formatCurrency(total)}</td>
-                      <td>{formatCurrency(interesMensual)}</td>
-                      <td>{formatCurrency(interesDevengado)}</td>
-                      <td>{formatCurrency(interesADevengar)}</td>
-                      <td style={{ fontWeight: 'bold' }}>{formatCurrency(capital + interesDevengado)}</td>
-                      <td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{s.id}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}><strong>{s.name}</strong></td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{formatDate(fSuscripcion)}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{(s.tna * 100).toFixed(2)}%</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{s.plazo}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{formatDate(fVencimiento)}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{formatCurrency(capital)}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{formatCurrency(interes)}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{formatCurrency(total)}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{formatCurrency(interesMensual)}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{formatCurrency(interesDevengado)}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{formatCurrency(interesADevengar)}</td>
+                      <td style={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>{formatCurrency(capital + interesDevengado)}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>
                         {s.comision ? (
                           <span style={{ color: 'var(--success-color)', fontWeight: 'bold' }}>
                             Sí {s.comisiones?.length > 0 ? `(${s.comisiones.length})` : ''}
@@ -556,7 +644,7 @@ const SeriesPage = () => {
                           <span style={{ color: 'var(--text-muted)' }}>No</span>
                         )}
                       </td>
-                      <td>
+                      <td style={{ whiteSpace: 'nowrap' }}>
                         <div style={{ display: 'flex', gap: '4px' }}>
                           <button 
                             className="btn-secondary" 
@@ -587,6 +675,7 @@ const SeriesPage = () => {
                                 className="btn-secondary" 
                                 style={{ padding: '4px', fontSize: '14px' }}
                                 onClick={() => {
+                                  setInitialRenovacionData(null);
                                   setSelectedSerieVieja(s);
                                   setShowRenovacionModal(true);
                                 }}
@@ -636,10 +725,32 @@ const SeriesPage = () => {
 
       {showAddModal && (
         <AddSerieModal
-          onClose={() => setShowAddModal(false)}
+          initialData={initialAddData}
+          onClose={() => {
+            setShowAddModal(false);
+            setInitialAddData(null);
+          }}
           onSubmit={(data) => addMutation.mutate(data)}
+          onPreview={(data) => previewNuevaSerieMutation.mutate(data)}
+          isPreviewLoading={previewNuevaSerieMutation.isPending}
           isLoading={addMutation.isPending}
           comisionesDeuda={comisionesDeuda}
+        />
+      )}
+      {nuevaSeriePreview && (
+        <NuevaSeriePreviewModal
+          previewData={nuevaSeriePreview.preview}
+          onConfirm={() => addMutation.mutate(nuevaSeriePreview.formPayload)}
+          onBack={() => {
+            setInitialAddData(nuevaSeriePreview.formPayload);
+            setShowAddModal(true);
+            setNuevaSeriePreview(null);
+          }}
+          onClose={() => {
+            setNuevaSeriePreview(null);
+            setInitialAddData(null);
+          }}
+          isLoadingConfirm={addMutation.isPending}
         />
       )}
       {editSerieData && (
@@ -655,9 +766,30 @@ const SeriesPage = () => {
       {showRenovacionModal && selectedSerieVieja && (
         <RenovacionModal
           serieVieja={selectedSerieVieja}
-          onClose={() => setShowRenovacionModal(false)}
-          onSubmit={(data) => renovarMutation.mutate(data)}
-          isLoading={renovarMutation.isPending}
+          allSeries={series}
+          initialData={initialRenovacionData}
+          onClose={() => {
+            setShowRenovacionModal(false);
+            setInitialRenovacionData(null);
+          }}
+          onPreview={(data) => previewRenovacionMutation.mutate(data)}
+          isPreviewLoading={previewRenovacionMutation.isPending}
+        />
+      )}
+      {renovacionPreview && (
+        <RenovacionPreviewModal
+          previewData={renovacionPreview.preview}
+          onConfirm={() => renovarMutation.mutate(renovacionPreview.formPayload)}
+          onBack={() => {
+            setInitialRenovacionData(renovacionPreview.formPayload);
+            setShowRenovacionModal(true);
+            setRenovacionPreview(null);
+          }}
+          onClose={() => {
+            setRenovacionPreview(null);
+            setInitialRenovacionData(null);
+          }}
+          isLoadingConfirm={renovarMutation.isPending}
         />
       )}
       {renovacionResults && (
@@ -678,14 +810,14 @@ const SeriesPage = () => {
 };
 
 // Modal Component
-const AddSerieModal = ({ onClose, onSubmit, isLoading, comisionesDeuda }) => {
+const AddSerieModal = ({ onClose, onSubmit, onPreview, isPreviewLoading, isLoading, comisionesDeuda, initialData }) => {
   const [formData, setFormData] = useState({
-    name: '',
-    fecha_suscripcion: '',
-    tna: '',
-    plazo: '',
-    comision: false,
-    file: null
+    name: initialData?.name || '',
+    fecha_suscripcion: initialData?.fecha_suscripcion || '',
+    tna: initialData?.tna !== undefined ? (initialData.tna * 100).toString() : '',
+    plazo: initialData?.plazo !== undefined ? initialData.plazo.toString() : '',
+    comision: initialData?.comision || false,
+    file: initialData?.file || null
   });
 
   const handleSubmit = (e) => {
@@ -699,8 +831,10 @@ const AddSerieModal = ({ onClose, onSubmit, isLoading, comisionesDeuda }) => {
     };
     if (formData.file) {
       data.file = formData.file;
+      onPreview(data);
+    } else {
+      onSubmit(data);
     }
-    onSubmit(data);
   };
 
   return (
@@ -788,13 +922,20 @@ const AddSerieModal = ({ onClose, onSubmit, isLoading, comisionesDeuda }) => {
               onChange={e => setFormData({ ...formData, file: e.target.files[0] })}
               style={{ padding: '8px 0' }}
             />
-            <small style={{ color: 'var(--text-muted)' }}>Procesa y carga las suscripciones asociadas a la serie usando la función `nueva_serie`.</small>
+            {formData.file && (
+              <small style={{ color: 'var(--accent-primary, #6366f1)', display: 'block', marginTop: '4px' }}>
+                Archivo: {formData.file.name}. Podrá previsualizar los resultados antes de guardar.
+              </small>
+            )}
+            <small style={{ color: 'var(--text-muted)' }}>Procesa y carga las suscripciones asociadas a la serie.</small>
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
-            <button type="button" className="btn-secondary" onClick={onClose} disabled={isLoading}>Cancelar</button>
-            <button type="submit" className="btn-primary" disabled={isLoading}>
-              {isLoading ? 'Guardando...' : 'Crear Serie'}
+            <button type="button" className="btn-secondary" onClick={onClose} disabled={isLoading || isPreviewLoading}>Cancelar</button>
+            <button type="submit" className="btn-primary" disabled={isLoading || isPreviewLoading}>
+              {formData.file
+                ? (isPreviewLoading ? 'Analizando archivo...' : 'Previsualizar Carga')
+                : (isLoading ? 'Guardando...' : 'Crear Serie')}
             </button>
           </div>
         </form>
@@ -804,14 +945,37 @@ const AddSerieModal = ({ onClose, onSubmit, isLoading, comisionesDeuda }) => {
 };
 
 // Renovacion Modal Component
-const RenovacionModal = ({ serieVieja, onClose, onSubmit, isLoading }) => {
+const RenovacionModal = ({ serieVieja, allSeries = [], onClose, onPreview, isPreviewLoading, initialData }) => {
   const [formData, setFormData] = useState({
-    serie_nueva: '',
-    fecha_suscripcion: '',
-    tna: '',
-    plazo: '',
-    file: null
+    serie_nueva: initialData?.serie_nueva || '',
+    fecha_suscripcion: initialData?.fecha_suscripcion || '',
+    tna: initialData?.tna !== undefined ? (initialData.tna * 100).toString() : '',
+    plazo: initialData?.plazo !== undefined ? initialData.plazo.toString() : '',
+    file: initialData?.file || null
   });
+
+  const [selectedMergedSeries, setSelectedMergedSeries] = useState(() => {
+    if (initialData?.selectedMergedSeries) return initialData.selectedMergedSeries;
+    if (initialData?.series_viejas) {
+      try {
+        const parsed = JSON.parse(initialData.series_viejas);
+        if (Array.isArray(parsed)) {
+          return parsed.filter(n => n !== serieVieja.name);
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return [];
+  });
+
+  // Series that have the exact same maturity date as serieVieja (excluding serieVieja itself)
+  const compatibleSeries = useMemo(() => {
+    if (!allSeries || !serieVieja?.fecha_vencimiento) return [];
+    return allSeries.filter(
+      (s) => s.id !== serieVieja.id && s.fecha_vencimiento === serieVieja.fecha_vencimiento
+    );
+  }, [allSeries, serieVieja]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -819,15 +983,18 @@ const RenovacionModal = ({ serieVieja, onClose, onSubmit, isLoading }) => {
       alert("Es necesario adjuntar el archivo de liquidación para la renovación.");
       return;
     }
+    const allViejasNames = [serieVieja.name, ...selectedMergedSeries];
     const data = {
       serie_vieja: serieVieja.name,
+      series_viejas: allViejasNames.length > 1 ? JSON.stringify(allViejasNames) : undefined,
+      selectedMergedSeries: selectedMergedSeries,
       serie_nueva: formData.serie_nueva,
       fecha_suscripcion: formData.fecha_suscripcion,
       tna: parseFloat(formData.tna) / 100,
       plazo: parseInt(formData.plazo, 10),
       file: formData.file
     };
-    onSubmit(data);
+    onPreview(data);
   };
 
   return (
@@ -836,11 +1003,15 @@ const RenovacionModal = ({ serieVieja, onClose, onSubmit, isLoading }) => {
       backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
       display: 'flex', justifyContent: 'center', alignItems: 'center'
     }}>
-      <div className="glass-panel" style={{ width: '400px', maxWidth: '90%', maxHeight: '90vh', overflowY: 'auto', padding: '24px', position: 'relative' }}>
+      <div className="glass-panel" style={{ width: '460px', maxWidth: '90%', maxHeight: '90vh', overflowY: 'auto', padding: '24px', position: 'relative' }}>
         <button onClick={onClose} style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-color)' }}>
           <X size={20} />
         </button>
-        <h3 style={{ marginTop: 0, marginBottom: '20px' }}>Renovar Serie: {serieVieja.name}</h3>
+        <h3 style={{ marginTop: 0, marginBottom: '6px' }}>Renovar Serie: {serieVieja.name}</h3>
+        <p style={{ margin: '0 0 18px 0', fontSize: '12px', color: 'var(--text-muted)' }}>
+          Fecha de vencimiento: <strong>{serieVieja.fecha_vencimiento}</strong>
+        </p>
+
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
           <div className="form-group">
@@ -856,7 +1027,7 @@ const RenovacionModal = ({ serieVieja, onClose, onSubmit, isLoading }) => {
           </div>
 
           <div className="form-group">
-            <label>Fecha de Suscripción *</label>
+            <label>Fecha de Suscripcion *</label>
             <input
               type="date"
               required
@@ -891,22 +1062,94 @@ const RenovacionModal = ({ serieVieja, onClose, onSubmit, isLoading }) => {
             />
           </div>
 
+          {/* Fusionar con otra(s) serie(s) que vencen en la misma fecha */}
+          {compatibleSeries.length > 0 && (
+            <div
+              style={{
+                border: '1px solid var(--border-color)',
+                borderRadius: '8px',
+                padding: '12px',
+                backgroundColor: 'rgba(255, 255, 255, 0.02)'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                <Layers size={16} color="var(--accent-primary, #6366f1)" />
+                <label style={{ margin: 0, fontWeight: 600, fontSize: '13px', color: 'var(--text-color)' }}>
+                  Fusionar con otra(s) serie(s)
+                </label>
+              </div>
+              <p style={{ margin: '0 0 10px 0', fontSize: '11px', color: 'var(--text-muted)' }}>
+                Series detectadas con mismo vencimiento (<strong>{serieVieja.fecha_vencimiento}</strong>):
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '130px', overflowY: 'auto' }}>
+                {compatibleSeries.map(s => {
+                  const isSelected = selectedMergedSeries.includes(s.name);
+                  return (
+                    <label
+                      key={s.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '6px 8px',
+                        borderRadius: '6px',
+                        backgroundColor: isSelected ? 'rgba(99, 102, 241, 0.12)' : 'rgba(255, 255, 255, 0.03)',
+                        border: isSelected ? '1px solid var(--accent-primary, #6366f1)' : '1px solid rgba(255, 255, 255, 0.06)',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={e => {
+                          if (e.target.checked) {
+                            setSelectedMergedSeries([...selectedMergedSeries, s.name]);
+                          } else {
+                            setSelectedMergedSeries(selectedMergedSeries.filter(name => name !== s.name));
+                          }
+                        }}
+                        style={{ width: '15px', height: '15px', cursor: 'pointer' }}
+                      />
+                      <div style={{ flex: 1, fontSize: '11px', display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ fontWeight: 600, color: 'var(--text-color)' }}>{s.name}</span>
+                        <span style={{ color: 'var(--text-muted)' }}>
+                          {(s.tna * 100).toFixed(1)}% | {s.plazo}d
+                        </span>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+              {selectedMergedSeries.length > 0 && (
+                <small style={{ color: 'var(--accent-primary, #6366f1)', display: 'block', marginTop: '6px', fontSize: '11px' }}>
+                  ✓ Se consolidarán {selectedMergedSeries.length + 1} series en la nueva emisión.
+                </small>
+              )}
+            </div>
+          )}
+
           <div className="form-group">
             <label>Archivo de Liquidación (Excel/CSV) *</label>
             <input
               type="file"
-              required
+              required={!formData.file}
               accept=".xlsx,.csv"
               onChange={e => setFormData({ ...formData, file: e.target.files[0] })}
               style={{ padding: '8px 0' }}
             />
+            {formData.file && (
+              <small style={{ color: 'var(--accent-primary, #6366f1)', display: 'block', marginTop: '4px' }}>
+                Archivo: {formData.file.name}. Podrá previsualizar los resultados antes de confirmar.
+              </small>
+            )}
             <small style={{ color: 'var(--text-muted)' }}>Procesa los rescates, renovaciones y suscripciones.</small>
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
-            <button type="button" className="btn-secondary" onClick={onClose} disabled={isLoading}>Cancelar</button>
-            <button type="submit" className="btn-primary" disabled={isLoading}>
-              {isLoading ? 'Renovando...' : 'Renovar Serie'}
+            <button type="button" className="btn-secondary" onClick={onClose} disabled={isPreviewLoading}>Cancelar</button>
+            <button type="submit" className="btn-primary" disabled={isPreviewLoading}>
+              {isPreviewLoading ? 'Analizando Liquidación...' : 'Previsualizar Renovación'}
             </button>
           </div>
         </form>
@@ -932,12 +1175,12 @@ const RenovacionResultsModal = ({ data, onClose }) => {
           <ExportExcelButton data={data} filename="Renovacion_Resultados" />
         </div>
         
-        <div className="table-responsive">
-          <table className="data-table">
+        <div className="table-responsive" style={{ overflow: 'auto', maxHeight: '60vh', minHeight: '200px' }}>
+          <table className="data-table" style={{ width: '100%', minWidth: '950px' }}>
             <thead>
               <tr>
                 {data.length > 0 && Object.keys(data[0]).map((key) => (
-                  <th key={key}>{key}</th>
+                  <th key={key} style={{ whiteSpace: 'nowrap' }}>{key}</th>
                 ))}
               </tr>
             </thead>
@@ -946,10 +1189,10 @@ const RenovacionResultsModal = ({ data, onClose }) => {
                 <tr key={index}>
                   {Object.entries(row).map(([key, val], idx) => {
                     const isMonetaryCol = ["Capital", "Interés", "Total", "Rescate", "Suscripción"].includes(key);
-                    const formattedVal = (isMonetaryCol && !isNaN(val) && val !== "")
-                      ? new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(val)
-                      : String(val);
-                    return <td key={idx}>{formattedVal}</td>;
+                    const formattedVal = (isMonetaryCol && !isNaN(val) && val !== "" && val !== null)
+                      ? (Math.abs(Number(val)) < 0.005 ? '$ 0,00' : new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(val))
+                      : String(val !== null ? val : '');
+                    return <td key={idx} style={{ whiteSpace: 'nowrap' }}>{formattedVal}</td>;
                   })}
                 </tr>
               ))}
@@ -1106,7 +1349,7 @@ const ResumenModal = ({ serieName, data, onClose }) => {
       backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
       display: 'flex', justifyContent: 'center', alignItems: 'center'
     }}>
-      <div className="glass-panel" style={{ width: '900px', maxWidth: '95%', maxHeight: '90vh', overflowY: 'auto', padding: '24px', position: 'relative' }}>
+      <div className="glass-panel" style={{ width: '1100px', maxWidth: '96%', maxHeight: '90vh', overflowY: 'auto', padding: '24px', position: 'relative' }}>
         <button onClick={onClose} style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-color)' }}>
           <X size={20} />
         </button>
@@ -1117,15 +1360,15 @@ const ResumenModal = ({ serieName, data, onClose }) => {
         
         {data && data.length > 0 ? (
           <>
-            <div className="table-responsive">
-              <table className="data-table">
+            <div className="table-responsive" style={{ overflow: 'auto', maxHeight: '60vh', minHeight: '220px' }}>
+              <table className="data-table" style={{ width: '100%', minWidth: '1150px' }}>
                 <thead>
                   <tr>
                     {Object.keys(data[0]).map((key) => {
                       const isMonetaryCol = ["Capital", "Interés", "Total", "Monto", "Int. Dev."].includes(key);
                       const isDateCol = String(key).toLowerCase().includes('fecha');
                       return (
-                        <th key={key} onClick={() => handleSort(key)} style={{ cursor: 'pointer' }}>
+                        <th key={key} onClick={() => handleSort(key)} style={{ cursor: 'pointer', whiteSpace: 'nowrap' }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                             <span>{key}</span>
                             <SortIcon columnKey={key} />
@@ -1162,9 +1405,9 @@ const ResumenModal = ({ serieName, data, onClose }) => {
                       {Object.entries(row).map(([key, val], idx) => {
                         const isMonetaryCol = ["Capital", "Interés", "Total", "Monto", "Int. Dev."].includes(key);
                         const formattedVal = (isMonetaryCol && !isNaN(val) && val !== "" && val !== null)
-                          ? new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(val)
+                          ? (Math.abs(Number(val)) < 0.005 ? '$ 0,00' : new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(val))
                           : String(val !== null ? val : '');
-                        return <td key={idx}>{formattedVal}</td>;
+                        return <td key={idx} style={{ whiteSpace: 'nowrap' }}>{formattedVal}</td>;
                       })}
                     </tr>
                   ))}
@@ -1172,10 +1415,11 @@ const ResumenModal = ({ serieName, data, onClose }) => {
                 <tfoot>
                   <tr>
                     {Object.keys(data[0]).map((key, idx) => {
-                      if (idx === 0) return <td key={idx} style={{ fontWeight: 'bold' }}>Totales ({filteredAndSortedData.length})</td>;
+                      if (idx === 0) return <td key={idx} style={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>Totales ({filteredAndSortedData.length})</td>;
                       const subtotalVal = subtotals[key];
                       if (subtotalVal !== null && subtotalVal !== undefined) {
-                        return <td key={idx} style={{ fontWeight: 'bold' }}>{new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(subtotalVal)}</td>;
+                        const formattedSub = Math.abs(Number(subtotalVal)) < 0.005 ? '$ 0,00' : new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(subtotalVal);
+                        return <td key={idx} style={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>{formattedSub}</td>;
                       }
                       return <td key={idx}></td>;
                     })}
