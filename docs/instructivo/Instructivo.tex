@@ -10,6 +10,8 @@
 \usepackage{graphicx}
 \usepackage{geometry}
 \geometry{a4paper, margin=1in}
+\emergencystretch=2.5em
+\renewcommand{\_}{\textunderscore\allowbreak}
 
 \title{Instructivo de Uso: Credit Manager}
 \author{Documentación Oficial}
@@ -18,377 +20,779 @@
 \begin{document}
 
 \maketitle
+\newpage
+
 \tableofcontents
 \newpage
 
 \section{Introducción}
-\textbf{Credit Manager} es un sistema avanzado para la gestión de carteras de créditos, motores de amortización e ingesta de datos. Permite la administración integral de activos financieros, el cálculo preciso de cuotas y el manejo masivo de carteras y cobranzas.
+Bienvenido a \textbf{Credit Manager}, la plataforma integral diseñada para simplificar y agilizar la administración diaria de préstamos, cobranzas, cheques, inversores y finanzas en tu empresa. 
 
-\section{Características Principales}
+Este instructivo fue elaborado pensando en las personas que utilizan el sistema en su labor cotidiana (operadores comerciales, analistas de crédito, cajeros, responsables de cobranzas y personal de tesorería). Aquí encontrarás explicaciones claras, sin tecnicismos innecesarios, y guías prácticas paso a paso para que puedas operar cada módulo con total confianza y eficacia.
+
+\newpage
+
+\section{¿Qué Podés Hacer con Credit Manager?}
+El sistema reúne en un solo lugar todas las herramientas necesarias para la operatoria financiera de tu compañía:
+
 \begin{itemize}
-    \item \textbf{Motor de Amortización:} Cálculo de cuotas utilizando el Sistema Francés, permitiendo ajustes dinámicos de capital, interés e IVA.
-    \item \textbf{Ingesta de Carteras (ETL):} Procesamiento masivo de carteras desde archivos CSV con validación de integridad referencial.
-    \item \textbf{Cobranzas Masivas Atómicas:} Soporte para procesamiento de planillas Excel. Ante cualquier inconsistencia, se realiza un \textit{rollback} automático para preservar la integridad de la base de datos.
-    \item \textbf{Generación de Punitorios:} Creación automática de créditos independientes por excedentes o sobrantes en los cobros.
-    \item \textbf{API y Dashboards:} Interfaz web intuitiva en React para visualizar KPIs, fichas de clientes y reportes de saldos, respaldada por un backend en FastAPI.
+    \item \textbf{Simular y Otorgar Créditos al Instante:} Calculá cronogramas de cuotas en el momento frente al cliente bajo el Sistema Francés, discriminando con exactitud el capital, los intereses y el IVA.
+    \item \textbf{Ficha Completa de Clientes:} Consultá en una única pantalla los datos personales, historial de pagos, situación crediticia en la Central de Deudores del BCRA y control de listas de seguridad (RePET).
+    \item \textbf{Cobranzas Ágiles (Uno a Uno o por Planilla):} Registrá cobros individuales en caja o importá directamente el archivo de Excel que envía el banco o el ente pagador para imputar cientos de cuotas de una sola vez.
+    \item \textbf{Facturación Electrónica Automática:} Emití comprobantes con autorización electrónica (CAE) conectándote de forma directa con ARCA (ex AFIP) con un solo clic.
+    \item \textbf{Control Total de Cheques Físicos y Electrónicos (E-Cheqs):} Llevá la custodia de valores, calculá descuentos financieros en tiempo real y conciliá depósitos o débitos con tus cuentas bancarias.
+    \item \textbf{Gestión de Inversores y Fondeo:} Estructurá series de pagarés o préstamos privados, liquidá intereses mensuales y gestioná renovaciones o rescates de capital con total transparencia.
+    \item \textbf{Tesorería, Bancos y Posiciones Fiscales:} Importá resúmenes bancarios para conciliar movimientos, controlá facturas de proveedores y liquidá tus posiciones mensuales de IVA e Ingresos Brutos (IIBB).
+    \item \textbf{Papelería Legal Automática:} Descargá pagarés, contratos de cesión y solicitudes completadas automáticamente con los datos del cliente en formatos Word y PDF listos para firmar.
 \end{itemize}
 
-\section{Arquitectura del Sistema}
-El sistema consta de los siguientes componentes principales:
+\newpage
+
+\section{¿Cómo Funciona el Sistema?}
+Para que no tengas que preocuparte por cuestiones técnicas, \textbf{Credit Manager} está organizado en tres partes sencillas:
 \begin{enumerate}
-    \item \textbf{Backend:} Desarrollado en Python utilizando FastAPI y SQLAlchemy. Se encarga de la lógica de negocio, procesamiento financiero y acceso a la base de datos SQLite.
-    \item \textbf{Frontend:} Desarrollado en React y Vite. Provee los paneles interactivos y los reportes gráficos (exportables a PDF).
-    \item \textbf{Datos:} La base de datos opera sobre SQLite con \texttt{PRAGMA foreign\_keys=ON}. Pandas y NumPy se emplean para cálculos vectorizados y limpieza.
+    \item \textbf{La Pantalla Web (lo que ves y usás):} Es el panel visual interactivo al que ingresás desde tu navegador web habitual (Google Chrome, Microsoft Edge, etc.). Es rápido, intuitivo y podés usarlo desde cualquier computadora autorizada.
+    \item \textbf{El Motor de Procesamiento (el cerebro del sistema):} Trabaja en segundo plano ejecutando de forma inmediata todos los cálculos matemáticos: liquidación de cuotas, devengamiento de intereses, validaciones fiscales y cruces de seguridad.
+    \item \textbf{La Base de Datos Segura (el archivo digital):} Guarda toda la información de clientes, préstamos, cobranzas y comprobantes con resguardo permanente, impidiendo que los datos se borren por error o se dupliquen.
 \end{enumerate}
 
-\section{Configuración e Instalación}
-\subsection{Requisitos Previos}
-Es necesario contar con Python 3 y Node.js para el desarrollo local. También se puede desplegar completamente usando Docker Compose.
+\newpage
 
-\subsection{Configuración del Entorno}
-Debe crear un archivo \texttt{.env} en la raíz del proyecto copiando el archivo de ejemplo \texttt{.env.example}. Las variables clave incluyen:
-\begin{verbatim}
-COMPANY_RAZON_SOCIAL="Empresa Ficticia S.A."
-COMPANY_CUIT=30000000000
-COMPANY_DIA_CORTE=28
-\end{verbatim}
-
-Estos datos se sincronizan bidireccionalmente con la base de datos y pueden ser editados posteriormente desde la interfaz web.
-
-\subsection{Ejecución Local}
-Para ejecutar el servidor Backend en modo desarrollo:
-\begin{verbatim}
-# En Linux/macOS
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-uvicorn src.api.main:app --reload
-
-# En Windows (PowerShell)
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-uvicorn src.api.main:app --reload
-\end{verbatim}
-
-\subsection{Ejecución con Docker (Recomendado)}
-Para levantar todos los servicios (Frontend, Backend y BD):
-\begin{verbatim}
-docker-compose -f docker-compose.yml \
-  -f docker-compose.dev.yml up -d --build
-\end{verbatim}
-
-\section{Uso del Sistema}
-
-\subsection{Dashboard}
-Permite visualizar un resumen general y detallado del estado de la cartera de créditos a través de múltiples gráficos interactivos y tablas.
-
-\textbf{Interacción con Filtros:}
-El panel superior del Dashboard cuenta con una barra de filtros que permiten ajustar los cálculos y la información mostrada. Los filtros disponibles incluyen:
+\section{Puesta en Marcha y Configuración Inicial}
+\subsection{Datos de la Empresa}
+Antes de comenzar a operar, el administrador del sistema configura los datos básicos de tu organización en el archivo de entorno (\texttt{.env}) o desde el panel de configuración:
 \begin{itemize}
-    \item \textbf{Fecha de Corte:} Define la fecha límite para el cálculo de saldos, morosidad y valor actual. Por defecto, toma el último día del mes actual.
-    \item \textbf{Tasa de Descuento (TNA):} Tasa Nominal Anual utilizada para descontar los flujos futuros y calcular el Valor Actual de la cartera.
-    \item \textbf{Dueños:} Permite seleccionar uno o varios dueños específicos de los créditos. Si se deja en blanco, se incluyen todos.
-    \item \textbf{Originadores:} Filtra la cartera según la entidad que originó el crédito. Si se deja en blanco, se incluyen todos.
-    \item \textbf{Proyección de Cuotas:} Permite definir la cantidad de períodos y su frecuencia en meses para estimar el flujo de ingresos futuros en el Estado de Situación Patrimonial.
+    \item \textbf{Razón Social:} El nombre legal de tu compañía, que aparecerá en los recibos, contratos y reportes.
+    \item \textbf{CUIT:} La Clave Única de Identificación Tributaria para la facturación electrónica ante ARCA/AFIP.
+    \item \textbf{Día de Corte:} El día habitual del mes fijado para el cálculo de vencimientos y liquidaciones de cartera (por ejemplo, el día 28 de cada mes).
 \end{itemize}
 
-Una vez ajustados los parámetros, se debe hacer clic en el botón de aplicar filtros para actualizar toda la información en pantalla. Además, el Dashboard permite exportar todos los gráficos y reportes a formato PDF, conservando los filtros activos.
+\subsection{Inicio de la Aplicación}
+Para poner en marcha el sistema en el servidor de la empresa, el equipo técnico o administrador puede iniciarlo mediante contenedores (Docker) o mediante el servidor local. Una vez iniciado, todos los usuarios pueden ingresar abriendo el navegador web en la dirección de red local asignada (por ejemplo, \texttt{http://localhost:5173} o la dirección interna de la empresa).
+\newpage
+
+\section{Uso y Comportamiento del Sistema}
+
+\subsection{Dashboard (Panel Principal)}
+El \textbf{Dashboard} es la primera pantalla que ves al ingresar a Credit Manager. Funciona como el tablero de control de tu empresa: te muestra en tiempo real, mediante tarjetas y gráficos claros, cuánta plata hay prestada en la calle, cuánto se cobró en el mes, qué porcentaje de la cartera está al día y cuánta deuda se encuentra en mora.
+
+\textbf{¿Qué información encontrás en este panel?}
+\begin{itemize}
+    \item \textbf{Tarjetas de Resumen (KPIs):} Te muestran de un vistazo el Capital Total Activo, el total de dinero recaudado en el mes corriente, el Saldo en Mora y la cantidad de créditos vigentes.
+    \item \textbf{Evolución de Cobranzas vs. Vencimientos:} Un gráfico que compara las cuotas que tenían que vencer este mes contra lo que efectivamente pagaron los clientes.
+    \item \textbf{Distribución de Mora:} Un gráfico circular que te muestra visualmente qué porcentaje de la cartera está al día y cuánto se reparte en atrasos leves (menos de 30 días), medios o graves.
+    \item \textbf{Proyección de Fondos:} Una estimación de cuánta plata va a ingresar a la empresa en los próximos meses si los clientes pagan según su cronograma habitual.
+\end{itemize}
+
+\textbf{Paso a paso: Cómo filtrar y consultar la información del Dashboard}
+\begin{enumerate}
+    \item En la barra de filtros superior, elegí la \textbf{Fecha de Corte} (por defecto toma el día de hoy, pero podés elegir el último día del mes pasado si querés analizar el cierre anterior).
+    \item Si tu empresa administra carteras de distintos socios o inversores, usá los desplegables de \textbf{Dueños} u \textbf{Originadores} para ver los números de un socio en particular (si los dejás en blanco, el sistema te muestra el total consolidado de la empresa).
+    \item Hacé clic en el botón azul \textbf{"Aplicar Filtros"}. Todos los números, barras y gráficos de la pantalla se actualizarán en un instante.
+    \item Si necesitás presentar estos números en una reunión o enviárselos a gerencia, hacé clic en \textbf{"Exportar a PDF"} para descargar un informe prolijo y listo para imprimir.
+\end{enumerate}
 
 \subsection{Cartera de Créditos}
 
 \subsubsection{Simular Cuotas}
-Herramienta que utiliza el motor financiero de Credit Manager para generar cronogramas de pago bajo el Sistema de Amortización Francés.
+Esta herramienta te permite armar presupuestos y calcular planes de pago en el momento, ya sea con el cliente en el mostrador o mientras hablás por teléfono con un asesor comercial. Utiliza el tradicional \textbf{Sistema Francés} (cuotas fijas y consecutivas).
 
-Permite ingresar los siguientes parámetros de cálculo:
-\begin{itemize}
-    \item \textbf{Capital a financiar:} Monto total a otorgar.
-    \item \textbf{Plazo (Cuotas):} Cantidad de cuotas del préstamo.
-    \item \textbf{TNA c/IVA (\%):} Tasa Nominal Anual.
-    \item \textbf{Fecha Emisión y Día Vencimiento:} Fechas clave para el cálculo exacto de días e intereses.
-    \item \textbf{Meses de Gracia:} Período inicial donde se pospone el pago.
-    \item \textbf{Alícuota IVA:} Porcentaje de impuesto a aplicar sobre los intereses.
-\end{itemize}
-
-El resultado es un cronograma detallado que puede exportarse a Excel, mostrando para cada vencimiento el desglose exacto de Capital, Interés, IVA y el Total de la cuota, junto con la sumatoria final de la operación.
+\textbf{Paso a paso: Cómo simular un préstamo para un cliente}
+\begin{enumerate}
+    \item Ingresá a \textbf{Cartera de Créditos} y hacé clic en \textbf{Simular Cuotas}.
+    \item En el campo \textbf{Capital a financiar}, escribí el monto de dinero que el cliente solicita (por ejemplo, \$150.000).
+    \item En \textbf{Plazo (Cuotas)}, indicá en cuántos meses lo va a devolver (por ejemplo, 12, 18 o 24 cuotas).
+    \item En \textbf{TNA c/IVA (\%)}, ingresá la Tasa Nominal Anual que acordaste para ese tipo de crédito.
+    \item Indicá la \textbf{Fecha de Emisión} (cuándo se entregaría la plata) y el \textbf{Día de Vencimiento} en el que el cliente deberá pagar cada mes (por ejemplo, los días 10).
+    \item Si la empresa le otorga un tiempo de gracia antes de empezar a pagar, indicalo en el campo \textbf{Meses de Gracia} (si empieza a pagar al mes siguiente, dejalo en 0).
+    \item Hacé clic en el botón \textbf{"Simular Cuotas"}.
+    \item Inmediatamente aparecerá en pantalla el cuadro completo de cuotas, mostrándote para cada mes el valor final de la cuota y su desglose exacto: cuánto va a devolución de capital, cuánto a intereses y cuánto a IVA.
+    \item Si el cliente quiere llevarse la propuesta impresa o querés enviársela por WhatsApp, hacé clic en \textbf{"Exportar a Excel"}.
+\end{enumerate}
 
 \subsubsection{Clientes}
-Este submódulo centraliza la gestión de toda la base de datos de clientes, sean personas físicas o jurídicas.
+En este módulo administrás el padrón completo de personas y empresas a las que tu organización les otorga financiamiento.
 
-\textbf{Dashboard (Ficha del Cliente):}
-Herramienta de búsqueda unificada que actúa como la ficha central del prospecto o cliente. Permite buscar rápidamente por Nombre, DNI o CUIL y visualizar de forma consolidada toda su información: datos personales, estado crediticio, calificación de riesgo (incluyendo reporte del BCRA), detalle completo de la cuenta corriente y KPIs de morosidad.
-
-\textbf{Listado de Clientes:}
-Es la vista principal para consultar y administrar la cartera completa. Cuenta con:
+\textbf{Ficha Integral del Cliente (Dashboard de Cliente):}
+Es como el legajo digital del cliente. Al escribir su DNI, CUIL o apellido en el buscador, el sistema abre su ficha completa donde podés ver:
 \begin{itemize}
-    \item \textbf{Filtros y Búsqueda:} Posibilidad de filtrar y ordenar las columnas por CUIL, Documento, Apellido, Nombre, Estado, Email y Teléfono.
-    \item \textbf{Acciones Rápidas:} Cada fila incluye una botonera para operar sobre el cliente de forma directa:
-          \begin{itemize}
-              \item \textbf{Dashboard de Cliente:} Redirige a la ficha del cliente cargando toda su información financiera.
-              \item \textbf{Ver Detalles:} Abre una ventana modal con los datos completos del legajo.
-              \item \textbf{Créditos:} Redirige al Listado de Créditos aplicando automáticamente un filtro por el CUIL seleccionado.
-              \item \textbf{Ver Cuenta Corriente:} Abre un modal para inspeccionar los movimientos de cuenta corriente del cliente sin salir de la pantalla actual.
-              \item \textbf{Editar / Eliminar:} Opciones de administración del registro (estas acciones se ocultan por seguridad si el usuario tiene rol de Auditor/Solo lectura).
-          \end{itemize}
+    \item Sus datos personales, teléfonos y domicilio verificado.
+    \item Su calificación crediticia oficial en la Central de Deudores del Banco Central (BCRA).
+    \item Si registra alertas de prevención de lavado o terrorismo en las listas oficiales (RePET).
+    \item Todos los préstamos que tuvo y tiene con tu empresa, con el detalle de cuotas pagadas y atrasos.
+    \item Su cuenta corriente histórica para saber si tiene saldo a favor o deudas pendientes.
 \end{itemize}
 
-\textbf{Alta de Cliente:}
-Formulario para dar de alta nuevos prospectos. El sistema procesa los datos y realiza validaciones automáticas de seguridad, incluyendo un cruce con bases de datos para alertar en pantalla si la persona se encuentra en el RePET (Registro Público de Personas y Entidades vinculadas al Terrorismo).
+\textbf{Paso a paso: Cómo dar de alta a un nuevo cliente}
+\begin{enumerate}
+    \item En el menú lateral, andá a \textbf{Cartera de Créditos} y seleccioná \textbf{Clientes}.
+    \item Hacé clic en el botón superior \textbf{"+ Nuevo Cliente"}.
+    \item Completá los datos identificatorios:
+          \begin{itemize}
+              \item \textbf{CUIL/CUIT:} 11 dígitos numéricos sin guiones ni espacios.
+              \item \textbf{DNI, Apellido y Nombre completo.}
+              \item \textbf{Sexo y Fecha de Nacimiento.}
+          \end{itemize}
+    \item Cargá sus vías de contacto: Teléfono celular principal, un teléfono alternativo y su correo electrónico para el envío de avisos de vencimiento.
+    \item Completá su \textbf{Domicilio}: Calle, Número, Piso/Depto, Código Postal, Localidad y Provincia.
+    \item Ingresá sus \textbf{Datos Laborales y Bancarios}: Empleador donde trabaja, sueldo neto mensual y su CBU o número de cuenta bancaria donde suele cobrar.
+    \item Hacé clic en \textbf{"Guardar Cliente"}. El sistema validará que el CUIL no esté repetido y revisará automáticamente las listas de seguridad para garantizar que la persona esté habilitada para operar.
+\end{enumerate}
+
+\textbf{Acciones útiles en la lista de clientes:}
+Al lado de cada cliente tenés botones directos para: ver su legajo de papeles digitalizados (\textit{Ver Detalles}), consultar su saldo actual (\textit{Ver Cuenta Corriente}) o saltar directamente a ver sus créditos activos (\textit{Créditos}).
 
 \subsubsection{Créditos}
-Este submódulo centraliza el ciclo de vida completo de los préstamos, abarcando desde la evaluación crediticia y originación asistida hasta el monitoreo de la cartera y la ejecución de procesos masivos.
+Este es el corazón operativo del sistema: desde acá otorgás nuevos préstamos, supervisás la cartera activa y controlás qué créditos están al día y cuáles tienen atrasos.
 
-\textbf{Listado de Créditos:}
-Es la pantalla principal para la consulta, supervisión y administración de la cartera de préstamos otorgados. Cuenta con:
+\textbf{Estados de un crédito (¿qué significan los colores?):}
 \begin{itemize}
-    \item \textbf{Filtros Avanzados y Búsqueda:} Posibilidad de filtrar y ordenar las columnas por ID de crédito, ID Externo, Socio Originador, CUIL del cliente, Plazo, TNA con IVA, Esquema de Tasa/Comisión y Tipo de Crédito. Incluye filtros numéricos por rango para Capital, Saldo en Mora y Días de Mora, así como un selector por fechas de emisión.
-    \item \textbf{Fecha de Corte Dinámica:} Selector de fecha que recalcula en tiempo real los saldos adeudados, cuotas devengadas y días de mora a cualquier fecha histórica o actual de corte.
-    \item \textbf{Métricas y Totales:} Barra inferior que consolida en tiempo real el Capital total colocado y el Saldo total en Mora según los registros filtrados.
-    \item \textbf{Exportación:} Opción para exportar la selección de créditos directamente a planillas Excel.
-    \item \textbf{Acciones Operativas por Fila:} Botonera con accesos directos sobre cada operación:
-          \begin{itemize}
-              \item \textbf{Dashboard de Cliente:} Redirige a la ficha integral del cliente prefiltrando por el crédito.
-              \item \textbf{Ver Cuenta Corriente:} Abre un modal para auditar las cuotas, vencimientos, cobros y saldos pendientes sin salir del listado.
-              \item \textbf{Ver Transferencias:} Permite inspeccionar los desembolsos bancarios asociados al crédito (monto, CBU, CUIT de destino y comprobantes).
-              \item \textbf{Ver Legajo:} Visualizador digital de los documentos y archivos adjuntos asociados al legajo del préstamo.
-              \item \textbf{Editar Estado / Eliminar:} Permite actualizar el estado de la operación o darla de baja (acciones restringidas para usuarios con rol de Auditor / Solo Lectura).
-          \end{itemize}
+    \item \textbf{Al Día (Verde):} El cliente pagó todas las cuotas vencidas o aún no llegó el primer vencimiento.
+    \item \textbf{Mora Leve (Amarillo):} Registra cuotas impagas con atrasos de entre 1 y 30 días.
+    \item \textbf{Mora Media (Naranja):} Registra atrasos de entre 31 y 90 días.
+    \item \textbf{Mora Grave (Rojo):} Atraso superior a 90 días que requiere gestión intensiva de cobranzas.
+    \item \textbf{Cancelado (Gris / Azul):} El préstamo fue saldado por completo y no debe nada.
 \end{itemize}
 
-\textbf{Alta de Crédito (Originación):}
-Asistente guiado en 5 pasos (Wizard) para la evaluación de riesgo y el otorgamiento riguroso de operaciones:
-\begin{itemize}
-    \item \textbf{Paso 1 - Búsqueda de Cliente:} Localización rápida por DNI o CUIL, identificando si se trata de un cliente existente o un nuevo prospecto.
-    \item \textbf{Paso 2 - Datos y Cumplimiento:} Carga o validación de datos personales y laborales, ejecutando la verificación obligatoria contra el RePET (Registro Público de Personas y Entidades vinculadas al Terrorismo) y el control de políticas crediticias.
-    \item \textbf{Paso 3 - Perfil Transaccional y Riesgo:} Consulta automática de la Central de Deudores del BCRA, scoring interno de riesgo, verificación de endeudamiento vigente en la entidad y cálculo de la capacidad de pago / cuota máxima afectable.
-    \item \textbf{Paso 4 - Condiciones Financieras:} Definición del capital neto a liquidar, selección del esquema de tasas y comisiones (desglosando automáticamente gastos y sellados para el cálculo del capital bruto), determinación del socio originador y sistema de amortización.
-    \item \textbf{Paso 5 - Simulación, Distribución y Confirmación:} Proyección detallada del cronograma de cuotas bajo el Sistema Francés, desglose y validación de las transferencias bancarias de fondos (tanto al cliente como comisiones/gastos a socios), previsualización del legajo en formato PDF y confirmación final de la operación.
-\end{itemize}
+\textbf{Paso a paso: Cómo otorgar un crédito nuevo (Asistente en 5 pasos)}
+Cuando un cliente solicita un préstamo, hacé clic en el botón verde \textbf{"+ Nuevo Crédito"} para abrir el asistente guiado:
+\begin{enumerate}
+    \item \textbf{Paso 1 - Buscar al Cliente:} Escribí el DNI o CUIL del solicitante. Si ya es cliente de la empresa, el sistema completará sus datos automáticamente. Si es una persona nueva, podés cargarla en el momento sin salir del asistente.
+    \item \textbf{Paso 2 - Verificar Requisitos y Documentación:} Revisá que los datos laborales estén vigentes y confirmá que la persona cumpla con las políticas crediticias de la empresa (edad mínima y máxima, antigüedad laboral requerida, etc.).
+    \item \textbf{Paso 3 - Evaluación de Riesgo y Capacidad de Pago:} El sistema consulta en línea la situación crediticia en el BCRA y analiza el sueldo del cliente para calcular la \textbf{Cuota Afectable Máxima} (asegurando que el valor de la cuota no supere el porcentaje permitido de sus ingresos).
+    \item \textbf{Paso 4 - Condiciones Financieras:} Ingresá el monto de dinero neto que se le va a entregar en mano al cliente y elegí el plan de tasas y comisiones correspondiente al socio originador. El sistema calculará automáticamente los gastos administrativos, sellados provinciales y el capital bruto del préstamo.
+    \item \textbf{Paso 5 - Cronograma, Transferencias y Confirmación:} Vas a ver en pantalla la tabla definitiva de cuotas calculadas bajo el Sistema Francés. Indicá el CBU o cuenta bancaria a la que se le transferirá el dinero al cliente y, si corresponde, las comisiones a los intermediarios. Podés previsualizar la documentación en PDF y, al hacer clic en \textbf{"Confirmar y Otorgar"}, el crédito queda formalmente asentado y vigente en el sistema.
+\end{enumerate}
 
-\textbf{Procesos de Crédito:}
-Herramientas para la ejecución de operaciones masivas sobre la cartera:
+\textbf{Herramientas para créditos existentes en la grilla:}
+En cada fila de crédito contás con accesos directos muy útiles:
 \begin{itemize}
-    \item \textbf{Carga Masiva de Archivos:} Permite subir lotes de archivos (PDF, JPG, PNG o paquetes comprimidos en .ZIP) de contratos y transferencias. El sistema interpreta la nomenclatura de los nombres de archivo para asociarlos automáticamente a sus respectivos créditos y transferencias, emitiendo un reporte de procesados y errores.
-    \item \textbf{Importación Masiva de Créditos:} Módulo de ingesta desde sistemas externos (como Quota de Estudio CFL o Web Carga CFL). Permite importar en bloque archivos de clientes, créditos y transferencias junto a sus legajos digitales, con control de duplicados y descarga de reportes de inconsistencias en Excel.
+    \item \textbf{Ver Cuenta Corriente:} Te abre una ventana donde ves cuota por cuota qué día venció, cuánto pagó, cuánto debe y qué recibos tiene aplicados.
+    \item \textbf{Ver Transferencias:} Te muestra el detalle del desembolso bancario: fecha de transferencia, monto exacto, CBU de destino y el comprobante bancario adjunto.
+    \item \textbf{Ver Legajo Digital:} Te permite consultar y descargar en pantalla las fotos o PDFs del DNI del cliente, sus recibos de sueldo y los contratos firmados.
 \end{itemize}
 
 \subsubsection{Cobranzas}
-Este submódulo gestiona integralmente la recaudación, imputación contable y trazabilidad de los pagos recibidos sobre la cartera de créditos. Incorpora un motor financiero de imputación por cascada (\textit{waterfall}) que cancela cuotas en riguroso orden cronológico y distribuye los fondos respetando la prelación tributaria y financiera (IVA $\rightarrow$ Interés $\rightarrow$ Capital).
+En este módulo se asientan todos los pagos que ingresan a la empresa. 
 
-\textbf{Listado de Cobranzas y Procesos:}
-Pantalla de consulta y control organizada en dos solapas especializadas:
+\textbf{¿Cómo imputa el dinero el sistema? (Cobranza en cascada)}
+Para evitarle problemas y sobrecargos al cliente, el sistema aplica siempre una regla de cobro justa y transparente:
 \begin{itemize}
-    \item \textbf{Solapa Cobranzas (Detalle de Imputaciones):} Vista analítica de cada movimiento de cobro individual registrado en la base de datos:
-          \begin{itemize}
-              \item \textbf{Información Detallada:} Muestra ID de Cobranza, ID de Proceso, CUIL, ID de Crédito, N° de Cuota, Fechas (Vto. y Pago), Tipo de Cobranza (Común, Anticipo, Cancelación Anticipada, Bonificación, Recurso, Ajuste o Penalty) y el desglose de Capital, Interés, IVA y Total.
-              \item \textbf{Filtros Avanzados:} Filtros dinámicos por ID, Lote/Proceso, CUIL, lista de créditos y tipo de cobro, acompañados por selectores de fecha (pago/vencimiento) y filtros de rango numérico para Capital, Interés, IVA y Total.
-              \item \textbf{Paginación Optimizada y Totales:} Carga progresiva (\textit{infinite scrolling}) de alto rendimiento y una barra de totales que consolida en tiempo real la recaudación global de la consulta.
-              \item \textbf{Acciones Rápidas:} Opciones directas para saltar a la ficha del cliente, auditar la cuenta corriente asociada o eliminar una cobranza individual con confirmación de seguridad.
-          \end{itemize}
-    \item \textbf{Solapa Procesos (Lotes de Ingesta):} Registro maestro y trazabilidad de cada corrida de cobranzas (sean individuales o importadas masivamente):
-          \begin{itemize}
-              \item \textbf{Monitoreo de Estado:} Muestra el estado del lote (Completado, Revertido, Procesando, Fallido), fecha exacta de ejecución, tipo de ingreso y descripción.
-              \item \textbf{Gestión y Reversión Atómica:} Permite auditar las cobranzas hijas de cada proceso prefiltrando el listado, modificar estados/notas, o ejecutar una eliminación en cascada que revierte de forma íntegra todas las imputaciones del lote y restaura los saldos originales de las cuotas.
-          \end{itemize}
+    \item \textbf{Primero lo más viejo:} El pago cancela siempre la cuota más antigua que esté impaga, evitando que sigan corriendo intereses punitorios.
+    \item \textbf{Orden financiero dentro de la cuota:} Cada peso que entra cancela primero los impuestos (IVA), luego los intereses devengados y finalmente el capital del préstamo.
 \end{itemize}
 
-\textbf{Ingreso de Cobranzas (Procesamiento):}
-Centro operativo para procesar e imputar pagos en la cartera a través de tres modalidades:
-\begin{itemize}
-    \item \textbf{Cobranza Individual:} Registro ágil de pagos puntuales. Permite localizar la deuda mediante múltiples identificadores (DNI, CUIL, ID de Crédito o ID Externo), especificando el monto percibido, la fecha efectiva de pago, la fecha de corte y el tipo de cancelación (pago común/anticipo o cancelación anticipada con quita de intereses futuros).
-    \item \textbf{Cobranza Masiva por Lote:} Procesamiento automatizado de recaudaciones mediante planillas Excel (.xlsx). Permite configurar de forma dinámica las columnas del archivo donde se encuentran los identificadores y los montos (ej. columnas A y B), admitiendo referencias por DNI, CUIL, ID de Crédito, ID Externo o ID de Cartera. El sistema aplica validaciones atómicas y ejecuta la imputación encadenada sobre toda la cartera.
-    \item \textbf{Cobranza con Recurso:} Modalidad especializada para carteras cedidas con cláusula de responsabilidad comercial. Permite imputar cobros liquidados por el socio originador o proveedor (seleccionado por CUIT) o por ID de Cartera, aplicando la recaudación a operaciones en mora y etiquetando los registros bajo cobranza con recurso.
-\end{itemize}
-
-\subsubsection{Facturación}
-Este módulo administra la facturación electrónica y el cumplimiento tributario ante ARCA (ex AFIP) de las cobranzas percibidas. Discrimina automáticamente los conceptos fiscales de cada pago (imputando el recupero de capital como concepto \textbf{No Gravado} y los intereses devengados como concepto \textbf{Gravado} sujeto a IVA) y gestiona la obtención de comprobantes con Código de Autorización Electrónico (CAE).
-
-\textbf{Cobranzas Pendientes de Facturar:}
-Vista principal para el control y emisión de comprobantes sobre las cobranzas que aún no han sido facturadas:
-\begin{itemize}
-    \item \textbf{Filtros Multicriterio:} Permite filtrar el universo de cobranzas por uno o varios Socios Originadores, Lotes o Procesos de Cobranza específicos, rango de fechas de recaudación y rango de fechas de vencimiento de la cuota.
-    \item \textbf{Grilla Analítica y Totales:} Presenta el detalle de cada cobro con el desglose exacto de No Gravado (Capital), Gravado (Intereses), IVA y el Importe Total. Incluye totalizadores en el pie de tabla que consolidan los importes fiscales de las filas filtradas y soporte para paginación progresiva.
-    \item \textbf{Exportación:} Botón para descargar el listado de cobranzas pendientes directamente a planillas de Excel.
-\end{itemize}
-
-\textbf{Emisión y Procesamiento Automático (ARCA):}
-Herramienta de facturación electrónica masiva con validaciones fiscales incorporadas:
-\begin{itemize}
-    \item \textbf{Control de Fechas Fiscales:} Selector de fecha de emisión con límites automáticos para asegurar el cumplimiento de la normativa fiscal vigente (restringiendo la emisión hasta un máximo de 10 días hacia atrás y garantizando la correlatividad temporal respecto al último comprobante emitido).
-    \item \textbf{Procesamiento por Lote:} Envío y autorización electrónica de las cobranzas seleccionadas. El sistema genera los comprobantes (ej. Factura B para consumidores finales o clientes identificados por CUIT), asigna punto de venta y número correlativo, almacena el CAE y su fecha de vencimiento, y actualiza el estado de las cobranzas a facturadas bajo una transacción atómica.
-\end{itemize}
-
-\textbf{Reportes y Descargas Fiscales:}
-Panel inferior destinado a la auditoría contable y obtención de documentación de respaldo para un período configurable (Fecha Desde / Hasta):
-\begin{itemize}
-    \item \textbf{Libro IVA Ventas (Excel):} Genera y exporta la planilla oficial del Libro IVA Ventas con el detalle reglamentario exigido: fecha, tipo de comprobante, punto de venta, numeración, CUIT del receptor, neto no gravado, neto gravado, débito fiscal de IVA, importe total, número de crédito, cuota, CAE y vencimiento de CAE.
-    \item \textbf{Descarga Masiva de Facturas (ZIP):} Genera en lote los comprobantes fiscales individuales en formato PDF con diseño normalizado (membrete institucional, desglose de ítems, totales e información de CAE) empaquetados en un archivo comprimido .ZIP listo para su archivo o remisión a clientes.
-\end{itemize}
-
-\subsubsection{Carteras}
-Este módulo administra integralmente el ciclo de vida de cesión, adquisición y negociación de carteras de créditos con socios comerciales e instituciones financieras. Permite originar compras y ventas de carteras bajo esquemas de descuento a Valor Actual (VA), gestionar el régimen de responsabilidad (con o sin recurso), generar la papelería legal contractual y efectuar el seguimiento y liquidación periódica de las cuotas y cobranzas correspondientes.
-
-\textbf{Gestión de Operaciones de Cartera:}
-Panel central para la visualización, control operativo y auditoría de todas las operaciones registradas:
-\begin{itemize}
-    \item \textbf{Grilla de Control y Filtros:} Presenta el inventario completo de operaciones indicando ID, Nombre de Cartera, Tipo de Operación (\textit{COMPRA} o \textit{VENTA}), Estado (\textit{PENDIENTE}, \textit{CONFIRMADA} o \textit{CANCELADA}), Socio Comercial contraparte, Fecha de Operación, Tasa Nominal Anual de Descuento (TNA), Cláusula de Recurso (Sí/No) e IVA (Sí/No). Incluye filtros interactivos por fecha y exportación total a Excel.
-    \item \textbf{Gestión del Ciclo de Vida:} Permite confirmar operaciones pendientes (asentando el traspaso definitivo de las cuotas y derechos crediticios), revertir operaciones a estado cancelado o eliminar registros de manera permanente con validación de seguridad.
-    \item \textbf{Visualización y Edición Detallada:} Acceso a la ficha analítica de la cartera mediante modal de previsualización para auditar los créditos incluidos, vencimientos y flujo financiero proyectado.
-    \item \textbf{Exportación de Entregables y Paquetes de Datos:}
-          \begin{itemize}
-              \item \textbf{Excel de la Operación:} Genera una planilla multidimensional con tres solapas: \textit{Créditos} (nómina de préstamos cedidos con capital y saldos), \textit{Cuotas} (cronograma detallado de vencimientos y valores descontados) y \textit{Vencimientos} (resumen consolidado por mes de cobro).
-              \item \textbf{Paquete de Archivos CSV (.ZIP):} Descarga masiva de los archivos de datos normalizados para facilitar la ingesta técnica en plataformas de contrapartes.
-              \item \textbf{Exportación de Legajos Digitales (.ZIP):} Empaqueta y descarga en un único archivo comprimido la totalidad de los documentos respaldatorios digitalizados (DNI, comprobantes de ingresos y transferencias) de todos los créditos que integran la operación.
-              \item \textbf{Generación de Contratos de Cesión:} Emisión automatizada del contrato formal de cesión de cartera en formatos PDF y Word (.docx), integrando membretes, cláusulas legales y cuadros de marcha financiera mediante el subsistema de papelería institucional.
-          \end{itemize}
-\end{itemize}
-
-\textbf{Nueva Operación de Cartera (Originación):}
-Asistente especializado para estructurar y cotizar operaciones de compra y venta:
-\begin{itemize}
-    \item \textbf{Modalidad Venta (Cesión de Cartera):}
-          \begin{itemize}
-              \item \textbf{Parametrización Comercial:} Selección del Socio Comercial adquirente (con posibilidad de registrar nuevos socios en tiempo real), definición de la fecha de corte, TNA de descuento, condición de recurso, tratamiento de IVA y selección de cuotas (completas o remanentes de créditos activos).
-              \item \textbf{Filtros de Elegibilidad Crediticia:} Permite acotar el universo de cuotas a ceder mediante rangos de fecha de emisión del crédito original, rangos de fecha de vencimiento de las cuotas e inclusión o exclusión de cartera en mora.
-              \item \textbf{Simulación Dinámica y Descuento Financiero:} Calcula el Valor Actual de cada cuota mediante descuento comercial en función de los días corridos al vencimiento. Despliega una interfaz de previsualización con solapas de \textit{Resumen}, \textit{Créditos} y \textit{Cuotas}, permitiendo desestimar o excluir créditos puntuales antes de comprometer la cesión definitiva.
-              \item \textbf{Confirmación de Venta:} Asienta la operación en la base de datos, asignando el estado inicial y vinculando los identificadores de cuota cedida.
-          \end{itemize}
-    \item \textbf{Modalidad Compra (Adquisición e Ingesta):}
-          \begin{itemize}
-              \item \textbf{Carga de Archivos de Cartera:} Permite incorporar carteras originadas por terceros mediante la subida de archivos CSV estandarizados de Personas (titulares), Préstamos (condiciones de otorgamiento) y Cuotas (calendario de pagos).
-              \item \textbf{Validación de Integridad y Consistencia:} Verifica la ausencia de duplicados, la coherencia de fechas y montos, y la concordancia de tasas y esquemas de amortización antes de incorporar los créditos al activo del sistema.
-          \end{itemize}
-\end{itemize}
-
-\textbf{Especificación y Formato de Archivos CSV (Compra y Venta):}
-Tanto el proceso de ingesta (compra) como el paquete de exportación (venta) operan bajo una estructura normalizada de tres archivos CSV posicionales sin fila de encabezado (\textit{headerless}), delimitados por comas (,) y codificados en formato \textit{latin-1} o UTF-8. La coherencia de la base de datos se garantiza mediante la clave relacional \texttt{ID Operación}:
+\textbf{Paso a paso: Cómo registrar un cobro individual (en caja o transferencia)}
 \begin{enumerate}
-    \item \textbf{Archivo PERSONAS.CSV (18 campos posicionales):}
-          Registra los datos filiatorios, de localización y laborales de los titulares de los créditos:
+    \item Andá a \textbf{Cartera de Créditos} > \textbf{Cobranzas} y hacé clic en \textbf{"Nueva Cobranza"}.
+    \item Buscá la deuda escribiendo el DNI, CUIL o número de crédito del cliente.
+    \item Ingresá el \textbf{Monto Cobrado} (el dinero exacto que pagó) y la \textbf{Fecha de Pago}.
+    \item Elegí el \textbf{Tipo de Cobranza}:
           \begin{itemize}
-              \item \textbf{Campo 1 - ID Operación:} Identificador unívoco del crédito que vincula al titular con sus préstamos y cuotas.
-              \item \textbf{Campo 2 - CUIL:} Código Único de Identificación Laboral (numérico, sin guiones).
-              \item \textbf{Campo 3 - Documento:} Número de documento nacional de identidad (DNI).
-              \item \textbf{Campos 4 y 5 - Apellido y Nombre:} Datos patronímicos del deudor.
-              \item \textbf{Campos 6 a 9 - Domicilio:} Calle, Calle Nro, Piso y Depto.
-              \item \textbf{Campo 10 - ID Provincia:} Código numérico de jurisdicción, homologado contra la tabla de equivalencias foráneas (\texttt{external\_mappings}).
-              \item \textbf{Campos 11 y 12 - Código Postal y Localidad:} ID Código Postal y nombre de la localidad.
-              \item \textbf{Campo 13 - Fecha Nacimiento:} Fecha en formato \texttt{AAAA-MM-DD}.
-              \item \textbf{Campo 14 - Teléfono:} Teléfono primario de contacto.
-              \item \textbf{Campo 15 - Sexo:} Identificador de género (\texttt{M} o \texttt{F}).
-              \item \textbf{Campo 16 - Remuneración:} Ingreso mensual del titular con dos decimales.
-              \item \textbf{Campos 17 y 18 - Teléfono 2 y Mail:} Vías complementarias de contacto.
+              \item \textit{Común / Cuota:} Si el cliente está pagando su cuota mensual habitual o entregando dinero a cuenta.
+              \item \textit{Cancelación Total Anticipada:} Si el cliente viene a cancelar toda su deuda pendiente de golpe. En este caso, el sistema descuenta automáticamente los intereses futuros no devengados para cobrarle únicamente el capital real que debe.
           \end{itemize}
+    \item Hacé clic en \textbf{"Procesar Cobranza"}. El sistema saldará la cuota, actualizará el estado del crédito y te mostrará el recibo de pago listo para entregarle al cliente.
+\end{enumerate}
 
-    \item \textbf{Archivo CREDITOS.csv / PRESTAMOS.CSV (15 campos posicionales):}
-          Define los términos financieros, el originador y los montos globales del préstamo:
-          \begin{itemize}
-              \item \textbf{Campo 1 - ID Operación:} Identificador único de la operación crediticia.
-              \item \textbf{Campo 2 - ID Entidad:} Código foráneo del socio originador o comercial, homologado contra la base de datos institucional.
-              \item \textbf{Campo 3 - ID Tipo Operación:} Identificador del tipo o línea de crédito.
-              \item \textbf{Campo 4 - Importe Cuota:} Monto de referencia de la cuota.
-              \item \textbf{Campos 5 a 7 - Capital, Interés e IVA:} Importes totales pactados en el otorgamiento original.
-              \item \textbf{Campos 8 a 10 - Capital Vendido, Interés Vendido e IVA Vendido:} Importes efectivamente transferidos o comprometidos en la transacción.
-              \item \textbf{Campo 11 - Fecha Compra / Operación:} Fecha de corte o emisión de la cesión (\texttt{AAAA-MM-DD}).
-              \item \textbf{Campo 12 - Tasa Compra:} Tasa Nominal Anual de descuento en formato porcentual (ej. \texttt{45.00}).
-              \item \textbf{Campo 13 - Valor Actual:} Importe presente total descontado resultante de la sumatoria de las cuotas transferidas.
-              \item \textbf{Campo 14 - Ente Pagador:} Razón social del empleador o entidad retenedora de haberes.
-              \item \textbf{Campo 15 - CBU / CVU:} Clave bancaria o virtual uniforme asociada al crédito.
-          \end{itemize}
+\textbf{Paso a paso: Cómo procesar una cobranza masiva con Excel}
+Cuando cobrás a través de débitos bancarios, descuentos por recibo de sueldo o redes de cobranza, te envían un archivo de Excel con cientos de pagos juntos. Para no cargarlos uno por uno a mano:
+\begin{enumerate}
+    \item Ingresá a \textbf{Cobranzas} y seleccioná la solapa o botón \textbf{"Cobranza Masiva"}.
+    \item Hacé clic en \textbf{"Seleccionar Archivo"} y elegí la planilla de Excel (\texttt{.xlsx}) en tu computadora.
+    \item En la pantalla vas a ver un selector muy simple: indicá en qué columna de tu Excel está el identificador del cliente (por ejemplo, Columna A: CUIL o DNI) y en qué columna está el dinero pagado (por ejemplo, Columna B: Importe).
+    \item Hacé clic en \textbf{"Validar Planilla"}. El sistema revisará el archivo sin guardar nada todavía y te mostrará un resumen claro: cuántos registros coinciden perfectamente con deudas activas y si hay algún DNI que no se encontró en la base.
+    \item Si todo coincide, hacé clic en \textbf{"Confirmar e Imputar Cobranzas"}. En unos pocos segundos, el sistema cancelará todas las cuotas del archivo de forma automática.
+\end{enumerate}
 
-    \item \textbf{Archivo CUOTAS.CSV (9 campos posicionales):}
-          Contiene el calendario de amortización detallado y el valor descontado de cada cuota:
+\textbf{¿Qué pasa si me equivoqué de archivo o cargué un cobro mal? (Reversión segura)}
+No te preocupes: el sistema está protegido contra errores humanos.
+\begin{itemize}
+    \item Si te equivocaste en un cobro individual, podés buscarlo en la grilla y hacer clic en el botón de eliminar cobro para anularlo.
+    \item Si subiste una planilla masiva equivocada, andá a la solapa \textbf{Procesos}, buscá el lote que acabás de procesar (está identificado con fecha y hora) y hacé clic en \textbf{"Revertir Proceso"}. El sistema anulará el lote entero de un solo golpe y devolverá todas las cuotas a su estado anterior, como si nunca hubieras subido la planilla.
+\end{itemize}
+
+\subsubsection{Facturación (Conexión con ARCA / AFIP)}
+Este módulo se encarga de emitir las facturas electrónicas oficiales ante la agencia tributaria (ARCA, ex AFIP) por las cobranzas que realizaste en el mes.
+
+\textbf{¿Cómo funciona impositivamente?}
+Cuando un cliente paga su cuota, la porción correspondiente a la devolución del capital no paga impuestos (concepto No Gravado). En cambio, los intereses cobrados sí llevan IVA y deben facturarse formalmente. El sistema hace esta separación de forma automática y matemática para que vos no tengas que calcular nada a mano.
+
+\textbf{Paso a paso: Cómo facturar las cobranzas pendientes del mes}
+\begin{enumerate}
+    \item Ingresá a \textbf{Cartera de Créditos} > \textbf{Facturación}.
+    \item En la solapa \textbf{Cobranzas Pendientes de Facturar}, vas a ver el listado de todos los cobros que aún no tienen comprobante fiscal. Podés usar los filtros si querés facturar solo los cobros de un socio originador o un rango de fechas determinado.
+    \item Seleccioná las cobranzas que querés facturar (podés tildar la casilla superior para marcar todas juntas).
+    \item En el campo \textbf{Fecha de Emisión}, elegí la fecha de tus facturas (el sistema te avisa si la fecha respeta los plazos legales de ARCA para que nunca tengas un rechazo).
+    \item Hacé clic en el botón verde \textbf{"Generar Facturas Electrónicas"}.
+    \item El sistema se conecta en el acto con los servidores de ARCA/AFIP, solicita el código de autorización (CAE) de cada factura, le asigna su punto de venta y número oficial correlativo, y deja los cobros registrados como facturados.
+\end{enumerate}
+
+\textbf{Descargas para el contador y los clientes:}
+\begin{itemize}
+    \item \textbf{Descargar Libro IVA Ventas (Excel):} Te descarga la planilla oficial con fecha, número de factura, CUIT del receptor, importes gravados, débito de IVA y número de CAE, lista para enviarle a tu contador a fin de mes.
+    \item \textbf{Descargar Facturas (ZIP):} Te genera un archivo comprimido con todos los comprobantes individuales en formato PDF (con el logo de tu empresa, el detalle legal y el código de barras de ARCA) listos para imprimir o mandar por mail a los clientes.
+\end{itemize}
+
+\subsubsection{Carteras (Compra y Venta de Carteras)}
+Este módulo te permite comprar o vender paquetes de préstamos en bloque a otras instituciones financieras, bancos o inversores.
+
+\textbf{¿Qué significa vender una cartera (Cesión de Créditos)?}
+Significa que tu empresa transfiere los derechos de cobro de un grupo de préstamos a un tercero para hacerse de dinero en efectivo hoy en lugar de esperar a cobrar cuota por cuota mes a mes.
+\begin{itemize}
+    \item \textbf{Con Recurso:} Si algún cliente de la cartera vendida deja de pagar, tu empresa sigue siendo responsable frente al comprador y debe compensar esa cuota impaga.
+    \item \textbf{Sin Recurso:} El comprador asume todo el riesgo crediticio; si el cliente no paga, la pérdida es del comprador y tu empresa no debe nada.
+\end{itemize}
+
+\textbf{Paso a paso: Cómo armar y cotizar una Venta de Cartera}
+\begin{enumerate}
+    \item Andá a \textbf{Carteras} y hacé clic en \textbf{"Nueva Operación"} seleccionando \textbf{Modalidad Venta}.
+    \item Elegí el \textbf{Socio Comercial} que te va a comprar los créditos.
+    \item Indicá la \textbf{Fecha de Corte} de la operación y la \textbf{Tasa Nominal Anual (TNA) de Descuento} que acordaron con la contraparte.
+    \item Indicá si la venta se realiza \textbf{Con Recurso} o \textbf{Sin Recurso}.
+    \item Usá los filtros para seleccionar qué créditos entran en el paquete: podés filtrar por fecha de otorgamiento, por fecha de vencimiento de las cuotas o excluir a clientes que tengan mora.
+    \item En la pantalla de previsualización vas a ver el cálculo del \textbf{Valor Actual (VA)}: el sistema descuenta matemáticamente cada cuota futura y te dice con precisión cuánta plata en efectivo te van a pagar hoy por todo el paquete. Podés desmarcar créditos puntuales si preferís dejarlos afuera.
+    \item Hacé clic en \textbf{"Confirmar Venta"}.
+    \item Una vez confirmada, desde la grilla de operaciones podés descargar con un solo clic:
           \begin{itemize}
-              \item \textbf{Campo 1 - ID Operación:} Identificador del crédito correspondiente.
-              \item \textbf{Campo 2 - ID Cuota:} Número secuencial de cuota (1, 2, 3\dots).
-              \item \textbf{Campo 3 - Fecha Vto.:} Fecha contractual de vencimiento de la cuota.
-              \item \textbf{Campo 4 - Fecha Vto. Pago:} Fecha estimada o efectiva de percepción de fondos.
-              \item \textbf{Campos 5 a 7 - Capital, Interés e IVA:} Desglose financiero de la cuota en dos decimales.
-              \item \textbf{Campo 8 - Saldo Pendiente:} Importe exigible pendiente de cobro neto de cobranzas previas.
-              \item \textbf{Campo 9 - Valor Actual:} Valor presente descontado a la fecha de cesión calculado según la fórmula comercial:
-                    \begin{equation}
-                        VA = \frac{\text{Capital} + \text{Inter\'es}}{\left(1 + \frac{\text{TNA} \times 30}{365}\right)^{\frac{\text{D\'ias Vto.}}{30}}}
-                    \end{equation}
-                    Si una cuota del crédito no formó parte de la cesión (y/o fue cobrada previamente), su Valor Actual se consigna en \texttt{0.00}.
+              \item El \textbf{Contrato Formal de Cesión} en formato Word o PDF listo para imprimir y firmar ante escribano.
+              \item El \textbf{Excel de la Operación} con las solapas de Créditos, Cuotas y Flujo mensual de cobros.
+              \item El \textbf{Paquete de Legajos Digitales (ZIP)} con las fotos de los DNI y recibos de sueldo de todos los clientes de esa cartera.
           \end{itemize}
 \end{enumerate}
 
-\textbf{Controles de Integridad y Validación del Pipeline ETL:}
-Durante la ingesta de estos archivos, el motor de carga ejecuta controles automatizados en memoria:
+\textbf{Paso a paso: Cómo hacer la liquidación de cobranzas de carteras cedidas}
+Si vendiste una cartera pero tu empresa sigue encargándose de cobrar las cuotas, tenés que rendirle cuentas periódicamente al comprador:
+\begin{enumerate}
+    \item Entrá a la solapa \textbf{Liquidaciones de Cartera}.
+    \item Hacé clic en \textbf{"Nueva Liquidación"}.
+    \item Elegí el socio comercial comprador y el período de cobro que querés liquidar.
+    \item El sistema agrupa automáticamente todas las cuotas que tus clientes pagaron durante ese período y calcula el importe exacto a transferirle al socio.
+    \item Hacé clic en \textbf{"Confirmar Liquidación"} y registrá la fecha y comprobante de la transferencia bancaria realizada.
+\end{enumerate}
+
+\subsubsection{Reportes de Créditos}
+Este submódulo reúne todos los informes analíticos y las declaraciones obligatorias que te solicitan los organismos oficiales.
+
+\textbf{1. Reporte de Saldos de Cartera (¿Cuánta plata tenemos en la calle?)}
+Te permite responder en segundos cualquier consulta sobre el estado patrimonial de tus créditos a cualquier fecha:
 \begin{itemize}
-    \item \textbf{Integridad Referencial Cruzada:} Comprueba que no existan préstamos o cuotas huérfanas carentes de titular en \texttt{PERSONAS.CSV}.
-    \item \textbf{Cuadratura de Capital:} Exige concordancia exacta entre el campo \texttt{Capital} del crédito y la sumatoria del capital de todas sus cuotas ($\sum \text{Capital}_{\text{cuotas}} - \text{Capital} = 0$).
-    \item \textbf{Homologación de Tablas Foráneas:} Valida y traduce automáticamente los códigos foráneos de provincia y entidad originadora según el padrón de relaciones activas.
-    \item \textbf{Tolerancia Financiera de Valor Actual:} Recalcula el Valor Actual de cada cuota contrastándolo contra el archivo; desviaciones mayores a \$1.00 son rechazadas de inmediato.
-    \item \textbf{Emisión de Reporte de Inconsistencias:} Ante cualquier discrepancia, la carga se revierte de forma atómica y se genera automáticamente una planilla Excel (\texttt{REPORTE\_ERRORES\_IMPORTACION\_*.xlsx}) con el detalle exacto de las observaciones para su saneamiento.
+    \item Podés elegir si querés ver solo los préstamos propios, solo los vendidos a terceros o ambos consolidados.
+    \item Podés agrupar los datos como te sea más cómodo: por cliente, por socio originador, por mes de vencimiento o por número de crédito.
+    \item En pantalla y en la descarga de Excel vas a ver el desglose exacto de: Capital vivo adeudado, Intereses devengados, IVA y el Saldo Total exigible.
 \end{itemize}
 
-\textbf{Liquidaciones de Cartera:}
-Módulo dedicado al seguimiento, rendición de cuentas y conciliación financiera de las cobranzas percibidas sobre carteras cedidas:
-\begin{itemize}
-    \item \textbf{Mecánica Financiera y Cláusula de Recurso:} Discrimina automáticamente las liquidaciones según la naturaleza del contrato:
+\textbf{2. Reporte Oficial para el BCRA (Proveedores No Financieros de Crédito - PNFC)}
+Si tu empresa otorga préstamos, tiene la obligación legal de informar mensualmente el estado de sus deudores al Banco Central de la República Argentina:
+\begin{enumerate}
+    \item En la solapa de \textbf{Reportes Regulados}, elegí la opción \textbf{Régimen Informativo BCRA}.
+    \item Seleccioná la fecha de corte del mes que querés presentar.
+    \item El sistema clasifica automáticamente a cada cliente según los días de mora que tenga:
           \begin{itemize}
-              \item \textit{Con Recurso:} El socio originador o cedente mantiene la responsabilidad por la mora de los deudores, compensando cuotas impagas o asumiendo el pasivo de cobro.
-              \item \textit{Sin Recurso:} La entidad adquirente asume plenamente el riesgo crediticio, rindiendo exclusivamente las cuotas efectivamente recaudadas.
+              \item \textit{Situación 1 (Normal):} Al día o atraso menor a 31 días.
+              \item \textit{Situación 2 (Riesgo Bajo):} Atraso de 32 a 90 días.
+              \item \textit{Situación 3 (Riesgo Medio):} Atraso de 91 a 180 días.
+              \item \textit{Situación 4 (Riesgo Alto):} Atraso de 181 a 365 días.
+              \item \textit{Situación 5 (Irrecuperable):} Atraso mayor a 365 días.
           \end{itemize}
-    \item \textbf{Procesamiento de Nuevas Liquidaciones:} Asistente para generar rendiciones a socios comerciales delimitando fecha de corte, períodos de vencimiento de cuota y filtros sobre procesos de cobranza específicos. Incluye simulación previa y confirmación atómica con creación de lotes identificados (\texttt{LIQUIDACIONES\_*}).
-    \item \textbf{Listado Analítico y Control de Lotes:}
-          \begin{itemize}
-              \item \textbf{Solapa Liquidaciones:} Visualización granular de cada cuota y cobranza liquidada con desglose de Capital, Interés, IVA e Importe Total, junto a su estado de cancelación y filtros multifactoriales tipo Excel. Barra inferior con totalizadores consolidados.
-              \item \textbf{Solapa Procesos de Liquidaciones:} Tablero maestro de lotes generados, permitiendo auditar el volumen rendido, dar de baja procesos con reversión total o disparar el registro de pagos efectivos al socio comercial informando fecha e importe transferido.
-          \end{itemize}
-\end{itemize}
+    \item Hacé clic en el botón \textbf{"Descargar Archivos Oficiales (.ZIP)"}.
+    \item El sistema te descarga un archivo comprimido con los tres archivos de texto obligatorios (\texttt{PROVEEDORES.TXT}, \texttt{IMPORTES.TXT} y \texttt{TASA.TXT}), formateados con los anchos de columna y caracteres exactos que exige el validador oficial del BCRA. ¡Listos para subir sin rechazos!
+    \item También podés descargar la planilla de control en Excel para auditar los números antes de la presentación.
+\end{enumerate}
 
-\subsubsection{Reportes}
-Generación de Reportes de Saldos y Reportes Regulados (ej. BCRA).
+\textbf{3. Reporte para la UIF (Prevención de Lavado de Activos y PLA/FT)}
+Te permite generar en segundos la auditoría requerida por la Unidad de Información Financiera:
+\begin{itemize}
+    \item \textbf{Padrón de Clientes:} Nómina completa con DNI, CUIL, capital total tomado y saldo de deuda actual.
+    \item \textbf{Matriz de Riesgo:} Detalle del puntaje de riesgo asignado a cada tomador según sus antecedentes.
+    \item \textbf{Registro de Cruce RePET:} Constancia fechada de que cada cliente fue cotejado contra la base pública de personas vinculadas al terrorismo.
+\end{itemize}
 
 \subsection{Cartera de Cheques}
-\subsubsection{Operar Cheques}
-Módulo para el ingreso y gestión de la cartera de cheques.
 
-\subsection{Inversores}
+El módulo de \textbf{Cartera de Cheques} funciona como la caja fuerte digital de tu empresa: te permite llevar el control exacto de todos los cheques que tenés en mano, tanto los tradicionales de papel como los cheques electrónicos (\textbf{E-Cheqs}). 
+
+El sistema distingue con total claridad entre:
+\begin{itemize}
+    \item \textbf{Cheques Propios:} Son los cheques emitidos por tu propia empresa para pagar a proveedores o socios.
+    \item \textbf{Cheques de Terceros:} Son los valores que recibís de clientes como pago de sus cuotas o que comprás en el mercado financiero mediante descuento de cheques.
+\end{itemize}
+
+\subsubsection{Operar Cheques}
+Desde esta pantalla administrás el ingreso de cheques, calculás el dinero en mano al descontarlos, controlás quién tiene la tenencia de cada valor y conciliás los movimientos con tus cuentas bancarias.
+
+\textbf{Padrón de Emisores y Operadores:}
+Cada persona o empresa que emite o compra cheques se registra con su CUIT (11 dígitos sin guiones), Razón Social, Teléfono y Calificación Crediticia (\textit{Excelente}, \textit{Bueno}, \textit{Regular}, \textit{Malo} o \textit{Rechazado}). Al iniciar el sistema, tu propia empresa ya viene cargada automáticamente con calificación Excelente.
+
+\textbf{Paso a paso: Cómo dar de alta un cheque en cartera}
+\begin{enumerate}
+    \item En el menú lateral, ingresá a \textbf{Cartera de Cheques} y hacé clic en el botón verde \textbf{"+ Nuevo Cheque"}.
+    \item Elegí el \textbf{Emisor (Librador)}:
+          \begin{itemize}
+              \item Si el cheque lo emitió tu propia empresa, elegí tu razón social y el sistema lo marcará automáticamente con la etiqueta \texttt{PROPIO}.
+              \item Si el cheque te lo entregó un cliente o tercero, elegí su nombre de la lista (o hacé clic en \texttt{+ Nuevo} si es la primera vez que opera).
+          \end{itemize}
+    \item Seleccioná el \textbf{Banco Girado} (por ejemplo, Banco Galicia, Santander, Banco Macro, etc.).
+    \item Ingresá el \textbf{Número de Cheque} (o el ID de transacción si es un E-Cheq).
+    \item En el campo \textbf{Monto}, escribí el valor facial del cheque en pesos.
+    \item Indicá la \textbf{Fecha de Emisión} y la \textbf{Fecha de Pago} (el día exacto a partir del cual el cheque se puede depositar o cobrar por ventanilla).
+    \item En el campo de archivo adjunto, subí la foto del cheque de papel o el comprobante en PDF del E-Cheq. De esta manera, cualquier compañero de trabajo puede ver el cheque digitalizado en pantalla sin necesidad de ir a buscar el papel físico a la tesorería.
+    \item Hacé clic en \textbf{"Guardar Cheque"}. El valor ingresará en estado \texttt{PENDIENTE}.
+\end{enumerate}
+
+\textbf{Estados del cheque a lo largo de su vida:}
+\begin{itemize}
+    \item \textbf{PENDIENTE:} El cheque recién ingresó y está guardado en custodia a la espera de ser cobrado, vendido o debitado.
+    \item \textbf{COMPRADO:} Aplica a cheques de terceros que tu empresa le compró a un cliente adelantándole el dinero en mano con descuento de intereses.
+    \item \textbf{VENDIDO:} Cheque que tu empresa entregó o descontó ante un banco, inversor o proveedor.
+    \item \textbf{ACREDITADO:} Cheque de terceros que ya fue depositado y la plata entró efectivamente en tu cuenta bancaria.
+    \item \textbf{DEBITADO:} Cheque propio que se presentó al cobro y el banco ya te restó los fondos de tu cuenta corriente.
+\end{itemize}
+
+\textbf{Paso a paso: Cómo comprar o descontar un cheque a un cliente}
+Si un cliente o comercio te trae un cheque a cobrar a 30, 60 o 90 días y necesita el dinero en efectivo hoy:
+\begin{enumerate}
+    \item Ubicá el cheque en la grilla y, en el menú de acciones de la fila, hacé clic en \textbf{"Operar"} y seleccioná \textbf{"Comprar"}.
+    \item Seleccioná el cliente o comercio al que le comprás el cheque.
+    \item Indicá la \textbf{Fecha de Operación} (la fecha en la que le entregás la plata).
+    \item Ingresá la \textbf{Tasa Nominal Anual (TNA) de Descuento} que acordaron cobrarle.
+    \item Ingresá el porcentaje de \textbf{Gastos Administrativos} (el sistema te sugiere un 2,80\% habitual, pero podés cambiarlo).
+    \item Si el cheque es de otra provincia o el banco demora días hábiles adicionales en acreditarlo, sumá esos días en el campo \textbf{Días de Castigo} (por ejemplo, 1 o 2 días de clearing).
+    \item En el recuadro de \textbf{Vista Previa de Liquidación}, vas a ver el cálculo automático al instante:
+          \begin{itemize}
+              \item Los días corridos totales hasta el vencimiento.
+              \item El descuento de intereses financieros.
+              \item Los gastos administrativos y el 21\% de IVA correspondiente sobre intereses y gastos.
+              \item El \textbf{Importe Neto a Pagar}: la suma exacta de dinero que tenés que transferirle o entregarle en mano al cliente.
+          \end{itemize}
+    \item Hacé clic en \textbf{"Confirmar Operación"}. El cheque pasa a estado \texttt{COMPRADO} y la ganancia por el descuento queda asentada en el sistema.
+\end{enumerate}
+
+\textbf{Paso a paso: Cómo vender o entregar un cheque a un tercero}
+Si tenés un cheque en cartera (sea propio o de terceros previamente comprado) y lo querés negociar con un banco o entregarlo en parte de pago a un inversor:
+\begin{enumerate}
+    \item En la grilla, hacé clic en \textbf{"Operar"} sobre el cheque y elegí \textbf{"Vender"}.
+    \item Seleccioná el banco o inversor al que se lo transferís.
+    \item Cargá la fecha de entrega y la tasa de descuento acordada.
+    \item Al confirmar, el cheque pasará a estado \texttt{VENDIDO} y el sistema actualizará quién es el tenedor actual del documento.
+\end{enumerate}
+
+\textbf{Paso a paso: Cómo conciliar cheques con tus cuentas bancarias}
+Cuando los cheques se depositan o se debitan en la realidad bancaria, el sistema te permite unirlos con el extracto del banco en dos clics:
+\begin{itemize}
+    \item \textbf{Para cheques de terceros depositados (Acción Acreditar):} Hacé clic en el botón \textbf{"Acreditar"} en la fila del cheque. Se abrirá una ventana con los movimientos recientes de tu extracto bancario. Elegí el ingreso de dinero correspondiente y presioná \textbf{"Vincular"}. El cheque pasa a estar \texttt{ACREDITADO} y muestra la insignia verde \texttt{[Vinculado]}.
+    \item \textbf{Para cheques propios que se pagaron (Acción Debitar):} Hacé clic en el botón \textbf{"Debitar"} en la fila del cheque propio. Buscá el débito en el extracto de tu cuenta corriente y presiona \textbf{"Vincular"}. El cheque pasará a estar \texttt{DEBITADO}.
+    \item \textbf{¿Te equivocaste de movimiento?}: Hacé clic sobre la insignia \texttt{[Vinculado]} y el sistema te permite desvincular el cheque de inmediato, devolviéndolo a su estado anterior en cartera sin alterar los registros históricos.
+\end{itemize}
+
+\subsection{Inversores y Deuda Privada}
+
+El módulo de \textbf{Inversores y Deuda Privada} está pensado para aquellas empresas que se financian recibiendo fondos de personas o empresas privadas para prestar en la calle. 
+
+Desde acá podés llevar el control milimétrico de cada inversor: quién aportó el dinero, en qué condiciones (plazo y tasa de interés acordada), cuánta renta ganó hasta el día de hoy, y cómo registrar pagos de intereses, rescates o renovaciones.
+
+El módulo se compone de cuatro partes muy sencillas:
+\begin{enumerate}
+    \item \textbf{Padrón de Inversores:} El registro de las personas o empresas que aportan capital, con sus datos de contacto y cuentas bancarias.
+    \item \textbf{Cuentas Comitentes:} Las cuentas donde se radican las inversiones. Pueden pertenecer a una sola persona o a varios cotitulares.
+    \item \textbf{Series de Deuda:} Los tramos o pagarés emitidos (por ejemplo, una colocación a 180 días con una tasa fija anual).
+    \item \textbf{Movimientos:} El libro diario donde queda anotado cada ingreso de dinero (suscripción), retiro (rescate), pago de intereses o renovación.
+\end{enumerate}
+
 \subsubsection{Inversores}
-Gestión del padrón de inversores.
+Es el directorio de personas físicas o jurídicas que confían sus fondos a la empresa.
+
+\textbf{Paso a paso: Cómo dar de alta a un nuevo inversor}
+\begin{enumerate}
+    \item Ingresá a \textbf{Inversores} > \textbf{Padrón de Inversores} y hacé clic en \textbf{"+ Nuevo Inversor"}.
+    \item Ingresá su \textbf{CUIT o CUIL} (11 dígitos sin guiones) y su \textbf{Razón Social} o Nombre completo.
+    \item El sistema realiza una consulta automática con ARCA (ex AFIP) para verificar que el CUIT exista y que el nombre ingresado coincida con el padrón impositivo oficial.
+    \item Completá su \textbf{Domicilio Legal}, su \textbf{Correo Electrónico} (donde recibirá las liquidaciones de intereses) y su \textbf{Teléfono}.
+    \item Cargá sus \textbf{Datos Bancarios}: CBU de 22 dígitos, Nombre del Banco y Número de cuenta donde se le transferirán los intereses o devoluciones de capital.
+    \item Hacé clic en \textbf{"Guardar Inversor"}.
+\end{enumerate}
 
 \subsubsection{Cuentas Comitentes}
-Administración de las cuentas comitentes asociadas a cada inversor.
+Cada inversor necesita tener al menos una cuenta comitente para poder colocar su dinero. 
+
+\textbf{Régimen de Titularidad (¡Muy importante!):}
+Cuando una cuenta tiene más de un titular (por ejemplo, dos socios o familiares), podés configurarla bajo dos modalidades bien diferenciadas:
+\begin{itemize}
+    \item \textbf{A Orden Indistinta (\texttt{conjunta = false}):} Significa que el dinero, los rescates o los intereses pueden ser retirados o cobrados por \textbf{cualquiera de los titulares de forma individual e independiente}, sin necesidad de que los demás titulares intervengan o firmen.
+    \item \textbf{A Orden Conjunta (\texttt{conjunta = true}):} Es una cuenta mancomunada. Para disponer o retirar fondos, la operación debe realizarse necesariamente \textbf{a nombre y con la conformidad de todos los titulares juntos}.
+\end{itemize}
+
+\textbf{Paso a paso: Cómo abrir una Cuenta Comitente}
+\begin{enumerate}
+    \item Andá a \textbf{Inversores} > \textbf{Cuentas Comitentes} y hacé clic en \textbf{"+ Nueva Cuenta"}.
+    \item Asignale un nombre o identificador (por ejemplo, \texttt{CTA-101}).
+    \item Elegí la modalidad de titularidad: \textbf{Indistinta} o \textbf{Conjunta}.
+    \item Agregá a los inversores que formarán parte de la cuenta y definí su orden (Titular 1, Titular 2, etc.).
+    \item Hacé clic en \textbf{"Guardar Cuenta"}.
+    \item En la grilla podés hacer clic en el botón de la lupa o ficha para abrir el \textbf{Estado de Cuenta}, donde vas a ver en cualquier momento el saldo vivo total, los intereses ganados y el historial completo de movimientos.
+\end{enumerate}
 
 \subsubsection{Series de Deuda}
-Control de las diferentes series de deuda emitidas.
+Una \textbf{Serie de Deuda} representa el compromiso financiero asumido con los inversores (similar a un pagaré o plazo fijo privado).
 
-\subsubsection{Movimientos}
-Registro de los movimientos de fondos de inversores.
+\textbf{Paso a paso: Cómo crear una nueva Serie de Deuda}
+\begin{enumerate}
+    \item Andá a \textbf{Series de Deuda} y hacé clic en \textbf{"+ Nueva Serie"}.
+    \item Ingresá un nombre identificatorio (por ejemplo, \texttt{SERIE XXV - 180 DÍAS}).
+    \item Indicá la \textbf{Fecha de Suscripción} (cuándo comienza a correr la inversión).
+    \item Indicá el \textbf{Plazo Contractual} expresado en días corridos (por ejemplo, 90, 180 o 365 días).
+    \item Cargá la \textbf{Tasa Nominal Anual (TNA \%)} que se le pagará al inversor por su dinero.
+    \item El sistema calculará automáticamente la \textbf{Fecha de Vencimiento} exacta sumando los días pactados.
+    \item Si interviene algún comisionista o socio que acercó al inversor, podés activar la opción de comisiones e indicar el porcentaje correspondiente.
+    \item Hacé clic en \textbf{"Guardar Serie"}.
+\end{enumerate}
+
+\textbf{¿Cómo calcula el sistema los intereses? (Devengamiento diario sin calculadora)}
+En la pantalla de Series de Deuda contás con un selector de \textbf{Fecha de Corte}:
+\begin{itemize}
+    \item Cada día que pasa, el sistema calcula de forma automática cuántos pesos de interés ganó el inversor hasta esa fecha exacta.
+    \item Te muestra el \textbf{Capital Vigente}, los \textbf{Intereses Devengados} hasta hoy, los \textbf{Intereses a Devengar} (lo que falta ganar hasta que venza el plazo) y el total que la empresa deberá desembolsar al vencimiento.
+\end{itemize}
+
+\textbf{Paso a paso: Cómo renovar una inversión cuando vence}
+Cuando una serie de deuda llega a su fecha de vencimiento:
+\begin{enumerate}
+    \item En la grilla de Series, hacé clic en el botón \textbf{"Renovar"}.
+    \item Elegí la nueva serie receptora donde el inversor colocará sus fondos para el siguiente período.
+    \item El asistente te da dos opciones muy claras para los intereses ganados:
+          \begin{itemize}
+              \item \textbf{Retirar intereses en mano:} La empresa le transfiere o paga en efectivo las ganancias al inversor, y renueva únicamente el capital original aportado.
+              \item \textbf{Capitalizar intereses (Reinversión total):} Las ganancias se suman al capital, de modo que la nueva inversión arranca con un monto mayor y genera más intereses hacia adelante.
+          \end{itemize}
+    \item Hacé clic en \textbf{"Confirmar Renovación"}. El sistema cancela la serie anterior y da de alta la nueva serie con todos sus saldos al día de forma automática.
+\end{enumerate}
+
+\subsubsection{Movimientos de Deuda}
+Es el libro mayor donde queda registrada cada transacción de dinero con los inversores:
+\begin{itemize}
+    \item \textbf{Suscripción (+):} Cuando el inversor pone plata en una serie. Aumenta su saldo.
+    \item \textbf{Rescate (-):} Cuando el inversor retira total o parcialmente su capital.
+    \item \textbf{Retiro de Intereses (-):} Cuando la empresa le paga las ganancias devengadas.
+    \item \textbf{Renovaciones (+ / -):} El traspaso automático de fondos de una serie vencida a una nueva.
+\end{itemize}
+
+\textbf{Paso a paso: Cómo ingresar una Suscripción de fondos}
+\begin{enumerate}
+    \item En \textbf{Movimientos}, hacé clic en \textbf{"+ Nuevo Movimiento"}.
+    \item Elegí el tipo de movimiento \textbf{Suscripción (+)}.
+    \item Seleccioná la Cuenta Comitente del inversor y la Serie de Deuda correspondiente.
+    \item Ingresá el monto de dinero depositado y la fecha efectiva de acreditación bancaria.
+    \item Hacé clic en \textbf{"Guardar"}. En la grilla vas a ver reflejado el impacto positivo en el saldo de la cuenta comitente y de la serie.
+\end{enumerate}
 
 \subsection{Finanzas}
+
+El módulo de \textbf{Finanzas} funciona como la oficina de tesorería y contabilidad de tu empresa: desde acá controlás la plata que tenés en los bancos, registrás los gastos y facturas de proveedores que hay que pagar, liquidás las comisiones de los socios que te traen clientes y calculás cuánto hay que pagarle a ARCA (ex AFIP) por IVA e Ingresos Brutos (IIBB).
+
+El módulo reúne cinco herramientas muy prácticas:
+\begin{enumerate}
+    \item \textbf{Liquidación de Comisiones:} Para calcular y pagar en segundos lo que le corresponde a los socios comerciales por los préstamos otorgados, las cuotas cobradas o los inversores captados.
+    \item \textbf{Bancos y Cuentas:} Para consultar en una sola pantalla los saldos de tus cuentas corrientes, saber cuánta plata tenés rindiendo en Fondos Comunes de Inversión (FCI) o Plazos Fijos, y subir los extractos del banco para conciliar movimientos sin cargarlos a mano.
+    \item \textbf{Comprobantes (Cuentas a Pagar):} Para llevar el control de todas las facturas de proveedores (alquiler, luz, papelería, servicios), armar planes de pago en cuotas y registrar las cancelaciones.
+    \item \textbf{Posición de IVA:} Para contrastar el débito fiscal de los intereses cobrados en tus cuotas contra el crédito fiscal de tus compras y retenciones bancarias, sabiendo con exactitud cuánto pagar a fin de mes.
+    \item \textbf{Posición de IIBB:} Para liquidar mensualmente el Impuesto sobre los Ingresos Brutos provincia por provincia bajo el régimen de Convenio Multilateral, según el domicilio de tus clientes.
+\end{enumerate}
+
 \subsubsection{Liquidación de Comisiones}
-Cálculo y liquidación de comisiones generadas.
+En este panel calculás de forma automática las retribuciones económicas que le corresponden a tus socios comerciales (los originadores que captan solicitudes y los intermediarios de la red comercial).
+
+\textbf{Filtro mensual de liquidación:}
+En la parte superior elegís el año y mes que querés liquidar (por ejemplo, \texttt{2026-10}). El sistema analiza todas las operaciones de ese mes y las agrupa en tres solapas muy claras:
+\begin{itemize}
+    \item \textbf{Comisiones de Colocación:} Muestra los honorarios generados por el otorgamiento de nuevos créditos durante el mes. Vas a ver el capital total prestado, el porcentaje pactado y cuánto le corresponde a cada parte (\textit{Comisión Originador} y \textit{Comisión Intermediario}).
+    \item \textbf{Comisiones de Cobranza:} Calcula las comisiones sobre las cuotas que tus clientes pagaron efectivamente en el mes, evitando pagar comisiones por adelantado sobre dinero aún no cobrado.
+    \item \textbf{Comisiones de Inversores:} Para las empresas que trabajan con deuda privada, liquida los honorarios pactados con aquellos intermediarios que acercaron fondos de inversores a las Series de Deuda.
+\end{itemize}
+
+\textbf{Paso a paso: Cómo liquidar las comisiones del mes y exportarlas a Excel}
+\begin{enumerate}
+    \item Ingresá a \textbf{Finanzas} > \textbf{Liquidación de Comisiones}.
+    \item En el selector superior, elegí el \textbf{Mes de Liquidación} que deseás procesar.
+    \item Recorré las solapas (\textbf{Colocación}, \textbf{Cobranza} e \textbf{Inversores}) para verificar las operaciones computadas y los porcentajes aplicados a cada socio.
+    \item Si tu empresa le realizó adelantos de dinero al socio durante el mes, el sistema deduce automáticamente esos importes del saldo a cobrar.
+    \item En la barra inferior vas a ver el resumen consolidado con el total a pagar. Hacé clic en el botón verde \textbf{"Exportar a Excel"} para descargar la planilla detallada, lista para respaldar la orden de pago bancaria o solicitarle la factura al socio.
+\end{enumerate}
 
 \subsubsection{Bancos y Cuentas}
-Administración de las cuentas bancarias propias.
+Esta pantalla es el centro de control de tesorería: te permite supervisar la liquidez de tu empresa y mantener tus cuentas bancarias conciliadas al día.
 
-\subsubsection{Comprobantes}
-Gestión de comprobantes de ingresos y egresos.
+\textbf{Panel de Control de Fondos (Dashboard de Tesorería):}
+Te muestra en tiempo real y para cualquier rango de fechas:
+\begin{itemize}
+    \item \textbf{Saldo Disponible:} La plata líquida que tenés en tus cuentas bancarias para operar en el día a día.
+    \item \textbf{Saldo en FCI:} Dinero colocado transitoriamente en Fondos Comunes de Inversión de rescate inmediato (Money Market) para que no pierda valor contra la inflación.
+    \item \textbf{Saldo en Plazo Fijo:} Colocaciones bancarias a término devengando intereses.
+    \item \textbf{Ingresos y Egresos del período:} El total de dinero que entró (por cobranzas, rescates o transferencias) y todo lo que salió (por préstamos otorgados, gastos o pago a proveedores).
+    \item \textbf{Flujo Neto:} La diferencia final ($\text{Ingresos} - \text{Egresos}$), que te dice si el período cerró en superávit o déficit de fondos.
+\end{itemize}
+
+\textbf{Subida de extractos bancarios y conciliación automática:}
+Para que no tengas que escribir a mano cada movimiento del extracto bancario, el sistema puede leer directamente los resúmenes descargados de los principales bancos (Banco BICA, Banco Santander, Banco de La Pampa, Banco Galicia, Banco Macro, etc.). El sistema analiza cada renglón y reconoce automáticamente conceptos habituales (como transferencias, débitos impositivos, comisiones de mantenimiento o pagos de VEP).
+
+\textbf{Paso a paso: Cómo cargar y conciliar un extracto bancario}
+\begin{enumerate}
+    \item Ingresá a \textbf{Finanzas} > \textbf{Bancos y Cuentas} y seleccioná la cuenta bancaria sobre la que querés trabajar.
+    \item Hacé clic en el botón \textbf{"Subir Extracto"}.
+    \item Seleccioná el archivo de extracto descargado de tu home banking (en formato texto o Excel).
+    \item El sistema procesará el archivo y te mostrará la grilla con todos los renglones importados.
+    \item Los movimientos reconocidos quedarán clasificados de inmediato. Si tenés varios movimientos similares sin catalogar (por ejemplo, comisiones bancarias), podés tildarlos juntos y hacer clic en \textbf{"Asignar Concepto en Bloque"} para clasificarlos en un solo paso.
+    \item Si el extracto incluye el cobro o débito de un cheque en cartera, hacé clic en el botón de vinculación para unirlo directamente con el cheque correspondiente.
+\end{enumerate}
+
+\subsubsection{Comprobantes (Cuentas a Pagar a Proveedores)}
+En este módulo administrás las compras y gastos de la empresa (alquileres, luz, papelería, servicios contables, software, etc.), asegurando un control ordenado de tus deudas comerciales y los vencimientos de pago.
+
+\textbf{Padrón de Proveedores:}
+Registrás los datos comerciales de tus acreedores: CUIT, Razón Social, Condición frente al IVA, domicilio, canales de contacto y el CBU bancario donde se les transfiere.
+
+\textbf{Carga y control de comprobantes:}
+\begin{itemize}
+    \item \textbf{Tipos de comprobantes admitidos:} Facturas A, B, C, M, Notas de Débito, Notas de Crédito y Recibos.
+    \item \textbf{Desglose impositivo completo:} Al cargar una factura, ingresás el importe neto gravado, la alícuota de IVA correspondiente (21\%, 10,5\% o 27\%), las percepciones provinciales o nacionales y los conceptos no gravados. Esto permite que el sistema alimente automáticamente tu liquidación impositiva mensual sin que tengas que volver a cargar los datos.
+    \item \textbf{Estados del comprobante:}
+          \begin{itemize}
+              \item \textit{Pendiente:} Factura cargada que aún no fue pagada.
+              \item \textit{Pagado:} Comprobante cancelado en su totalidad.
+              \item \textit{Vencido:} Comprobante impago cuya fecha límite de pago ya expiró.
+          \end{itemize}
+\end{itemize}
+
+\textbf{Paso a paso: Cómo cargar una factura de proveedor y registrar su pago}
+\begin{enumerate}
+    \item En el menú lateral, andá a \textbf{Finanzas} > \textbf{Comprobantes} y hacé clic en \textbf{"+ Nuevo Comprobante"}.
+    \item Seleccioná el \textbf{Proveedor} emisor (si no existe, podés crearlo en el momento).
+    \item Elegí el \textbf{Tipo de Comprobante} (por ejemplo, Factura A), indicá el punto de venta y el número de comprobante.
+    \item Ingresá la \textbf{Fecha de Emisión} y la \textbf{Fecha de Vencimiento} para el pago.
+    \item Cargá el importe neto gravado y seleccioná la alícuota de IVA. Si la factura incluye percepciones de Ingresos Brutos o IVA, sumalas en sus respectivos casilleros. El sistema calculará el total general automáticamente.
+    \item Hacé clic en \textbf{"Guardar Comprobante"}. La factura quedará asentada en estado \textit{Pendiente}.
+    \item Cuando realices el pago (por transferencia bancaria o entregando un cheque de cartera), hacé clic en \textbf{"Pagar / Cancelar"} en la fila del comprobante, seleccioná el medio de pago utilizado y confirmá. La factura pasará a estado \textit{Pagado}.
+\end{enumerate}
 
 \subsubsection{Posición de IVA}
-Consulta de la posición del Impuesto al Valor Agregado.
+Esta herramienta le ahorra horas de trabajo a tu área contable, calculando de manera automática la declaración jurada mensual del Impuesto al Valor Agregado:
 
-\subsubsection{Posición de IIBB}
-Consulta de la posición de Ingresos Brutos.
+\begin{itemize}
+    \item \textbf{Débito Fiscal (IVA Ventas):} Es el IVA acumulado por los intereses cobrados y facturados a los clientes en sus cuotas durante el mes.
+    \item \textbf{Crédito Fiscal (IVA Compras):} Es el IVA computable de todas las facturas de proveedores que cargaste en el módulo de Comprobantes durante el mismo período.
+    \item \textbf{Retenciones Bancarias Sufridas:} El dinero que los bancos te retuvieron en concepto de IVA en tus cuentas durante el mes.
+    \item \textbf{Percepciones de Compras:} Percepciones de IVA liquidadas por proveedores en sus facturas de compras.
+    \item \textbf{Saldo a Favor del Período Anterior:} Crédito fiscal acumulado que te quedó a favor del mes pasado.
+    \item \textbf{Pagos a Cuenta (VEPs):} Anticipos o volantes de pago ya abonados ante la agencia tributaria.
+\end{itemize}
+
+\textbf{Cálculo de la Posición Neta:}
+El sistema aplica la fórmula oficial de liquidación:
+\begin{equation}
+    \begin{aligned}
+        \text{Posición Neta IVA} ={} & \text{IVA Ventas} - \text{IVA Compras} \\
+        & - \text{Retenciones} - \text{Percepciones} + \text{Saldo Anterior} - \text{Pagos VEP}
+    \end{aligned}
+\end{equation}
+Si el resultado es positivo, representa el importe que la empresa debe pagarle a ARCA/AFIP; si es negativo, constituye un saldo técnico a favor que se traslada automáticamente al mes siguiente.
+
+\textbf{Paso a paso: Cómo revisar y guardar la Posición mensual de IVA}
+\begin{enumerate}
+    \item Ingresá a \textbf{Finanzas} > \textbf{Posición de IVA}.
+    \item Seleccioná el \textbf{Año y Mes} que deseás liquidar (por ejemplo, \texttt{2026-10}).
+    \item Verificá las cifras automáticas que el sistema calculó a partir de tus ventas y compras del mes.
+    \item Si tu contador te indica algún ajuste especial o querés ingresar un pago a cuenta, cargalo en el campo correspondiente con su justificación.
+    \item Hacé clic en \textbf{"Guardar Declaración"}. La liquidación quedará archivada en el historial inmutable de la empresa y podés exportar el reporte a Excel para respaldar la presentación impositiva oficial.
+\end{enumerate}
+
+\subsubsection{Posición de IIBB (Ingresos Brutos / Convenio Multilateral)}
+Este módulo calcula mensualmente el Impuesto sobre los Ingresos Brutos distribuyendo la base imponible según la provincia donde vive cada cliente, tal como lo exige el régimen de Convenio Multilateral.
+
+\textbf{Cálculo territorial automático:}
+\begin{itemize}
+    \item \textbf{Base Gravada por Provincia:} El sistema analiza cada cuota cobrada en el mes y, según el domicilio legal del titular del crédito, imputa los intereses financieros netos a la provincia que corresponde.
+    \item \textbf{Alícuotas Provinciales Configurables:} Te permite establecer y actualizar el porcentaje impositivo vigente para cada jurisdicción (por ejemplo, 5\%, 7\%, 8\%).
+    \item \textbf{Impuesto Determinado por Jurisdicción:}
+          \begin{equation}
+              \text{Impuesto Provincial}_{j} = \text{Base Gravada}_{j} \times \left(\frac{\text{Al\'{\i}cuota}_{j}}{100}\right)
+          \end{equation}
+          donde $j$ representa a cada una de las provincias donde tenés operaciones vigentes.
+\end{itemize}
+
+\textbf{Determinación del Saldo a Pagar:}
+El sistema consolida el impuesto total de todas las provincias y descuenta las retenciones bancarias provinciales, percepciones sufridas y pagos a cuenta:
+\begin{equation}
+    \begin{aligned}
+        \text{Saldo IIBB} ={} & \sum_{j} \text{Impuesto Provincial}_{j} - \text{Retenciones} \\
+        & - \text{Percepciones} + \text{Saldo Anterior} - \text{Pagos VEP}
+    \end{aligned}
+\end{equation}
+
+\textbf{Paso a paso: Cómo liquidar y presentar la Posición de IIBB}
+\begin{enumerate}
+    \item Ingresá a \textbf{Finanzas} > \textbf{Posición de IIBB}.
+    \item Elegí el período mensual a liquidar.
+    \item Vas a ver en pantalla la tabla con todas las provincias alcanzadas: el monto de base gravada, la alícuota aplicable y el impuesto calculado para cada una de ellas.
+    \item Revisá el total de retenciones y percepciones provinciales acumuladas.
+    \item Cambiá el estado de la liquidación a \textbf{"Presentada"} y, una vez que abones el volante electrónico de pago, marcala como \textbf{"Pagada"} registrando la fecha de pago.
+    \item Descargá la planilla resumen en Excel para tu archivo y para el profesional contable.
+\end{enumerate}
 
 \subsection{Configuración}
+
+El módulo de \textbf{Configuración} es el centro de control de Credit Manager. Su principal ventaja es que le otorga a tu empresa \textbf{autonomía total}: podés modificar tasas de interés, crear nuevos esquemas de comisiones, ajustar los límites de riesgo crediticio, dar de alta usuarios y personalizar los modelos de contratos en Word sin depender de programadores ni requerir cambios técnicos en el sistema.
+
+El módulo se compone de cuatro áreas:
+\begin{enumerate}
+    \item \textbf{Tablas Auxiliares:} El catálogo maestro con las 18 tablas paramétricas del sistema (provincias, socios, tasas, empleadores, bancos, etc.).
+    \item \textbf{Acciones del Sistema:} Herramientas de mantenimiento general para sincronizar estados de cobro, activar o apagar módulos y personalizar el logo corporativo.
+    \item \textbf{Usuarios:} Administración de operadores, asignación de permisos según el puesto de trabajo y restablecimiento de contraseñas.
+    \item \textbf{Papelería:} Carga y personalización de plantillas en Word (\texttt{.docx}) con reemplazo automático de variables para generar contratos y pagarés en segundos.
+\end{enumerate}
+
 \subsubsection{Tablas Auxiliares}
-Administración de parámetros del sistema.
+En esta sección consultás y modificás las 18 tablas que rigen el funcionamiento del negocio. En cada tabla podés filtrar por cualquier columna, ordenar los registros de menor a mayor, exportar la información a Microsoft Excel y crear o editar renglones con un simple formulario modal.
+
+Las 18 tablas se dividen en seis áreas de trabajo:
+
+\begin{enumerate}
+    \item \textbf{Geografía y Normativa:}
+          \begin{itemize}
+              \item \textbf{Nacionalidades (\texttt{nacionalidades}):} Listado de países. Incluye una marca de alerta para países de alto riesgo según el GAFI (Grupo de Acción Financiera Internacional), advirtiendo si corresponde aplicar una debida diligencia reforzada en Prevención de Lavado (PLA/FT).
+              \item \textbf{Provincias (\texttt{provincias}):} Catálogo de provincias argentinas, fundamental para calcular las tasas del Impuesto de Sellos y la distribución de Ingresos Brutos (Convenio Multilateral).
+          \end{itemize}
+
+    \item \textbf{Socios Comerciales y Red de Ventas:}
+          \begin{itemize}\raggedright
+              \item \textbf{Socios Comerciales (\texttt{socios}):} Empresas y mutuales que actúan como originadores de créditos o intermediarios. Acá se configuran sus datos de contacto, CUIT, cuenta bancaria para transferirles comisiones, día de corte mensual y los \textit{Anticipos Vigentes} (adelantos de dinero realizados para compensar en liquidaciones futuras).
+              \item \textbf{Empleadores (\texttt{empleadores}):} Organismos pagadores y empresas sobre cuyos recibos de sueldo se aplican los descuentos de cuotas. La casilla \textit{Es Pasivo} diferencia entre cajas de previsión social (jubilados y pensionados) y personal en actividad.
+              \item \textbf{Comercializadores (\texttt{comercializadores}):} Vendedores y asesores comerciales externos que acercan solicitudes de crédito.
+              \item \textbf{Relaciones Mapeadas (\texttt{relaciones}):} Diccionario de equivalencias que permite vincular los códigos de clientes o créditos de un socio externo con los identificadores internos de Credit Manager durante la importación masiva de carteras.
+          \end{itemize}
+
+    \item \textbf{Operadores de Cheques:}
+          \begin{itemize}
+              \item \textbf{Operadores (\texttt{operadores}):} Directorio de personas y entidades con las que se negocian cheques, con su calificación crediticia (\textit{Excelente}, \textit{Bueno}, \textit{Regular}, etc.) para controlar límites y aforos de descuento en tesorería.
+          \end{itemize}
+
+    \item \textbf{Tasas y Comisiones:}
+          \begin{itemize}\raggedright
+              \item \textbf{Tasas y Comisiones (\texttt{tasas\_y\_comisiones}):} Las condiciones financieras aplicables a los créditos: plazos en cuotas, Tasa Nominal Anual con IVA (\texttt{tna\_c\_iva}), comisiones para originadores e intermediarios, gastos administrativos de otorgamiento, porcentaje de sellado provincial y el factor de recargo punitorio por mora.
+              \item \textbf{Comisiones de Deuda (\texttt{comisiones\_deuda}):} Porcentajes de comisión acordados para socios que acercan inversores a las Series de Deuda.
+          \end{itemize}
+
+    \item \textbf{Finanzas y Tesorería:}
+          \begin{itemize}
+              \item \textbf{Bancos (\texttt{bancos}):} Entidades bancarias del sistema financiero con el formato de extracto compatible configurado para conciliar automáticamente.
+              \item \textbf{Cuentas Bancarias (\texttt{cuentas}):} Cuentas bancarias propias con su CBU, Alias, número de cuenta y moneda.
+              \item \textbf{Conceptos (\texttt{conceptos}):} Motivos de ingresos y egresos de dinero (por ejemplo, cobranzas, sueldos, alquiler, débitos bancarios).
+              \item \textbf{Clasificaciones (\texttt{clasificaciones}):} Agrupaciones presupuestarias para los informes gerenciales de flujo de fondos.
+          \end{itemize}
+
+    \item \textbf{Riesgo Crediticio y Capacidad de Pago (PLA/FT):}
+          \begin{itemize}\raggedright
+              \item \textbf{Factores de Riesgo (\texttt{factores\_riesgo}):} Criterios evaluados en la matriz de scoring crediticio, con sus pesos y ponderaciones.
+              \item \textbf{Multiplicadores de Riesgo (\texttt{multiplicadores\_riesgo}):} Coeficientes de ajuste según las características del tomador.
+              \item \textbf{Perfiles Transaccionales (\texttt{reglas\_perfiles\_transaccionales}):} Reglas para calcular con total precisión la capacidad de pago del solicitante a partir de su recibo de haberes: define qué conceptos suman (básico, adicionales, horas extras, asignaciones) y qué descuentos restan, determinando el \textbf{Sueldo Computable} y la \textbf{Cuota Afectable Máxima}:
+                    \begin{equation}
+                        \text{Sueldo Computable} = \text{Básico} + \sum_{k \in \text{Habilitados}} \text{Concepto}_{k} - \sum_{m \in \text{Deducciones}} \text{Descuento}_{m}
+                    \end{equation}
+                    \begin{equation}
+                        \text{Cuota Afectable Máxima} = \text{Sueldo Computable} \times \text{Cupo (\%)}
+                    \end{equation}
+              \item \textbf{Punitorios (\texttt{penalties}):} Escalas de recargo moratorio según los días de atraso.
+              \item \textbf{Políticas Crediticias (\texttt{politicas\_crediticias}):} Requisitos de admisión por socio originador: edades mínimas y máximas de otorgamiento (para hombres, mujeres y jubilados) y antigüedad laboral mínima requerida.
+          \end{itemize}
+\end{enumerate}
+
+\textbf{Paso a paso: Cómo consultar o editar parámetros en las Tablas Auxiliares}
+\begin{enumerate}
+    \item En el menú lateral, ingresá a \textbf{Configuración} > \textbf{Tablas Auxiliares}.
+    \item En el selector desplegable superior, elegí la tabla que necesitás consultar (por ejemplo, \textit{Tasas y Comisiones} o \textit{Empleadores}).
+    \item Para modificar un registro existente, hacé clic en el botón de edición (ícono de lápiz) en la fila correspondiente. Se abrirá una ventana donde podés actualizar valores (como la tasa TNA o un teléfono de contacto).
+    \item Para dar de alta un nuevo registro, hacé clic en el botón verde superior \textbf{"+ Nuevo Registro"}, completá los campos del formulario y presioná \textbf{"Guardar"}.
+    \item El cambio surtirá efecto inmediato en todo el sistema sin necesidad de reiniciar la aplicación.
+\end{enumerate}
 
 \subsubsection{Acciones del Sistema}
-Registro y auditoría de eventos ejecutados.
+Este panel agrupa tareas de mantenimiento general, personalización visual y supervisión de seguridad:
 
-\subsubsection{Usuarios}
-Gestión de accesos y perfiles (solo administradores).
+\begin{itemize}
+    \item \textbf{Sincronización Global de Estados:}
+          Es el botón de puesta al día general. Al ejecutarlo, el sistema revisa en pocos segundos el universo completo de créditos, cuotas y clientes, comparando la fecha actual contra los vencimientos y pagos asentados. Actualiza en tiempo real los estados de mora (\textit{Al Día}, \textit{Mora Leve}, \textit{Mora Media}, \textit{Mora Grave}, \textit{Incobrable} o \textit{Cancelado}), asegurando que las cifras de los reportes y del Dashboard sean exactas.
 
-\subsubsection{Papelería}
-Configuración de plantillas impresas para Créditos y Ventas de Cartera.
+    \item \textbf{Activar o Desactivar Módulos (\textit{Feature Toggling}):}
+          Panel exclusivo para el rol de \textbf{Administrador}. Si tu empresa actualmente no opera con cheques o inversores privados, podés apagar esos módulos con un simple interruptor para que no aparezcan en el menú lateral. Cuando decidas utilizarlos, los activás con un clic y quedarán disponibles al instante para todos los usuarios.
+
+    \item \textbf{Identidad Corporativa (Logo y Favicon):}
+          Permite subir la imagen del logo de tu empresa (para que aparezca en el encabezado de la plataforma y en los contratos o recibos emitidos) y el ícono de la pestaña del navegador (\textit{favicon}).
+
+    \item \textbf{Registro de Auditoría (Bitácora de Seguridad):}
+          El sistema registra de forma automática e inalterable cada acción importante que se realiza: qué usuario la ejecutó, a qué hora exacta, desde qué computadora y qué datos modificó. Esto garantiza total transparencia operativa y brinda respaldo ante cualquier consulta interna.
+\end{itemize}
+
+\textbf{Paso a paso: Cómo ejecutar la Sincronización Global de Estados}
+\begin{enumerate}
+    \item Ingresá a \textbf{Configuración} > \textbf{Acciones del Sistema}.
+    \item En la tarjeta de \textbf{Sincronización de Estados}, hacé clic en el botón azul \textbf{"Sincronizar Estados Ahora"}.
+    \item El sistema procesará todas las cuentas y mostrará un mensaje de confirmación indicando la cantidad de créditos y cuotas verificadas.
+\end{enumerate}
+
+\subsubsection{Usuarios y Permisos}
+Para organizar el trabajo en equipo y proteger la confidencialidad de la información, el sistema asigna perfiles de acceso (roles) adaptados a cada tarea en la empresa:
+
+\begin{enumerate}
+    \item \textbf{Administrador:} Acceso completo a todas las pantallas, configuración global de parámetros, gestión de usuarios y auditoría.
+    \item \textbf{Gerente:} Supervisión ejecutiva. Consulta paneles consolidados, reportes patrimoniales y autoriza excepciones en políticas crediticias.
+    \item \textbf{Oficial de Crédito:} Para el equipo comercial: alta y consulta de clientes, simulación de cuotas, evaluación de perfiles transaccionales y otorgamiento de préstamos.
+    \item \textbf{Operador de Cobranzas:} Para el equipo de recupero: registro de cobros individuales, procesamiento de planillas masivas de Excel y seguimiento de atrasos.
+    \item \textbf{Operador de Inversiones:} Para el área de fondeo: administración de cuentas comitentes, series de deuda, depósitos y renovaciones.
+    \item \textbf{Responsable de Finanzas:} Para la tesorería: conciliación de extractos bancarios, carga de facturas de proveedores y liquidación de comisiones, IVA e IIBB.
+    \item \textbf{Auditor / Solo Lectura:} Para revisores o contadores externos: consulta de información y descarga de reportes sin posibilidad de modificar ni borrar datos.
+\end{enumerate}
+
+\textbf{Paso a paso: Cómo dar de alta un usuario o cambiar una contraseña}
+\begin{enumerate}
+    \item Andá a \textbf{Configuración} > \textbf{Usuarios}.
+    \item Para crear un operador nuevo, hacé clic en el botón verde \textbf{"+ Nuevo Usuario"}. Escribí su nombre completo, su correo electrónico (con el que iniciará sesión) y asignale el rol correspondiente.
+    \item Para cambiar la clave de un usuario que la olvidó, hacé clic en el botón de la llavecita (\textit{Cambiar Contraseña}) en su fila, ingresá la nueva clave y confirmá.
+    \item Si un colaborador deja de trabajar en la empresa, simplemente editá su usuario y desmarcá la casilla \textbf{Activo}. Su acceso quedará bloqueado de inmediato, pero todas sus operaciones históricas quedarán debidamente preservadas en la auditoría.
+\end{enumerate}
+
+\subsubsection{Papelería (Plantillas Word y Emisión de Documentos)}
+Este módulo automatiza por completo la confección de contratos, pagarés y solicitudes legales, eliminando la tarea lenta y propensa a errores de rellenar documentos a mano en Word.
+
+\textbf{¿Cómo funciona la sustitución de variables?}
+Tu empresa sube sus propios modelos de contratos en formato Word (\texttt{.docx}). En las partes del texto donde van los datos del cliente, del préstamo o de la empresa, se colocan etiquetas entre llaves dobles, por ejemplo: \texttt{\{\{ cliente.nombre \}\}} o \texttt{\{\{ credito.monto\_otorgado\_letras \}\}}.
+Al momento de otorgar un crédito o vender una cartera, el sistema toma la plantilla y reemplaza al instante cada etiqueta por el dato real, formateando los importes en números y letras automáticamente.
+
+\textbf{Categorías de documentación:}
+\begin{itemize}
+    \item \textbf{Créditos:} Solicitud de Préstamo, Pagaré a la Vista con Cláusula sin Protesto, Autorización de Débito Bancario o Descuento de Haberes, Declaración Jurada de Origen y Licitud de Fondos (PLA/FT), Condición de Persona Expuesta Políticamente (PEP), Constancia de Consulta en RePET y Seguro de Vida sobre Saldo Deudor.
+    \item \textbf{Ventas de Cartera:} Contrato Marco de Cesión de Créditos, Anexos de Cartera (con o sin recurso) y Notificaciones de cesión a los deudores.
+\end{itemize}
+
+\textbf{Plantillas generales o por socio comercial:}
+Podés configurar documentos de uso general compartidos por toda la organización o definir plantillas exclusivas para un socio comercial determinado (respetando su membrete, domicilios especiales y cláusulas contractuales propias).
+
+\textbf{Variables disponibles para utilizar en tus plantillas Word:}
+\begin{itemize}\raggedright
+    \item \textbf{Datos del Cliente:} \texttt{cliente.nombre}, \texttt{cliente.apellido}, \texttt{cliente.dni}, \texttt{cliente.cuil}, \texttt{cliente.domicilio}, \texttt{cliente.calle}, \texttt{cliente.calle\_nro}, \texttt{cliente.piso}, \texttt{cliente.depto}, \texttt{cliente.cp}, \texttt{cliente.cbu}, \texttt{cliente.cuenta\_bancaria}, \texttt{cliente.banco}, \texttt{cliente.localidad}, \texttt{cliente.provincia}, \texttt{cliente.nacionalidad}, \texttt{cliente.estado\_civil}, \texttt{cliente.telefono}, \texttt{cliente.mail}, \texttt{cliente.sexo}, \texttt{cliente.fecha\_nacimiento}, \texttt{cliente.cargo}, \texttt{cliente.pep}, \texttt{cliente.repet}, \texttt{cliente.repet\_id}, \texttt{cliente.repet\_fecha\_consulta}, \texttt{cliente.repet\_estado}.
+    \item \textbf{Referidos Personales:} \texttt{referido\_1.nombre}, \texttt{referido\_1.apellido}, \texttt{referido\_1.telefono}, \texttt{referido\_1.email}, \texttt{referido\_2.nombre}, \texttt{referido\_2.apellido}, \texttt{referido\_2.telefono}, \texttt{referido\_2.email}.
+    \item \textbf{Datos del Empleador:} \texttt{empleador.razon\_social}, \texttt{empleador.fecha\_ingreso}, \texttt{empleador.ingreso\_mensual}, \texttt{empleador.legajo}, \texttt{empleador.domicilio\_calle}, \texttt{empleador.domicilio\_nro}, \texttt{empleador.domicilio\_piso}, \texttt{empleador.domicilio\_depto}, \texttt{empleador.localidad}, \texttt{empleador.provincia}, \texttt{empleador.codigo\_postal}, \texttt{empleador.telefono}.
+    \item \textbf{Condiciones Financieras del Crédito:} \texttt{credito.monto\_otorgado}, \texttt{credito.monto\_otorgado\_letras}, \texttt{credito.monto\_neto}, \texttt{credito.monto\_neto\_letras}, \texttt{credito.gastos\_otorgamiento}, \texttt{credito.gastos\_otorgamiento\_letras}, \texttt{credito.sellado}, \texttt{credito.sellado\_letras}, \texttt{credito.interes}, \texttt{credito.interes\_letras}, \texttt{credito.iva}, \texttt{credito.iva\_letras}, \texttt{credito.plazo}, \texttt{credito.valor\_cuota}, \texttt{credito.monto\_total}, \texttt{credito.monto\_total\_letras}, \texttt{credito.tna\_c\_iva}, \texttt{credito.tna\_s\_iva}, \texttt{credito.tea\_s\_iva}, \texttt{credito.tem\_s\_iva}, \texttt{credito.cft}, \texttt{credito.cuotas}, \texttt{credito.fecha\_emision\_dia}, \texttt{credito.fecha\_emision\_mes\_letras}, \texttt{credito.fecha\_emision\_anio}, \texttt{credito.primer\_vto}, \texttt{credito.tabla\_transferencias}.
+    \item \textbf{Datos de la Empresa y Socio:} \texttt{empresa.razon\_social}, \texttt{empresa.cuit}, \texttt{empresa.cbu}, \texttt{empresa.nro\_cta\_bancaria}, \texttt{empresa.domicilio}, \texttt{socio.razon\_social}.
+    \item \textbf{Cesión de Cartera:} \texttt{cartera.id}, \texttt{cartera.nombre}, \texttt{cartera.fecha\_compra}, \texttt{cartera.monto\_total}, \texttt{cartera.monto\_total\_letras}, \texttt{cartera.socio\_comercial}, \texttt{cartera.recurso}, \texttt{cartera.fecha\_dia}, \texttt{cartera.fecha\_mes\_letras}, \texttt{cartera.fecha\_anio}.
+\end{itemize}
+
+\textbf{Paso a paso: Cómo subir una plantilla de Word y emitir la documentación de un crédito}
+\begin{enumerate}
+    \item En \textbf{Configuración} > \textbf{Papelería}, hacé clic en \textbf{"+ Nueva Plantilla"}.
+    \item Asignale un nombre descriptivo (por ejemplo, \textit{Pagaré con Cláusula sin Protesto}), seleccioná la categoría (\textit{Créditos} o \textit{Venta de Cartera}) y adjuntá el archivo Word (\texttt{.docx}) con las etiquetas preparadas.
+    \item Establecé el número de orden en que querés que aparezca en el legajo y hacé clic en \textbf{"Guardar"}.
+    \item Cuando otorgues un crédito o consultes la ficha de un préstamo existente, hacé clic en el botón \textbf{"Descargar Papelería"}. Vas a poder descargar cada documento en formato Word individual o compilar en el acto un único archivo \textbf{PDF integrado} con todos los formularios completos y ordenados, listo para imprimir y hacer firmar al cliente.
+\end{enumerate}
 
 \section{Soporte y Pruebas}
-El proyecto incluye un entorno de \textit{Jupyter Notebooks} (\texttt{notebooks/test.ipynb}) que permite ejecutar simulaciones de ingesta y auditar el comportamiento del sistema de manera interactiva sin afectar la aplicación principal.
+Para cualquier duda operativa sobre el uso de la plataforma o consultas sobre nuevas configuraciones, ponete en contacto con el equipo de soporte interno o el administrador de sistemas de tu empresa. El sistema incluye además un entorno de simulación para que los supervisores puedan poner a prueba nuevas reglas de negocio o cargas masivas de prueba en un ámbito seguro antes de aplicarlas a la operatoria diaria.
 
 \end{document}
