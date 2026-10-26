@@ -343,7 +343,7 @@ class Cuota(Base):
 
         total_esperado = round(float(self.capital) + float(self.interes) + float(self.iva), 2)
         total_cobrado = round(sum(
-            round(float(c.capital) + float(c.interes) + float(c.iva), 2) for c in self.liquidaciones if not session or c not in session.deleted
+            round(float(c.capital) + float(c.interes) + float(c.iva), 2) for c in self.liquidaciones if bool(c.cancelada) and (not session or c not in session.deleted)
         ), 2)
 
         if total_cobrado >= total_esperado:

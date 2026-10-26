@@ -189,7 +189,9 @@ def procesar_cobranza_recurso(
 
 @router.get("/procesos")
 def get_procesos(db: Session = Depends(get_db)):
-    from src.database.models.creditos.cobranzas import Proceso, Cobranza
+    from src.database.models.creditos.cobranzas import Proceso, Cobranza, LiquidacionCuotaCedida
+    from src.database.models.creditos.carteras import Cartera
+    from src.database.models import SocioComercial
     from sqlalchemy import func
     
     procesos = db.query(Proceso).order_by(desc(Proceso.fecha_ejecucion)).all()
@@ -214,6 +216,46 @@ def get_procesos(db: Session = Depends(get_db)):
             "fecha_max": t.fecha_max.strftime("%Y-%m-%d") if t.fecha_max else None
         } for t in totals_query if t.proceso_id is not None
     }
+
+    # Query distinct owners (SocioComercial.razon_social) for each liquidation process
+    liquidaciones_dueños_query = (
+        db.query(
+            LiquidacionCuotaCedida.proceso_id,
+            SocioComercial.razon_social
+        )
+        .join(Cartera, LiquidacionCuotaCedida.cartera_id == Cartera.id)
+        .join(SocioComercial, Cartera.socio_id == SocioComercial.id)
+        .filter(LiquidacionCuotaCedida.proceso_id.isnot(None))
+        .distinct()
+        .all()
+    )
+
+    dueños_map = {}
+    for proc_id, razon_social in liquidaciones_dueños_query:
+        if proc_id not in dueños_map:
+            dueños_map[proc_id] = set()
+        if razon_social:
+            dueños_map[proc_id].add(razon_social)
+
+    # Query totals for liquidation processes if not already present
+    liquidaciones_totals_query = db.query(
+        LiquidacionCuotaCedida.proceso_id,
+        func.sum(LiquidacionCuotaCedida.capital).label("capital"),
+        func.sum(LiquidacionCuotaCedida.interes).label("interes"),
+        func.sum(LiquidacionCuotaCedida.iva).label("iva"),
+        func.sum(LiquidacionCuotaCedida.capital + LiquidacionCuotaCedida.interes + LiquidacionCuotaCedida.iva).label("total")
+    ).group_by(LiquidacionCuotaCedida.proceso_id).all()
+
+    for lt in liquidaciones_totals_query:
+        if lt.proceso_id is not None and lt.proceso_id not in totals_map:
+            totals_map[lt.proceso_id] = {
+                "capital": float(lt.capital or 0),
+                "interes": float(lt.interes or 0),
+                "iva": float(lt.iva or 0),
+                "total": float(lt.total or 0),
+                "fecha_min": None,
+                "fecha_max": None
+            }
     
     result = []
     for p in procesos:
@@ -225,10 +267,14 @@ def get_procesos(db: Session = Depends(get_db)):
         else:
             fecha_emision_desc = "-"
 
+        dueño_str = ", ".join(sorted(dueños_map[p.id])) if p.id in dueños_map and dueños_map[p.id] else "-"
+
         result.append({
             "ID": p.id,
             "Tipo": p.tipo.value if hasattr(p.tipo, 'value') else str(p.tipo),
             "Estado": p.estado.value if hasattr(p.estado, 'value') else str(p.estado),
+            "Dueño": dueño_str,
+            "dueño": dueño_str,
             "Descripción": p.descripcion or "-",
             "Fecha Ejecución": p.fecha_ejecucion.strftime("%Y-%m-%d %H:%M:%S") if p.fecha_ejecucion else "-",
             "Fecha Emisión Cobranza": fecha_emision_desc,
@@ -364,6 +410,79 @@ def pagar_proceso_liquidaciones(
             
         db.commit()
         return {"status": "success", "message": mensaje.strip()}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/procesos/{proceso_id}/liquidaciones/revertir-pago")
+def revertir_pago_proceso_liquidaciones(
+    proceso_id: int, 
+    db: Session = Depends(get_db)
+):
+    from src.database.models.creditos.cobranzas import (
+        Proceso, EstadoProcesoEnum, TipoProcesoEnum, LiquidacionCuotaCedida, TipoLiquidacionEnum
+    )
+    from src.database.models.creditos.creditos import Cuota
+    from src.database.models.socios import AnticiposSinAplicar
+    from datetime import date
+
+    proceso = db.query(Proceso).filter(Proceso.id == proceso_id).first()
+    if not proceso:
+        raise HTTPException(status_code=404, detail="Proceso no encontrado")
+
+    if proceso.tipo not in [TipoProcesoEnum.LIQUIDACIONES_MASIVAS, TipoProcesoEnum.LIQUIDACIONES_INDIVIDUALES]:
+        raise HTTPException(status_code=400, detail="El proceso no es de liquidaciones.")
+
+    liquidaciones = db.query(LiquidacionCuotaCedida).filter(LiquidacionCuotaCedida.proceso_id == proceso_id).all()
+    if not liquidaciones:
+        raise HTTPException(status_code=400, detail="No se encontraron liquidaciones para este proceso.")
+
+    liqs_canceladas = [l for l in liquidaciones if l.cancelada]
+    if not liqs_canceladas and proceso.estado != EstadoProcesoEnum.COMPLETADO:
+        raise HTTPException(status_code=400, detail="El proceso no tiene liquidaciones pagadas/canceladas para revertir.")
+
+    try:
+        # Revert Anticipos if RECURSO settlements were cancelled
+        liq_sample = liquidaciones[0]
+        socio_id = liq_sample.cartera.socio_id if liq_sample.cartera else None
+
+        recurso_cancelado = sum(
+            float(l.capital or 0) + float(l.interes or 0) + float(l.iva or 0)
+            for l in liqs_canceladas
+            if getattr(l.tipo_liquidacion, "value", str(l.tipo_liquidacion)) == TipoLiquidacionEnum.RECURSO.value
+        )
+
+        if recurso_cancelado > 0 and socio_id:
+            # Reintegrar a anticipos el importe que se había descontado
+            db.add(AnticiposSinAplicar(
+                fecha=date.today(),
+                socio_id=socio_id,
+                monto=round(recurso_cancelado, 2)
+            ))
+
+        # Revert cancelada and fecha_pago on all liquidations
+        cuotas_afectadas = set()
+        for l in liquidaciones:
+            if l.cancelada:
+                l.cancelada = False
+                l.fecha_pago = None
+                if l.cuota_id:
+                    cuotas_afectadas.add(l.cuota_id)
+
+        # Recalculate cuotas
+        if cuotas_afectadas:
+            cuotas_db = db.query(Cuota).filter(Cuota.id.in_(list(cuotas_afectadas))).all()
+            for cuota in cuotas_db:
+                cuota.actualizar_estado_cedido(date.today())
+
+        # Reopen proceso to PENDIENTE
+        proceso.estado = EstadoProcesoEnum.PENDIENTE
+
+        db.commit()
+        return {
+            "status": "success",
+            "message": f"Pago revertido exitosamente. Se restablecieron {len(liqs_canceladas)} liquidaciones a pendiente y el proceso quedó en estado PENDIENTE."
+        }
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))

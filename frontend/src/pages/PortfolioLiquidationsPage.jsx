@@ -28,6 +28,7 @@ const LIQUIDACIONES_COLUMNS = [
 
 const PROCESOS_LIQUIDACION_COLUMNS = [
   { key: 'ID', label: 'ID Proceso' },
+  { key: 'Dueño', label: 'Dueño' },
   { key: 'Tipo', label: 'Tipo' },
   { key: 'Estado', label: 'Estado' },
   { key: 'Descripción', label: 'Descripción' },
@@ -72,6 +73,7 @@ const PortfolioLiquidationsPage = () => {
   };
 
   const [filter, setFilter] = useState(initialFilter);
+  const [filterProcesos, setFilterProcesos] = useState({ dueño: [] });
 
   const matchesFilter = (item, currentFilter, excludeField = null) => {
     if (excludeField !== 'id' && currentFilter.id && !String(item.id).includes(currentFilter.id)) return false;
@@ -154,6 +156,18 @@ const PortfolioLiquidationsPage = () => {
     return liquidaciones.filter(l => matchesFilter(l, filter));
   }, [liquidaciones, filter]);
 
+  const AVAILABLE_DUEÑOS_PROCESOS = useMemo(() => {
+    return [...new Set(procesos.map(p => p.Dueño || p.dueño).filter(d => d && d !== '-'))].sort();
+  }, [procesos]);
+
+  const filteredProcesos = useMemo(() => {
+    if (!filterProcesos.dueño || filterProcesos.dueño.length === 0) return procesos;
+    return procesos.filter(p => {
+      const d = p.Dueño || p.dueño || '-';
+      return filterProcesos.dueño.includes(d);
+    });
+  }, [procesos, filterProcesos]);
+
   const handleFilterChange = (field, value) => setFilter(prev => ({ ...prev, [field]: value }));
 
   const totalCapital = filteredLiquidaciones.reduce((acc, curr) => acc + Number(curr.capital || 0), 0);
@@ -187,8 +201,37 @@ const PortfolioLiquidationsPage = () => {
         axiosClient.get(`/api/v1/liquidaciones?t=${new Date().getTime()}`),
         axiosClient.get(`/api/v1/procesos?t=${new Date().getTime()}`)
       ]);
-      setLiquidaciones(resLiq.data);
-      setProcesos(resProc.data.filter(p => String(p.Tipo).startsWith('LIQUIDACIONES_')));
+      const liquidacionesData = resLiq.data || [];
+      setLiquidaciones(liquidacionesData);
+
+      // Build fallback map for owners from liquidaciones data
+      const processOwnersMap = {};
+      liquidacionesData.forEach(l => {
+        if (l.proceso_id && l.socio_comercial) {
+          if (!processOwnersMap[l.proceso_id]) {
+            processOwnersMap[l.proceso_id] = new Set();
+          }
+          processOwnersMap[l.proceso_id].add(l.socio_comercial);
+        }
+      });
+
+      const mappedProcesos = (resProc.data || [])
+        .filter(p => String(p.Tipo).startsWith('LIQUIDACIONES_'))
+        .map(p => {
+          const ownersFromLiq = processOwnersMap[p.ID]
+            ? Array.from(processOwnersMap[p.ID]).sort().join(', ')
+            : null;
+          const dueño = (p.Dueño && p.Dueño !== '-')
+            ? p.Dueño
+            : (p.dueño && p.dueño !== '-' ? p.dueño : (ownersFromLiq || '-'));
+          return {
+            ...p,
+            Dueño: dueño,
+            dueño: dueño
+          };
+        });
+
+      setProcesos(mappedProcesos);
     } catch (error) {
       alert("Error cargando datos: " + error.message);
     } finally {
@@ -260,6 +303,22 @@ const PortfolioLiquidationsPage = () => {
     }
   };
 
+  const handleRevertPayment = async (procesoId) => {
+    if (!window.confirm("¿Está seguro de que desea revertir el pago de este proceso? Las liquidaciones volverán a estado pendiente y las cuotas asociadas recuperarán su estado anterior.")) {
+      return;
+    }
+    setLoadingActions(prev => ({ ...prev, [`revert-${procesoId}`]: true }));
+    try {
+      const response = await axiosClient.post(`/api/v1/procesos/${procesoId}/liquidaciones/revertir-pago`);
+      alert(response.data.message || "Pago revertido con éxito.");
+      fetchLiquidacionesYProcesos();
+    } catch (error) {
+      alert("Error al revertir pago: " + (error.response?.data?.detail || error.message));
+    } finally {
+      setLoadingActions(prev => ({ ...prev, [`revert-${procesoId}`]: false }));
+    }
+  };
+
   useEffect(() => {
     fetchLiquidacionesYProcesos();
   }, []);
@@ -294,12 +353,24 @@ const PortfolioLiquidationsPage = () => {
             </div>
           )}
           {activeTab === 'procesos' && (
-            <ExportExcelButton 
-              data={procesos} 
-              filteredData={procesos} 
-              filename="procesos_liquidaciones_export" 
-              columns={PROCESOS_LIQUIDACION_COLUMNS}
-            />
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              {filterProcesos.dueño.length > 0 && (
+                <button 
+                  className="btn-secondary" 
+                  onClick={() => setFilterProcesos({ dueño: [] })}
+                  title="Limpiar filtros"
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '100%' }}
+                >
+                  <FilterX size={16} /> Limpiar Filtros
+                </button>
+              )}
+              <ExportExcelButton 
+                data={procesos} 
+                filteredData={filteredProcesos} 
+                filename="procesos_liquidaciones_export" 
+                columns={PROCESOS_LIQUIDACION_COLUMNS}
+              />
+            </div>
           )}
         </div>
       </header>
@@ -489,6 +560,17 @@ const PortfolioLiquidationsPage = () => {
             <thead>
               <tr>
                 <th>ID Proceso</th>
+                <th style={{ minWidth: '150px' }}>
+                  Dueño
+                  <div style={{ marginTop: '5px' }}>
+                    <ExcelListFilter 
+                      availableOptions={AVAILABLE_DUEÑOS_PROCESOS}
+                      selectedOptions={filterProcesos.dueño}
+                      onChange={val => setFilterProcesos(prev => ({ ...prev, dueño: val }))}
+                      title="Filtrar Dueños..."
+                    />
+                  </div>
+                </th>
                 <th>Tipo</th>
                 <th>Estado</th>
                 <th>Descripción</th>
@@ -497,12 +579,13 @@ const PortfolioLiquidationsPage = () => {
               </tr>
             </thead>
             <tbody>
-              {procesos.length === 0 ? (
-                <tr><td colSpan="6" className="text-center empty-state">{loading ? "Cargando..." : "No hay procesos de liquidación."}</td></tr>
+              {filteredProcesos.length === 0 ? (
+                <tr><td colSpan="7" className="text-center empty-state">{loading ? "Cargando..." : "No hay procesos de liquidación."}</td></tr>
               ) : (
-                procesos.map(p => (
+                filteredProcesos.map(p => (
                   <tr key={p.ID}>
                     <td>{p.ID}</td>
+                    <td><strong>{p.Dueño || p.dueño || '-'}</strong></td>
                     <td>{p.Tipo}</td>
                     <td>
                       <span className={`status-badge status-${p.Estado.toLowerCase()}`}>
@@ -523,7 +606,7 @@ const PortfolioLiquidationsPage = () => {
                       >
                         👁️
                       </button>
-                      {p.Estado !== 'COMPLETADO' && (
+                      {p.Estado !== 'COMPLETADO' ? (
                         <>
                           <button 
                             className="btn-secondary" 
@@ -543,6 +626,16 @@ const PortfolioLiquidationsPage = () => {
                             {loadingActions[`delete-${p.ID}`] ? '⏳' : '🗑️'}
                           </button>
                         </>
+                      ) : (
+                        <button 
+                          className="btn-secondary" 
+                          title="Revertir Pago"
+                          onClick={() => handleRevertPayment(p.ID)}
+                          style={{ padding: '4px 8px', fontSize: '14px', color: '#f59e0b' }}
+                          disabled={loadingActions[`revert-${p.ID}`]}
+                        >
+                          {loadingActions[`revert-${p.ID}`] ? '⏳' : '↩️'}
+                        </button>
                       )}
                     </td>
                   </tr>
