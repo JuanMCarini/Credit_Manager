@@ -1,127 +1,203 @@
 # 💳 Credit Manager - Core Engine
 
-Sistema de gestión de carteras de créditos, motores de amortización financiera e ingesta de datos desarrollado en Python. Este proyecto permite la administración de activos financieros, cálculo de cuotas mediante sistema francés, importación masiva de carteras, procesamiento de cobranzas (con soporte para transacciones atómicas y rollback) y generación de reportes analíticos de saldos.
+Plataforma financiera integral para la administración de **carteras de créditos**, **custodia y descuento de cheques**, **fondeo con inversores privados** y **tesorería corporativa**, desarrollada en Python (FastAPI) y React.
+
+> 🌐 *Read this document in English: [README_en.md](README_en.md)*  
+> 📖 *Manual de Usuario completo disponible en: [`docs/instructivo/Instructivo.pdf`](docs/instructivo/Instructivo.pdf)*
+
+---
 
 ## 🚀 Características Principales
 
-* **Motor de Amortización**: Cálculo preciso de cuotas mediante el Sistema Francés utilizando `numpy-financial` con forzado de fechas de vencimiento y cálculo dinámico de componentes (capital, interés e IVA).
-* **Ingesta de Carteras (ETL)**: Ingesta masiva y modular de carteras desde archivos CSV crudos (personas, préstamos, cuotas). Implementa validación de integridad referencial, casteo seguro de nulos (`NaN`/`NaT`) y carga a la base de datos a través de transacciones ACID.
-* **Cobranzas Masivas Atómicas**: Procesamiento masivo de pagos y cancelaciones (estándar o anticipadas) desde planillas de Excel. Cuenta con control transaccional completo: si algún registro tiene problemas (por ejemplo, falta de deuda o discrepancias en los montos) o se produce una excepción, se ejecuta un `rollback` automático de toda la sesión para asegurar la consistencia y evitar guardados parciales.
-* **Gestión de Punitorios (Penalties)**: Generación automática de créditos independientes de tipo punitorio a partir del excedente o sobrante del cobro de un cliente, integrando el cobro en una única operación atómica.
-* **Reportes Analíticos Optimizados**: Generación rápida de reportes de saldos de cartera (`saldos()`). Utiliza técnicas de *SQL push-down* para delegar el filtrado al motor SQLite y vectorización lógica en Pandas para evitar saturar la memoria RAM.
-* **Arquitectura de Datos ORM**: Modelado relacional estructurado con SQLAlchemy. Registra operaciones granulares de la cartera (Compra, Venta y Recompra de carteras con o sin recurso).
-* **Configuración Validada y Dinámica**: Gestión centralizada mediante Pydantic y un archivo `.env`. Los datos de la empresa principal se auto-inicializan en la base de datos al arrancar y se sincronizan bidireccionalmente: si se editan desde la interfaz web, el archivo `.env` se actualiza automáticamente en caliente.
-* **API Web**: Endpoints desarrollados con FastAPI para realizar simulaciones de cuotas de crédito en tiempo real y consultar reportes de saldos de cartera en formato JSON.
-* **Dashboards Analíticos Avanzados**: Interfaces interactivas (React) para visualizar el estado global de la cartera y la ficha individual de cada cliente. Incluye filtrado dinámico, cálculo de KPIs en tiempo real (mora, capital, intereses) y exportación gráfica a PDF (vertical y apaisado) para reportes gerenciales.
+### 1. Cartera de Créditos y Originación
+* **Motor de Amortización Financiera**: Cálculo preciso de cronogramas bajo el Sistema Francés utilizando `numpy-financial`, con soporte para períodos de gracia, forzado de fechas de vencimiento y desglose dinámico de capital, interés, IVA, gastos de otorgamiento, sellados provinciales y tasas (TNA, TEA, TEM, CFT).
+* **Originación Asistida y Renovaciones**: Flujo guiado de otorgamiento con validación de políticas crediticias por socio originador, cálculo automático de capacidad de pago mediante **Perfil Transaccional** (Sueldo Computable y Cuota Afectable Máxima), gestión de legajos digitales, registro de transferencias de desembolso y refinanciación/renovación de créditos vigentes.
+* **Cobranzas Individuales y Masivas Atómicas**:
+  * Imputación en cascada (*primero la cuota más antigua; orden interno: IVA → Interés → Capital*).
+  * Soporte para pagos parciales, cobros ordinarios y **cancelaciones anticipadas** (descontando intereses futuros no devengados).
+  * Procesamiento masivo desde planillas de Excel con control transaccional ACID, reversión segura de lotes completos y **auto-ajuste de diferencias de redondeo** ($\le \$0.05$) mediante eventos de sesión de SQLAlchemy.
+  * **Gestión de Punitorios**: Generación automática de créditos independientes de tipo punitorio a partir de excedentes o recargos moratorios en una única operación atómica.
+* **Operaciones y Liquidaciones de Cartera**: Compra, venta (cesión) y recompra de carteras con o sin recurso, cotización financiera mediante **Valor Actual (VA)** descontado, exportación de anexos y liquidación periódica de cobranzas a socios compradores.
+* **Facturación Electrónica (ARCA / ex AFIP)**: Integración directa con los servicios web de ARCA (`afip.py`) para la emisión automática de comprobantes electrónicos con CAE sobre los intereses cobrados, descarga del **Libro IVA Ventas** en Excel y lotes de facturas en PDF/ZIP.
+* **Papelería Legal Automática**: Motor de generación documental basado en plantillas Word (`.docx`) con reemplazo dinámico de variables (`docxtpl`), conversión de importes a letras y compilación automática a PDF unificado listo para firmar.
+
+### 2. Cumplimiento Normativo y Evaluación de Riesgo (BCRA, UIF y RePET)
+* **Central de Deudores del BCRA**: Consulta en línea de la situación crediticia e historial de cheques rechazados por CUIT/CUIL, y generación del **Régimen Informativo para Proveedores No Financieros de Crédito (PNFC)** exportando los archivos oficiales (`PROVEEDORES.TXT`, `IMPORTES.TXT` y `TASA.TXT`) con formato de ancho fijo validado.
+* **Prevención de Lavado de Activos (UIF - PLA/FT)**: Matriz parametrizable de factores y multiplicadores de riesgo crediticio, alerta de países GAFI y reportes de auditoría UIF.
+* **Cruce Automatizado con RePET**: Tarea programada en segundo plano (`APScheduler`) que sincroniza diariamente el Registro Público de Personas y Entidades vinculadas a actos de Terrorismo y su Financiamiento, dejando constancia auditable en cada ficha de cliente.
+
+### 3. Cartera de Cheques (Físicos y E-Cheqs)
+* **Custodia y Operatoria de Valores**: Administración de cheques propios y de terceros, con padrón de emisores/operadores calificados crediticiamente.
+* **Liquidación de Compra y Venta**: Cálculo en tiempo real de descuentos financieros por compra o negociación de cheques (días corridos, días de clearing/castigo, TNA de descuento, gastos administrativos e IVA) y adjunto de respaldos digitales.
+* **Conciliación Bancaria de Valores**: Vinculación directa del cobro (acreditación) o pago (débito) de cheques contra los movimientos reales importados en las cuentas bancarias.
+
+### 4. Inversores y Deuda Privada
+* **Cuentas Comitentes y Titularidad**: Gestión del padrón de inversores (con validación de CUIT ante ARCA) y cuentas comitentes bajo régimen de **Orden Indistinta** o **Orden Conjunta**.
+* **Series de Deuda y Devengamiento Diario**: Emisión de series de deuda pactadas a plazo y tasa fija, cálculo automático de intereses devengados y a devengar a cualquier fecha de corte, registro de suscripciones, rescates, retiro de intereses, renovaciones (con retiro o capitalización de intereses) y liquidación de comisiones a captadores.
+
+### 5. Finanzas, Tesorería e Impuestos
+* **Bancos, Cuentas y Conciliación de Extractos**: Panel de liquidez (saldos disponibles, Fondos Comunes de Inversión y Plazos Fijos) e importación inteligente de extractos bancarios (Banco BICA, Santander, La Pampa, etc.) con clasificación masiva de conceptos.
+* **Comprobantes y Cuentas a Pagar**: Registro de facturas de proveedores con desglose impositivo completo, planes de pago en cuotas y cancelación mediante transferencias o cheques en cartera.
+* **Liquidación de Comisiones Comerciales**: Cálculo mensual automatizado de comisiones de colocación, cobranza y captación de inversores, con deducción automática de anticipos vigentes.
+* **Posiciones Fiscales (IVA e IIBB)**: Determinación mensual de la **Posición Neta de IVA** (débito fiscal de cuotas vs. crédito fiscal de comprobantes, retenciones, percepciones y VEPs) y **Posición de Ingresos Brutos (IIBB)** distribuida por jurisdicción provincial bajo el régimen de Convenio Multilateral.
+
+### 6. Seguridad, Auditoría y Configuración Multi-Tenant
+* **Control de Acceso Basado en Roles (RBAC)**: Autenticación mediante tokens JWT con 7 perfiles operativos (*Administrador, Gerente, Oficial de Crédito, Operador de Cobranzas, Operador de Inversiones, Responsable de Finanzas, Auditor / Solo Lectura*).
+* **Trazabilidad y Auditoría Inmutable**: Bitácora de seguridad por usuario e historial auditable de transiciones de estado para créditos y clientes (`HistorialEstadoCredito`, `HistorialEstadoCliente`).
+* **Autonomía Paramétrica y Feature Toggling**: 18 tablas auxiliares editables en caliente, interruptores para activar o desactivar módulos según el modelo de negocio de la empresa y sincronización bidireccional automática entre la base de datos y el archivo `.env`.
+
+---
 
 ## 📐 Arquitectura del Sistema
 
 ```mermaid
 graph TD
-    Excel[Excel de Cobranza Masiva] -->|Lectura con Pandas| CM[CollectionManager]
-    CSV[Archivos CSV de Carteras] -->|Procesamiento ETL| PI[PortfolioPurchase]
-    CM -->|Carga de pagos/punitorios| DB[(credit_manager.db)]
-    PI -->|Carga de créditos/cuotas| DB
-    DB -->|SQL Push-down| Rep[Reportes de Saldos]
-    DB -->|ORM models| API[FastAPI API]
-    API -->|Endpoints de Simulación/Saldos| Cliente[Cliente Web / Integrador]
+    subgraph Frontend ["Cliente Web (React 19 + Vite)"]
+        UI[Dashboards, Asistentes y Grillas Interactivas]
+    end
+
+    subgraph Backend ["Core Engine API (FastAPI + SQLAlchemy)"]
+        API[REST API + RBAC Middleware]
+        Logic[Motores Financieros: Amortización, Cobranzas, Cheques, Deuda, Finanzas]
+        Docs[Generador Documental: Word/PDF, Excel y TXT BCRA]
+        Cron[APScheduler: Sincronización Diaria RePET]
+    end
+
+    subgraph External ["Servicios Externos"]
+        ARCA[ARCA / ex AFIP: Facturación CAE y Padrón]
+        BCRA[API BCRA: Central de Deudores]
+        REPET[Datos Abiertos Justicia: Padrón RePET]
+    end
+
+    subgraph Storage ["Persistencia"]
+        DB[(PostgreSQL 15)]
+        FS[(Archivos: Legajos, Plantillas y Uploads)]
+    end
+
+    UI <-->|JSON / JWT / Descargas| API
+    API --> Logic
+    API --> Docs
+    Cron --> Logic
+    Logic <-->|Transacciones ACID / SQL Push-down| DB
+    Docs <--> FS
+    Logic <--> ARCA
+    Logic <--> BCRA
+    Cron <--> REPET
 ```
+
+---
 
 ## 🛠️ Tecnologías Utilizadas
 
-* **Lenguaje**: Python 3.14.4 (Backend) / JavaScript (Frontend)
-* **Manipulación de Datos**: Pandas, NumPy & NumPy-Financial
-* **ORM & Base de Datos**: SQLAlchemy & SQLite (forzando `PRAGMA foreign_keys=ON`)
-* **Configuración y Validación**: Pydantic & Pydantic-Settings
-* **Framework Web (Backend)**: FastAPI & Uvicorn
-* **Framework Web (Frontend)**: React & Vite
-* **Pruebas**: Pytest
-* **Lectura de Archivos**: openpyxl (para lectura de archivos Excel)
+* **Backend**: Python 3.11+ / 3.14, FastAPI, Uvicorn & Gunicorn
+* **Base de Datos y ORM**: PostgreSQL 15 & SQLAlchemy 2.0 (`pg8000` / `psycopg`)
+* **Procesamiento Financiero y Datos**: Pandas, NumPy, NumPy-Financial, OpenPyXL, xlrd
+* **Seguridad y Configuración**: Pydantic v2, Pydantic-Settings, Passlib (`bcrypt`), Python-JOSE (JWT)
+* **Integraciones y Tareas Programadas**: `afip.py` (ARCA/AFIP), HTTPX, `curl_cffi`, APScheduler, RapidFuzz
+* **Motor Documental y Reportes**: `docxtpl`, `python-docx`, LibreOffice / `docx2pdf`, `pypdf`, `reportlab`, `num2words`
+* **Frontend**: React 19, Vite 8, Zustand, TanStack React Query, React Router v7, Recharts, SheetJS (`xlsx`), jsPDF + html2canvas, SweetAlert2, Lucide React
+* **Testing y Contenedores**: Pytest, Docker & Docker Compose, Nginx
+
+---
 
 ## 📁 Estructura del Proyecto
 
 ```text
 Credit_Manager/
-├── .env                  # Variables de entorno y metadatos de la empresa administradora
-├── docker-compose.yml    # Configuración de contenedores y servicios con Docker
-├── data/                 # Almacenamiento local de la base de datos SQLite y archivos CSV/Excel
-├── frontend/             # Cliente web (React, Vite)
-├── notebooks/            # Notebooks Jupyter para pruebas interactivas y auditorías
+├── .env.example              # Plantilla de variables de entorno y configuración multi-instancia
+├── Dockerfile.backend        # Imagen de producción del backend (Python + LibreOffice + Gunicorn)
+├── docker-compose.yml        # Orquestación de servicios (PostgreSQL, Backend, Frontend Nginx)
+├── docker-compose.dev.yml    # Overrides para desarrollo con hot-reload y volúmenes montados
+├── requirements.txt          # Dependencias de Python
+├── data/                     # Almacenamiento local de archivos subidos, legajos y plantillas
+├── data_imports/             # Scripts de migración e ingesta inicial de datos históricos (ETL)
+├── docs/
+│   └── instructivo/          # Manual de Usuario oficial en formato LaTeX (.tex) y PDF
+├── frontend/                 # Aplicación web SPA (React 19 + Vite) -> ver frontend/README.md
+├── notebooks/                # Notebooks Jupyter para pruebas interactivas, auditoría y migración
+├── scripts/
+│   ├── reset_and_seed_db.py          # Reseteo completo del esquema PostgreSQL y carga de semillas
+│   └── backfill_historial_estados.py # Inicialización de bitácoras de auditoría de estados
 ├── src/
-    ├── config.py         # Configuración centralizada de la aplicación
-    ├── api/              # Endpoints, ruteo y configuración del servidor FastAPI
-    │   ├── main.py       # Punto de entrada de la API web
-    │   └── routes/       # Definición de rutas adicionales de la API
-    ├── database/         # Configuración del motor, conexión de sesión y modelos de SQLAlchemy
-    │   ├── connection.py # Engine de la base de datos y fábrica de sesiones
-    │   ├── models.py     # Definición de las tablas (Cliente, Credito, Cuota, Cobranza, etc.)
-    │   └── seed_geography.py # Poblado de tablas geográficas (Provincias)
-    ├── imports/          # Módulos de ingesta y ETL masivo
-    │   ├── init_socios.py    # Inicializador automático de socios comerciales
-    │   └── cql/              # Procesadores de reportes de Empresa Ficticia
-    │       ├── read.py       # Selector de directorio y lector de planillas base
-    │       ├── clients.py    # Procesamiento y carga optimizada de clientes
-    │       ├── credits.py    # Vectorización financiera (TNA) y carga de créditos
-    │       └── quota_and_coll.py # Carga segura por chunks de cuotas y cobranzas
-    ├── logic/            # Reglas de negocio y motores financieros
-    │   ├── amortization.py   # Motor de cálculo del sistema Francés
-    │   ├── collections.py    # Gestor de cobranzas estándar, anticipadas e ingestas masivas
-    │   └── penalties.py      # Gestor para la generación de créditos de punitorio por sobrantes
-    ├── portfolio/        # Módulos de adquisición y cesión (venta/compra/recompra) de carteras
-    │   ├── purchase.py   # Importación y validación de carteras adquiridas
-    │   └── sell.py       # Proceso de cesión de carteras
-    ├── reports/          # Reportes y analítica de saldos e intereses devengados
-    │   └── balances.py   # Cálculo vectorial de saldos y deuda morosa/pendiente
-    └── utils/            # Funciones auxiliares comunes (formateo de fechas, selección de archivos, etc.)
-└── tests/                # Pruebas unitarias y de integración (pytest)
+│   ├── config.py             # Configuración centralizada (CompanyConfig, APIConfig, DatabaseConfig)
+│   ├── api/                  # Servidor FastAPI, middlewares, esquemas Pydantic y rutas
+│   │   ├── main.py           # Punto de entrada de la API, lifespan y registro de routers
+│   │   ├── scheduler.py      # Cron jobs en segundo plano (sincronización diaria RePET)
+│   │   ├── dependencies/     # Dependencias de autenticación JWT y validación RBAC
+│   │   ├── routes/           # 20 routers modulares (creditos, cobranzas, cheques, inversores, etc.)
+│   │   └── schemas/          # Contratos de entrada/salida validados con Pydantic
+│   ├── database/             # Capa de persistencia relacional
+│   │   ├── connection.py     # Motor SQLAlchemy y fábrica de sesiones PostgreSQL
+│   │   ├── events.py         # Listeners de sesión (auto-ajuste de redondeos en cobranzas)
+│   │   ├── seed_*.py         # Seeders automáticos (admin, bancos, conceptos, provincias, módulos)
+│   │   └── models/           # Modelos ORM organizados por dominio (creditos, cheques, deuda, finance)
+│   ├── logic/                # Reglas de negocio y motores de cálculo
+│   │   ├── creditos/         # Amortización, originación, cobranzas, facturación, legajos, parsers bancarios
+│   │   ├── cheques/          # Operatoria y descuento de cheques
+│   │   ├── deuda/            # Series de deuda, cuentas comitentes, devengamiento, suscripciones y comisiones
+│   │   ├── refinanciacion/   # Fusión y renovación de créditos
+│   │   └── uif/              # Matriz de riesgo PLA/FT, perfil transaccional y reportes UIF
+│   ├── portfolio/            # Compra, venta (cesión) y recompra de carteras de créditos
+│   ├── reports/              # Reportes analíticos de saldos, régimen BCRA y reportes financieros
+│   ├── services/             # Clientes de servicios externos (ARCA/AFIP, BCRA, RePET, auditoría)
+│   └── utils/                # Utilidades transversales de fechas y manejo de archivos
+└── tests/                    # Suite de pruebas unitarias y de integración con Pytest
 ```
+
+---
 
 ## ⚙️ Instalación y Configuración
 
-### 1. Clonar el repositorio y acceder a la carpeta
+### 1. Clonar el repositorio
 ```bash
 git clone https://github.com/JuanMCarini/Credit_Manager.git
 cd Credit_Manager
 ```
 
-### 2. Configurar el Entorno Virtual
-Crea y activa un entorno virtual en Python:
+### 2. Configurar Variables de Entorno (`.env`)
+Copia el archivo de plantilla `.env.example` a `.env` en la raíz del proyecto y ajusta los parámetros de tu organización y base de datos PostgreSQL:
 ```bash
-# En Windows (PowerShell)
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-
-# En Linux/macOS
-python3 -m venv venv
-source venv/bin/activate
+cp .env.example .env
 ```
-
-### 3. Instalar Dependencias
-Instala los paquetes requeridos especificados en `requirements.txt`:
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Configurar Variables de Entorno
-Crea un archivo `.env` en la raíz del proyecto basándote en la plantilla `.env.example`. 
-Ejemplo de valores:
+Variables principales del archivo `.env`:
 ```env
+# Orígenes permitidos por CORS
+API_ALLOWED_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173"]
+
+# Datos de la Empresa Administradora (sincronizados bidireccionalmente con la BD)
 COMPANY_RAZON_SOCIAL="Empresa Ficticia S.A."
 COMPANY_CUIT=30000000000
+COMPANY_DOMICILIO="Calle Falsa 123, Ciudad, Provincia"
+COMPANY_EMAIL_CONTACTO="contacto@empresaficticia.com"
+COMPANY_TELEFONO="+54 9 11 0000-0000"
+COMPANY_BANK_ACCOUNT="CC $ 12345678"
+COMPANY_BANK_NAME="Banco Ficticio"
+COMPANY_CBU="0000000000000000000000"
 COMPANY_DIA_CORTE=28
-```
-*(Nota: Si omites estos valores, el sistema usará datos por defecto. Posteriormente podrás editarlos desde la sección de Socios Comerciales en la interfaz web y este archivo se actualizará automáticamente).*
 
-### 5. (Opcional) Despliegue con Docker
-Puedes levantar el sistema completo usando Docker Compose:
+# Conexión a Base de Datos PostgreSQL
+DB_USER=postgres
+DB_PASSWORD=postgres
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=credit_manager
+```
+
+### 3. Opción A: Despliegue con Docker Compose (Recomendado)
+Para levantar la base de datos PostgreSQL, el backend y el frontend en contenedores:
+
 ```bash
+# Modo Desarrollo (con hot-reload en backend y frontend)
 docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+
+# Modo Producción (Backend con Gunicorn + Frontend servido por Nginx)
+docker-compose up -d --build
 ```
 
-#### 🏗️ Correr múltiples instancias (Multi-Tenant)
-La arquitectura de despliegue en Docker está parametrizada para que puedas correr múltiples copias independientes del sistema en la misma computadora. Para levantar una nueva instancia para otra empresa:
-1. Clona/copia el proyecto a otra carpeta.
-2. Edita el archivo `.env` de esa nueva carpeta ajustando el bloque de Docker con un nombre de proyecto y puertos anfitriones que no estén en uso:
+#### 🏗️ Ejecución de múltiples instancias (Multi-Tenant)
+La arquitectura de Docker está parametrizada para correr múltiples instancias independientes en el mismo servidor o estación de trabajo:
+1. Copia el proyecto en otro directorio.
+2. Edita el archivo `.env` de la nueva instancia asignando un nombre de proyecto y puertos libres:
    ```env
    COMPOSE_PROJECT_NAME=credit_manager_empresa2
    HOST_PORT_DB=5434
@@ -129,26 +205,60 @@ La arquitectura de despliegue en Docker está parametrizada para que puedas corr
    HOST_PORT_FRONTEND=81
    HOST_PORT_FRONTEND_DEV=5174
    ```
-3. **⚠️ Importante para CORS:** Si cambiaste el puerto del frontend (p.ej a `5174`), debes agregarlo obligatoriamente a la lista de orígenes permitidos en el `.env` para que el frontend pueda comunicarse con el backend de su instancia:
+3. Incluye el nuevo puerto del frontend en `API_ALLOWED_ORIGINS`:
    ```env
-   API_ALLOWED_ORIGINS=["http://localhost:5174","http://127.0.0.1:5174"]
+   API_ALLOWED_ORIGINS=["http://localhost:5174","http://127.0.0.1:5174","http://localhost:81"]
    ```
-4. Levanta la instancia normalmente con `docker-compose`. Cada sistema tendrá su propia base de datos totalmente aislada.
+4. Inicia los contenedores con `docker-compose`. Cada instancia contará con su propio volumen de PostgreSQL completamente aislado.
+
+### 4. Opción B: Instalación Local (Entorno Virtual Python + Node.js)
+
+1. **Crear y activar el entorno virtual de Python**:
+   ```bash
+   # En Windows (PowerShell)
+   python -m venv venv
+   .\venv\Scripts\Activate.ps1
+
+   # En Linux / macOS
+   python3 -m venv venv
+   source venv/bin/activate
+   ```
+2. **Instalar dependencias del backend**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. **Inicializar o resetear la base de datos PostgreSQL**:
+   Al iniciar la aplicación por primera vez, FastAPI crea automáticamente las tablas y ejecuta los *seeders* iniciales (roles, usuario administrador, empresa principal, provincias, bancos, conceptos y módulos). Si deseas limpiar y reinicializar la base de datos desde cero:
+   ```bash
+   python scripts/reset_and_seed_db.py
+   ```
+   > 🔑 **Credenciales por defecto del Administrador**:  
+   > **Usuario**: `admin@creditmanager.com` | **Contraseña**: `123456`
+
+---
 
 ## 🚀 Uso y Ejecución
 
-### Ejecutar la API en modo Desarrollo
-Para levantar el servidor FastAPI localmente:
+### Levantar el Backend (FastAPI)
 ```bash
 uvicorn src.api.main:app --reload
 ```
-Una vez iniciado, podrás acceder a la documentación interactiva en:
-- Swagger UI: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
-- Redoc: [http://127.0.0.1:8000/redoc](http://127.0.0.1:8000/redoc)
+Documentación interactiva de la API disponible en:
+* **Swagger UI**: `http://127.0.0.1:8000/docs`
+* **ReDoc**: `http://127.0.0.1:8000/redoc`
 
-### Ejecutar Pruebas y Simulaciones en Jupyter Notebook
-Para realizar pruebas interactivas de ingesta de carteras y procesamiento de cobros masivos, abre el entorno de Jupyter Notebooks:
+### Levantar el Frontend (React + Vite)
+En otra terminal, accede a la carpeta `frontend` (ver más detalles en [`frontend/README.md`](frontend/README.md)):
 ```bash
-jupyter notebook notebooks/test.ipynb
+cd frontend
+npm install
+npm run dev
 ```
-Dentro de este notebook podrás resetear el esquema de base de datos, repoblar las tablas geográficas, procesar carteras enteras y ejecutar cobros masivos sobre archivos Excel.
+La interfaz web estará disponible en `http://localhost:5173`.
+
+### Ejecutar la Suite de Pruebas (Pytest)
+Para correr los tests unitarios y de integración (amortización, cobranzas, validaciones, renovaciones, eventos de redondeo y auditoría de estados):
+```bash
+pytest
+```
+*(Nota: Las pruebas utilizan una base de datos aislada en memoria para garantizar rapidez y no afectar tus datos de desarrollo).*
