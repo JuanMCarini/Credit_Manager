@@ -152,9 +152,11 @@ def reporte(fecha_corte: str | date, n_periodos: int = 2, salto_meses: int = 1, 
             df_lqcc['fecha_cobranza'] = pd.to_datetime(df_lqcc['fecha_cobranza']).dt.to_period("M")
             df_lqcc['fecha_pago'] = pd.to_datetime(df_lqcc['fecha_pago']).dt.to_period("M")
             periodo_filtro = pd.Period(fecha, freq='M')
+            df_lqcc_tipo_liq = df_lqcc['tipo_liquidacion'].apply(lambda x: getattr(x, "value", str(x)))
+            bca_values = [TipoLiquidacionEnum.BCA.value, TipoLiquidacionEnum.BCA.name, "BCA"]
             filtro = (
                 (df_lqcc['fecha_cobranza'] <= periodo_filtro) & 
-                (df_lqcc['tipo_liquidacion'] != TipoLiquidacionEnum.BCA) & 
+                (~df_lqcc_tipo_liq.isin(bca_values)) & 
                 ((df_lqcc["fecha_pago"] > periodo_filtro) | 
                 (df_lqcc["fecha_pago"].isna()))
                 )

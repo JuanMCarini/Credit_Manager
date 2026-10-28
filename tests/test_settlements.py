@@ -8,6 +8,10 @@ from src.database.models import (
     TipoCredito,
     LiquidacionCuotaCedida,
     TipoLiquidacionEnum,
+    TipoCobranzaEnum,
+    Cobranza,
+    OperacionCartera,
+    TipoOperacionCartera,
 )
 from src.logic.creditos.settlements import SettlementManager
 
@@ -165,3 +169,52 @@ def test_canceled_settlements_partial(db_session, test_credito_cedido):
 
     c2_db = db_session.get(Cuota, cuotas[1].id)
     assert c2_db.estado_cesion == EstadoCuotaCedida.PENDIENTE
+
+
+def test_settlements_s_resource_classification(db_session, test_credito_cedido, dummy_cartera):
+    credito, cuotas, _ = test_credito_cedido
+    c1, c2, c3 = cuotas
+    
+    # Associate cuotas with Cartera venta sin recurso
+    dummy_cartera.tipo_operacion = TipoOperacionCartera.VENTA
+    dummy_cartera.recurso = False
+    dummy_cartera.iva = False
+    
+    op1 = OperacionCartera(cartera_id=dummy_cartera.id, cuota_id=c1.id, fecha_registro=date(2026, 5, 10))
+    op2 = OperacionCartera(cartera_id=dummy_cartera.id, cuota_id=c2.id, fecha_registro=date(2026, 5, 10))
+    op3 = OperacionCartera(cartera_id=dummy_cartera.id, cuota_id=c3.id, fecha_registro=date(2026, 5, 10))
+    db_session.add_all([op1, op2, op3])
+    
+    # Create cobranzas:
+    # cob1: CA on c1 (vto 2026-06-28)
+    cob1 = Cobranza(cuota_id=c1.id, tipo_cobranza=TipoCobranzaEnum.CA, capital=100.0, interes=0.0, iva=0.0, fecha=date(2026, 6, 15))
+    # cob2: BCA on c1 (vto 2026-06-28) with fecha_corte 2026-06-28 -> IP
+    cob2 = Cobranza(cuota_id=c1.id, tipo_cobranza=TipoCobranzaEnum.BCA, capital=0.0, interes=20.0, iva=0.0, fecha=date(2026, 6, 15))
+    # cob3: BCA on c2 (vto 2026-07-28) with fecha_corte 2026-06-28 -> BCA (month > fecha_corte)
+    cob3 = Cobranza(cuota_id=c2.id, tipo_cobranza=TipoCobranzaEnum.BCA, capital=0.0, interes=15.0, iva=0.0, fecha=date(2026, 6, 15))
+    # cob4: COMUN on c3 -> NORMAL
+    cob4 = Cobranza(cuota_id=c3.id, tipo_cobranza=TipoCobranzaEnum.COMUN, capital=110.0, interes=10.0, iva=2.1, fecha=date(2026, 6, 15))
+    
+    db_session.add_all([cob1, cob2, cob3, cob4])
+    db_session.commit()
+    
+    sm = SettlementManager(db_session)
+    df_rec, df_s_rec = sm.obtain_settlement_of_transferred_quota(
+        id_val=dummy_cartera.socio_id,
+        identificador='CLIENTE ID',
+        fecha=date(2026, 6, 28)
+    )
+    df_sett = sm.settlements_s_resource(df_s_rec)
+    
+    # Verify classifications:
+    c1_ca = df_sett[df_sett['cobranza_id'] == cob1.id].iloc[0]
+    assert c1_ca['tipo_liquidacion'] == TipoLiquidacionEnum.CA
+    
+    c1_ip = df_sett[df_sett['cobranza_id'] == cob2.id].iloc[0]
+    assert c1_ip['tipo_liquidacion'] == TipoLiquidacionEnum.IP
+    
+    c2_bca = df_sett[df_sett['cobranza_id'] == cob3.id].iloc[0]
+    assert c2_bca['tipo_liquidacion'] == TipoLiquidacionEnum.BCA
+    
+    c3_normal = df_sett[df_sett['cobranza_id'] == cob4.id].iloc[0]
+    assert c3_normal['tipo_liquidacion'] == TipoLiquidacionEnum.NORMAL

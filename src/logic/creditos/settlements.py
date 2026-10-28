@@ -265,15 +265,25 @@ class SettlementManager:
         
         df_cobr["tipo_liquidacion"] = TipoLiquidacionEnum.NORMAL
         
-        mask = df_cobr["tipo_cobranza"] == TipoCobranzaEnum.BCA
-        df_cobr.loc[mask, "tipo_liquidacion"] = TipoLiquidacionEnum.BCA
+        tipo_cob_norm = df_cobr["tipo_cobranza"].apply(lambda x: getattr(x, "value", str(x)))
+
+        is_bca = tipo_cob_norm.isin([
+            TipoCobranzaEnum.BCA.value,
+            TipoCobranzaEnum.BCA.name,
+            "BCA"
+        ])
+        df_cobr.loc[is_bca, "tipo_liquidacion"] = TipoLiquidacionEnum.BCA
 
         fecha_corte_ref = self.fecha_corte or date.today()
-        mask = mask & (df_cobr["fecha_vencimiento"].dt.to_period("M") <= pd.Period(fecha_corte_ref, freq="M"))
-        df_cobr.loc[mask, "tipo_liquidacion"] = TipoLiquidacionEnum.IP
+        is_ip = is_bca & (df_cobr["fecha_vencimiento"].dt.to_period("M") <= pd.Period(fecha_corte_ref, freq="M"))
+        df_cobr.loc[is_ip, "tipo_liquidacion"] = TipoLiquidacionEnum.IP
 
-        mask = (df_cobr["tipo_cobranza"] == TipoCobranzaEnum.CA)
-        df_cobr.loc[mask, "tipo_liquidacion"] = TipoLiquidacionEnum.CA
+        is_ca = tipo_cob_norm.isin([
+            TipoCobranzaEnum.CA.value,
+            TipoCobranzaEnum.CA.name,
+            "CA"
+        ])
+        df_cobr.loc[is_ca, "tipo_liquidacion"] = TipoLiquidacionEnum.CA
 
         if "fecha" in df_cobr.columns:
             df_cobr.rename(columns={"fecha": "fecha_emision_cobranza"}, inplace=True)

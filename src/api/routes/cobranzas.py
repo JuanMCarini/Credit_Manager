@@ -721,6 +721,8 @@ def delete_cobranza(cobranza_id: int, db: Session = Depends(get_db)):
     credito = cuota.credito if cuota else None
     
     try:
+        if cobranza.factura:
+            db.delete(cobranza.factura)
         db.delete(cobranza)
         db.flush()
         
@@ -757,6 +759,8 @@ def modificar_cobranza(cobranza_id: int, datos: CobranzaIndividual, db: Session 
     credito = cuota.credito if cuota else None
     
     try:
+        if cobranza.factura:
+            db.delete(cobranza.factura)
         db.delete(cobranza)
         db.flush()
         

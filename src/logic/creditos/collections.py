@@ -226,7 +226,7 @@ class CollectionManager:
         # 5. Column cleanup and chronological ordering
         df.drop(columns=["capital_cobr", "interes_cobr", "iva_cobr"], inplace=True)
         df["fecha_vencimiento"] = pd.to_datetime(df["fecha_vencimiento"])
-        df.sort_values(by="fecha_vencimiento", inplace=True)
+        df.sort_values(by=["fecha_vencimiento", "credito_id", "nro_cuota"], inplace=True)
 
         # 6. Identification of total balance and filtering of already paid installments
         df["total"] = df[["capital", "interes", "iva"]].sum(axis=1).round(2)
