@@ -1,13 +1,15 @@
 from typing import Optional, List
 from datetime import date, datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from src.database.models.creditos.creditos import TipoCredito
+
 
 class TransferenciaCreate(BaseModel):
     cbu: str
     monto: float
     cuit: str
     razon_social: str
+
 
 class CreditoCreate(BaseModel):
     cliente_cuil: str
@@ -22,9 +24,11 @@ class CreditoCreate(BaseModel):
     id_externo: Optional[str] = None
     transferencias: Optional[List[TransferenciaCreate]] = []
 
+
 class CreditoEstadoUpdate(BaseModel):
     estado: str
     motivo: Optional[str] = None
+
 
 class HistorialEstadoCreditoOut(BaseModel):
     id: int
@@ -38,8 +42,8 @@ class HistorialEstadoCreditoOut(BaseModel):
     origen: str
     motivo: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 class DocumentoLegajoOut(BaseModel):
     id: int
@@ -50,5 +54,4 @@ class DocumentoLegajoOut(BaseModel):
     fecha_subida: datetime
     transferencia_id: Optional[int] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

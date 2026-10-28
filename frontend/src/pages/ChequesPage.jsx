@@ -1,18 +1,19 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuthStore } from '../store/useAuthStore';
 import useAppStore from '../store/useAppStore';
+import axiosClient from '../api/axiosClient';
 import CurrencyInput from '../components/CurrencyInput';
 import { FilterX } from 'lucide-react';
 import ExcelListFilter from '../components/ExcelListFilter';
 import ExcelDateFilter from '../components/ExcelDateFilter';
+import { getLocalDateISO } from '../utils/dates';
 
 const ChequesPage = () => {
-  const { user, token } = useAuthStore();
+  const { user } = useAuthStore();
   const isAuditor = user?.rol === 'Auditor / Solo Lectura';
-  const { apiStatus, bancos = [], fetchAuxiliares } = useAppStore();
+  const { bancos = [], fetchAuxiliares } = useAppStore();
   const [cheques, setCheques] = useState([]);
   const [operadores, setOperadores] = useState([]);
-  const [loading, setLoading] = useState(true);
 
   // Modales
   const [showNuevoCheque, setShowNuevoCheque] = useState(false);
@@ -96,7 +97,7 @@ const ChequesPage = () => {
     cuit: '', razon_social: '', calificacion: 'BUENO', telefono: '', email: ''
   };
   const initialOperacionForm = {
-    fecha_operacion: new Date().toISOString().split('T')[0],
+    fecha_operacion: getLocalDateISO(),
     operador_cuil: '',
     tna_descuento: '',
     dias_castigo: 0,
@@ -109,20 +110,14 @@ const ChequesPage = () => {
 
   const fetchData = async () => {
     try {
-      setLoading(true);
-      const resCheques = await fetch('/api/cheques/', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if(resCheques.ok) setCheques(await resCheques.json());
-      
-      const resOperadores = await fetch('/api/cheques/operadores', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if(resOperadores.ok) setOperadores(await resOperadores.json());
+      const [resCheques, resOperadores] = await Promise.all([
+        axiosClient.get('/api/cheques/'),
+        axiosClient.get('/api/cheques/operadores')
+      ]);
+      setCheques(resCheques.data);
+      setOperadores(resOperadores.data);
     } catch (err) {
       console.error(err);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -138,80 +133,51 @@ const ChequesPage = () => {
     try {
       const isEditing = editingChequeId !== null;
       const url = isEditing ? `/api/cheques/${editingChequeId}` : '/api/cheques/';
-      const method = isEditing ? 'PUT' : 'POST';
+      const res = isEditing
+        ? await axiosClient.put(url, chequeForm)
+        : await axiosClient.post(url, chequeForm);
 
-      const res = await fetch(url, {
-        method,
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}` 
-        },
-        body: JSON.stringify(chequeForm)
-      });
-      if(res.ok) {
-        const resultData = await res.json();
-        const chequeIdToUpload = isEditing ? editingChequeId : resultData.id;
+      const resultData = res.data;
+      const chequeIdToUpload = isEditing ? editingChequeId : resultData.id;
 
-        if (imagenFile) {
-          const formData = new FormData();
-          formData.append('file', imagenFile);
-          await fetch(`/api/cheques/${chequeIdToUpload}/imagen`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${token}` },
-            body: formData
-          });
-        }
-
-        setShowNuevoCheque(false);
-        setEditingChequeId(null);
-        setChequeForm(initialChequeForm);
-        setImagenFile(null);
-        fetchData();
-      } else {
-        alert(await res.text());
+      if (imagenFile) {
+        const formData = new FormData();
+        formData.append('file', imagenFile);
+        await axiosClient.post(`/api/cheques/${chequeIdToUpload}/imagen`, formData);
       }
+
+      setShowNuevoCheque(false);
+      setEditingChequeId(null);
+      setChequeForm(initialChequeForm);
+      setImagenFile(null);
+      fetchData();
     } catch (err) {
       console.error(err);
+      alert(err.response?.data?.detail || err.message);
     }
   };
 
   const handleBorrarCheque = async (id) => {
     if (!window.confirm("¿Estás seguro de que querés borrar este cheque?")) return;
     try {
-      const res = await fetch(`/api/cheques/${id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        fetchData();
-      } else {
-        alert(await res.text());
-      }
+      await axiosClient.delete(`/api/cheques/${id}`);
+      fetchData();
     } catch (err) {
       console.error(err);
+      alert(err.response?.data?.detail || err.message);
     }
   };
 
   const handleCrearOperador = async (e) => {
     e.preventDefault();
     try {
-      const res = await fetch('/api/cheques/operadores', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(operadorForm)
-      });
-      if(res.ok) {
-        setShowNuevoOperador(false);
-        setOperadorForm(initialOperadorForm);
-        fetchData();
-      } else {
-        alert(await res.text());
-      }
+      await axiosClient.post('/api/cheques/operadores', operadorForm);
+      setShowNuevoOperador(false);
+      setOperadorForm(initialOperadorForm);
+      fetchData();
     } catch (err) {
       console.error(err);
+      alert(err.response?.data?.detail || err.message);
     }
   };
 
@@ -232,29 +198,23 @@ const ChequesPage = () => {
       const url = editingOperacionId 
            ? `/api/cheques/operaciones/${editingOperacionId}` 
            : `/api/cheques/${selectedCheque.id}/operaciones`;
-      const method = editingOperacionId ? 'PUT' : 'POST';
 
-      const res = await fetch(url, {
-        method: method,
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(payload)
-      });
-      if(res.ok) {
-        setShowOperarCheque(false);
-        setOperacionForm(initialOperacionForm);
-        setEditingOperacionId(null);
-        fetchData();
-        if (showListadoOperaciones) {
-           abrirListadoOperaciones(selectedCheque);
-        }
+      if (editingOperacionId) {
+        await axiosClient.put(url, payload);
       } else {
-        alert(await res.text());
+        await axiosClient.post(url, payload);
+      }
+
+      setShowOperarCheque(false);
+      setOperacionForm(initialOperacionForm);
+      setEditingOperacionId(null);
+      fetchData();
+      if (showListadoOperaciones) {
+         abrirListadoOperaciones(selectedCheque);
       }
     } catch (err) {
       console.error(err);
+      alert(err.response?.data?.detail || err.message);
     }
   };
 
@@ -262,13 +222,8 @@ const ChequesPage = () => {
     setLoadingMovimientos(true);
     try {
       // Pedimos los ultimos movimientos (ej: limite de 200 para mostrar en la modal)
-      const res = await fetch(`/api/finanzas/movimientos?limit=200`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setMovimientos(data.items || []);
-      }
+      const res = await axiosClient.get('/api/finanzas/movimientos', { params: { limit: 200 } });
+      setMovimientos(res.data?.items || []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -284,52 +239,32 @@ const ChequesPage = () => {
 
   const handleAsignarMovimiento = async (movimientoId) => {
     try {
-      const res = await fetch(`/api/cheques/${selectedCheque.id}/asignar_movimiento`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ movimiento_id: movimientoId })
-      });
-      if (res.ok) {
-        setShowModalMovimiento(false);
-        fetchData();
-      } else {
-        alert(await res.text());
-      }
+      await axiosClient.post(`/api/cheques/${selectedCheque.id}/asignar_movimiento`, { movimiento_id: movimientoId });
+      setShowModalMovimiento(false);
+      fetchData();
     } catch (err) {
       console.error(err);
+      alert(err.response?.data?.detail || err.message);
     }
   };
 
   const handleDesasignarMovimiento = async (cheque) => {
     if (!window.confirm(`¿Seguro que deseás desvincular el movimiento del cheque #${cheque.numero}?`)) return;
     try {
-      const res = await fetch(`/api/cheques/${cheque.id}/desasignar_movimiento`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        fetchData();
-      } else {
-        alert(await res.text());
-      }
+      await axiosClient.post(`/api/cheques/${cheque.id}/desasignar_movimiento`);
+      fetchData();
     } catch (err) {
       console.error(err);
+      alert(err.response?.data?.detail || err.message);
     }
   };
 
   const abrirListadoOperaciones = async (cheque) => {
     setSelectedCheque(cheque);
     try {
-      const res = await fetch(`/api/cheques/${cheque.id}/operaciones`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if(res.ok) {
-        setOperacionesList(await res.json());
-        setShowListadoOperaciones(true);
-      }
+      const res = await axiosClient.get(`/api/cheques/${cheque.id}/operaciones`);
+      setOperacionesList(res.data);
+      setShowListadoOperaciones(true);
     } catch (err) {
       console.error(err);
     }
@@ -359,18 +294,12 @@ const ChequesPage = () => {
   const handleBorrarOperacion = async (op) => {
     if(window.confirm('¿Estás seguro de eliminar esta operación?')) {
       try {
-        const res = await fetch(`/api/cheques/operaciones/${op.id}`, {
-          method: 'DELETE',
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if(res.ok) {
-          abrirListadoOperaciones(selectedCheque);
-          fetchData();
-        } else {
-          alert(await res.text());
-        }
+        await axiosClient.delete(`/api/cheques/operaciones/${op.id}`);
+        abrirListadoOperaciones(selectedCheque);
+        fetchData();
       } catch (err) {
         console.error(err);
+        alert(err.response?.data?.detail || err.message);
       }
     }
   };
@@ -383,16 +312,12 @@ const ChequesPage = () => {
     
     if (cheque.estado !== 'PENDIENTE') {
        try {
-         const res = await fetch(`/api/cheques/${cheque.id}/operaciones`, {
-           headers: { 'Authorization': `Bearer ${token}` }
-         });
-         if (res.ok) {
-           const ops = await res.json();
-           if (ops.length > 0) {
-             // sort descending by id or fecha_operacion
-             const lastOp = ops.sort((a, b) => b.id - a.id)[0];
-             defaultFechaOp = lastOp.fecha_operacion;
-           }
+         const res = await axiosClient.get(`/api/cheques/${cheque.id}/operaciones`);
+         const ops = res.data;
+         if (ops && ops.length > 0) {
+           // sort descending by id or fecha_operacion
+           const lastOp = ops.sort((a, b) => b.id - a.id)[0];
+           defaultFechaOp = lastOp.fecha_operacion;
          }
        } catch (err) {
          console.error(err);
@@ -435,21 +360,14 @@ const ChequesPage = () => {
     try {
       const formData = new FormData();
       formData.append('file', imagenFile);
-      const res = await fetch(`/api/cheques/${selectedCheque.id}/imagen`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
-        body: formData
-      });
-      if(res.ok) {
-        alert("Imagen subida correctamente");
-        setShowImageModal(false);
-        setImagenFile(null);
-        fetchData();
-      } else {
-        alert(await res.text());
-      }
+      await axiosClient.post(`/api/cheques/${selectedCheque.id}/imagen`, formData);
+      alert("Imagen subida correctamente");
+      setShowImageModal(false);
+      setImagenFile(null);
+      fetchData();
     } catch (err) {
       console.error(err);
+      alert(err.response?.data?.detail || err.message);
     }
   };
 

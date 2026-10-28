@@ -1,7 +1,7 @@
 """
 Script: reset_and_seed_db.py
 Description: Wipes the database clean (drops all tables) and seeds it from scratch
-             with initial system data and company settings from .env (CREDISE S.A.).
+             with initial system data and company settings from .env.
 """
 
 import sys
@@ -12,8 +12,8 @@ from sqlalchemy import text
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from src.database.connection import SessionLocal, engine, Base
-import src.database.models  # Ensures all models and enums are registered
-from src.database.models import SocioComercial, Rol, Usuario, TipoRolEnum
+import src.database.models  # noqa: F401 - Ensures all models and enums are registered
+from src.database.models import SocioComercial
 from src.database.seed_admin import seed_admin
 from src.database.seed_bancos import seed_bancos
 from src.database.seed_geography import seed_provincias
@@ -27,7 +27,6 @@ def reset_database():
     with engine.connect() as conn:
         conn.execute(text("DROP SCHEMA public CASCADE;"))
         conn.execute(text("CREATE SCHEMA public;"))
-        conn.execute(text("GRANT ALL ON SCHEMA public TO usuario_db;"))
         conn.execute(text("GRANT ALL ON SCHEMA public TO public;"))
         conn.commit()
     print("   ✅ Esquema public reseteado a cero.")
@@ -37,39 +36,21 @@ def reset_database():
     print("   ✅ Tablas y tipos ENUM creados exitosamente.")
 
     print("3. Ejecutando seeders del sistema...")
-    # A. Roles y usuario admin
+    # A. Roles y usuario admin (admin@creditmanager.com / 123456)
     seed_admin()
     print("   ✅ Roles y Usuario Maestro inicializados.")
 
     db = SessionLocal()
     try:
-        # B. Restaurar usuario de la empresa (Ariel Tejada)
-        gerente_role = db.query(Rol).filter_by(nombre="GERENTE").first()
-        admin_role = db.query(Rol).filter_by(nombre=TipoRolEnum.ADMINISTRADOR.value).first()
-        rol_ariel = gerente_role or admin_role
-
-        user_ariel = db.query(Usuario).filter_by(email="arieltejada@credisesa.com.ar").first()
-        if not user_ariel:
-            user_ariel = Usuario(
-                email="arieltejada@credisesa.com.ar",
-                hashed_password="$2b$12$uV0iMhU2eCQACA1OQ9sUPekT94N9AZBfK/XISHJ7gEjsdgFRPNMly",
-                nombre_completo="Jose Ariel Tejada",
-                rol_id=rol_ariel.id if rol_ariel else None,
-                is_active=True,
-            )
-            db.add(user_ariel)
-            db.commit()
-            print("   ✅ Usuario 'Jose Ariel Tejada' (arieltejada@credisesa.com.ar) creado.")
-
-        # C. Crear empresa principal con los datos del .env
-        razon_social = COMPANY_DATA.razon_social or "CREDISE S.A."
-        cuit = COMPANY_DATA.cuit or "30717174220"
-        domicilio = COMPANY_DATA.domicilio or "19 de Mayo 486, Bahía Blanca, Buenos Aires"
-        email = COMPANY_DATA.email_contacto or "administracion@credisesa.com.ar"
-        telefono = COMPANY_DATA.telefono or ""
-        bank_account = COMPANY_DATA.bank_account or "CC-$ 10176607"
-        bank_name = COMPANY_DATA.bank_name or "Banco Bica S.A."
-        cbu = COMPANY_DATA.cbu or "4260004000100101766075"
+        # B. Crear empresa principal con los datos del .env
+        razon_social = COMPANY_DATA.razon_social
+        cuit = COMPANY_DATA.cuit
+        domicilio = COMPANY_DATA.domicilio
+        email = COMPANY_DATA.email_contacto
+        telefono = COMPANY_DATA.telefono
+        bank_account = COMPANY_DATA.bank_account
+        bank_name = COMPANY_DATA.bank_name
+        cbu = COMPANY_DATA.cbu
         dia_corte = COMPANY_DATA.dia_corte or 28
 
         socio_existente = db.query(SocioComercial).filter(
@@ -77,7 +58,7 @@ def reset_database():
         ).first()
 
         if not socio_existente:
-            nuevo_socio = SocioComercial.create_socio(
+            SocioComercial.create_socio(
                 razon_social=razon_social,
                 cuit=cuit,
                 db=db,
@@ -93,19 +74,19 @@ def reset_database():
         else:
             print(f"   ℹ️ Empresa principal '{razon_social}' ya existe.")
 
-        # D. Provincias
+        # C. Provincias
         seed_provincias(db)
 
-        # E. Conceptos
+        # D. Conceptos
         seed_conceptos(db)
 
-        # F. Módulos
+        # E. Módulos
         seed_modulos(db)
 
     finally:
         db.close()
 
-    # G. Bancos
+    # F. Bancos
     seed_bancos()
 
     print("\n🎉 Base de datos reseteada e inicializada exitosamente.")

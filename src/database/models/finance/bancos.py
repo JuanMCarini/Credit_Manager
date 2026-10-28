@@ -1,5 +1,5 @@
 import enum
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Date, Float, Enum as SQLEnum, Boolean
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Date, Float, Numeric, Enum as SQLEnum, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from src.database import Base
@@ -52,39 +52,48 @@ class Cuenta(Base):
         # Sumamos o restamos dependiendo del tipo de movimiento
         total = 0.0
         for mov in self.movimientos:
+            if not mov.concepto:
+                continue
+            monto = float(mov.monto)
             if mov.concepto.tipo_movimiento in (CategoriaMovimiento.INGRESO, CategoriaMovimiento.RESCATE_FCI, CategoriaMovimiento.PLAZO_FIJO_EGRESOS):
-                total += mov.monto
+                total += monto
             elif mov.concepto.tipo_movimiento in (CategoriaMovimiento.EGRESO, CategoriaMovimiento.SUSCRIPCION_FCI, CategoriaMovimiento.PLAZO_FIJO_INGRESOS):
-                total -= mov.monto
-        return total
+                total -= monto
+        return round(total, 2)
 
     @property
     def saldo_fci(self) -> float:
         # Sumamos o restamos dependiendo del tipo de movimiento
         total = 0.0
         for mov in self.movimientos:
+            if not mov.concepto:
+                continue
+            monto = float(mov.monto)
             if mov.concepto.tipo_movimiento == CategoriaMovimiento.RESCATE_FCI:
-                total -= mov.monto
+                total -= monto
             elif mov.concepto.tipo_movimiento == CategoriaMovimiento.SUSCRIPCION_FCI:
-                total += mov.monto
+                total += monto
 
             total = max(0.0, total)
 
-        return total
+        return round(total, 2)
 
     @property
     def saldo_plazo_fijo(self) -> float:
         # Sumamos o restamos dependiendo del tipo de movimiento
         total = 0.0
         for mov in self.movimientos:
+            if not mov.concepto:
+                continue
+            monto = float(mov.monto)
             if mov.concepto.tipo_movimiento == CategoriaMovimiento.PLAZO_FIJO_INGRESOS:
-                total += mov.monto
+                total += monto
             elif mov.concepto.tipo_movimiento == CategoriaMovimiento.PLAZO_FIJO_EGRESOS:
-                total -= mov.monto
+                total -= monto
 
             total = max(0.0, total)
 
-        return total
+        return round(total, 2)
 
 class Concepto(Base):
     __tablename__ = "conceptos"
@@ -122,7 +131,7 @@ class Movimiento(Base):
     cuenta_id = Column(Integer, ForeignKey("cuentas.id"), nullable=False)
     fecha = Column(Date, nullable=False)
     nro_comprobante = Column(String(20), nullable=True)
-    monto = Column(Float, nullable=False)
+    monto = Column(Numeric(15, 2), nullable=False)
     concepto_id = Column(Integer, ForeignKey("conceptos.id"), nullable=True)
     descripcion = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

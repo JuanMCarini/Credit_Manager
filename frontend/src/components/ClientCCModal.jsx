@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
 import ExcelDateFilter from './ExcelDateFilter';
 import ExportExcelButton from './ExportExcelButton';
+import { getLocalDateISO } from '../utils/dates';
 
 const formatCurrency = (num) => {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(num);
@@ -17,8 +18,8 @@ const ClientCCModal = ({ cuil, clientName, onClose, initialFilterCredito = '', i
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [showEstadoFilter, setShowEstadoFilter] = useState(false);
   const [anticipadaMode, setAnticipadaMode] = useState(false);
-  const [fechaCorte, setFechaCorte] = useState(new Date().toISOString().split('T')[0]);
-  const [fechaPago, setFechaPago] = useState(new Date().toISOString().split('T')[0]);
+  const [fechaCorte, setFechaCorte] = useState(getLocalDateISO());
+  const [fechaPago, setFechaPago] = useState(getLocalDateISO());
   const [tipoCobranza, setTipoCobranza] = useState('COMUN');
 
   const ESTADOS_DISPONIBLES = ['PENDIENTE', 'CANCELADA', 'MOROSA', 'INCOBRABLE', 'NO COMPRADA'];

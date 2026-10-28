@@ -32,7 +32,7 @@ def create_cliente(
     current_user: Usuario = Depends(get_current_user)
 ) -> Dict[str, Any]:
     try:
-        data = cliente_data.dict(exclude_unset=True)
+        data = cliente_data.model_dump(exclude_unset=True)
         referidos_data = data.pop("referidos", [])
         motivo_estado = data.pop("motivo_estado", None)
         nuevo_cliente = Cliente(**data)
@@ -44,7 +44,7 @@ def create_cliente(
         logger = logging.getLogger(__name__)
         full_name = f"{nuevo_cliente.nombre} {nuevo_cliente.apellido}"
         try:
-            asyncio.run(sync_repet_data(db))
+            # Screening contra base local RePET (sincronizada en background)
             repet_result = screen_person(db, full_name=full_name, cuil_cliente=nuevo_cliente.cuil, user_id=current_user.id)
             if repet_result.get("status") == "ALERT":
                 nuevo_cliente.repet = True
@@ -153,14 +153,12 @@ def get_clientes_list(
             "Estado": c.estado.value if hasattr(c.estado, "value") else (str(c.estado) if c.estado else "-"),
             "Fecha Estado": c.fecha_estado.strftime("%Y-%m-%d") if c.fecha_estado else "-",
             "CBU": c.cbu or "-",
-            "Provincia": prov,
             "Localidad": c.localidad or "-",
             "Código Postal": c.id_codigo_postal or "-",
             "Calle": c.calle or "-",
             "Calle Nro": c.calle_nro if c.calle_nro is not None else "-",
             "Piso": c.piso or "-",
             "Depto": c.depto or "-",
-            "Empleador": emp,
             "Mail": c.mail or "-",
             "Teléfono": c.telefono or "-",
             "Teléfono 2": c.telefono_2 or "-",
@@ -191,7 +189,7 @@ def get_cliente(cuil: str, db: Session = Depends(get_db), current_user: Usuario 
     import asyncio
     from src.services.repet import screen_person, sync_repet_data
     try:
-        asyncio.run(sync_repet_data(db))
+        # Screening contra base local RePET (sincronizada en background)
         full_name = f"{cliente.nombre} {cliente.apellido}"
         repet_result = screen_person(db, full_name=full_name, cuil_cliente=cliente.cuil, user_id=current_user.id)
         if repet_result.get("status") == "ALERT" and not cliente.repet:
@@ -267,7 +265,7 @@ def get_cliente_bcra(cuil: str, db: Session = Depends(get_db)):
 def get_cliente_riesgo(cuil: str, db: Session = Depends(get_db)):
     from src.logic.uif.riesgo_cliente import calculo
     try:
-        df, riesgo_enum, advertencias = calculo(cuil, save=False)
+        df, riesgo_enum, advertencias = calculo(cuil, save=False, db=db)
         puntaje_total = 0.0
         if not df.empty:
             puntaje_total = round(df.iloc[-1]["Puntaje"], 2)
@@ -282,7 +280,7 @@ def get_cliente_riesgo(cuil: str, db: Session = Depends(get_db)):
         }
     except Exception as e:
         import traceback
-        raise HTTPException(status_code=500, detail=f"Error al calcular riesgo: {str(e)}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Error al calcular riesgo: {str(e)}")
 
 @router.get("/{cuil}/perfil_transaccional")
 def get_cliente_perfil_transaccional(cuil: str, db: Session = Depends(get_db)):
@@ -538,7 +536,7 @@ def get_cliente_cuenta_corriente(
         json_compatible_item_data = jsonable_encoder(result)
         return json_compatible_item_data
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Error al obtener cuenta corriente: {str(e)}")
 
 @router.put("/{cuil}")
 def update_cliente(
@@ -552,7 +550,7 @@ def update_cliente(
         if not cliente:
             raise HTTPException(status_code=404, detail="Cliente no encontrado")
             
-        update_data = cliente_data.dict(exclude_unset=True)
+        update_data = cliente_data.model_dump(exclude_unset=True)
         referidos_data = update_data.pop("referidos", None)
         motivo_estado = update_data.pop("motivo_estado", None)
         
@@ -608,7 +606,7 @@ def update_cliente(
         import asyncio
         from src.services.repet import screen_person, sync_repet_data
         try:
-            asyncio.run(sync_repet_data(db))
+            # Screening contra base local RePET (sincronizada en background)
             full_name = f"{cliente.nombre} {cliente.apellido}"
             repet_result = screen_person(db, full_name=full_name, cuil_cliente=cliente.cuil, user_id=current_user.id)
             if repet_result.get("status") == "ALERT":

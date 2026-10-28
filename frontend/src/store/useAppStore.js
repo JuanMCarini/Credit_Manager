@@ -81,9 +81,9 @@ const useAppStore = create((set) => ({
   apiStatus: 'Conectando...',
   checkApiStatus: async () => {
     try {
-      await axiosClient.get('/'); // Simple ping
+      await axiosClient.get('/api/v1/health'); // Simple ping
       set({ apiStatus: 'Conectado (API Local)' });
-    } catch (e) {
+    } catch {
       set({ apiStatus: 'Desconectado' });
     }
   },

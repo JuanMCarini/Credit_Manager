@@ -3,12 +3,13 @@ import axiosClient from '../api/axiosClient';
 import { Calendar, DollarSign, Briefcase, Users, Download } from 'lucide-react';
 import ExportExcelButton from '../components/ExportExcelButton';
 import useAppStore from '../store/useAppStore';
+import { getLocalMonthISO } from '../utils/dates';
 
 const FinanzasPage = () => {
   const systemModules = useAppStore((s) => s.systemModules);
   const showInversores = systemModules?.inversores !== false;
   const [mes, setMes] = useState(
-    new Date().toISOString().substring(0, 7)
+    getLocalMonthISO()
   );
   
   const [colocaciones, setColocaciones] = useState([]);
@@ -126,7 +127,7 @@ const FinanzasPage = () => {
               className="form-control" 
               value={mes} 
               onChange={(e) => setMes(e.target.value)} 
-              max={new Date().toISOString().substring(0, 7)}
+              max={getLocalMonthISO()}
             />
           </div>
           {activeTab !== 'inversores' ? (

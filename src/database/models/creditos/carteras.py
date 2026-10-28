@@ -16,13 +16,13 @@ from sqlalchemy.orm import relationship
 from src.database import Base
 
 
-class TipoOperacionCartera(enum.Enum):
+class TipoOperacionCartera(str, enum.Enum):
     COMPRA = "COMPRA"
     VENTA = "VENTA"
     RECOMPRA = "RECOMPRA"
 
 
-class EstadoCartera(enum.Enum):
+class EstadoCartera(str, enum.Enum):
     PENDIENTE = "PENDIENTE"
     COMPRADA = "COMPRADA"
     VENDIDA = "VENDIDA"
@@ -54,7 +54,7 @@ class Cartera(Base):
     estado = Column(
         Enum(EstadoCartera), nullable=False, default=EstadoCartera.PENDIENTE
     )
-    fecha_generacion = Column(Date, nullable=False, default=date.today())
+    fecha_generacion = Column(Date, nullable=False, default=date.today)
 
     # Relationships
     creditos_incluidos = relationship("Credito", back_populates="cartera")

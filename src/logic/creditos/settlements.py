@@ -115,14 +115,19 @@ class SettlementManager:
         if con_recurso is not None:
             query = query.filter(Cartera.recurso == con_recurso)
 
-        match identificador:
+        ident_str = getattr(identificador, "value", str(identificador)).strip()
+        match ident_str:
             case "CLIENTE ID" | "CLIENTE_ID" | "Socio ID":
                 id_val_int = [int(i) for i in id_val if str(i).isdigit()]
                 query = query.filter(Cartera.socio_id.in_(id_val_int))
             case "CLIENTE CUIT" | "CLIENTE_CUIT" | "Socio CUIT":
-                query = (query
-                .join(SocioComercial, Cartera.socio_id == SocioComercial.id)
-                .filter(SocioComercial.cuit.in_(id_val)))
+                query = (
+                    query.join(SocioComercial, Cartera.socio_id == SocioComercial.id)
+                    .filter(SocioComercial.cuit.in_(id_val))
+                )
+            case "CARTERA ID" | "CARTERA_ID":
+                id_val_int = [int(i) for i in id_val if str(i).isdigit()]
+                query = query.filter(Cartera.id.in_(id_val_int))
 
         df = pd.read_sql(query.statement, self.db.get_bind(), index_col="id")
         for col in ["capital", "interes", "iva"]:
@@ -263,7 +268,8 @@ class SettlementManager:
         mask = df_cobr["tipo_cobranza"] == TipoCobranzaEnum.BCA
         df_cobr.loc[mask, "tipo_liquidacion"] = TipoLiquidacionEnum.BCA
 
-        mask = mask & (df_cobr["fecha_vencimiento"].dt.to_period("M") <= pd.Period(self.fecha_corte, freq="M"))
+        fecha_corte_ref = self.fecha_corte or date.today()
+        mask = mask & (df_cobr["fecha_vencimiento"].dt.to_period("M") <= pd.Period(fecha_corte_ref, freq="M"))
         df_cobr.loc[mask, "tipo_liquidacion"] = TipoLiquidacionEnum.IP
 
         mask = (df_cobr["tipo_cobranza"] == TipoCobranzaEnum.CA)
@@ -274,12 +280,30 @@ class SettlementManager:
         else:
             df_cobr["fecha_emision_cobranza"] = None
 
-        df_cobr = df_cobr[self.settlements.columns.drop("cobranza_id")].reset_index()
+        default_cols = [
+            "cuota_id", "credito_id", "id_externo", "cartera_id",
+            "tipo_liquidacion", "nro_cuota", "fecha_vencimiento",
+            "capital", "interes", "iva", "cobranza_id", "fecha_emision_cobranza"
+        ]
+        target_cols = (
+            list(self.settlements.columns)
+            if (self.settlements is not None and len(self.settlements.columns) > 0)
+            else default_cols
+        )
+        cols_without_cobranza = [c for c in target_cols if c != "cobranza_id"]
+
+        if "id_externo" not in df_cobr.columns:
+            df_cobr["id_externo"] = None
+
+        df_cobr = df_cobr[cols_without_cobranza].reset_index()
         df_cobr.rename(columns={"id": "cobranza_id"}, inplace=True)
         df_cobr["fecha_vencimiento"] = pd.to_datetime(df_cobr["fecha_vencimiento"]).dt.date
-        df_cobr = df_cobr[self.settlements.columns]
+        df_cobr = df_cobr[target_cols]
 
-        self.settlements = pd.concat([self.settlements, df_cobr], ignore_index=True)
+        if self.settlements is None or self.settlements.empty:
+            self.settlements = df_cobr.copy()
+        else:
+            self.settlements = pd.concat([self.settlements, df_cobr], ignore_index=True)
 
         return df_cobr
 

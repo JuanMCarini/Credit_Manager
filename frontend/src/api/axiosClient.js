@@ -27,6 +27,8 @@ axiosClient.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+let isRedirecting401 = false;
+
 // Response interceptor for centralized error handling
 axiosClient.interceptors.response.use(
   (response) => response,
@@ -35,10 +37,14 @@ axiosClient.interceptors.response.use(
     
     // Redirect to login if token is expired or unauthorized
     if (error.response && error.response.status === 401) {
-      alert("Su sesión ha expirado por inactividad. Por favor, vuelva a iniciar sesión.");
-      localStorage.removeItem('token');
-      localStorage.removeItem('userRole');
-      window.location.href = '/login';
+      if (!isRedirecting401) {
+        isRedirecting401 = true;
+        alert("Su sesión ha expirado por inactividad. Por favor, vuelva a iniciar sesión.");
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        localStorage.removeItem('userRole');
+        window.location.href = '/login';
+      }
     }
     
     const message = error.response?.data?.detail || error.message || "An unknown error occurred";

@@ -1,8 +1,9 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional
 from decimal import Decimal
 from datetime import datetime
 from src.database.models.finance.posicion_iva import EstadoPosicionIva
+
 
 class PosicionIvaBase(BaseModel):
     anio: int = Field(..., gt=2000)
@@ -16,8 +17,10 @@ class PosicionIvaBase(BaseModel):
     saldo_a_pagar: Decimal = Field(default=0.0)
     estado: EstadoPosicionIva = Field(default=EstadoPosicionIva.BORRADOR)
 
+
 class PosicionIvaCreate(PosicionIvaBase):
     pass
+
 
 class PosicionIvaUpdate(BaseModel):
     iva_ventas: Optional[Decimal] = None
@@ -29,10 +32,10 @@ class PosicionIvaUpdate(BaseModel):
     saldo_a_pagar: Optional[Decimal] = None
     estado: Optional[EstadoPosicionIva] = None
 
+
 class PosicionIvaResponse(PosicionIvaBase):
     id: int
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

@@ -31,9 +31,17 @@ class LoanOriginator:
 
     def __init__(self, db_session: Session | None = None):
         self.db = db_session or SessionLocal()
+        self._own_session = db_session is None
         self.client: Cliente | None = None
         self.partner: SocioComercial | None = None
         self.credit: Credito | None = None
+
+    def close(self) -> None:
+        if hasattr(self, "_own_session") and self._own_session and hasattr(self, "db") and self.db:
+            self.db.close()
+
+    def __del__(self):
+        self.close()
 
     def _validate_client(self, client_cuil: str) -> None:
         """
@@ -56,7 +64,7 @@ class LoanOriginator:
         =============================================================================
         """
         if partner_id:
-            self.partner = self.db.query(SocioComercial).get(partner_id)
+            self.partner = self.db.get(SocioComercial, partner_id)
             if self.partner:
                 return self.partner.dia_corte
         return 28
@@ -129,7 +137,9 @@ class LoanOriginator:
                 
             try:
                 from src.logic.uif.riesgo_cliente import calculo
-                df_riesgo, riesgo_final, adv = calculo(cuil=self.client.cuil, save=True, update_at=issuance_date)
+                df_riesgo, riesgo_final, adv = calculo(
+                    cuil=self.client.cuil, save=True, update_at=issuance_date, db=self.db
+                )
                 if riesgo_final.value == "Alto":
                     observaciones.append("Riesgo UIF ALTO")
             except Exception as e:
@@ -187,7 +197,7 @@ class LoanOriginator:
                     monto_sellado = float(self.credit.capital) * porcentaje
                     t_sellado = Transferencia(
                         credito_id=self.credit.id,
-                        cbu=None,
+                        cbu="0000000000000000000000",
                         monto=monto_sellado,
                         cuit="",
                         razon_social="Sellado"
@@ -284,7 +294,7 @@ class LoanOriginator:
                     monto_sellado = float(self.credit.capital) * porcentaje
                     t_sellado = Transferencia(
                         credito_id=self.credit.id,
-                        cbu=None,
+                        cbu="0000000000000000000000",
                         monto=monto_sellado,
                         cuit="",
                         razon_social="Sellado"

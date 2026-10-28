@@ -16,6 +16,14 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parent.parent
 ENV_PATH = str(ROOT_DIR / ".env")
 
+
+def _sanitize_env_value(val: object) -> str:
+    """Elimina saltos de línea y comillas dobles para prevenir inyección en archivo .env."""
+    if val is None:
+        return ""
+    return str(val).replace("\r", " ").replace("\n", " ").replace('"', "'").strip()
+
+
 class CompanyConfig(BaseSettings):
     """
     Data structure representing the company that owns and manages the portfolios.
@@ -56,12 +64,11 @@ class CompanyConfig(BaseSettings):
         return clean_cuit
 
 
-# Global immutable instance to be imported across the application
-# Usage: from config import COMPANY_DATA
+# Global instance to be imported across the application
 COMPANY_DATA = CompanyConfig()
 
+
 def get_company_data(db=None) -> CompanyConfig:
-    from sqlalchemy.orm import Session
     from src.database.connection import SessionLocal
     from src.database.models.socios import SocioComercial
 
@@ -85,13 +92,22 @@ def get_company_data(db=None) -> CompanyConfig:
         if db is None:
             session.close()
 
+
 def update_company_env(socio):
     """
     Sincroniza los datos de un SocioComercial (el principal) hacia el archivo .env
-    y la memoria (COMPANY_DATA).
+    y la memoria (COMPANY_DATA) sanitizando saltos de línea y comillas.
     """
-    import os
-    
+    razon_social = _sanitize_env_value(socio.razon_social)
+    cuit = "".join(filter(str.isdigit, str(socio.cuit or "")))
+    domicilio = _sanitize_env_value(socio.domicilio_legal)
+    mail = _sanitize_env_value(socio.mail)
+    telefono = _sanitize_env_value(socio.telefono)
+    bank_account = _sanitize_env_value(socio.nro_cuenta_bancaria)
+    bank_name = _sanitize_env_value(socio.nombre_banco)
+    cbu = "".join(filter(str.isdigit, str(socio.cbu or "")))
+    dia_corte = int(socio.dia_corte or 28)
+
     if Path(ENV_PATH).exists():
         with open(ENV_PATH, "r", encoding="utf-8") as f:
             lines = f.readlines()
@@ -99,35 +115,37 @@ def update_company_env(socio):
         with open(ENV_PATH, "w", encoding="utf-8") as f:
             for line in lines:
                 if line.startswith("COMPANY_RAZON_SOCIAL="):
-                    f.write(f'COMPANY_RAZON_SOCIAL="{socio.razon_social}"\n')
+                    f.write(f'COMPANY_RAZON_SOCIAL="{razon_social}"\n')
                 elif line.startswith("COMPANY_CUIT="):
-                    f.write(f'COMPANY_CUIT={socio.cuit}\n')
+                    f.write(f'COMPANY_CUIT={cuit}\n')
                 elif line.startswith("COMPANY_DOMICILIO="):
-                    f.write(f'COMPANY_DOMICILIO="{socio.domicilio_legal or ""}"\n')
+                    f.write(f'COMPANY_DOMICILIO="{domicilio}"\n')
                 elif line.startswith("COMPANY_EMAIL_CONTACTO="):
-                    f.write(f'COMPANY_EMAIL_CONTACTO="{socio.mail or ""}"\n')
+                    f.write(f'COMPANY_EMAIL_CONTACTO="{mail}"\n')
                 elif line.startswith("COMPANY_TELEFONO="):
-                    f.write(f'COMPANY_TELEFONO="{socio.telefono or ""}"\n')
+                    f.write(f'COMPANY_TELEFONO="{telefono}"\n')
                 elif line.startswith("COMPANY_BANK_ACCOUNT="):
-                    f.write(f'COMPANY_BANK_ACCOUNT="{socio.nro_cuenta_bancaria or ""}"\n')
+                    f.write(f'COMPANY_BANK_ACCOUNT="{bank_account}"\n')
                 elif line.startswith("COMPANY_BANK_NAME="):
-                    f.write(f'COMPANY_BANK_NAME="{socio.nombre_banco or ""}"\n')
+                    f.write(f'COMPANY_BANK_NAME="{bank_name}"\n')
                 elif line.startswith("COMPANY_CBU="):
-                    f.write(f'COMPANY_CBU="{socio.cbu or ""}"\n')
+                    f.write(f'COMPANY_CBU="{cbu}"\n')
                 elif line.startswith("COMPANY_DIA_CORTE="):
-                    f.write(f'COMPANY_DIA_CORTE={socio.dia_corte or 28}\n')
+                    f.write(f'COMPANY_DIA_CORTE={dia_corte}\n')
                 else:
                     f.write(line)
                     
-    COMPANY_DATA.razon_social = socio.razon_social
-    COMPANY_DATA.cuit = socio.cuit
-    COMPANY_DATA.domicilio = socio.domicilio_legal or ""
-    COMPANY_DATA.email_contacto = socio.mail or ""
-    COMPANY_DATA.telefono = socio.telefono or ""
-    COMPANY_DATA.bank_account = socio.nro_cuenta_bancaria or ""
-    COMPANY_DATA.bank_name = socio.nombre_banco or ""
-    COMPANY_DATA.cbu = socio.cbu or ""
-    COMPANY_DATA.dia_corte = socio.dia_corte or 28
+    COMPANY_DATA.razon_social = razon_social
+    if len(cuit) == 11:
+        COMPANY_DATA.cuit = cuit
+    COMPANY_DATA.domicilio = domicilio
+    COMPANY_DATA.email_contacto = mail
+    COMPANY_DATA.telefono = telefono
+    COMPANY_DATA.bank_account = bank_account
+    COMPANY_DATA.bank_name = bank_name
+    COMPANY_DATA.cbu = cbu
+    COMPANY_DATA.dia_corte = dia_corte
+
 
 class APIConfig(BaseSettings):
     """
@@ -136,6 +154,14 @@ class APIConfig(BaseSettings):
     allowed_origins: List[str] = Field(
         default=["http://localhost:5173", "http://127.0.0.1:5173"],
         description="List of allowed origins for CORS."
+    )
+    secret_key: str = Field(
+        default="super_secret_key_change_in_production",
+        description="Secret key for JWT signing."
+    )
+    access_token_expire_minutes: int = Field(
+        default=60 * 12,
+        description="JWT token expiration time in minutes."
     )
 
     model_config = SettingsConfigDict(
@@ -152,7 +178,9 @@ class APIConfig(BaseSettings):
             return [origin.strip() for origin in v.split(",") if origin.strip()]
         return v
 
+
 API_SETTINGS = APIConfig()
+
 
 class DatabaseConfig(BaseSettings):
     """
@@ -174,5 +202,6 @@ class DatabaseConfig(BaseSettings):
     @property
     def database_url(self) -> str:
         return f"postgresql+pg8000://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}"
+
 
 DATABASE_SETTINGS = DatabaseConfig()

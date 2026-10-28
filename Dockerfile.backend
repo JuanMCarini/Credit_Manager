@@ -18,10 +18,8 @@ COPY requirements.txt .
 # Install python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy source code and environment variables
-COPY .env .
+# Copy source code (environment variables are injected via docker-compose / runtime)
 COPY src/ ./src/
-
 
 # Expose port
 EXPOSE 8000

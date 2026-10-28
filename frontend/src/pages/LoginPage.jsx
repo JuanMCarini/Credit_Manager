@@ -31,15 +31,26 @@ const LoginPage = () => {
         body: formData,
       });
 
-      const data = await response.json();
+      let data = {};
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        try {
+          data = await response.json();
+        } catch {
+          data = {};
+        }
+      } else {
+        const text = await response.text();
+        data = { detail: text ? `Error del servidor (${response.status})` : undefined };
+      }
 
-      if (response.ok) {
+      if (response.ok && data.access_token) {
         login(data.user, data.access_token);
         navigate('/');
       } else {
         setError(data.detail || 'Error al iniciar sesión');
       }
-    } catch (err) {
+    } catch {
       setError('Error de conexión con el servidor');
     } finally {
       setIsLoading(false);

@@ -33,7 +33,7 @@ def create_inversor(
     db: Session = Depends(get_db)
 ):
     try:
-        nuevo_inversor = Inversor(**inversor_data.dict())
+        nuevo_inversor = Inversor(**inversor_data.model_dump())
         db.add(nuevo_inversor)
         db.commit()
         db.refresh(nuevo_inversor)
@@ -101,7 +101,7 @@ def update_inversor(inversor_id: int, inversor_data: InversorCreate, db: Session
         raise HTTPException(status_code=404, detail="Inversor no encontrado")
     
     try:
-        update_data = inversor_data.dict(exclude_unset=True)
+        update_data = inversor_data.model_dump(exclude_unset=True)
         for key, value in update_data.items():
             setattr(inversor, key, value)
             
@@ -124,7 +124,7 @@ def create_cuenta_comitente(
     db: Session = Depends(get_db)
 ):
     try:
-        data = cuenta_data.dict()
+        data = cuenta_data.model_dump()
         titulares_data = data.pop("titulares", [])
         
         nueva_cuenta = CuentaComitente(**data)
@@ -220,7 +220,7 @@ def update_cuenta_comitente(cuenta_id: int, cuenta_data: CuentaComitenteCreate, 
         raise HTTPException(status_code=404, detail="Cuenta comitente no encontrada")
     
     try:
-        data = cuenta_data.dict()
+        data = cuenta_data.model_dump()
         titulares_data = data.pop("titulares", [])
         
         cuenta.id_externo = data["id_externo"]
@@ -271,7 +271,7 @@ def create_serie(
     db: Session = Depends(get_db)
 ):
     try:
-        nueva_serie = Serie(**serie_data.dict())
+        nueva_serie = Serie(**serie_data.model_dump())
         db.add(nueva_serie)
         db.commit()
         db.refresh(nueva_serie)
@@ -508,7 +508,7 @@ def update_serie(
         if not serie:
             raise HTTPException(status_code=404, detail="Serie no encontrada")
 
-        update_data = serie_data.dict(exclude_unset=True)
+        update_data = serie_data.model_dump(exclude_unset=True)
         for key, value in update_data.items():
             setattr(serie, key, value)
 
@@ -600,7 +600,7 @@ def create_movimiento(
     db: Session = Depends(get_db)
 ):
     try:
-        nuevo_movimiento = MovimientoDeuda(**movimiento_data.dict())
+        nuevo_movimiento = MovimientoDeuda(**movimiento_data.model_dump())
         db.add(nuevo_movimiento)
         db.commit()
         db.refresh(nuevo_movimiento)
@@ -672,7 +672,7 @@ def update_movimiento(
     if not movimiento:
         raise HTTPException(status_code=404, detail="Movimiento no encontrado")
     
-    update_data = movimiento_data.dict(exclude_unset=True)
+    update_data = movimiento_data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(movimiento, key, value)
         

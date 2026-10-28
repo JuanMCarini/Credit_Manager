@@ -5,20 +5,15 @@ Author: Juan Martín Carini
 Date: 2026-05-08
 """
 
-import os
-
 from sqlalchemy import create_engine
-from sqlalchemy.engine import Engine
-from sqlalchemy.event import listens_for
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker
 
 from src.config import DATABASE_SETTINGS
 
 # Create the engine using the configuration from environment
 engine = create_engine(
     DATABASE_SETTINGS.database_url,
-    # You might want to add pool_size or max_overflow here for production
+    pool_pre_ping=True,
 )
 
 # Create a session factory
@@ -37,6 +32,3 @@ def get_db():
         yield db
     finally:
         db.close()
-
-
-

@@ -71,7 +71,7 @@ class PortfolioSell:
             creditos_admitidos = [EstadoCredito.ACTIVO, EstadoCredito.APROBADO, EstadoCredito.FIRMADO]
 
             if mora:
-                actualizar_estados()
+                actualizar_estados(db_session=self.db)
                 cuotas_admitidas.append(EstadoCuota.MOROSA)
                 creditos_admitidos.append(EstadoCredito.MOROSO)
 
@@ -497,7 +497,7 @@ class PortfolioSell:
                 func.sum(Cuota.iva).label("IVA"),
             )
             .join(Cliente, Credito.cliente_cuil == Cliente.cuil)
-            .join(Empleador, Cliente.empleador_id == Empleador.id)
+            .outerjoin(Empleador, Cliente.empleador_id == Empleador.id)
             .join(Cuota, Cuota.credito_id == Credito.id)
             .filter(Credito.id.in_(df["credito_id"]))
             .group_by(Credito.id, Empleador.razon_social, Cliente.cbu)

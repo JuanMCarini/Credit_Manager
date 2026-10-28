@@ -20,10 +20,8 @@
     "react-datepicker": "^9.1.0",
     "react-dom": "^19.2.6",
     "react-router-dom": "^7.17.0",
-    "react-tabulator": "latest",
     "recharts": "^3.10.1",
     "sweetalert2": "^11.26.25",
-    "tabulator-tables": "latest",
     "xlsx": "^0.18.5",
     "zustand": "^5.0.14"
   },

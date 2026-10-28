@@ -1,6 +1,7 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict
 from typing import Optional, List, Union
 from datetime import date
+
 
 class LiquidacionResponse(BaseModel):
     id: int
@@ -22,17 +23,18 @@ class LiquidacionResponse(BaseModel):
     cancelada: bool
     fecha_emision_cobranza: Optional[date] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 class LiquidacionProcessRequest(BaseModel):
     id_val: Union[int, str, List[Union[int, str]]]
-    identificador: str = "CLIENTE ID" # "CLIENTE ID" or "CLIENTE CUIT"
+    identificador: str = "CLIENTE ID"  # "CLIENTE ID" or "CLIENTE CUIT"
     fecha_corte: Optional[date] = None
     fecha_vencimiento_desde: Optional[date] = None
     fecha_vencimiento_hasta: Optional[date] = None
     con_recurso: bool = False
     procesos_cobranza_id: Optional[List[int]] = None
+
 
 class LiquidacionPreviewResponse(BaseModel):
     cuota_id: int
@@ -47,6 +49,7 @@ class LiquidacionPreviewResponse(BaseModel):
     iva: float
     cobranza_id: Optional[int] = None
     fecha_emision_cobranza: Optional[date] = None
+
 
 class CompradorResponse(BaseModel):
     id: int

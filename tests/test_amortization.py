@@ -1,6 +1,6 @@
 from datetime import date
 import pytest
-from src.logic.amortization import AmortizationEngine
+from src.logic.creditos.amortization import AmortizationEngine
 from src.database.models import Cuota
 
 

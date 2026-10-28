@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { useDebounce } from '../hooks/useDebounce';
-import axiosClient from '../api/axiosClient';
+import axiosClient, { downloadFile } from '../api/axiosClient';
 import ExportExcelButton from '../components/ExportExcelButton';
 import { ChevronDown, Calendar, Users, Layers, Filter } from 'lucide-react';
+import { getLocalDateISO } from '../utils/dates';
 
-const MultiSelect = ({ options, selected, onChange, placeholder, icon: Icon }) => {
+const MultiSelect = ({ options, selected, onChange, placeholder }) => {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef(null);
 
@@ -142,9 +143,9 @@ const FacturacionPage = () => {
   const [filtroFechaVtoHasta, setFiltroFechaVtoHasta] = useState('');
   
   const [procesando, setProcesando] = useState(false);
-  const [fechaFacturacion, setFechaFacturacion] = useState(new Date().toISOString().split('T')[0]);
+  const [fechaFacturacion, setFechaFacturacion] = useState(getLocalDateISO());
   const [minDateStr, setMinDateStr] = useState('');
-  const maxDateStr = new Date().toISOString().split('T')[0];
+  const maxDateStr = getLocalDateISO();
   
   const [fechaDesde, setFechaDesde] = useState('');
   const [fechaHasta, setFechaHasta] = useState('');
@@ -184,9 +185,6 @@ const FacturacionPage = () => {
   const {
     data,
     isLoading: loading,
-    isError,
-    error,
-    isFetching,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage
@@ -212,7 +210,7 @@ const FacturacionPage = () => {
         const ultima = res.data.ultima_fecha;
         const fallbackMinD = new Date();
         fallbackMinD.setDate(new Date().getDate() - 10);
-        const fallbackStr = fallbackMinD.toISOString().split('T')[0];
+        const fallbackStr = getLocalDateISO(fallbackMinD);
         // max of fallbackStr and ultima
         const newMin = ultima > fallbackStr ? ultima : fallbackStr;
         setMinDateStr(newMin);
@@ -231,8 +229,8 @@ const FacturacionPage = () => {
     const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
     const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
     
-    setFechaDesde(firstDay.toISOString().split('T')[0]);
-    setFechaHasta(lastDay.toISOString().split('T')[0]);
+    setFechaDesde(getLocalDateISO(firstDay));
+    setFechaHasta(getLocalDateISO(lastDay));
   }, [fetchUltimaFecha]);
 
   const handleProcesar = async () => {
@@ -255,27 +253,18 @@ const FacturacionPage = () => {
     }
   };
 
-  const downloadFile = (url, filename) => {
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', filename);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const handleDescargarLibro = () => {
+  const handleDescargarLibro = async () => {
     const params = new URLSearchParams();
     if (fechaDesde) params.append('fecha_desde', fechaDesde);
     if (fechaHasta) params.append('fecha_hasta', fechaHasta);
-    downloadFile(`${axiosClient.defaults.baseURL}/api/v1/facturacion/libro-iva?${params.toString()}`, 'libro_iva.xlsx');
+    await downloadFile('/api/v1/facturacion/libro-iva', Object.fromEntries(params), 'libro_iva.xlsx');
   };
 
-  const handleDescargarMasivo = () => {
+  const handleDescargarMasivo = async () => {
     const params = new URLSearchParams();
     if (fechaDesde) params.append('fecha_desde', fechaDesde);
     if (fechaHasta) params.append('fecha_hasta', fechaHasta);
-    downloadFile(`${axiosClient.defaults.baseURL}/api/v1/facturacion/descargar-masivo?${params.toString()}`, 'facturas.zip');
+    await downloadFile('/api/v1/facturacion/descargar-masivo', Object.fromEntries(params), 'facturas.zip');
   };
 
   // Opciones extraídas para selectores múltiples

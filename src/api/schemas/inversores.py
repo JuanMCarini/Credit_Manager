@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, constr
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional, List
 from datetime import date, datetime
 from src.database.models.deuda.movimientos import TipoMovimiento
@@ -17,16 +17,18 @@ class InversorBase(BaseModel):
     nombre_banco: Optional[str] = None
     activo: bool = True
 
+
 class InversorCreate(InversorBase):
     pass
+
 
 class InversorResponse(InversorBase):
     id: int
     created_at: datetime
     update_at: Optional[datetime] = None
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 # -----------------
 # CUENTA COMITENTE
@@ -35,28 +37,31 @@ class CuentaComitenteBase(BaseModel):
     id_externo: Optional[str] = None
     conjunta: bool = False
 
+
 class TitularidadCuentaComitenteBase(BaseModel):
     id_inversor: int
     orden: int = 1
     activo: bool = True
 
+
 class TitularidadCuentaComitenteResponse(TitularidadCuentaComitenteBase):
     id: int
     inversor: InversorResponse
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 class CuentaComitenteCreate(CuentaComitenteBase):
     titulares: List[TitularidadCuentaComitenteBase] = []
+
 
 class CuentaComitenteResponse(CuentaComitenteBase):
     id: int
     created_at: datetime
     titulares: List[TitularidadCuentaComitenteResponse] = []
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 # -----------------
 # SERIE
@@ -68,8 +73,10 @@ class SerieBase(BaseModel):
     plazo: int
     comision: bool = False
 
+
 class SerieCreate(SerieBase):
     pass
+
 
 class SerieUpdate(BaseModel):
     name: Optional[str] = Field(None, max_length=100)
@@ -78,13 +85,14 @@ class SerieUpdate(BaseModel):
     plazo: Optional[int] = None
     comision: Optional[bool] = None
 
+
 class SerieResponse(SerieBase):
     id: int
     fecha_vencimiento: date
     created_at: datetime
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 # -----------------
 # MOVIMIENTO DEUDA
@@ -97,8 +105,10 @@ class MovimientoDeudaBase(BaseModel):
     tipo_movimiento: TipoMovimiento
     observaciones: Optional[str] = None
 
+
 class MovimientoDeudaCreate(MovimientoDeudaBase):
     pass
+
 
 class MovimientoDeudaUpdate(BaseModel):
     id_cuenta_comitente: Optional[int] = None
@@ -108,11 +118,11 @@ class MovimientoDeudaUpdate(BaseModel):
     tipo_movimiento: Optional[TipoMovimiento] = None
     observaciones: Optional[str] = None
 
+
 class MovimientoDeudaResponse(MovimientoDeudaBase):
     id: int
     created_at: datetime
     cuenta_comitente: CuentaComitenteResponse
     serie: SerieResponse
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)

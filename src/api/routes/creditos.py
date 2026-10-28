@@ -110,11 +110,7 @@ def preview_legajo(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         db.rollback()
-        import traceback
-        error_msg = f"Error generando previsualización: {str(e)}\n\n{traceback.format_exc()}"
-        with open("error_preview.txt", "w") as f:
-            f.write(error_msg)
-        raise HTTPException(status_code=500, detail=error_msg)
+        raise HTTPException(status_code=500, detail=f"Error generando previsualización: {str(e)}")
 
 @router.post("/api/v1/creditos/{credito_id}/penalty")
 def create_penalty_cuota(
@@ -621,14 +617,15 @@ async def upload_documento(
             raise HTTPException(status_code=404, detail="Crédito no encontrado")
             
         os.makedirs(UPLOAD_DIR, exist_ok=True)
-        file_path = os.path.join(UPLOAD_DIR, f"{credito_id}_{file.filename}")
+        clean_filename = os.path.basename(file.filename or "documento.pdf")
+        file_path = os.path.join(UPLOAD_DIR, f"{credito_id}_{clean_filename}")
         
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
             
         doc_existente = db.query(DocumentoLegajo).filter(
             DocumentoLegajo.credito_id == credito_id,
-            DocumentoLegajo.nombre_archivo == file.filename
+            DocumentoLegajo.nombre_archivo == clean_filename
         ).first()
 
         if doc_existente:
@@ -639,7 +636,7 @@ async def upload_documento(
         else:
             nuevo_doc = DocumentoLegajo(
                 credito_id=credito_id,
-                nombre_archivo=file.filename,
+                nombre_archivo=clean_filename,
                 ruta_archivo=file_path,
                 tipo_archivo=file.content_type,
                 transferencia_id=transferencia_id
@@ -682,10 +679,10 @@ async def upload_documento(
                     db.refresh(credito)
 
         return nuevo_doc
+    except HTTPException:
+        raise
     except Exception as e:
-        import traceback
-        error_msg = f"Error interno: {str(e)}\n\n{traceback.format_exc()}"
-        raise HTTPException(status_code=500, detail=error_msg)
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
 
 @router.get("/api/v1/creditos/{credito_id:int}/documentos", response_model=List[DocumentoLegajoOut])
 def get_documentos(credito_id: int, db: Session = Depends(get_db)):
@@ -900,7 +897,13 @@ async def upload_batch_documentos(files: List[UploadFile] = File(...), db: Sessi
                             break
                     
                     if todas_con_comprobante:
-                        db.query(Credito).filter(Credito.id == credito.id).update({"estado": EstadoCredito.ACTIVO.name})
+                        registrar_cambio_estado_credito(
+                            db=db,
+                            credito=credito,
+                            nuevo_estado=EstadoCredito.ACTIVO,
+                            origen="DESEMBOLSO_MASIVO",
+                            motivo="Comprobantes de transferencia completos (Lote)"
+                        )
             
             db.commit()
             procesados.append({"archivo": filename, "credito_id": credito.id, "transferencia_id": transferencia.id if transferencia else None})
@@ -981,7 +984,7 @@ async def importacion_masiva_creditos(
                                     extracted_files.append(file_path)
                 else:
                     file_bytes = await file.read()
-                    file_path = os.path.join(tmpdirname, file.filename)
+                    file_path = os.path.join(tmpdirname, os.path.basename(file.filename or "adjunto"))
                     with open(file_path, "wb") as f:
                         f.write(file_bytes)
                     extracted_files.append(file_path)
@@ -1082,7 +1085,7 @@ async def importacion_masiva_creditos(
             if not tmpdirname:
                 tmpdirname = tempfile.mkdtemp()
                 
-            txt_path = os.path.join(tmpdirname, archivo_web_carga.filename)
+            txt_path = os.path.join(tmpdirname, os.path.basename(archivo_web_carga.filename or "web_carga.txt"))
             txt_content = await archivo_web_carga.read()
             with open(txt_path, "wb") as f:
                 f.write(txt_content)
@@ -1140,6 +1143,8 @@ async def importacion_masiva_creditos(
             "excel_base64": excel_base64
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Error durante importación masiva: {str(e)}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Error durante importación masiva: {str(e)}")

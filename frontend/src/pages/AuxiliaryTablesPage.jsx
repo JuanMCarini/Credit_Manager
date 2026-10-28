@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import useAppStore from '../store/useAppStore';
 import axiosClient from '../api/axiosClient';
 import ExportExcelButton from '../components/ExportExcelButton';
+import { getLocalDateISO } from '../utils/dates';
 
 const AuxiliaryTablesPage = () => {
   const { nacionalidades, provincias, empleadores, socios, operadores, tasasYComisiones, relaciones, comercializadores, bancos, cuentas, conceptos, clasificaciones, comisionesDeuda, factoresRiesgo, multiplicadoresRiesgo, reglasPerfilesTransaccionales, penalties, politicasCrediticias, fetchAuxiliares } = useAppStore();
@@ -117,7 +118,7 @@ const AuxiliaryTablesPage = () => {
         } else if (['horas_extras', 'vacaciones', 'otros', 'descuentos_voluntarios'].includes(c)) {
           emptyForm[c] = true;
         } else if (c === 'fecha') {
-          emptyForm[c] = new Date().toISOString().substring(0, 10);
+          emptyForm[c] = getLocalDateISO();
         } else if (c === 'moneda') {
           emptyForm[c] = 'Pesos Argentinos $';
         } else if (c === 'anticipo_vigente') {
@@ -137,7 +138,7 @@ const AuxiliaryTablesPage = () => {
     const duplicateData = { ...record };
     delete duplicateData.id; // Remove ID to create a new record
     if (currentTableConfig.schema.includes('fecha')) {
-      duplicateData.fecha = new Date().toISOString().split('T')[0]; // Set date to today
+      duplicateData.fecha = getLocalDateISO(); // Set date to today
     }
 
     percentFields.forEach(f => {

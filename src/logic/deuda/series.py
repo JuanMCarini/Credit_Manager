@@ -7,9 +7,8 @@ from .ctas_ctes import buscar
 
 def resumen(serie: int | str):
     
+    db = SessionLocal()
     try:
-        db = SessionLocal()
-        
         filters = [Serie.name == str(serie)]
         try:
             filters.append(Serie.id == int(serie))
@@ -44,28 +43,34 @@ def resumen(serie: int | str):
 def resumen_general(comisiones: bool) -> pd.DataFrame:
 
     db = SessionLocal()
-    query = (
-        db.query(
-            Serie.name.label("Serie"),
-            Serie.fecha_suscripcion.label("Fecha Suscripción"),
-            Serie.tna.label("TNA"),
-            Serie.plazo.label("Plazo"),
-            Comision.porcentaje.label("% Comisión"))
-        .join(Serie.comisiones_asociadas) # Va a ComisionesSerie
-        .join(ComisionesSerie.comision)   # Va a Comision
-        .filter(Serie.comision == comisiones)
-    )
+    try:
+        query = (
+            db.query(
+                Serie.name.label("Serie"),
+                Serie.fecha_suscripcion.label("Fecha Suscripción"),
+                Serie.tna.label("TNA"),
+                Serie.plazo.label("Plazo"),
+                Comision.porcentaje.label("% Comisión"))
+            .join(Serie.comisiones_asociadas) # Va a ComisionesSerie
+            .join(ComisionesSerie.comision)   # Va a Comision
+            .filter(Serie.comision == comisiones)
+        )
 
-    df = pd.read_sql(query.statement, db.get_bind())
+        df = pd.read_sql(query.statement, db.get_bind())
+    finally:
+        db.close()
+
     df["Fecha Suscripción"] = pd.to_datetime(df["Fecha Suscripción"]).dt.to_period("D")
     df["Fecha Vencimiento"] = df["Fecha Suscripción"] + df["Plazo"]
     df = df[df["Fecha Vencimiento"] > pd.Period.now("D")]
     df.set_index("Serie", inplace=True)
     df.sort_values(by=["Fecha Vencimiento"], inplace=True)
+    df[["Capital", "Interés", "Total"]] = 0.0
 
     for s in df.index:
         df_s = resumen(s)
-        df.loc[s, ["Capital", "Interés", "Total"]] = df_s[["Capital", "Interés", "Total"]].sum().round(2)
+        if not df_s.empty:
+            df.loc[s, ["Capital", "Interés", "Total"]] = df_s[["Capital", "Interés", "Total"]].sum().round(2)
     df["Comisión"] = df["Capital"] * df["% Comisión"]/365 * df["Plazo"]
 
     return df

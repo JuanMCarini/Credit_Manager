@@ -21,13 +21,14 @@ const MainLayout = () => {
   const REFRESH_INTERVAL = 14 * 60 * 1000; // 14 minutes (before 30 min backend expiration)
 
   const handleLogout = useCallback(async (isAuto = false) => {
+    const auto = isAuto === true;
     try {
-      await fetch('/api/auth/logout', { method: 'POST' });
+      await axiosClient.post('/api/auth/logout');
     } catch (e) {
       console.error('Logout failed', e);
     }
     logout();
-    if (isAuto === true) {
+    if (auto) {
       alert("Su sesión ha expirado por inactividad. Por favor, vuelva a iniciar sesión.");
     }
     navigate('/login');
@@ -92,7 +93,7 @@ const MainLayout = () => {
             <button className="btn-secondary" onClick={() => setShowPasswordModal(true)}>
               Cambiar Contraseña
             </button>
-            <button className="btn-secondary" onClick={handleLogout}>
+            <button className="btn-secondary" onClick={() => handleLogout(false)}>
               Cerrar Sesión
             </button>
           </div>

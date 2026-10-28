@@ -1,13 +1,15 @@
 from typing import Optional, List
-from datetime import date
-from pydantic import BaseModel, Field
+from datetime import date, datetime
+from pydantic import BaseModel, ConfigDict, Field
 from src.database.models.creditos.clientes import SexoEnum, EstadoClienteEnum
+
 
 class ReferidoCreate(BaseModel):
     nombre: str = Field(..., max_length=100)
     apellido: str = Field(..., max_length=100)
     telefono: Optional[str] = None
     email: Optional[str] = None
+
 
 class ClienteCreate(BaseModel):
     cuil: str = Field(..., max_length=11, description="CUIL sin guiones (11 dígitos)")
@@ -43,7 +45,6 @@ class ClienteCreate(BaseModel):
     referidos: List[ReferidoCreate] = []
     motivo_estado: Optional[str] = None
 
-from datetime import datetime
 
 class HistorialEstadoClienteOut(BaseModel):
     id: int
@@ -57,5 +58,4 @@ class HistorialEstadoClienteOut(BaseModel):
     origen: str
     motivo: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

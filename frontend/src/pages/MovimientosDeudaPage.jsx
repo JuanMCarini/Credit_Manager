@@ -6,6 +6,7 @@ import ExcelListFilter from '../components/ExcelListFilter';
 import ExcelNumberRangeFilter from '../components/ExcelNumberRangeFilter';
 import CurrencyInput from '../components/CurrencyInput';
 import { useAuthStore } from '../store/useAuthStore';
+import { getLocalDateISO, parseLocalDate } from '../utils/dates';
 
 const MovimientosDeudaPage = () => {
   const queryClient = useQueryClient();
@@ -56,9 +57,9 @@ const MovimientosDeudaPage = () => {
         return true;
       }
 
-      let valStr = '';
+      let valStr;
       if (key === 'fecha') {
-        valStr = new Date(m.fecha).toLocaleDateString();
+        valStr = parseLocalDate(m.fecha).toLocaleDateString();
       } else if (key === 'cuenta') {
         valStr = m.cuenta_externo ? `${m.cuenta_externo} (ID ${m.id_cuenta_comitente})` : `ID ${m.id_cuenta_comitente}`;
       } else if (key === 'serie') {
@@ -79,9 +80,9 @@ const MovimientosDeudaPage = () => {
     if (!movimientos) return [];
     const options = new Set();
     movimientos.forEach(m => {
-      let valStr = '';
+      let valStr;
       if (key === 'fecha') {
-        valStr = new Date(m.fecha).toLocaleDateString();
+        valStr = parseLocalDate(m.fecha).toLocaleDateString();
       } else if (key === 'cuenta') {
         valStr = m.cuenta_externo ? `${m.cuenta_externo} (ID ${m.id_cuenta_comitente})` : `ID ${m.id_cuenta_comitente}`;
       } else if (key === 'serie') {
@@ -236,7 +237,7 @@ const MovimientosDeudaPage = () => {
                 filteredMovimientos.map(m => (
                   <tr key={m.id}>
                     <td>{m.id}</td>
-                    <td>{new Date(m.fecha).toLocaleDateString()}</td>
+                    <td>{parseLocalDate(m.fecha).toLocaleDateString()}</td>
                     <td>{m.cuenta_externo ? `${m.cuenta_externo} (ID ${m.id_cuenta_comitente})` : `ID ${m.id_cuenta_comitente}`}</td>
                     <td>
                       {m.tipo_movimiento === 'Renovación rescate' && m.id_serie_destino
@@ -348,7 +349,7 @@ const AddMovimientoModal = ({ initialData, onClose, onSubmit, isLoading }) => {
     id_cuenta_comitente: initialData?.id_cuenta_comitente || '',
     id_serie: initialData?.id_serie || '',
     id_serie_destino: initialData?.id_serie_destino || '',
-    fecha: initialData?.fecha ? new Date(initialData.fecha).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+    fecha: initialData?.fecha ? String(initialData.fecha).split('T')[0] : getLocalDateISO(),
     monto: initialData?.monto || '',
     tipo_movimiento: initialData?.tipo_movimiento || 'Suscripción',
     observaciones: initialData?.observaciones || ''
@@ -377,7 +378,7 @@ const AddMovimientoModal = ({ initialData, onClose, onSubmit, isLoading }) => {
     const data = {
       id_cuenta_comitente: parseInt(formData.id_cuenta_comitente),
       id_serie: parseInt(formData.id_serie),
-      fecha: new Date(formData.fecha).toISOString(), // FastAPI expects datetime
+      fecha: formData.fecha,
       monto: parseFloat(formData.monto),
       tipo_movimiento: formData.tipo_movimiento,
       observaciones: formData.observaciones || null
@@ -426,7 +427,7 @@ const AddMovimientoModal = ({ initialData, onClose, onSubmit, isLoading }) => {
             >
               <option value="">-- Seleccionar Serie --</option>
               {seriesData?.map(s => (
-                <option key={s.id} value={s.id}>{s.name} (TNA: {s.tna}%)</option>
+                <option key={s.id} value={s.id}>{s.name} (TNA: {(Number(s.tna) * 100).toFixed(2)}%)</option>
               ))}
             </select>
           </div>
@@ -442,7 +443,7 @@ const AddMovimientoModal = ({ initialData, onClose, onSubmit, isLoading }) => {
               >
                 <option value="">-- Seleccionar Serie --</option>
                 {seriesData?.map(s => (
-                  <option key={s.id} value={s.id}>{s.name} (TNA: {s.tna}%)</option>
+                  <option key={s.id} value={s.id}>{s.name} (TNA: {(Number(s.tna) * 100).toFixed(2)}%)</option>
                 ))}
               </select>
             </div>

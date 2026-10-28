@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import axiosClient from '../api/axiosClient';
 import ExportExcelButton from '../components/ExportExcelButton';
+import { getLocalDateISO } from '../utils/dates';
 
 const formatCurrency = (num) => {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(num);
@@ -13,7 +14,7 @@ const SimulationPage = () => {
     capital: 100000,
     plazo: 12,
     tna: 105,
-    fecha: new Date().toISOString().split('T')[0],
+    fecha: getLocalDateISO(),
     vto: 28,
     gracia: 2,
     iva: 0.21

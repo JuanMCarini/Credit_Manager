@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useTransition } from 'react';
+import React, { useState, useEffect, useMemo, useTransition } from 'react';
 import axiosClient from '../api/axiosClient';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, LabelList, ComposedChart, Line} from 'recharts';
 import { jsPDF } from 'jspdf';
@@ -6,6 +6,7 @@ import html2canvas from 'html2canvas';
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { es } from 'date-fns/locale';
+import { parseLocalDate } from '../utils/dates';
 const formatCurrency = (value) => {
   if (value === null || value === undefined) return "$ 0";
   return new Intl.NumberFormat('es-AR', {
@@ -19,7 +20,7 @@ const formatCurrency = (value) => {
 const CHART_COLORS = ['#6366f1', '#14b8a6', '#f59e0b', '#ec4899', '#8b5cf6', '#10b981', '#f43f5e', '#3b82f6'];
 
 const RADIAN = Math.PI / 180;
-const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, index }) => {
+const renderCustomizedLabel = ({ cx, cy, midAngle, outerRadius, percent }) => {
   const radius = outerRadius + 20;
   const x = cx + radius * Math.cos(-midAngle * RADIAN);
   const y = cy + radius * Math.sin(-midAngle * RADIAN);
@@ -41,7 +42,7 @@ const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, per
   );
 };
 
-const renderCustomizedLabelMora = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, index, payload }) => {
+const renderCustomizedLabelMora = ({ cx, cy, midAngle, outerRadius, percent, payload }) => {
   const radius = outerRadius + 10;
   const x = cx + radius * Math.cos(-midAngle * RADIAN);
   const y = cy + radius * Math.sin(-midAngle * RADIAN);
@@ -237,7 +238,6 @@ const DashboardCarteraPage = () => {
           { id: 'export-tab-morosidad', title: 'Morosidad Cartera' }
         ];
 
-        let pageCount = 0;
         for (let i = 0; i < tabsToExport.length; i++) {
           const el = document.getElementById(tabsToExport[i].id);
           if (el) {
@@ -300,8 +300,6 @@ const DashboardCarteraPage = () => {
               pdf.setTextColor(150, 150, 150);
               pdf.text(`Página ${pdf.internal.getNumberOfPages()}`, pdfWidth / 2, pdfHeight - 10, { align: 'center' });
             }
-
-            pageCount++;
           }
         }
 
@@ -310,6 +308,8 @@ const DashboardCarteraPage = () => {
       } catch (err) {
         console.error("Error exporting to PDF:", err);
       } finally {
+        document.body.style.overflow = originalOverflow;
+        if (mainContent) mainContent.style.overflow = originalMainOverflow;
         setIsExporting(false);
         setExportFormat(null);
         root.style.removeProperty('--bg-base');
@@ -422,7 +422,6 @@ const DashboardCarteraPage = () => {
   const gruposPeriodo = {};
   const tna = appliedFilters.tasaDescuento / 100;
   const parsedFechaCorteDate = new Date(appliedFilters.fechaCorte + 'T00:00:00'); // Force local midnight
-  const corteYearMonth = appliedFilters.fechaCorte.substring(0, 7);
 
   const resumenEstados = {
     'APROBADO': { Estado: 'Aprobado', Vencido: 0, AVencer: 0, Total: 0, fill: 'var(--color-capital)' },
@@ -452,7 +451,6 @@ const DashboardCarteraPage = () => {
     const intCobrado = row['Interés Cobrado'] || 0;
     const ivaCobrado = row['IVA Cobrado'] || 0;
     const totCobrado = capCobrado + intCobrado + ivaCobrado;
-    const estado = row.Estado || 'PENDIENTE';
 
     totalCapital += cap;
     totalInteres += int;
@@ -674,16 +672,6 @@ const DashboardCarteraPage = () => {
     });
   }, [cobranzasEvolutionData, filtroDueños, filtroOriginadores]);
 
-  const cobranzasUniqueOriginadores = useMemo(() => {
-    const origs = new Set();
-    filteredCobranzasEvolutionData.forEach(month => {
-      Object.keys(month).forEach(key => {
-        if (key.startsWith('origRaw_')) origs.add(key.replace('origRaw_', ''));
-      });
-    });
-    return Array.from(origs).sort();
-  }, [filteredCobranzasEvolutionData]);
-
   const cobranzasUniqueTipos = useMemo(() => {
     const tipos = new Set();
     filteredCobranzasEvolutionData.forEach(month => {
@@ -727,7 +715,7 @@ const DashboardCarteraPage = () => {
     const periodos = {};
     Object.values(creditos).forEach(c => {
       if (!c.fechaEmision) return;
-      const d = new Date(c.fechaEmision);
+      const d = parseLocalDate(c.fechaEmision);
       if (isNaN(d.getTime())) return;
 
       const periodo = c.fechaEmision.substring(0, 7); // 'YYYY-MM'
@@ -921,19 +909,23 @@ const DashboardCarteraPage = () => {
       }
     });
 
-    // We designate the LAST small bucket so all previous points are available in refs when it renders
+    // We designate the LAST small bucket so all previous points are available when it renders
     const designatedSmallBucketIndex = smallBucketsIndices.length > 0 ? smallBucketsIndices[smallBucketsIndices.length - 1] : -1;
 
+    let cumTotal = 0;
     return moraBuckets.filter(b => b.Total > 0).map((b) => {
       const originalIdx = moraBuckets.indexOf(b);
       const isSmall = b.Total / totalMora < 0.05;
       const showSmallSum = originalIdx === designatedSmallBucketIndex;
+      const midAngle = totalMora > 0 ? 360 * (cumTotal + b.Total / 2) / totalMora : 0;
+      cumTotal += b.Total;
       
       return {
         ...b,
         isSmall,
         showSmallSum,
-        smallSumPercent: smallSumTotal / totalMora
+        smallSumPercent: smallSumTotal / totalMora,
+        midAngle
       };
     });
   }, [moraBuckets]);
@@ -973,8 +965,6 @@ const DashboardCarteraPage = () => {
     }
     return '';
   }, [moraBuckets]);
-
-  const smallSlicesRef = useRef({});
 
   const tabKeys = [
     'situacion_patrimonial',
@@ -2558,12 +2548,8 @@ const DashboardCarteraPage = () => {
                     outerRadius={70} 
                     label={renderCustomizedLabelMora} 
                     labelLine={(props) => {
-                      const { points, payload, index } = props;
+                      const { cx, cy, outerRadius, points, payload, index } = props;
                       if (!points) return null;
-                      
-                      if (payload.isSmall) {
-                        smallSlicesRef.current[index] = points[0];
-                      }
 
                       if (payload.isSmall && !payload.showSmallSum) return <g></g>;
                       
@@ -2577,8 +2563,12 @@ const DashboardCarteraPage = () => {
                             <polyline points={points.map(p => `${p.x},${p.y}`).join(' ')} fill="none" stroke="var(--text-secondary)" />
                             {smallIndices.map(si => {
                               if (si === index) return null;
-                              const p0 = smallSlicesRef.current[si];
-                              if (!p0) return null;
+                              const sb = moraBucketsPie[si];
+                              if (!sb) return null;
+                              const p0 = {
+                                x: cx + outerRadius * Math.cos(-sb.midAngle * RADIAN),
+                                y: cy + outerRadius * Math.sin(-sb.midAngle * RADIAN)
+                              };
                               return (
                                 <line key={`conn-${si}`} x1={p0.x} y1={p0.y} x2={elbow.x} y2={elbow.y} stroke="var(--text-secondary)" strokeDasharray="3 3" />
                               );

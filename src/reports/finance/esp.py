@@ -20,9 +20,10 @@ from src.database.models.cheques.main import Cheque, OperacionCheque, TipoOperac
 
 def reporte(fecha_corte: str | date, n_periodos: int = 2, salto_meses: int = 1, tna_descuento: float = 0.0) -> pd.DataFrame:
     
-    df_comp = comprobantes.df_comprobantes.copy ()
-    df_pagos = comprobantes.df_pagos.copy()
-    df_carteras = cartera.resumen.copy()
+    df_comp = comprobantes.get_comprobantes().copy()
+    df_pagos = comprobantes.get_pagos().copy()
+    df_carteras = cartera.get_resumen().copy()
+    df_bancos_all = bancos.get_df()
     
     fecha_corte = pd.to_datetime(fecha_corte).date()
 
@@ -37,14 +38,14 @@ def reporte(fecha_corte: str | date, n_periodos: int = 2, salto_meses: int = 1, 
         tna_series = df_carteras.loc[filtro_cartera, "tna_descuento"]
         
         if not tna_series.empty:
-            tna = tna_series.mean()
+            tna = float(tna_series.mean())
         else:
             filtro_siguiente = df_carteras["fecha_compra"] < pd.to_datetime(fecha) - relativedelta(months=1)
             tna_siguiente = df_carteras.loc[filtro_siguiente, "tna_descuento"]
-            tna = tna_siguiente.mean() if not tna_siguiente.empty else tna_descuento
+            tna = float(tna_siguiente.mean()) if not tna_siguiente.empty else tna_descuento
         periodo = f"{pd.Period(fecha, freq='M')} - ({tna:.0%})"
-        df_bcos = bancos.df.loc[bancos.df["fecha"] <= fecha].copy()
-        caja = df_bcos["monto"].sum()
+        df_bcos = df_bancos_all.loc[df_bancos_all["fecha"] <= fecha].copy() if not df_bancos_all.empty else df_bancos_all.copy()
+        caja = df_bcos["monto"].sum() if not df_bcos.empty else 0.0
         datos.append(
             {"Categoria": "Activos", "Detalle": "Bancos/Caja", periodo: caja})
     
@@ -53,7 +54,7 @@ def reporte(fecha_corte: str | date, n_periodos: int = 2, salto_meses: int = 1, 
             {"Categoria": "Activos", "Detalle": "Inversiones (FCI)", periodo: fci_saldo})
     
         df_comp_pend = comprobantes.pendientes(fecha)
-        pendientes = df_comp_pend.groupby("concepto")["saldo"].sum()
+        pendientes = df_comp_pend.groupby("concepto")["saldo"].sum() if not df_comp_pend.empty else pd.Series(dtype=float)
         facturas_adeudadas = 0.0
         for concepto, saldo in pendientes.items():
             if concepto in ["Ganancias", "IIBB", "IVA"]:
@@ -81,15 +82,17 @@ def reporte(fecha_corte: str | date, n_periodos: int = 2, salto_meses: int = 1, 
     
     
         carteras_vendidas_a_cobrar = df_carteras.loc[filtro_cartera, 'valor_actual_total'].sum()
-        filtro_bcos_cartera = (df_bcos["fecha"] <= fecha) & (df_bcos["concepto_nombre"] == "Venta Cartera")
-        carteras_vendidas_a_cobrar -= df_bcos.loc[filtro_bcos_cartera, "monto"].sum()
-        filtro_comp_venta = (df_comp["fecha_emision"] <= fecha) & (df_comp["concepto"] == "Venta Cartera")
-        carteras_vendidas_a_cobrar -= df_comp.loc[filtro_comp_venta, "iva_21"].sum()
+        filtro_bcos_cartera = (df_bcos["fecha"] <= fecha) & (df_bcos["concepto_nombre"] == "Venta Cartera") if not df_bcos.empty else pd.Series(dtype=bool)
+        monto_bcos_cartera = df_bcos.loc[filtro_bcos_cartera, "monto"].sum() if not df_bcos.empty else 0.0
+        carteras_vendidas_a_cobrar -= monto_bcos_cartera
+        filtro_comp_venta = (df_comp["fecha_emision"] <= fecha) & (df_comp["concepto"] == "Venta Cartera") if not df_comp.empty else pd.Series(dtype=bool)
+        iva_comp_venta = df_comp.loc[filtro_comp_venta, "iva_21"].sum() if not df_comp.empty else 0.0
+        carteras_vendidas_a_cobrar -= iva_comp_venta
         if round(carteras_vendidas_a_cobrar, 0) != 0.0:
             datos.append(
                 {"Categoria": "Activos", "Detalle": "Ventas de Cartera a Cobrar", periodo: carteras_vendidas_a_cobrar})
 
-        venta_cartera_a_ceder = df_bcos.loc[filtro_bcos_cartera, "monto"].sum() - (df_carteras.loc[filtro_cartera, 'valor_actual_total'].sum() + df_comp.loc[filtro_comp_venta, "iva_21"].sum())
+        venta_cartera_a_ceder = monto_bcos_cartera - (df_carteras.loc[filtro_cartera, 'valor_actual_total'].sum() + iva_comp_venta)
         if round(-venta_cartera_a_ceder, 0) < 0.0:
             datos.append(
                 {"Categoria": "Pasivos", "Detalle": "Valor Actual de Cartera a Ceder", periodo: -venta_cartera_a_ceder})
@@ -129,7 +132,6 @@ def reporte(fecha_corte: str | date, n_periodos: int = 2, salto_meses: int = 1, 
                 OperacionCheque.tipo_operacion == TipoOperacionCheque.VENTA,
                 OperacionCheque.fecha_operacion <= fecha,
                 Cheque.fecha_pago > fecha,
-                ~Cheque.id.in_(vendidos_stmt)
             ).scalar()
 
             cheques_a_cobrar = float(cheques_a_cobrar or 0.0)

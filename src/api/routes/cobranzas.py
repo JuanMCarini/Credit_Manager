@@ -769,14 +769,9 @@ def modificar_cobranza(cobranza_id: int, datos: CobranzaIndividual, db: Session 
             credito.actualizar_estado()
             if credito.cliente:
                 credito.cliente.actualizar_estado()
-            
-        db.commit()
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Error eliminando la cobranza original: {str(e)}")
-        
-    manager = CollectionManager(db)
-    try:
+        db.flush()
+
+        manager = CollectionManager(db)
         fecha_pago_dt = datetime.combine(datos.fecha_pago, datetime.min.time()) if datos.fecha_pago else datetime.today()
         if datos.anticipada:
             df = manager.process_early_cancellation(
@@ -798,6 +793,7 @@ def modificar_cobranza(cobranza_id: int, datos: CobranzaIndividual, db: Session 
             
         return {"status": "success", "message": "Cobranza modificada exitosamente."}
     except Exception as e:
+        db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
 
 

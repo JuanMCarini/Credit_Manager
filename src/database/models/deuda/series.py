@@ -21,7 +21,7 @@ class Serie(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(100), nullable=False, unique=True)
     fecha_suscripcion = Column(Date, nullable=False)
-    tna = Column(Numeric(10, 2), nullable=False)
+    tna = Column(Numeric(10, 6), nullable=False)
     plazo = Column(Integer, nullable=False)
     comision = Column(Boolean, nullable=False, default=False)
 
@@ -41,7 +41,7 @@ class Comision(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     fecha = Column(Date, nullable=False)
     id_socio_comercial = Column(ForeignKey('socios_comerciales.id'), nullable=False)
-    porcentaje = Column(Numeric(10, 2), nullable=False)
+    porcentaje = Column(Numeric(10, 6), nullable=False)
     
     created_at = Column(DateTime, default=func.now())
     update_at = Column(DateTime, default=func.now(), onupdate=func.now())

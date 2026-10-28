@@ -1,8 +1,9 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional
 from decimal import Decimal
 from datetime import datetime
 from src.database.models.finance.posicion_iibb import EstadoPosicionIibb
+
 
 class PosicionIibbBase(BaseModel):
     anio: int = Field(..., gt=2000)
@@ -16,8 +17,10 @@ class PosicionIibbBase(BaseModel):
     detalle_provincias: Optional[list] = Field(default=None)
     estado: EstadoPosicionIibb = Field(default=EstadoPosicionIibb.BORRADOR)
 
+
 class PosicionIibbCreate(PosicionIibbBase):
     pass
+
 
 class PosicionIibbUpdate(BaseModel):
     iibb_ventas: Optional[Decimal] = None
@@ -29,10 +32,10 @@ class PosicionIibbUpdate(BaseModel):
     detalle_provincias: Optional[list] = None
     estado: Optional[EstadoPosicionIibb] = None
 
+
 class PosicionIibbResponse(PosicionIibbBase):
     id: int
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

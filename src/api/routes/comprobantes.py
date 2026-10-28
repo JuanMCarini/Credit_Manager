@@ -348,14 +348,15 @@ def upload_comprobante_pdf(
     if not db_comprobante:
         raise HTTPException(status_code=404, detail="Comprobante no encontrado")
         
-    if not file.filename.endswith(".pdf") and not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Solo se permiten archivos PDF o imágenes")
+    clean_name = os.path.basename(file.filename or "")
+    ext = os.path.splitext(clean_name)[1].lower()
+    allowed_exts = {".pdf", ".png", ".jpg", ".jpeg", ".webp"}
+    allowed_mimes = {"application/pdf", "image/png", "image/jpeg", "image/webp"}
+    if ext not in allowed_exts or (file.content_type and file.content_type.lower() not in allowed_mimes):
+        raise HTTPException(status_code=400, detail="Solo se permiten archivos PDF o imágenes (.pdf, .png, .jpg, .jpeg, .webp)")
         
     upload_dir = "data/uploads/comprobantes"
     os.makedirs(upload_dir, exist_ok=True)
-    
-    # Generate unique filename
-    ext = os.path.splitext(file.filename)[1]
     filename = f"comp_{comprobante_id}_{uuid.uuid4().hex}{ext}"
     filepath = os.path.join(upload_dir, filename)
     

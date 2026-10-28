@@ -5,7 +5,7 @@ from datetime import datetime, date
 from typing import Optional
 
 import pandas as pd
-from sqlalchemy import text
+from sqlalchemy import text, bindparam
 
 from src.database import engine
 from src.reports.balances import saldos
@@ -137,9 +137,10 @@ def _get_bcra_aggregated_data(
         
     # Fetch client names
     cuils = df["CUIL Cliente"].dropna().unique().tolist()
-    if cuils:
-        cuils_str = ",".join(f"'{c}'" for c in cuils)
-        clientes_query = text(f"SELECT cuil, apellido, nombre FROM clientes WHERE cuil IN ({cuils_str})")
+    if len(cuils) > 0:
+        clientes_query = text("SELECT cuil, apellido, nombre FROM clientes WHERE cuil IN :cuils").bindparams(
+            bindparam("cuils", list(cuils), expanding=True)
+        )
         df_clientes = pd.read_sql_query(clientes_query, engine)
         df_clientes["Nombre Completo"] = df_clientes["apellido"] + " " + df_clientes["nombre"]
         df_clientes["Nombre Completo"] = df_clientes["Nombre Completo"].apply(normalize_text)
@@ -164,10 +165,11 @@ def _get_bcra_aggregated_data(
 
     # Get TNA
     min_tna_val = None
-    credito_ids = df["ID Credito"].dropna().unique().tolist()
-    if credito_ids:
-        ids_str = ",".join(str(int(c)) for c in credito_ids)
-        min_tna_query = text(f"SELECT MIN(tna_c_iva) FROM creditos WHERE id IN ({ids_str}) AND tna_c_iva > 0")
+    credito_ids = [int(c) for c in df["ID Credito"].dropna().unique().tolist()]
+    if len(credito_ids) > 0:
+        min_tna_query = text("SELECT MIN(tna_c_iva) FROM creditos WHERE id IN :ids AND tna_c_iva > 0").bindparams(
+            bindparam("ids", list(credito_ids), expanding=True)
+        )
         with engine.connect() as conn:
             min_tna_val = conn.execute(min_tna_query).scalar()
             if min_tna_val is None:

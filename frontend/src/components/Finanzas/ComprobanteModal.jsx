@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { X, Save, FileText, Upload } from 'lucide-react';
 import axiosClient from '../../api/axiosClient';
 import CurrencyInput from '../CurrencyInput';
+import { getLocalDateISO } from '../../utils/dates';
 
 const ComprobanteModal = ({ isOpen, onClose, onSave, comprobante = null, proveedores = [], conceptos = [], onNewProveedor }) => {
   const [formData, setFormData] = useState({
@@ -9,8 +10,8 @@ const ComprobanteModal = ({ isOpen, onClose, onSave, comprobante = null, proveed
     tipo_comprobante: 'A',
     punto_venta: '',
     numero_comprobante: '',
-    fecha_contable: new Date().toISOString().substring(0, 10),
-    fecha_emision: new Date().toISOString().substring(0, 10),
+    fecha_contable: getLocalDateISO(),
+    fecha_emision: getLocalDateISO(),
     fecha_vencimiento: '',
     importe_no_gravado: 0,
     importe_exento: 0,
@@ -40,8 +41,8 @@ const ComprobanteModal = ({ isOpen, onClose, onSave, comprobante = null, proveed
           tipo_comprobante: 'A',
           punto_venta: '',
           numero_comprobante: '',
-          fecha_contable: new Date().toISOString().substring(0, 10),
-          fecha_emision: new Date().toISOString().substring(0, 10),
+          fecha_contable: getLocalDateISO(),
+          fecha_emision: getLocalDateISO(),
           fecha_vencimiento: '',
           importe_no_gravado: 0,
           importe_exento: 0,
@@ -101,7 +102,7 @@ const ComprobanteModal = ({ isOpen, onClose, onSave, comprobante = null, proveed
     }
   };
 
-  const calcularTotal = () => {
+  const calcularTotalNumerico = () => {
     const parseNum = (val) => {
       const parsed = parseFloat(val);
       return isNaN(parsed) ? 0 : parsed;
@@ -119,6 +120,11 @@ const ComprobanteModal = ({ isOpen, onClose, onSave, comprobante = null, proveed
       parseNum(formData.percepcion_iibb) +
       parseNum(formData.percepcion_ganancias) +
       parseNum(formData.otros_impuestos);
+    return Math.round(total * 100) / 100;
+  };
+
+  const calcularTotal = () => {
+    const total = calcularTotalNumerico();
     return new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(total);
   };
 
@@ -159,7 +165,7 @@ const ComprobanteModal = ({ isOpen, onClose, onSave, comprobante = null, proveed
         payload.otros_impuestos = 0;
         payload.importe_total = parseFloat(payload.importe_total) || 0;
       } else {
-        payload.importe_total = parseFloat(calcularTotal()) || 0;
+        payload.importe_total = calcularTotalNumerico();
       }
       
       if (!payload.concepto_id) {

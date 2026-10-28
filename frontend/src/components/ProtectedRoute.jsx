@@ -10,10 +10,11 @@ const ProtectedRoute = ({ allowedRoles }) => {
   }
 
   // Permitir siempre al Administrador o a roles específicos
-  const hasAccess = user.rol === 'Administrador' || allowedRoles.includes(user.rol);
+  const userRole = typeof user.rol === 'object' ? user.rol?.nombre : user.rol;
+  const hasAccess = userRole === 'Administrador' || allowedRoles.includes(userRole);
 
   if (!hasAccess) {
-    return <Navigate to="/unauthorized" replace />;
+    return <Navigate to="/" replace />;
   }
 
   return <Outlet />;

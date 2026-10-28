@@ -10,6 +10,7 @@ import NuevaSeriePreviewModal from '../components/NuevaSeriePreviewModal';
 import RenovacionPreviewModal from '../components/RenovacionPreviewModal';
 import { useAuthStore } from '../store/useAuthStore';
 import useAppStore from '../store/useAppStore';
+import { getLocalDateISO } from '../utils/dates';
 
 const SeriesPage = () => {
   const queryClient = useQueryClient();
@@ -21,7 +22,7 @@ const SeriesPage = () => {
   const [nuevaSeriePreview, setNuevaSeriePreview] = useState(null);
 
   const [editSerieData, setEditSerieData] = useState(null);
-  const [fechaCorte, setFechaCorte] = useState(new Date().toISOString().split('T')[0]);
+  const [fechaCorte, setFechaCorte] = useState(getLocalDateISO());
   const [tableFilters, setTableFilters] = useState({});
   const [sortConfig, setSortConfig] = useState({ key: 'id', direction: 'desc' });
 
@@ -87,7 +88,7 @@ const SeriesPage = () => {
                 multiplier = -1;
               }
               const mov = m.monto * multiplier;
-              let cap = 0;
+              let cap;
               if (['Suscripción', 'Renovación suscripción'].includes(tipo)) {
                 cap = mov;
               } else {
@@ -122,7 +123,7 @@ const SeriesPage = () => {
         const fVencimiento = new Date(s.fecha_vencimiento + 'T00:00:00');
         const fCorte = new Date(fechaCorte + 'T23:59:59');
         
-        let interesDevengado = 0;
+        let interesDevengado;
         if (fCorte <= fSuscripcion) interesDevengado = 0;
         else if (fCorte >= fVencimiento) interesDevengado = interes;
         else interesDevengado = capital * s.tna * (((fCorte - fSuscripcion) / 86400000) / 365);
@@ -178,7 +179,7 @@ const SeriesPage = () => {
             const fSusc = new Date(s.fecha_suscripcion + 'T00:00:00');
             const fVenc = new Date(s.fecha_vencimiento + 'T00:00:00');
             const fCorte = new Date(fechaCorte + 'T23:59:59');
-            let intDev = 0;
+            let intDev;
             if (fCorte <= fSusc) intDev = 0;
             else if (fCorte >= fVenc) intDev = int;
             else intDev = cap * s.tna * (((fCorte - fSusc) / 86400000) / 365);
@@ -240,7 +241,7 @@ const SeriesPage = () => {
           const fVencimiento = new Date(s.fecha_vencimiento + 'T00:00:00');
           const fCorte = new Date(fechaCorte + 'T23:59:59');
           
-          let interesDevengado = 0;
+          let interesDevengado;
           if (fCorte <= fSuscripcion) interesDevengado = 0;
           else if (fCorte >= fVencimiento) interesDevengado = interes;
           else interesDevengado = capital * s.tna * (((fCorte - fSuscripcion) / 86400000) / 365);
@@ -303,7 +304,7 @@ const SeriesPage = () => {
     const fVencimiento = new Date(s.fecha_vencimiento + 'T00:00:00');
     const fCorte = new Date(fechaCorte + 'T23:59:59');
 
-    let interesDevengado = 0;
+    let interesDevengado;
     if (fCorte <= fSuscripcion) interesDevengado = 0;
     else if (fCorte >= fVencimiento) interesDevengado = interes;
     else interesDevengado = capital * s.tna * (((fCorte - fSuscripcion) / 86400000) / 365);
@@ -600,7 +601,7 @@ const SeriesPage = () => {
                   const fVencimiento = new Date(s.fecha_vencimiento + 'T00:00:00');
                   const fCorte = new Date(fechaCorte + 'T00:00:00');
 
-                  let interesDevengado = 0;
+                  let interesDevengado;
                   if (fCorte <= fSuscripcion) {
                     interesDevengado = 0;
                   } else if (fCorte >= fVencimiento) {

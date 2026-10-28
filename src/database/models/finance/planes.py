@@ -33,15 +33,20 @@ class Plan(Base):
     primer_vencimiento = Column(Date, nullable=False)
     sistema = Column(SQLEnum(SistemaMatematico), nullable=False)
     denominador = Column(SQLEnum(Denominador), nullable=False)
-    tna = Column(Numeric(12, 2), nullable=False)
+    tna = Column(Numeric(12, 6), nullable=False)
     
     @validates("tna")
     def tasa(self, key, value):
         try:
-            if self.sistema == SistemaMatematico.DIRECTO:
-                return (self.valor_cuota*self.plazo/(self.capital - self.anticipo) - 1 ) / self.plazo * float(self.denominador.value)
-            elif self.sistema == SistemaMatematico.FRANCES:
-                return float(npf.rate(nper=self.plazo, pmt=self.valor_cuota, pv=-(self.capital - self.anticipo))*float(self.denominador.value))
+            denom_val = getattr(self.denominador, "value", self.denominador)
+            denom_float = (365.0 / 30.0) if denom_val == "365/30" else float(denom_val)
+            valor_cuota = float(self.valor_cuota)
+            capital = float(self.capital)
+            anticipo = float(self.anticipo or 0.0)
+            if self.sistema in (SistemaMatematico.DIRECTO, SistemaMatematico.DIRECTO.value):
+                return (valor_cuota * self.plazo / (capital - anticipo) - 1) / self.plazo * denom_float
+            elif self.sistema in (SistemaMatematico.FRANCES, SistemaMatematico.FRANCES.value):
+                return float(npf.rate(nper=self.plazo, pmt=valor_cuota, pv=-(capital - anticipo)) * denom_float)
         except Exception:
             pass
         return value
@@ -101,4 +106,3 @@ def generar_comprobantes_cuotas(mapper, connection, target):
         
     if comprobantes_data:
         connection.execute(Comprobante.__table__.insert(), comprobantes_data)
-

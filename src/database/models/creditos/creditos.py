@@ -21,12 +21,12 @@ from src.database import Base
 from src.utils.dates import normalize_date
 
 
-class OrigenCredito(enum.Enum):
+class OrigenCredito(str, enum.Enum):
     ORIGINADO = "ORIGINADO"
     COMPRADO = "COMPRADO"
 
 
-class EstadoCredito(enum.Enum):
+class EstadoCredito(str, enum.Enum):
     APROBADO = "APROBADO"
     FIRMADO = "FIRMADO"
     RECHAZADO = "RECHAZADO"
@@ -37,7 +37,7 @@ class EstadoCredito(enum.Enum):
     INCOBRABLE = "INCOBRABLE"
 
 
-class TipoCredito(enum.Enum):
+class TipoCredito(str, enum.Enum):
     FRANCES = "SISTEMA FRANCES"
     ALEMAN = "SISTEMA ALEMAN"
     PENALTY = "PENALTY"
@@ -251,7 +251,7 @@ class Credito(Base):
         )
 
 
-class EstadoCuota(enum.Enum):
+class EstadoCuota(str, enum.Enum):
     NO_COMPRADA = "NO COMPRADA"
     PENDIENTE = "PENDIENTE"
     MOROSA = "MOROSA"
@@ -259,7 +259,7 @@ class EstadoCuota(enum.Enum):
     INCOBRABLE = "INCOBRABLE"
 
 
-class EstadoCuotaCedida(enum.Enum):
+class EstadoCuotaCedida(str, enum.Enum):
     NO_VENDIDA = "NO VENDIDA"
     NO_COMPRADA = "NO COMPRADA"
     PENDIENTE = "PENDIENTE"

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import useAppStore from '../store/useAppStore';
 import { downloadFile } from '../api/axiosClient';
+import { getLocalDateISO } from '../utils/dates';
 
 const BcraReportsPage = () => {
   const { socios } = useAppStore();
@@ -10,11 +11,11 @@ const BcraReportsPage = () => {
   const getLastDayOfPreviousMonth = () => {
     const today = new Date();
     const lastDay = new Date(today.getFullYear(), today.getMonth(), 0);
-    return lastDay.toISOString().split('T')[0];
+    return getLocalDateISO(lastDay);
   };
 
   const [filters, setFilters] = useState({
-    fecha_corte: new Date().toISOString().split('T')[0],
+    fecha_corte: getLocalDateISO(),
     vto_hasta: getLastDayOfPreviousMonth(),
     origen: 'Propios',
     socio_originador: 'Todos',

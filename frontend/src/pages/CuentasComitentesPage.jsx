@@ -45,7 +45,7 @@ const CuentasComitentesPage = () => {
   const filteredCuentas = (cuentas || []).filter(cta => {
     return Object.entries(filters).every(([key, filterValue]) => {
       if (!filterValue || filterValue.length === 0) return true;
-      let valStr = '';
+      let valStr;
       if (key === 'tipo') {
         valStr = cta.conjunta ? 'Conjunta' : 'Indistinta';
       } else if (key === 'titulares') {
@@ -65,8 +65,8 @@ const CuentasComitentesPage = () => {
     let result = [...filteredCuentas];
     if (sortConfig.key) {
       result.sort((a, b) => {
-        let valA = '';
-        let valB = '';
+        let valA;
+        let valB;
         if (sortConfig.key === 'tipo') {
           valA = a.conjunta ? 'Conjunta' : 'Indistinta';
           valB = b.conjunta ? 'Conjunta' : 'Indistinta';
@@ -98,7 +98,7 @@ const CuentasComitentesPage = () => {
     
     const options = new Set();
     cuentas.forEach(cta => {
-      let valStr = '';
+      let valStr;
       if (key === 'titulares') {
         valStr = cta.titulares && cta.titulares.length > 0
           ? cta.titulares.map(t => `${t.inversor_razon_social} ${t.inversor_cuit}`).join(' ')

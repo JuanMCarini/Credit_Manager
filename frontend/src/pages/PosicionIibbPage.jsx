@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
 import { Calendar, Save, FileText, CheckCircle, Clock, Percent } from 'lucide-react';
 import Swal from 'sweetalert2';
+import { getLocalMonthISO } from '../utils/dates';
 
 const CurrencyInput = ({ value, onChange, className, style }) => {
   const [isFocused, setIsFocused] = useState(false);
@@ -33,7 +34,7 @@ const CurrencyInput = ({ value, onChange, className, style }) => {
 
 const PosicionIibbPage = () => {
   const [mes, setMes] = useState(
-    new Date().toISOString().substring(0, 7)
+    getLocalMonthISO()
   );
   
   const [loading, setLoading] = useState(false);
@@ -274,7 +275,7 @@ const PosicionIibbPage = () => {
                     setEstadoPosicion('Borrador');
                     setDetalleProvincias([]);
                   }}
-                  max={new Date().toISOString().substring(0, 7)}
+                  max={getLocalMonthISO()}
                 />
               </div>
 

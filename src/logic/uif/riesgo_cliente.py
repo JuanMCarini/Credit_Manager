@@ -5,6 +5,7 @@ import pandas as pd
 
 from enum import Enum
 from datetime import date
+from sqlalchemy.orm import Session
 
 from src.database import SessionLocal
 from src.database.models import Cliente, Empleador, Nacionalidad, SocioComercial
@@ -28,7 +29,7 @@ def _merge_configs(base: dict, custom: dict) -> dict:
             merged[k] = v
     return merged
 
-def _seed_db(db):
+def _seed_db(db, commit: bool = True):
 
     DEFAULT_CONFIG = {
         "pesos": {
@@ -62,8 +63,7 @@ def _seed_db(db):
     # Crear factor contenedor para los cortes
     cortes_factor = FactoRiesgo(codigo="cortes", detalle="Cortes de Riesgo", peso=0.0)
     db.add(cortes_factor)
-    db.commit()
-    db.refresh(cortes_factor)
+    db.flush()
     
     for k, v in DEFAULT_CONFIG["cortes"].items():
         db.add(MultiplicadoresRiesgo(
@@ -87,8 +87,7 @@ def _seed_db(db):
     for k, v in DEFAULT_CONFIG["pesos"].items():
         factor = FactoRiesgo(codigo=k, detalle=f"Factor {k}", peso=v)
         db.add(factor)
-        db.commit()
-        db.refresh(factor)
+        db.flush()
         
         if k in mult_map:
             for mult_key, var_val in mult_map[k]:
@@ -102,13 +101,16 @@ def _seed_db(db):
                         variable=var_val
                     ))
     
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
 
-def _get_config_from_db(db) -> dict:
+def _get_config_from_db(db, commit_seed: bool = True) -> dict:
     factores = db.query(FactoRiesgo).all()
     
     if not factores:
-        _seed_db(db)
+        _seed_db(db, commit=commit_seed)
         factores = db.query(FactoRiesgo).all()
         
     cfg = {"pesos": {}, "multiplicadores": {}, "cortes": {}, "variables": {}, "detalles": {}}
@@ -139,9 +141,10 @@ def _eval_act_eco(datos, mults, vars):
 
 def _eval_nacionalidad(datos, mults, vars):
     lista_gafi = datos.get("lista_gafi")
-    if lista_gafi == "Lista Gris":
+    gafi_val = getattr(lista_gafi, "value", lista_gafi)
+    if gafi_val == "Lista Gris":
         return mults.get("gafi_gris", 1)
-    elif lista_gafi == "Lista Negra":
+    elif gafi_val == "Lista Negra":
         return mults.get("gafi_negra", 1)
     return 1
 
@@ -200,104 +203,120 @@ def calculo(
     cuil: str,
     config_personalizada: dict = None,
     save: bool = False,
-    update_at: date = None
-    ) -> tuple[pd.DataFrame, Riesgo, list]:
-    db = SessionLocal()
-    
-    base_config = _get_config_from_db(db)
-    cfg = _merge_configs(base_config, config_personalizada)
-    
-    pesos = cfg["pesos"]
-    mults = cfg["multiplicadores"]
-    cortes = cfg["cortes"]
+    update_at: date = None,
+    db: Session | None = None,
+) -> tuple[pd.DataFrame, Riesgo, list]:
+    own_session = db is None
+    if own_session:
+        db = SessionLocal()
 
-    row = (db
-            .query(Cliente, Empleador.es_pasivo, SocioComercial.codigo_descuento, Nacionalidad.lista_gafi)
+    try:
+        base_config = _get_config_from_db(db, commit_seed=own_session)
+        cfg = _merge_configs(base_config, config_personalizada)
+        
+        pesos = cfg["pesos"]
+        mults = cfg["multiplicadores"]
+        cortes = cfg["cortes"]
+
+        row = (
+            db.query(Cliente, Empleador.es_pasivo, SocioComercial.codigo_descuento, Nacionalidad.lista_gafi)
             .outerjoin(Empleador, Empleador.id == Cliente.empleador_id)
             .outerjoin(SocioComercial, SocioComercial.id == Empleador.socio_comercial_id)
             .outerjoin(Nacionalidad, Nacionalidad.id == Cliente.id_nacionalidad)
-            .filter(Cliente.cuil == cuil).first())
-    if row:
-        cliente_obj, es_pasivo, codigo_descuento, lista_gafi = row
-        datos = {c.name: getattr(cliente_obj, c.name) for c in Cliente.__table__.columns}
-        datos["es_pasivo"] = es_pasivo
-        datos["nacionalidad"] = cliente_obj.nacionalidad.nombre if cliente_obj.nacionalidad else None
-        datos["codigo_descuento"] = codigo_descuento
-        datos["lista_gafi"] = lista_gafi
-        datos["_cuil"] = cuil
+            .filter(Cliente.cuil == cuil)
+            .first()
+        )
+        if row:
+            cliente_obj, es_pasivo, codigo_descuento, lista_gafi = row
+            datos = {c.name: getattr(cliente_obj, c.name) for c in Cliente.__table__.columns}
+            datos["es_pasivo"] = es_pasivo
+            datos["nacionalidad"] = cliente_obj.nacionalidad.nombre if cliente_obj.nacionalidad else None
+            datos["codigo_descuento"] = codigo_descuento
+            datos["lista_gafi"] = lista_gafi
+            datos["_cuil"] = cuil
 
-        nulos = [k for k, v in datos.items() if v is None]
-        advertencias = []
-        if nulos:
-            import logging
-            logger = logging.getLogger(__name__)
-            mensaje_adv = f"Faltan datos (nulos) para el cálculo de riesgo del CUIL {cuil}: {', '.join(nulos)}"
-            logger.warning(f"Advertencia: {mensaje_adv}")
-            advertencias.append(mensaje_adv)
+            nulos = [k for k, v in datos.items() if v is None]
+            advertencias = []
+            if nulos:
+                import logging
+                logger = logging.getLogger(__name__)
+                mensaje_adv = f"Faltan datos (nulos) para el cálculo de riesgo del CUIL {cuil}: {', '.join(nulos)}"
+                logger.warning(f"Advertencia: {mensaje_adv}")
+                advertencias.append(mensaje_adv)
 
-    else:
-        db.close()
-        raise ValueError("Cliente no encontrado")
+        else:
+            raise ValueError("Cliente no encontrado")
 
-    detalles_riesgo = []
+        detalles_riesgo = []
 
-    # Bloqueos directos
-    if datos["repet"]:
-        db.close()
-        df = pd.DataFrame([{"Factor": "Bloqueo por REPET", "Peso Base": 99.0, "Multiplicador": 1, "Puntaje": 99.0}])
-        return df, Riesgo.ALTO, advertencias
+        # Bloqueos directos
+        if datos["repet"]:
+            df = pd.DataFrame([{"Factor": "Bloqueo por REPET", "Peso Base": 99.0, "Multiplicador": 1, "Puntaje": 99.0}])
+            return df, Riesgo.ALTO, advertencias
 
-    if datos["pep"] and datos["nacionalidad"] != "ARGENTINA":
-        df = pd.DataFrame([{"Factor": "Bloqueo por PEP Extranjero", "Peso Base": 99.0, "Multiplicador": 1, "Puntaje": 99.0}])
-        return df, Riesgo.ALTO, advertencias
+        if datos["pep"] and datos["nacionalidad"] != "ARGENTINA":
+            df = pd.DataFrame([{"Factor": "Bloqueo por PEP Extranjero", "Peso Base": 99.0, "Multiplicador": 1, "Puntaje": 99.0}])
+            return df, Riesgo.ALTO, advertencias
 
-    # Evaluacion dinámica
-    for factor_code, peso in pesos.items():
-        eval_func = EVALUADORES.get(factor_code)
+        # Evaluacion dinámica
+        for factor_code, peso in pesos.items():
+            eval_func = EVALUADORES.get(factor_code)
+            
+            # Si existe evaluador, lo ejecutamos, sino multiplicador es 1
+            mult = eval_func(datos, mults, cfg["variables"]) if eval_func else 1
+            
+            # Obtenemos nombre bonito si existe, sino caemos en el codigo formatteado
+            factor_nombre = cfg["detalles"].get(factor_code, factor_code.replace("_", " ").title())
+            
+            detalles_riesgo.append({
+                "Factor": factor_nombre,
+                "Peso Base": peso,
+                "Multiplicador": mult,
+                "Puntaje": round(peso * mult, 2)
+            })
+
+        # Consolidación final
+        df = pd.DataFrame(detalles_riesgo)
+        puntaje_total = df["Puntaje"].sum()
+
+        if puntaje_total <= cortes["bajo_max"]:
+            riesgo_final = Riesgo.BAJO
+        elif puntaje_total <= cortes["medio_max"]:
+            riesgo_final = Riesgo.MEDIO
+        else:
+            riesgo_final = Riesgo.ALTO
         
-        # Si existe evaluador, lo ejecutamos, sino multiplicador es 1
-        mult = eval_func(datos, mults, cfg["variables"]) if eval_func else 1
-        
-        # Obtenemos nombre bonito si existe, sino caemos en el codigo formatteado
-        factor_nombre = cfg["detalles"].get(factor_code, factor_code.replace("_", " ").title())
-        
-        detalles_riesgo.append({
-            "Factor": factor_nombre,
-            "Peso Base": peso,
-            "Multiplicador": mult,
-            "Puntaje": round(peso * mult, 2)
-        })
+        if save:
+            if update_at is None:
+                update_at = date.today()
+            for i, row_df in df.iterrows():
+                existente = (
+                    db.query(RiesgoCliente)
+                    .filter_by(cuil_cliente=cuil, update_at=update_at, factor=row_df["Factor"])
+                    .first()
+                )
+                if existente:
+                    existente.peso = row_df["Peso Base"]
+                    existente.multiplicador = row_df["Multiplicador"]
+                    existente.puntaje = row_df["Puntaje"]
+                else:
+                    registro = RiesgoCliente(
+                        cuil_cliente=cuil,
+                        factor=row_df["Factor"],
+                        peso=row_df["Peso Base"],
+                        multiplicador=row_df["Multiplicador"],
+                        puntaje=row_df["Puntaje"],
+                        update_at=update_at
+                    )
+                    db.add(registro)
+            if own_session:
+                db.commit()
+            else:
+                db.flush()
 
-    db.close()
+        df.loc[len(df)] = {"Factor": f"PUNTAJE TOTAL (Riesgo {riesgo_final.value})", "Peso Base": df["Peso Base"].sum(), "Multiplicador": "", "Puntaje": puntaje_total}
 
-    # Consolidación final
-    df = pd.DataFrame(detalles_riesgo)
-    puntaje_total = df["Puntaje"].sum()
-
-    if puntaje_total <= cortes["bajo_max"]:
-        riesgo_final = Riesgo.BAJO
-    elif puntaje_total <= cortes["medio_max"]:
-        riesgo_final = Riesgo.MEDIO
-    else:
-        riesgo_final = Riesgo.ALTO
-    
-    if save:
-        if update_at is None:
-            update_at = date.today()
-        for i, row in df.iterrows():
-            registro = RiesgoCliente(
-                cuil_cliente=cuil,
-                factor=row["Factor"],
-                peso=row["Peso Base"],
-                multiplicador=row["Multiplicador"],
-                puntaje=row["Puntaje"],
-                update_at=update_at
-            )
-            db.add(registro)
-        db.commit()
-
-    db.close()
-
-    df.loc[len(df)] = {"Factor": f"PUNTAJE TOTAL (Riesgo {riesgo_final.value})", "Peso Base": df["Peso Base"].sum(), "Multiplicador": "", "Puntaje": puntaje_total}
-
-    return df, riesgo_final, advertencias
+        return df, riesgo_final, advertencias
+    finally:
+        if own_session:
+            db.close()

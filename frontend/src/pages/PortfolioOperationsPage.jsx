@@ -7,6 +7,7 @@ import CarteraPreviewModal from '../components/CarteraPreviewModal';
 import ExcelDateFilter from '../components/ExcelDateFilter';
 import ExportExcelButton from '../components/ExportExcelButton';
 import * as XLSX from 'xlsx';
+import { getLocalDateISO } from '../utils/dates';
 
 const PortfolioOperationsPage = () => {
   const navigate = useNavigate();
@@ -102,7 +103,7 @@ const PortfolioOperationsPage = () => {
           usar_cuotas_guardadas: true,
           creditos_excluidos: [],
           nombre_cartera: cartera.nombre || 'Export',
-          fecha_venta: cartera.fecha_compra || new Date().toISOString().split('T')[0],
+          fecha_venta: cartera.fecha_compra || getLocalDateISO(),
           tna_descuento: cartera.tna_descuento || 0,
           cuit_comprador: '',
           razon_social_comprador: cartera.socio || '',

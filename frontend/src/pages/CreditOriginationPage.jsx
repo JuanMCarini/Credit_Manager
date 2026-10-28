@@ -6,6 +6,7 @@ import ClientCCModal from '../components/ClientCCModal';
 import TransfersForm from '../components/TransfersForm';
 import PerfilTransaccionalForm from '../components/PerfilTransaccionalForm';
 import CurrencyInput from '../components/CurrencyInput';
+import { getLocalDateISO } from '../utils/dates';
 
 const formatCurrency = (value) => {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(value);
@@ -49,7 +50,7 @@ const CreditOriginationPage = () => {
     tasa_id: '',
     tipo: 'SISTEMA FRANCES',
     socio_id: '',
-    fecha_emision: new Date().toISOString().split('T')[0],
+    fecha_emision: getLocalDateISO(),
     id_externo: ''
   });
 
@@ -399,7 +400,7 @@ const CreditOriginationPage = () => {
       setStep(1);
       setCliente(null);
       setSearchCuil('');
-      setCreditoForm({ capital_neto: '', tasa_id: '', tipo: 'SISTEMA FRANCES', socio_id: '', fecha_emision: new Date().toISOString().split('T')[0], id_externo: '' });
+      setCreditoForm({ capital_neto: '', tasa_id: '', tipo: 'SISTEMA FRANCES', socio_id: '', fecha_emision: getLocalDateISO(), id_externo: '' });
       setComputedCapitalBruto(0);
       setSimulation(null);
       setTransfers([]);

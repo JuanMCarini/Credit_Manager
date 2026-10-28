@@ -4,6 +4,7 @@ import { Trash2, DollarSign, FilterX } from 'lucide-react';
 import ExcelDateFilter from '../components/ExcelDateFilter';
 import ExcelListFilter from '../components/ExcelListFilter';
 import ExportExcelButton from '../components/ExportExcelButton';
+import { getLocalDateISO } from '../utils/dates';
 
 const LIQUIDACIONES_COLUMNS = [
   { key: 'id', label: 'ID' },
@@ -49,7 +50,7 @@ const PortfolioLiquidationsPage = () => {
     hasRecurso: false,
     hasSinRecurso: false,
     amount: 0,
-    fechaPago: new Date().toISOString().split('T')[0]
+    fechaPago: getLocalDateISO()
   });
   const initialFilter = {
     id: '', 
@@ -270,7 +271,7 @@ const PortfolioLiquidationsPage = () => {
       hasRecurso,
       hasSinRecurso,
       amount: 0,
-      fechaPago: new Date().toISOString().split('T')[0]
+      fechaPago: getLocalDateISO()
     });
     setShowPayModal(true);
   };

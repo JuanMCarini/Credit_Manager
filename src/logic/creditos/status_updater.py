@@ -8,7 +8,9 @@ from src.utils.dates import normalize_date
 
 
 def actualizar_estados(
-    fecha: Optional[Union[str, date]] = None, db: Optional[Session] = None
+    fecha: Optional[Union[str, date]] = None,
+    db: Optional[Session] = None,
+    db_session: Optional[Session] = None,
 ) -> pd.DataFrame:
     """
     =============================================================================
@@ -20,6 +22,7 @@ def actualizar_estados(
     Parameters:
         fecha (date | str): Reference date to check for delinquency (defaults to today).
         db (Session): Optional SQLAlchemy session. If not provided, a new one is managed.
+        db_session (Session): Alias for db for caller compatibility.
     Returns:
         pd.DataFrame: A pandas DataFrame containing the updated state of overdue cuotas.
     =============================================================================
@@ -29,6 +32,7 @@ def actualizar_estados(
     else:
         fecha = normalize_date(fecha)
 
+    db = db or db_session
     own_session = False
     if db is None:
         db = SessionLocal()

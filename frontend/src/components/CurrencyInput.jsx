@@ -40,8 +40,16 @@ const CurrencyInput = ({ value, onChange, name, className, placeholder, required
   const handleChange = (e) => {
     let raw = e.target.value;
     
-    // Convert all dots to commas to unify decimal separator while editing
-    raw = raw.replace(/\./g, ',');
+    if (raw.includes(',')) {
+      raw = raw.replace(/\./g, '');
+    } else {
+      const dotCount = (raw.match(/\./g) || []).length;
+      if (dotCount === 1) {
+        raw = raw.replace('.', ',');
+      } else if (dotCount > 1) {
+        raw = raw.replace(/\./g, '');
+      }
+    }
     
     // Keep only digits and commas
     let filtered = raw.replace(/[^\d,]/g, '');

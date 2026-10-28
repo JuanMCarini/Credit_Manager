@@ -3,43 +3,48 @@ import pandas as pd
 
 from src.database import SessionLocal
 from src.database.models import Movimiento, Concepto, Clasificacion, CategoriaMovimiento
-db = SessionLocal()
 
-query = (
-    db.query(
-        Movimiento.id,
-        Movimiento.fecha,
-        Movimiento.monto,
-        Concepto.name.label("concepto_nombre"), 
-        Concepto.tipo_movimiento.label("tipo_movimiento"), 
-        Clasificacion.name.label("clasificacion_nombre")
-    )
-    .select_from(Movimiento)
-    .join(Concepto, isouter=True)
-    .join(Clasificacion, isouter=True)
-)
 
-df = pd.read_sql(query.statement, db.connection(), index_col="id")
-db.close()
+def get_df() -> pd.DataFrame:
+    with SessionLocal() as db:
+        query = (
+            db.query(
+                Movimiento.id,
+                Movimiento.fecha,
+                Movimiento.monto,
+                Concepto.name.label("concepto_nombre"),
+                Concepto.tipo_movimiento.label("tipo_movimiento"),
+                Clasificacion.name.label("clasificacion_nombre"),
+            )
+            .select_from(Movimiento)
+            .join(Concepto, isouter=True)
+            .join(Clasificacion, isouter=True)
+        )
+        df = pd.read_sql(query.statement, db.connection(), index_col="id")
 
-# 1. Modificar valores usando vectorización y .loc
-# Por si read_sql los trae como strings de sus nombres ('EGRESO', etc) 
-# o como Enum de Python, podemos abarcar ambos casos de la siguiente manera:
-egresos = [
-    CategoriaMovimiento.EGRESO, 
-    CategoriaMovimiento.SUSCRIPCION_FCI, 
-    CategoriaMovimiento.PLAZO_FIJO_INGRESOS,
-    # También incluimos los strings (values/names) por si pandas los convierte
-    CategoriaMovimiento.EGRESO.name,
-    CategoriaMovimiento.SUSCRIPCION_FCI.name,
-    CategoriaMovimiento.PLAZO_FIJO_INGRESOS.name
-]
+    if not df.empty:
+        df["monto"] = df["monto"].astype(float)
+        egresos = [
+            CategoriaMovimiento.EGRESO,
+            CategoriaMovimiento.SUSCRIPCION_FCI,
+            CategoriaMovimiento.PLAZO_FIJO_INGRESOS,
+            CategoriaMovimiento.EGRESO.name,
+            CategoriaMovimiento.SUSCRIPCION_FCI.name,
+            CategoriaMovimiento.PLAZO_FIJO_INGRESOS.name,
+            CategoriaMovimiento.EGRESO.value,
+            CategoriaMovimiento.SUSCRIPCION_FCI.value,
+            CategoriaMovimiento.PLAZO_FIJO_INGRESOS.value,
+        ]
+        mask = df["tipo_movimiento"].isin(egresos)
+        df.loc[mask, "monto"] *= -1
 
-# Aplicamos la multiplicación solo a las filas que coincidan
-mask = df["tipo_movimiento"].isin(egresos)
-df.loc[mask, "monto"] *= -1
+    return df
+
 
 def resumen(fecha: str | date | None = None):
+    df = get_df()
+    if df.empty:
+        return pd.Series(dtype=float)
     if isinstance(fecha, str):
         fecha = pd.to_datetime(fecha).date()
     if fecha is None:
@@ -49,30 +54,35 @@ def resumen(fecha: str | date | None = None):
 
 
 def fci(fecha: str | date | None = None):
+    df = get_df()
+    if df.empty:
+        return 0.0
     if isinstance(fecha, str):
         fecha = pd.to_datetime(fecha).date()
     if fecha is None:
         fecha = df["fecha"].max()
-    # Usar tipo_movimiento atrapa todos los conceptos de suscripción/rescate, sin importar su nombre exacto
     filtro = (pd.to_datetime(df["fecha"]).dt.date <= pd.to_datetime(fecha).date()) & (
         df["tipo_movimiento"].isin([
-            CategoriaMovimiento.SUSCRIPCION_FCI, 
+            CategoriaMovimiento.SUSCRIPCION_FCI,
             CategoriaMovimiento.RESCATE_FCI,
             CategoriaMovimiento.SUSCRIPCION_FCI.name,
-            CategoriaMovimiento.RESCATE_FCI.name
+            CategoriaMovimiento.RESCATE_FCI.name,
+            CategoriaMovimiento.SUSCRIPCION_FCI.value,
+            CategoriaMovimiento.RESCATE_FCI.value,
         ])
     )
 
-    # Es VITAL ordenar por fecha antes de hacer un saldo acumulado que tiene topes (max), 
-    # de lo contrario el orden de inserción en BD puede alterar el resultado
     df_fci = df[filtro].sort_values(by="fecha")
 
-    # Iterar directamente sobre la serie (columna) es mucho más rápido y limpio que iterrows()
     saldo = 0.0
     for monto in df_fci["monto"]:
-        # Restamos porque la suscripción es un egreso del banco (negativo)
-        # pero es un ingreso para el FCI (positivo)
-        saldo -= monto
+        saldo -= float(monto)
         saldo = max(saldo, 0.0)
-        
+
     return saldo
+
+
+def __getattr__(name: str):
+    if name == "df":
+        return get_df()
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")

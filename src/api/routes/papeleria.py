@@ -267,7 +267,7 @@ def upload_document(
             raise HTTPException(status_code=404, detail="Socio comercial no encontrado.")
 
     # Validar extensión (Solo Word)
-    filename = file.filename
+    filename = os.path.basename(file.filename or "")
     if not filename:
         raise HTTPException(status_code=400, detail="Nombre de archivo inválido.")
     
@@ -378,8 +378,7 @@ def update_document_socio(doc_id: int, payload: UpdateSocioPayload, db: Session 
         socio_id_val = int(payload.socio_id)
         
     if socio_id_val is not None:
-        from src.database.models import Socio
-        socio_exist = db.query(Socio).filter(Socio.id == socio_id_val).first()
+        socio_exist = db.query(SocioComercial).filter(SocioComercial.id == socio_id_val).first()
         if not socio_exist:
             raise HTTPException(status_code=400, detail="El socio especificado no existe")
 
@@ -413,7 +412,7 @@ def replace_document_file(
     if not doc:
         raise HTTPException(status_code=404, detail="Documento no encontrado.")
     
-    filename = file.filename
+    filename = os.path.basename(file.filename or "")
     if not filename:
         raise HTTPException(status_code=400, detail="Nombre de archivo inválido.")
     
@@ -1047,9 +1046,7 @@ def _generar_pdf_for_credito(credito: Credito, db: Session) -> str:
                     except:
                         pass
     except Exception as e:
-        import traceback
-        error_msg = f"Error interno: {str(e)}\n\n{traceback.format_exc()}"
-        raise HTTPException(status_code=500, detail=error_msg)
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
         
     return final_pdf_path
 
@@ -1146,6 +1143,4 @@ def generar_papeleria_cartera(cartera_id: int, formato: str = 'pdf', db: Session
                     except:
                         pass
     except Exception as e:
-        import traceback
-        error_msg = f"Error interno: {str(e)}\n\n{traceback.format_exc()}"
-        raise HTTPException(status_code=500, detail=error_msg)
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")

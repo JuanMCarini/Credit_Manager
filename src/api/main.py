@@ -5,9 +5,10 @@ Description: Main entry point for the Credit Manager API.
 """
 
 import os
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, Depends
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, Response
 from contextlib import asynccontextmanager
 from typing import Dict
 
@@ -32,27 +33,29 @@ from src.api.routes.cheques import router as cheques_router
 from src.api.routes.posicion_iva import router as posicion_iva_router
 from src.api.routes.inversores import router as inversores_router
 from src.api.routes.posicion_iibb import router as posicion_iibb_router
-from src.config import API_SETTINGS
-from src.database import Base, engine
+from src.config import API_SETTINGS, COMPANY_DATA
+from src.database import Base, engine, SessionLocal
+from src.database.models.socios import SocioComercial
 
 # -------------------------------------------------------------------
-# Inicialización de la Base de Datos
+# Registro de Modelos de la Base de Datos
 # -------------------------------------------------------------------
-import src.database.models.finance.planes # Import to register the model
-import src.database.models.finance.posicion_iva # Registrar PosicionIva
-import src.database.models.finance.posicion_iibb # Registrar PosicionIibb
-import src.database.models.system # Registrar ModuloSistema
-Base.metadata.create_all(bind=engine)
+import src.database.models.finance.planes  # noqa: F401
+import src.database.models.finance.posicion_iva  # noqa: F401
+import src.database.models.finance.posicion_iibb  # noqa: F401
+import src.database.models.system  # noqa: F401
 
 # -------------------------------------------------------------------
 # Inicialización de la Aplicación
 # -------------------------------------------------------------------
 from src.api.dependencies.auth import enforce_rbac
 from src.api.scheduler import start_scheduler, stop_scheduler
-from fastapi import Depends
-from src.database import SessionLocal
-from src.database.models.socios import SocioComercial
-from src.config import COMPANY_DATA
+from src.database.seed_admin import seed_admin
+from src.database.seed_geography import seed_provincias
+from src.database.seed_conceptos import seed_conceptos
+from src.database.seed_bancos import seed_bancos
+from src.database.seed_modulos import seed_modulos
+
 
 def init_main_company():
     try:
@@ -75,15 +78,15 @@ def init_main_company():
     except Exception as e:
         print(f"⚠️ Error al inicializar la empresa principal: {e}")
 
-from src.database.seed_admin import seed_admin
-from src.database.seed_geography import seed_provincias
-from src.database.seed_conceptos import seed_conceptos
-from src.database.seed_bancos import seed_bancos
-from src.database.seed_modulos import seed_modulos
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        print(f"⚠️ Error creando esquema de base de datos: {e}")
+
     init_main_company()
     seed_admin()
     seed_bancos()
@@ -101,6 +104,7 @@ async def lifespan(app: FastAPI):
     # Shutdown
     stop_scheduler()
 
+
 app = FastAPI(
     title="Credit Manager Core Engine API",
     description="API RESTful para interactuar con el motor financiero de gestión de cartera de créditos.",
@@ -113,7 +117,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=API_SETTINGS.allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -121,21 +125,21 @@ os.makedirs("data/uploads", exist_ok=True)
 app.mount("/static", StaticFiles(directory="data/uploads"), name="static")
 
 # -------------------------------------------------------------------
-# Endpoints Root
+# Endpoints Root & Health
 # -------------------------------------------------------------------
 
-from fastapi.responses import FileResponse, Response
-
 @app.get("/", tags=["Health"])
-async def health_check() -> Dict[str, str]:
+@app.get("/api/v1/health", tags=["Health"])
+def health_check() -> Dict[str, str]:
     """
     Endpoint de prueba de estado (health check).
     Retorna 200 OK y el estado general de la aplicación.
     """
     return {"status": "ok", "message": "Credit Manager API is running"}
 
+
 @app.get("/favicon.ico", include_in_schema=False)
-async def get_favicon():
+def get_favicon():
     file_path = "data/uploads/favicon.ico"
     if os.path.exists(file_path):
         return FileResponse(file_path)
@@ -168,7 +172,3 @@ app.include_router(cheques_router)
 app.include_router(posicion_iva_router)
 app.include_router(inversores_router)
 app.include_router(posicion_iibb_router)
-
-# -------------------------------------------------------------------
-# Frontend (Ahora servido por Nginx)
-# -------------------------------------------------------------------

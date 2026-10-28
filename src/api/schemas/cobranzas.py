@@ -1,6 +1,7 @@
 from typing import Optional, List
 from datetime import date
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
+
 
 class CobranzaIndividual(BaseModel):
     identificador: str
@@ -11,11 +12,13 @@ class CobranzaIndividual(BaseModel):
     anticipada: bool = False
     tipo_cobranza: Optional[str] = None
 
+
 class CobranzaRecurso(BaseModel):
     identificador: str
     id_val: str
     monto: float
     fecha_pago: Optional[date] = None
+
 
 class CobranzaMasiva(BaseModel):
     identificador: str
@@ -24,9 +27,11 @@ class CobranzaMasiva(BaseModel):
     monto_total: float
     fecha_pago: Optional[date] = None
 
+
 class ProcesoUpdate(BaseModel):
     estado: str
     descripcion: Optional[str] = None
+
 
 class CobranzaResponse(BaseModel):
     ID: int
@@ -42,9 +47,11 @@ class CobranzaResponse(BaseModel):
     IVA: float
     Total: float
 
-    class Config:
-        populate_by_name = True
-        alias_generator = lambda string: string.replace('_', ' ')
+    model_config = ConfigDict(
+        populate_by_name=True,
+        alias_generator=lambda string: string.replace("_", " "),
+    )
+
 
 class CobranzaListResponse(BaseModel):
     items: List[CobranzaResponse]

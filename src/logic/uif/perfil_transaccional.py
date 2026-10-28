@@ -86,7 +86,7 @@ def capital_neto_maximo(cuil: str, periodo: Union[Period, date], socio: Union[So
         df["cap_bruto_max"] = cupo / df["factor_cuota"]
         
         # Capital Neto Max = Capital Bruto Max * (1 - gastos)
-        gastos = df["porcentaje_sellado"] + df["gasto_1_porcentaje"] + df["gasto_2_porcentaje"]
+        gastos = df["porcentaje_sellado"].fillna(0) + df["gasto_1_porcentaje"].fillna(0) + df["gasto_2_porcentaje"].fillna(0)
         df["cap_neto_max"] = df["cap_bruto_max"] * (1 - gastos)
         
         df.sort_values(by=["plazo"], inplace=True)

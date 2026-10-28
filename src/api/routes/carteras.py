@@ -194,6 +194,8 @@ def create_venta_cartera(data: VentaCarteraRequest, db: Session = Depends(get_db
         )
         
         return {"status": "success", "message": f"Venta registrada exitosamente. Cartera ID: {cartera.id}"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -785,6 +787,9 @@ def delete_cartera(cartera_id: int, db: Session = Depends(get_db)):
         db.delete(cartera)
         db.commit()
         return {"status": "success", "message": f"Cartera {cartera_id} eliminada correctamente."}
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=f"No se puede eliminar la cartera (puede estar referenciada). Error: {str(e)}")

@@ -125,7 +125,7 @@ def saldos(
     mask_moroso = (df["_cred_total"].round(2) > 0) & df["_any_vencida"]
     mask_activo = (df["_cred_total"].round(2) > 0) & ~df["_any_vencida"]
     
-    mask_keep_special = df["estado_credito"].isin(["INCOBRABLE", "JUDICIALIZADO"])
+    mask_keep_special = df["estado_credito"].isin(["INCOBRABLE", "JUDICIAL", "JUDICIALIZADO"])
     
     df.loc[mask_cancelado, "estado_credito"] = "CANCELADO"
     df.loc[mask_moroso & ~mask_keep_special, "estado_credito"] = "MOROSO"

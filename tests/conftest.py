@@ -3,6 +3,7 @@ import pytest
 from datetime import date
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 from src.database import Base
 from src.database.models import Cliente, SocioComercial, Cartera, Credito, TipoOperacionCartera
 
@@ -13,7 +14,11 @@ def engine():
     Creates an in-memory SQLite engine for the duration of the test session.
     Forces foreign keys to be respected.
     """
-    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
     
     # Event listener to force SQLite Foreign Key checks
     @event.listens_for(engine, "connect")
@@ -35,8 +40,6 @@ def db_session(engine):
     session = TestingSessionLocal()
     
     # Register application database triggers (event listeners)
-    # They are automatically registered at module level when we import src.database.events,
-    # but we import them here explicitly to ensure they are active.
     from src.database import events  # noqa: F401
 
     try:

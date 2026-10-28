@@ -1,6 +1,6 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { FilterX } from 'lucide-react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { useQuery, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import axiosClient from '../api/axiosClient';
 import { useDebounce } from '../hooks/useDebounce';
@@ -15,7 +15,6 @@ const formatCurrency = (num) => {
 
 const CollectionsListPage = () => {
   const location = useLocation();
-  const navigate = useNavigate();
   const queryParams = new URLSearchParams(location.search);
   const initialProcesoId = queryParams.get('proceso_id') || '';
   const queryClient = useQueryClient();
@@ -311,7 +310,7 @@ const CollectionsListPage = () => {
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
               <button 
                 className="btn-secondary" 
-                onClick={() => setFilter({ ProcesoID: '', CreditoID: [], ID: '', Tipo: [], MediosPago: [], Fecha: { start: '', end: '' }, Estado: [] })}
+                onClick={() => setFilter({ ProcesoID: '', CreditoID: [], CUIL: '', ID: '', Tipo: '', MediosPago: [], Capital: {}, Interes: {}, IVA: {}, Total: {}, Fecha: { start: '', end: '' }, FechaVto: [], FechaPago: [], Estado: [] })}
                 title="Limpiar todos los filtros"
                 style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '100%', padding: '0 12px' }}
               >

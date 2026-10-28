@@ -65,10 +65,10 @@ class AmortizationEngine:
 
             # 4. Final installment adjustment to close the balance at exactly zero
             if i == plazo:
-                principal_amort = remaining_balance
-                interest_c_iva = cuota_fija_total - principal_amort
+                principal_amort = round(remaining_balance, 2)
+                interest_c_iva = round(cuota_fija_total - principal_amort, 2)
                 interest_net = round(interest_c_iva / (1 + tasa_iva), 2)
-                iva_amount = interest_c_iva - interest_net
+                iva_amount = round(interest_c_iva - interest_net, 2)
 
             diff = cuota_fija_total - (principal_amort + interest_net + iva_amount)
             diff = round(diff, 2)

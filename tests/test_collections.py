@@ -4,7 +4,7 @@ from datetime import date
 import pytest
 import pandas as pd
 from src.database.models import Credito, Cuota, EstadoCuota, TipoCredito, Cobranza, TipoCobranzaEnum
-from src.logic.collections import CollectionManager
+from src.logic.creditos.collections import CollectionManager
 
 
 @pytest.fixture

@@ -65,6 +65,19 @@ class CollectionManager:
             self.db.close()
 
     @staticmethod
+    def _normalize_id_val(val_id: int | float | str, as_int: bool = False) -> int | str:
+        if as_int:
+            return int(float(val_id))
+        if isinstance(val_id, int) and not isinstance(val_id, bool):
+            return str(val_id)
+        if isinstance(val_id, float):
+            return str(int(val_id)) if val_id.is_integer() else str(val_id)
+        val_str = str(val_id).strip()
+        if val_str.endswith(".0"):
+            val_str = val_str[:-2]
+        return val_str
+
+    @staticmethod
     def _generate_empty_collections() -> pd.DataFrame:
         """
         =============================================================================
@@ -117,27 +130,26 @@ class CollectionManager:
         # 2. Ruteo optimizado con match-case, pero encadenando JOINs y WHEREs programáticos
         match identificador:
             case "CREDITO_ID":
-                val_id = int(float(val_id))
+                val_id = self._normalize_id_val(val_id, as_int=True)
                 query = query.filter(Cuota.credito_id == val_id)
 
             case "ID_EXTERNO":
-                val_id = str(int(float(val_id)))
+                val_id = self._normalize_id_val(val_id, as_int=False)
                 query = query.join(Credito).filter(Credito.id_externo == val_id)
 
             case "CLIENTE_CUIL":
-                val_id = str(int(float(val_id)))
+                val_id = self._normalize_id_val(val_id, as_int=False)
                 query = query.join(Credito).filter(Credito.cliente_cuil == val_id)
 
             case "CLIENTE_DNI":
-                # SQLAlchemy encadena los joins mágicamente usando las relationships() que ya definiste en models.py
-                val_id = str(int(float(val_id)))
+                val_id = self._normalize_id_val(val_id, as_int=False)
                 query = (
                     query.join(Credito)
                     .join(Cliente)
                     .filter(Cliente.documento == val_id)
                 )
             case "PROVEEDOR_CUIT":
-                val_id = str(int(float(val_id)))
+                val_id = self._normalize_id_val(val_id, as_int=False)
                 query = (
                     query.join(Credito)
                     .join(Cartera, Credito.cartera_id == Cartera.id)
@@ -150,7 +162,7 @@ class CollectionManager:
                 )
 
             case "CARTERA_ID":
-                val_id = int(float(val_id))
+                val_id = self._normalize_id_val(val_id, as_int=True)
                 query = (
                     query.join(Credito)
                     .join(Cartera, Credito.cartera_id == Cartera.id)
@@ -552,7 +564,7 @@ class CollectionManager:
 
         # 1. Normalization
         payment_date = normalize_date(payment_date)
-        vto_date = normalize_date(vto_date)
+        vto_date = normalize_date(vto_date) if vto_date is not None else payment_date
 
         # 2. Debt extraction and calculation (Early exit if there is no debt)
         df = self._get_pending_installments(identificador, id_val)
@@ -633,7 +645,7 @@ class CollectionManager:
 
         # 1. Normalization
         payment_date = normalize_date(payment_date)
-        vto_date = normalize_date(vto_date)
+        vto_date = normalize_date(vto_date) if vto_date is not None else payment_date
 
         # 2. Debt extraction and calculation (Early exit if there is no debt)
         df = self._get_pending_installments(identificador, id_val)
@@ -662,7 +674,7 @@ class CollectionManager:
                 row = partial_df.index.values[0]
                 partial_df.loc[row, "total"] = unuse_amount
 
-                if unuse_amount < partial_df.loc[row, "interes"]:
+                if unuse_amount <= (partial_df.loc[row, "interes"] + partial_df.loc[row, "iva"]):
                     partial_df.loc[row, "interes"] = round(
                         unuse_amount / (1 + tasa_iva), 2
                     )
@@ -744,50 +756,48 @@ class CollectionManager:
         id_tipo = identificador.upper()
 
         try:
-            # 0. Verification of portfolio states
+            # 0. Verification of portfolio states and socio resolution without multiplying rows
+            socio_id = None
             if id_tipo == "PROVEEDOR_CUIT":
+                id_val = self._normalize_id_val(id_val, as_int=False)
                 carteras_pendientes = self.db.query(Cartera).join(SocioComercial).filter(
-                    SocioComercial.cuit == str(int(float(id_val))),
+                    SocioComercial.cuit == id_val,
                     Cartera.recurso == True,
                     Cartera.estado == EstadoCartera.PENDIENTE
                 ).all()
                 if carteras_pendientes:
                     ids = [c.id for c in carteras_pendientes]
                     raise ValueError(f"⚠️ El socio posee carteras con recurso PENDIENTES de confirmación (IDs: {ids}). Debe confirmarlas antes de procesar la cobranza.")
+                cartera_recurso = (
+                    self.db.query(Cartera.socio_id)
+                    .join(SocioComercial, SocioComercial.id == Cartera.socio_id)
+                    .filter(SocioComercial.cuit == id_val, Cartera.recurso == True)
+                    .first()
+                )
+                socio_id = cartera_recurso[0] if cartera_recurso else None
             elif id_tipo == "CARTERA_ID":
-                cartera = self.db.query(Cartera).filter(Cartera.id == int(float(id_val))).first()
+                id_val = self._normalize_id_val(id_val, as_int=True)
+                cartera = self.db.query(Cartera).filter(Cartera.id == id_val).first()
                 if cartera and cartera.estado == EstadoCartera.PENDIENTE:
                     raise ValueError(f"⚠️ La cartera {cartera.id} se encuentra PENDIENTE. Debe confirmarla antes de procesar la cobranza.")
+                socio_id = cartera.socio_id if (cartera and cartera.recurso) else None
 
-            # 1. Dynamic query construction to query historical advances
-            query_anticipos = self.db.query(AnticiposSinAplicar)
-            match identificador:
-                case "PROVEEDOR_CUIT":
-                    id_val = str(id_val)
-                    query_anticipos = (
-                        query_anticipos.join(
-                            SocioComercial,
-                            AnticiposSinAplicar.socio_id == SocioComercial.id,
-                        )
-                        .join(Cartera, SocioComercial.id == Cartera.socio_id)
-                        .filter(SocioComercial.cuit == id_val)
-                    )
-                case "CARTERA_ID":
-                    id_val = int(id_val)
-                    query_anticipos = query_anticipos.join(
-                        Cartera, AnticiposSinAplicar.socio_id == Cartera.socio_id
-                    ).filter(Cartera.id == id_val)
-            query_anticipos = query_anticipos.filter(Cartera.recurso)
-            # 2. Reading existing advances and adding to the available amount
-            anticipos = pd.read_sql(
-                query_anticipos.statement,
-                self.db.connection(),
-                index_col="id",
-            )
+            # 1. Query historical advances directly by socio_id (without joining Cartera)
+            if socio_id is not None:
+                query_anticipos = self.db.query(AnticiposSinAplicar).filter(
+                    AnticiposSinAplicar.socio_id == socio_id
+                )
+                anticipos = pd.read_sql(
+                    query_anticipos.statement,
+                    self.db.connection(),
+                    index_col="id",
+                )
+                monto_anticipos = (
+                    float(anticipos["monto"].sum()) if "monto" in anticipos.columns else 0.0
+                )
+            else:
+                monto_anticipos = 0.0
 
-            monto_anticipos = (
-                float(anticipos["monto"].sum()) if "monto" in anticipos.columns else 0.0
-            )
             amount += monto_anticipos
             # 3. Extraction and calculation of filtered current debt
             df = self._fetch_installments_by_identifier(identificador, id_val, True)
@@ -802,10 +812,18 @@ class CollectionManager:
             # 5. Filtering of installments falling within fully covered due dates
             df = df.loc[df["fecha_vencimiento"].isin(df_vto.index)].copy()
 
-            # 6. Persistence of the remainder (leftover) in the partner advances table
+            # 6. Persistence of the remainder / consumption delta in the partner advances table
             if sobrante != 0:
                 fecha_iso = normalize_date(payment_date, as_type=str)
-                if id_tipo == "PROVEEDOR_CUIT":
+                if socio_id is not None:
+                    self.db.execute(
+                        text("""
+                            INSERT INTO anticipos_socios (socio_id, monto, fecha)
+                            VALUES (:socio_id, :monto, :fecha)
+                        """),
+                        {"socio_id": socio_id, "monto": sobrante, "fecha": fecha_iso},
+                    )
+                elif id_tipo == "PROVEEDOR_CUIT":
                     self.db.execute(
                         text("""
                             INSERT INTO anticipos_socios (socio_id, monto, fecha)
@@ -833,7 +851,7 @@ class CollectionManager:
                 res = self._generate_empty_collections()
                 res.attrs["anticipos_previos"] = monto_anticipos
                 res.attrs["sobrante"] = sobrante
-                res.attrs["anticipos_actualizado"] = monto_anticipos + sobrante
+                res.attrs["anticipos_actualizado"] = round(monto_anticipos + sobrante, 2)
                 return res
 
             # 8. Final classification of collection type and delegation of persistence (which includes commit)
@@ -847,7 +865,7 @@ class CollectionManager:
             )
             res.attrs["anticipos_previos"] = monto_anticipos
             res.attrs["sobrante"] = sobrante
-            res.attrs["anticipos_actualizado"] = monto_anticipos + sobrante
+            res.attrs["anticipos_actualizado"] = round(monto_anticipos + sobrante, 2)
             return res
 
         except Exception as e:
@@ -862,26 +880,26 @@ class CollectionManager:
         )
         match identificador:
             case "CREDITO_ID":
-                val_id = int(float(id_val))
+                val_id = self._normalize_id_val(id_val, as_int=True)
                 query = query.filter(Credito.id == val_id)
             case "ID_EXTERNO":
-                val_id = str(int(float(id_val)))
+                val_id = self._normalize_id_val(id_val, as_int=False)
                 query = query.filter(Credito.id_externo == val_id)
             case "CLIENTE_CUIL":
-                val_id = str(int(float(id_val)))
+                val_id = self._normalize_id_val(id_val, as_int=False)
                 query = query.filter(Credito.cliente_cuil == val_id)
             case "CLIENTE_DNI":
-                val_id = str(int(float(id_val)))
+                val_id = self._normalize_id_val(id_val, as_int=False)
                 query = query.join(Cliente).filter(Cliente.documento == val_id)
             case "PROVEEDOR_CUIT":
-                val_id = str(int(float(id_val)))
+                val_id = self._normalize_id_val(id_val, as_int=False)
                 query = (
                     query.join(Cartera, Credito.cartera_id == Cartera.id)
                     .join(SocioComercial, Cartera.socio_id == SocioComercial.id)
                     .filter(SocioComercial.cuit == val_id)
                 )
             case "CARTERA_ID":
-                val_id = int(float(id_val))
+                val_id = self._normalize_id_val(id_val, as_int=True)
                 query = query.filter(Credito.cartera_id == val_id)
             case _:
                 return None
@@ -939,7 +957,7 @@ class CollectionManager:
         df.columns = header
         df["monto"] = df["monto"].astype(float)
         df = df.loc[df[ident] != "Total"]
-        df[ident] = df[ident].astype(str)
+        df[ident] = df[ident].apply(lambda x: self._normalize_id_val(x, as_int=False))
         df = df.groupby(ident)[["monto"]].sum().reset_index()
 
         if (df["monto"] >= 0).all() or (df["monto"] <= 0).all():

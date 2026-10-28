@@ -1,7 +1,7 @@
 # pyrefly: ignore [missing-import]
 import pytest
 from datetime import date
-from src.api.main import get_cliente_cuenta_corriente
+from src.api.routes.clientes import get_cliente_cuenta_corriente
 from src.database import Cliente, Credito, Cuota, Cobranza, TipoCobranzaEnum
 from src.database.models import EstadoCredito, EstadoCuota
 

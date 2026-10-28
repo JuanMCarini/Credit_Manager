@@ -9,7 +9,7 @@ from src.database.models import (
     LiquidacionCuotaCedida,
     TipoLiquidacionEnum,
 )
-from src.logic.settlements import SettlementManager
+from src.logic.creditos.settlements import SettlementManager
 
 
 @pytest.fixture

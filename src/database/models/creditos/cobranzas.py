@@ -17,7 +17,7 @@ from sqlalchemy.orm import relationship
 from src.database import Base
 
 
-class TipoProcesoEnum(enum.Enum):
+class TipoProcesoEnum(str, enum.Enum):
     INDIVIDUAL = "INDIVIDUAL"
     MASIVO_CSV = "MASIVO_CSV"
     LIQUIDACIONES_INDIVIDUALES = "LIQUIDACIONES_INDIVIDUALES"
@@ -25,7 +25,7 @@ class TipoProcesoEnum(enum.Enum):
     RECURSO = "RECURSO"
 
 
-class EstadoProcesoEnum(enum.Enum):
+class EstadoProcesoEnum(str, enum.Enum):
     COMPLETADO = "COMPLETADO"
     REVERTIDO = "REVERTIDO"
     PROCESANDO = "PROCESANDO"
@@ -87,7 +87,7 @@ class Proceso(Base):
         return f"<Proceso(id={self.id}, tipo={self.tipo}, estado={self.estado})>"
 
 
-class TipoCobranzaEnum(enum.Enum):
+class TipoCobranzaEnum(str, enum.Enum):
     COMUN = "COMUN"
     ANTICIPO = "ANTICIPO"
     CA = "CANCELACION ANTICIPADA"
@@ -121,7 +121,6 @@ class Cobranza(Base):
     interes = Column(Numeric(15, 2), nullable=False)
     iva = Column(Numeric(15, 2), nullable=False)
     fecha = Column(Date, nullable=False)
-    facturada = Column(Boolean, nullable=False, default=False)
 
     def default_facturada(context):
         tipo = context.current_parameters.get("tipo_cobranza")
@@ -146,31 +145,32 @@ class Cobranza(Base):
             cuota_id = context.current_parameters.get("cuota_id")
             if cuota_id is not None and context.connection is not None:
                 from sqlalchemy.orm import Session
-                from src.database.models.creditos.carteras import Cartera, OperacionCartera
+                from src.database.models.creditos.carteras import Cartera, OperacionCartera, TipoOperacionCartera
 
                 db = Session(bind=context.connection)
-
-                result = db.query(Cartera.iva, Cartera.tipo_operacion).join(
-                    OperacionCartera, Cartera.id == OperacionCartera.cartera_id
-                ).filter(
-                    OperacionCartera.cuota_id == cuota_id
-                ).order_by(
-                    OperacionCartera.id.desc()
-                ).limit(1).first()
-                
-                if result is not None:
-                    iva, tipo_op = result
-                    from src.database.models.creditos.carteras import TipoOperacionCartera
-                    if tipo_op == TipoOperacionCartera.VENTA:
-                        return True if iva is True else False
+                try:
+                    result = db.query(Cartera.iva, Cartera.tipo_operacion).join(
+                        OperacionCartera, Cartera.id == OperacionCartera.cartera_id
+                    ).filter(
+                        OperacionCartera.cuota_id == cuota_id
+                    ).order_by(
+                        OperacionCartera.id.desc()
+                    ).limit(1).first()
+                    
+                    if result is not None:
+                        iva, tipo_op = result
+                        if tipo_op == TipoOperacionCartera.VENTA:
+                            return True if iva is True else False
+                        else:
+                            return False if iva is True else True
                     else:
-                        return False if iva is True else True
-                else:
-                    # Cuota propia (no cedida)
-                    if tipo_val == TipoCobranzaEnum.RECURSO.value:
-                        return True # Un recurso sin cesión no tiene sentido, por defecto no se factura
-                    else:
-                        return False # COMUN, ANTICIPO, CA, PENALTY propios -> Se facturan
+                        # Cuota propia (no cedida)
+                        if tipo_val == TipoCobranzaEnum.RECURSO.value:
+                            return True # Un recurso sin cesión no tiene sentido, por defecto no se factura
+                        else:
+                            return False # COMUN, ANTICIPO, CA, PENALTY propios -> Se facturan
+                finally:
+                    db.close()
 
         return True
 
@@ -190,7 +190,7 @@ class Cobranza(Base):
         return f"<Cobranza(cuota_id={self.cuota_id}, tipo={self.tipo_cobranza}, total={self.importe_total})>"
 
 
-class TipoLiquidacionEnum(enum.Enum):
+class TipoLiquidacionEnum(str, enum.Enum):
     PENDIENTE = "PENDIENTE"
     NORMAL = "NORMAL"
     RECURSO = "RECURSO"

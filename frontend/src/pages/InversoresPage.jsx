@@ -33,7 +33,7 @@ const InversoresPage = () => {
     return inversores.filter(inv => {
       return Object.entries(filters).every(([key, filterValue]) => {
         if (!filterValue || filterValue.length === 0) return true;
-        let valStr = '';
+        let valStr;
         if (key === 'estado') {
           valStr = inv.activo ? 'Activo' : 'Inactivo';
         } else {

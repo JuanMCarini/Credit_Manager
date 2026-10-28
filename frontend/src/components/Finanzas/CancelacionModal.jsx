@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import axiosClient from '../../api/axiosClient';
 import CurrencyInput from '../CurrencyInput';
+import { getLocalDateISO } from '../../utils/dates';
 import { X, Check } from 'lucide-react';
 
 const CancelacionModal = ({ isOpen, onClose, onSave, comprobante }) => {
   const [formData, setFormData] = useState({
     importe: 0,
-    fecha_cancelacion: new Date().toISOString().substring(0, 10),
+    fecha_cancelacion: getLocalDateISO(),
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -18,7 +19,7 @@ const CancelacionModal = ({ isOpen, onClose, onSave, comprobante }) => {
     if (isOpen && comprobante) {
       setFormData({
         importe: remainingBalance,
-        fecha_cancelacion: new Date().toISOString().substring(0, 10),
+        fecha_cancelacion: getLocalDateISO(),
       });
       setError('');
     }

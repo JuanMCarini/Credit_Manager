@@ -5,6 +5,7 @@ import ExportExcelButton from '../components/ExportExcelButton';
 import ExcelDateFilter from '../components/ExcelDateFilter';
 import ExcelNumberRangeFilter from '../components/ExcelNumberRangeFilter';
 import ExcelListFilter from '../components/ExcelListFilter';
+import { getLocalDateISO } from '../utils/dates';
 
 const formatCurrency = (num) => {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(num);
@@ -21,7 +22,7 @@ const BalancesPage = () => {
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
 
   const [filters, setFilters] = useState({
-    fecha: new Date().toISOString().split('T')[0],
+    fecha: getLocalDateISO(),
     conSaldo: true,
     propias: ''
   });
@@ -107,7 +108,7 @@ const BalancesPage = () => {
 
   const isGrouping = activeGroups.length > 0;
   
-  let columns = [];
+  let columns;
   if (isGrouping) {
     columns = activeGroups.map(g => ({ label: g.label, key: g.id })).concat([
       { label: "Capital", key: "Capital" },

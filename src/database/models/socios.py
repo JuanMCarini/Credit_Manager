@@ -83,61 +83,71 @@ class SocioComercial(Base):
     def create_socio(
         cls, razon_social: str, cuit: str, db: Session | None = None, **kwargs
     ) -> "SocioComercial":
+        own_session = db is None
         db = db or SessionLocal()
-        cuit_str = str(cuit).strip()
-        rs_str = str(razon_social).strip()
+        try:
+            cuit_str = str(cuit).strip()
+            rs_str = str(razon_social).strip()
 
-        if "cbu" in kwargs and kwargs["cbu"]:
-            kwargs["cbu"] = "".join(filter(str.isdigit, str(kwargs["cbu"])))
-            if len(kwargs["cbu"]) > 22:
-                kwargs["cbu"] = kwargs["cbu"][:22]
+            if "cbu" in kwargs and kwargs["cbu"]:
+                kwargs["cbu"] = "".join(filter(str.isdigit, str(kwargs["cbu"])))
+                if len(kwargs["cbu"]) > 22:
+                    kwargs["cbu"] = kwargs["cbu"][:22]
 
-        existe = (
-            db.query(cls)
-            .filter((cls.cuit == cuit_str) | (cls.razon_social == rs_str))
-            .first()
-        )
-
-        if existe:
-            raise ValueError(
-                f"A Socio Comercial is already registered with CUIT '{cuit_str}' "
-                f"or Razón Social '{rs_str}'."
+            existe = (
+                db.query(cls)
+                .filter((cls.cuit == cuit_str) | (cls.razon_social == rs_str))
+                .first()
             )
 
-        try:
-            nuevo_socio = cls(razon_social=rs_str, cuit=cuit_str, **kwargs)
-            db.add(nuevo_socio)
-            db.commit()
-            db.refresh(nuevo_socio)
-            return nuevo_socio
-        except Exception as e:
-            db.rollback()
-            raise RuntimeError(f"Failed to register the new socio comercial: {e}")
+            if existe:
+                raise ValueError(
+                    f"A Socio Comercial is already registered with CUIT '{cuit_str}' "
+                    f"or Razón Social '{rs_str}'."
+                )
+
+            try:
+                nuevo_socio = cls(razon_social=rs_str, cuit=cuit_str, **kwargs)
+                db.add(nuevo_socio)
+                db.commit()
+                db.refresh(nuevo_socio)
+                return nuevo_socio
+            except Exception as e:
+                db.rollback()
+                raise RuntimeError(f"Failed to register the new socio comercial: {e}")
+        finally:
+            if own_session:
+                db.close()
 
     @classmethod
     def update_socio(
         cls, socio_id: int, db: Session | None = None, **kwargs
     ) -> "SocioComercial":
+        own_session = db is None
         db = db or SessionLocal()
-        socio = db.query(cls).filter_by(id=socio_id).first()
-        if not socio:
-            raise ValueError(f"No Socio Comercial was found with ID {socio_id}.")
-
-        if "cbu" in kwargs and kwargs["cbu"]:
-            kwargs["cbu"] = "".join(filter(str.isdigit, str(kwargs["cbu"])))
-            if len(kwargs["cbu"]) > 22:
-                kwargs["cbu"] = kwargs["cbu"][:22]
-
         try:
-            for key, value in kwargs.items():
-                if hasattr(socio, key) and key != "id":
-                    setattr(socio, key, value)
-            db.commit()
-            db.refresh(socio)
-            return socio
-        except Exception as e:
-            db.rollback()
-            raise RuntimeError(f"Failed to update socio comercial data: {e}")
+            socio = db.query(cls).filter_by(id=socio_id).first()
+            if not socio:
+                raise ValueError(f"No Socio Comercial was found with ID {socio_id}.")
+
+            if "cbu" in kwargs and kwargs["cbu"]:
+                kwargs["cbu"] = "".join(filter(str.isdigit, str(kwargs["cbu"])))
+                if len(kwargs["cbu"]) > 22:
+                    kwargs["cbu"] = kwargs["cbu"][:22]
+
+            try:
+                for key, value in kwargs.items():
+                    if hasattr(socio, key) and key != "id":
+                        setattr(socio, key, value)
+                db.commit()
+                db.refresh(socio)
+                return socio
+            except Exception as e:
+                db.rollback()
+                raise RuntimeError(f"Failed to update socio comercial data: {e}")
+        finally:
+            if own_session:
+                db.close()
 
 
 class AnticiposSinAplicar(Base):

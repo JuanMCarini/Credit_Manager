@@ -16,13 +16,13 @@ from sqlalchemy.orm import relationship, validates
 from src.database import Base
 
 
-class SexoEnum(enum.Enum):
+class SexoEnum(str, enum.Enum):
     MASCULINO = "M"
     FEMENINO = "F"
     OTRO = "O"
 
 
-class EstadoClienteEnum(enum.Enum):
+class EstadoClienteEnum(str, enum.Enum):
     ACTIVO = "ACTIVO"
     MOROSO = "MOROSO"
     INCOBRABLE = "INCOBRABLE"
@@ -62,7 +62,7 @@ class Empleador(Base):
     def __repr__(self):
         return f"<Empleador(cuit='{self.cuit}', razon_social='{self.razon_social}')>"
 
-class ListaGAFI(enum.Enum):
+class ListaGAFI(str, enum.Enum):
     BLANCA = "Lista Blanca"
     GRIS = "Lista Gris"
     NEGRA = "Lista Negra"
