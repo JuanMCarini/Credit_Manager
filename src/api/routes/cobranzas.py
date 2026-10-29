@@ -277,6 +277,8 @@ def get_procesos(db: Session = Depends(get_db)):
             "dueño": dueño_str,
             "Descripción": p.descripcion or "-",
             "Fecha Ejecución": p.fecha_ejecucion.strftime("%Y-%m-%d %H:%M:%S") if p.fecha_ejecucion else "-",
+            "Fecha de Cobro": fecha_emision_desc,
+            "Fecha Cobro": fecha_emision_desc,
             "Fecha Emisión Cobranza": fecha_emision_desc,
             "Fecha Emision Min": f_min,
             "Fecha Emision Max": f_max,

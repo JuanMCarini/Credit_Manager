@@ -66,6 +66,8 @@ class CollectionManager:
 
     @staticmethod
     def _normalize_id_val(val_id: int | float | str, as_int: bool = False) -> int | str:
+        if pd.isna(val_id):
+            return 0 if as_int else ""
         if as_int:
             return int(float(val_id))
         if isinstance(val_id, int) and not isinstance(val_id, bool):
@@ -459,6 +461,10 @@ class CollectionManager:
         try:
             # 2. Extract a single valid ID (we take the credit of the last processed installment)
             credito_origen_real = int(df_cobr.iloc[-1]["credito_id"])
+            orig_credito = self.db.query(Credito).filter(Credito.id == credito_origen_real).first()
+            penalty_tasa_iva = tasa_iva
+            if orig_credito and orig_credito.cartera and not orig_credito.cartera.iva:
+                penalty_tasa_iva = 0.0
 
             # 3. Generate the credit and installment using the leftover
             penalty_credito, penalty_cuota = new_penalty.generate_penalty_credit(
@@ -466,7 +472,7 @@ class CollectionManager:
                 monto_punitorio=sobrante,
                 fecha_emision=payment_date,
                 fecha_vencimiento=payment_date,
-                tasa_iva=tasa_iva,
+                tasa_iva=penalty_tasa_iva,
                 commit=commit,
             )
 
@@ -587,13 +593,26 @@ class CollectionManager:
                 row = partial_df.index.values[0]
                 partial_df.loc[row, "total"] = unuse_amount
 
-                if unuse_amount <= (partial_df.loc[row, "interes"] + partial_df.loc[row, "iva"]):
-                    partial_df.loc[row, "interes"] = round(
-                        unuse_amount / (1 + tasa_iva), 2
+                expected_iva = float(partial_df.loc[row, "iva"])
+                expected_int = float(partial_df.loc[row, "interes"])
+                if expected_iva <= 0.0:
+                    tasa_iva_cuota = 0.0
+                elif expected_int > 0.0:
+                    tasa_iva_cuota = expected_iva / expected_int
+                else:
+                    tasa_iva_cuota = tasa_iva
+
+                if unuse_amount <= (expected_int + expected_iva):
+                    if tasa_iva_cuota > 0.0:
+                        partial_df.loc[row, "interes"] = round(
+                        unuse_amount / (1 + tasa_iva_cuota), 2
                     )
-                    partial_df.loc[row, "iva"] = round(
+                        partial_df.loc[row, "iva"] = round(
                         unuse_amount - partial_df.loc[row, "interes"], 2
                     )
+                    else:
+                        partial_df.loc[row, "interes"] = unuse_amount
+                        partial_df.loc[row, "iva"] = 0.0
                     partial_df.loc[row, "capital"] = 0.0
                 else:
                     partial_df.loc[row, "capital"] = unuse_amount - (
@@ -674,13 +693,26 @@ class CollectionManager:
                 row = partial_df.index.values[0]
                 partial_df.loc[row, "total"] = unuse_amount
 
-                if unuse_amount <= (partial_df.loc[row, "interes"] + partial_df.loc[row, "iva"]):
-                    partial_df.loc[row, "interes"] = round(
-                        unuse_amount / (1 + tasa_iva), 2
+                expected_iva = float(partial_df.loc[row, "iva"])
+                expected_int = float(partial_df.loc[row, "interes"])
+                if expected_iva <= 0.0:
+                    tasa_iva_cuota = 0.0
+                elif expected_int > 0.0:
+                    tasa_iva_cuota = expected_iva / expected_int
+                else:
+                    tasa_iva_cuota = tasa_iva
+
+                if unuse_amount <= (expected_int + expected_iva):
+                    if tasa_iva_cuota > 0.0:
+                        partial_df.loc[row, "interes"] = round(
+                        unuse_amount / (1 + tasa_iva_cuota), 2
                     )
-                    partial_df.loc[row, "iva"] = round(
+                        partial_df.loc[row, "iva"] = round(
                         unuse_amount - partial_df.loc[row, "interes"], 2
                     )
+                    else:
+                        partial_df.loc[row, "interes"] = unuse_amount
+                        partial_df.loc[row, "iva"] = 0.0
                     partial_df.loc[row, "capital"] = 0.0
                 else:
                     partial_df.loc[row, "capital"] = unuse_amount - (
@@ -955,9 +987,16 @@ class CollectionManager:
         df = pd.read_excel(data_source, usecols=f"{id_column},{amount_column}")
         header = [ident, "monto"]
         df.columns = header
-        df["monto"] = df["monto"].astype(float)
-        df = df.loc[df[ident] != "Total"]
+        df.dropna(subset=[ident, "monto"], inplace=True)
+        valores_invalidos = {"total", "total general", "nan", "none", "", ident.lower(), "id", "id_credito", "id credito", "id_externo", "id externo"}
+        df = df[~df[ident].astype(str).str.strip().str.lower().isin(valores_invalidos)]
+        df["monto"] = pd.to_numeric(df["monto"], errors="coerce")
+        df.dropna(subset=["monto"], inplace=True)
+        df = df[df["monto"] != 0]
+
+
         df[ident] = df[ident].apply(lambda x: self._normalize_id_val(x, as_int=False))
+        df = df[df[ident] != ""]
         df = df.groupby(ident)[["monto"]].sum().reset_index()
 
         if (df["monto"] >= 0).all() or (df["monto"] <= 0).all():
@@ -997,13 +1036,16 @@ class CollectionManager:
                 else:
                     last_credit = self._get_last_canceled_credit(identificador, row[ident])
                     if last_credit:
+                        penalty_tasa_iva = 0.21
+                        if last_credit.cartera and not last_credit.cartera.iva:
+                            penalty_tasa_iva = 0.0
                         pm = PenaltyManager(self.db)
                         penalty_credito, penalty_cuota = pm.generate_penalty_credit(
                             credito_origen_id=last_credit.id,
                             monto_punitorio=row["monto"],
                             fecha_emision=payment_date,
                             fecha_vencimiento=vto_date,
-                            tasa_iva=0.21,
+                            tasa_iva=penalty_tasa_iva,
                             commit=False
                         )
                         df_penalty = pd.DataFrame(

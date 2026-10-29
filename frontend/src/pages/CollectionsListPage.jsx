@@ -43,7 +43,7 @@ const CollectionsListPage = () => {
   // --- PROCESOS STATE ---
   const [procesos, setProcesos] = useState([]);
   const [loadingProcesos, setLoadingProcesos] = useState(false);
-  const [filterProcesos, setFilterProcesos] = useState({ ID: '', Tipo: [], Estado: [], Fecha: [] });
+  const [filterProcesos, setFilterProcesos] = useState({ ID: '', Tipo: [], Estado: [], Fecha: [], FechaCobro: [] });
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [showTipoFilter, setShowTipoFilter] = useState(false);
   const [showEstadoFilter, setShowEstadoFilter] = useState(false);
@@ -57,6 +57,7 @@ const CollectionsListPage = () => {
   const TIPOS_DISPONIBLES = ['INDIVIDUAL', 'MASIVO_CSV'];
   const ESTADOS_DISPONIBLES = ['COMPLETADO', 'REVERTIDO', 'PROCESANDO', 'FALLIDO'];
   const AVAILABLE_FECHAS = useMemo(() => [...new Set(procesos.map(p => p["Fecha Ejecución"]).filter(Boolean))], [procesos]);
+  const AVAILABLE_FECHAS_COBRO = useMemo(() => [...new Set(procesos.map(p => p["Fecha de Cobro"] || p["Fecha Emisión Cobranza"]).filter(Boolean))].sort(), [procesos]);
 
   // --- COBRANZAS FETCH ---
   const fetchCobranzas = async ({ pageParam = 0, queryKey }) => {
@@ -249,11 +250,14 @@ const CollectionsListPage = () => {
     if (filterProcesos.Tipo.length > 0) result = result.filter(p => filterProcesos.Tipo.includes(p.Tipo));
     if (filterProcesos.Estado.length > 0) result = result.filter(p => filterProcesos.Estado.includes(p.Estado));
     if (filterProcesos.Fecha && filterProcesos.Fecha.length > 0) result = result.filter(p => filterProcesos.Fecha.includes(p["Fecha Ejecución"]));
+    if (filterProcesos.FechaCobro && filterProcesos.FechaCobro.length > 0) {
+      result = result.filter(p => filterProcesos.FechaCobro.includes(p["Fecha de Cobro"] || p["Fecha Emisión Cobranza"]));
+    }
 
     if (sortConfig.key) {
       result.sort((a, b) => {
-        let valA = a[sortConfig.key] ?? '';
-        let valB = b[sortConfig.key] ?? '';
+        let valA = a[sortConfig.key] ?? (sortConfig.key === 'Fecha de Cobro' ? a["Fecha Emisión Cobranza"] : '');
+        let valB = b[sortConfig.key] ?? (sortConfig.key === 'Fecha de Cobro' ? b["Fecha Emisión Cobranza"] : '');
         if (typeof valA === 'string') valA = valA.toLowerCase();
         if (typeof valB === 'string') valB = valB.toLowerCase();
         if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
@@ -328,7 +332,7 @@ const CollectionsListPage = () => {
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
               <button 
                 className="btn-secondary" 
-                onClick={() => setFilterProcesos({ ID: '', Tipo: [], Estado: [], Fecha: [] })}
+                onClick={() => setFilterProcesos({ ID: '', Tipo: [], Estado: [], Fecha: [], FechaCobro: [] })}
                 title="Limpiar todos los filtros"
                 style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '100%', padding: '0 12px' }}
               >
@@ -362,7 +366,7 @@ const CollectionsListPage = () => {
                 <option value="">-- Todos los Procesos --</option>
                 {procesosData && procesosData.map(p => (
                   <option key={p.ID} value={String(p.ID)}>
-                    Lote #{p.ID} - {p.Tipo} ({p.Estado}) - {p["Fecha Ejecución"]}
+                    Lote #{p.ID} - {p.Tipo} ({p.Estado}){(p["Fecha de Cobro"] || p["Fecha Emisión Cobranza"]) && (p["Fecha de Cobro"] || p["Fecha Emisión Cobranza"]) !== '-' ? ` | Cobro: ${p["Fecha de Cobro"] || p["Fecha Emisión Cobranza"]}` : ''} - {p["Fecha Ejecución"]}
                   </option>
                 ))}
               </select>
@@ -371,6 +375,7 @@ const CollectionsListPage = () => {
                 if (!selectedProceso) return null;
                 return (
                   <div style={{ marginTop: '8px', fontSize: '12px', fontWeight: 'bold', display: 'flex', gap: '15px', padding: '6px', background: 'rgba(0,0,0,0.2)', borderRadius: '4px' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Fecha Cobro: {selectedProceso["Fecha de Cobro"] || selectedProceso["Fecha Emisión Cobranza"] || "-"}</span>
                     <span style={{ color: 'var(--text-secondary)' }}>Capital: {formatCurrency(selectedProceso.Capital)}</span>
                     <span style={{ color: 'var(--text-secondary)' }}>Interés: {formatCurrency(selectedProceso.Interes)}</span>
                     <span style={{ color: 'var(--text-secondary)' }}>IVA: {formatCurrency(selectedProceso.IVA)}</span>
@@ -656,6 +661,17 @@ const CollectionsListPage = () => {
                     Descripción <SortIcon columnKey="Descripción" />
                   </th>
 
+                  <th onClick={() => handleSortProcesos('Fecha de Cobro')} style={{ cursor: 'pointer' }}>
+                    Fecha de Cobro <SortIcon columnKey="Fecha de Cobro" />
+                    <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
+                      <ExcelDateFilter 
+                        availableDates={AVAILABLE_FECHAS_COBRO}
+                        selectedDates={filterProcesos.FechaCobro || []}
+                        onChange={dates => setFilterProcesos({ ...filterProcesos, FechaCobro: dates })}
+                      />
+                    </div>
+                  </th>
+
                   <th onClick={() => handleSortProcesos('Fecha Ejecución')} style={{ cursor: 'pointer' }}>
                     Fecha Ejecución <SortIcon columnKey="Fecha Ejecución" />
                     <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
@@ -673,7 +689,7 @@ const CollectionsListPage = () => {
               <tbody>
                 {filteredAndSortedProcesos.length === 0 ? (
                   <tr>
-                    <td colSpan="6" className="text-center empty-state" style={{ padding: '40px' }}>
+                    <td colSpan="7" className="text-center empty-state" style={{ padding: '40px' }}>
                       {loadingProcesos ? "Cargando..." : "No hay procesos para mostrar con los filtros actuales."}
                     </td>
                   </tr>
@@ -692,6 +708,7 @@ const CollectionsListPage = () => {
                          </span>
                       </td>
                       <td>{p["Descripción"] || "-"}</td>
+                      <td>{p["Fecha de Cobro"] || p["Fecha Emisión Cobranza"] || "-"}</td>
                       <td>{p["Fecha Ejecución"]}</td>
                       <td>
                         <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
