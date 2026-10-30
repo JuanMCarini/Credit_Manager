@@ -8,8 +8,13 @@ from fastapi.responses import JSONResponse, FileResponse
 from sqlalchemy.orm import Session, joinedload
 
 from src.database import get_db
-from src.database.models import Cartera, EstadoCartera, EstadoCuotaCedida, TipoOperacionCartera, Cuota, OperacionCartera, Credito, Cliente
-from src.api.schemas.carteras import VentaCarteraRequest, UpdateCarteraRequest
+import shutil
+from pypdf import PdfWriter
+from src.database.models import Cartera, EstadoCartera, EstadoCuotaCedida, TipoOperacionCartera, Cuota, OperacionCartera, Credito, Cliente, DocumentoCartera
+from src.api.schemas.carteras import VentaCarteraRequest, UpdateCarteraRequest, DocumentoCarteraOut
+
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+UPLOAD_DIR_CARTERAS = os.path.join(project_root, "data", "uploads", "contratos_carteras")
 from src.portfolio.sell import PortfolioSell
 from src.portfolio.purchase import PortfolioPurchase
 from src.api.routes.system import sync_system_states
@@ -20,10 +25,12 @@ router = APIRouter(prefix="/api/v1/carteras", tags=["Carteras"])
 @router.get("")
 def get_carteras(db: Session = Depends(get_db)):
     from src.database.models import SocioComercial
-    carteras = db.query(Cartera).options(joinedload(Cartera.socio)).all()
+    carteras = db.query(Cartera).options(joinedload(Cartera.socio), joinedload(Cartera.documentos)).all()
     
     result = []
     for c in carteras:
+        docs = c.documentos or []
+        tiene_firmado = any(d.es_contrato_firmado for d in docs)
         result.append({
             "id": c.id,
             "nombre": c.nombre,
@@ -33,7 +40,9 @@ def get_carteras(db: Session = Depends(get_db)):
             "tna_descuento": c.tna_descuento,
             "recurso": c.recurso,
             "iva": c.iva,
-            "estado": c.estado.value if hasattr(c.estado, 'value') else c.estado
+            "estado": c.estado.value if hasattr(c.estado, 'value') else c.estado,
+            "tiene_contrato_firmado": tiene_firmado,
+            "cant_documentos": len(docs)
         })
     return result
 
@@ -784,6 +793,17 @@ def delete_cartera(cartera_id: int, db: Session = Depends(get_db)):
     
             db.query(OperacionCartera).filter(OperacionCartera.cartera_id == cartera_id).delete(synchronize_session=False)
 
+        docs_a_borrar = db.query(DocumentoCartera).filter(DocumentoCartera.cartera_id == cartera_id).all()
+        for d in docs_a_borrar:
+            basename_d = os.path.basename(d.ruta_archivo.replace('\\', '/'))
+            full_path_d = os.path.join(UPLOAD_DIR_CARTERAS, basename_d)
+            if os.path.exists(full_path_d):
+                try:
+                    os.remove(full_path_d)
+                except Exception:
+                    pass
+        db.query(DocumentoCartera).filter(DocumentoCartera.cartera_id == cartera_id).delete(synchronize_session=False)
+
         db.delete(cartera)
         db.commit()
         return {"status": "success", "message": f"Cartera {cartera_id} eliminada correctamente."}
@@ -843,6 +863,16 @@ def export_cartera_legajos(cartera_id: int, db: Session = Depends(get_db)):
             except Exception as e:
                 errores.append(f"Credito ID {credito.id} (CUIL: {credito.cliente_cuil}): {str(e)}")
                 
+        # Adjuntar contratos firmados de la cartera si existen
+        docs_cartera = db.query(DocumentoCartera).filter(DocumentoCartera.cartera_id == cartera_id).all()
+        for doc_c in docs_cartera:
+            basename_c = os.path.basename(doc_c.ruta_archivo.replace('\\', '/'))
+            full_path_c = os.path.join(UPLOAD_DIR_CARTERAS, basename_c)
+            if not os.path.exists(full_path_c) and os.path.exists(doc_c.ruta_archivo):
+                full_path_c = doc_c.ruta_archivo
+            if os.path.exists(full_path_c):
+                zipf.write(full_path_c, f"Contrato Firmado Cartera - {doc_c.nombre_archivo}")
+
         if errores:
             errors_path = os.path.join(temp_dir, "errores.txt")
             with open(errors_path, "w") as f:
@@ -866,3 +896,154 @@ def get_tna_venta_reciente(fecha: date, db: Session = Depends(get_db)):
         
     return {"tna": tna}
 
+
+
+# --- DOCUMENTOS Y CONTRATOS DE CARTERA ---
+
+@router.post("/{cartera_id}/documentos", response_model=DocumentoCarteraOut)
+async def upload_documento_cartera(
+    cartera_id: int,
+    file: UploadFile = File(...),
+    es_contrato_firmado: bool = Form(True),
+    db: Session = Depends(get_db),
+):
+    try:
+        cartera = db.query(Cartera).filter(Cartera.id == cartera_id).first()
+        if not cartera:
+            raise HTTPException(status_code=404, detail="Cartera no encontrada")
+
+        os.makedirs(UPLOAD_DIR_CARTERAS, exist_ok=True)
+        clean_filename = os.path.basename(file.filename or "contrato.pdf")
+        stored_filename = f"{cartera_id}_{clean_filename}"
+        file_path = os.path.join(UPLOAD_DIR_CARTERAS, stored_filename)
+
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        doc_existente = db.query(DocumentoCartera).filter(
+            DocumentoCartera.cartera_id == cartera_id,
+            DocumentoCartera.nombre_archivo == clean_filename
+        ).first()
+
+        if doc_existente:
+            doc_existente.ruta_archivo = file_path
+            doc_existente.tipo_archivo = file.content_type or "application/octet-stream"
+            doc_existente.es_contrato_firmado = es_contrato_firmado
+            nuevo_doc = doc_existente
+        else:
+            nuevo_doc = DocumentoCartera(
+                cartera_id=cartera_id,
+                nombre_archivo=clean_filename,
+                ruta_archivo=file_path,
+                tipo_archivo=file.content_type or "application/octet-stream",
+                es_contrato_firmado=es_contrato_firmado,
+            )
+            db.add(nuevo_doc)
+
+        db.commit()
+        db.refresh(nuevo_doc)
+        return nuevo_doc
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error subiendo documento: {str(e)}")
+
+
+@router.get("/{cartera_id}/documentos", response_model=list[DocumentoCarteraOut])
+def get_documentos_cartera(cartera_id: int, db: Session = Depends(get_db)):
+    cartera = db.query(Cartera).filter(Cartera.id == cartera_id).first()
+    if not cartera:
+        raise HTTPException(status_code=404, detail="Cartera no encontrada")
+    docs = db.query(DocumentoCartera).filter(DocumentoCartera.cartera_id == cartera_id).order_by(DocumentoCartera.fecha_subida.desc()).all()
+    return docs
+
+
+@router.get("/{cartera_id}/documentos/{doc_id}/download")
+def download_documento_cartera(cartera_id: int, doc_id: int, db: Session = Depends(get_db)):
+    doc = db.query(DocumentoCartera).filter(
+        DocumentoCartera.id == doc_id,
+        DocumentoCartera.cartera_id == cartera_id
+    ).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento no encontrado")
+
+    basename = os.path.basename(doc.ruta_archivo.replace("\\", "/"))
+    full_path = os.path.join(UPLOAD_DIR_CARTERAS, basename)
+    if not os.path.exists(full_path):
+        if os.path.exists(doc.ruta_archivo):
+            full_path = doc.ruta_archivo
+        else:
+            raise HTTPException(status_code=404, detail="Archivo físico no encontrado en el servidor")
+
+    return FileResponse(
+        path=full_path,
+        filename=doc.nombre_archivo,
+        media_type=doc.tipo_archivo or "application/octet-stream"
+    )
+
+
+@router.delete("/{cartera_id}/documentos/{doc_id}")
+def delete_documento_cartera(cartera_id: int, doc_id: int, db: Session = Depends(get_db)):
+    doc = db.query(DocumentoCartera).filter(
+        DocumentoCartera.id == doc_id,
+        DocumentoCartera.cartera_id == cartera_id
+    ).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento no encontrado")
+
+    basename = os.path.basename(doc.ruta_archivo.replace("\\", "/"))
+    full_path = os.path.join(UPLOAD_DIR_CARTERAS, basename)
+    if os.path.exists(full_path):
+        try:
+            os.remove(full_path)
+        except Exception:
+            pass
+
+    db.delete(doc)
+    db.commit()
+    return {"status": "success", "message": "Documento eliminado correctamente"}
+
+
+@router.get("/{cartera_id}/documentos/merged/download")
+def download_merged_documentos_cartera(cartera_id: int, db: Session = Depends(get_db)):
+    cartera = db.query(Cartera).filter(Cartera.id == cartera_id).first()
+    if not cartera:
+        raise HTTPException(status_code=404, detail="Cartera no encontrada")
+
+    docs = db.query(DocumentoCartera).filter(DocumentoCartera.cartera_id == cartera_id).all()
+    if not docs:
+        raise HTTPException(status_code=404, detail="No hay documentos adjuntos para esta cartera")
+
+    pdf_docs = []
+    for d in docs:
+        basename = os.path.basename(d.ruta_archivo.replace("\\", "/"))
+        full_path = os.path.join(UPLOAD_DIR_CARTERAS, basename)
+        if not os.path.exists(full_path) and os.path.exists(d.ruta_archivo):
+            full_path = d.ruta_archivo
+        if os.path.exists(full_path) and (d.nombre_archivo.lower().endswith(".pdf") or "pdf" in (d.tipo_archivo or "").lower()):
+            pdf_docs.append((d, full_path))
+
+    if len(pdf_docs) == 1:
+        doc, path = pdf_docs[0]
+        return FileResponse(path=path, filename=doc.nombre_archivo, media_type="application/pdf")
+    elif len(pdf_docs) > 1:
+        merger = PdfWriter()
+        for _, path in pdf_docs:
+            merger.append(path)
+
+        temp_dir = tempfile.mkdtemp()
+        merged_path = os.path.join(temp_dir, f"Contrato_Firmado_Cartera_{cartera_id}.pdf")
+        merger.write(merged_path)
+        return FileResponse(
+            path=merged_path,
+            filename=f"Contrato_Firmado_Cartera_{cartera_id}.pdf",
+            media_type="application/pdf"
+        )
+    else:
+        doc = docs[0]
+        basename = os.path.basename(doc.ruta_archivo.replace("\\", "/"))
+        full_path = os.path.join(UPLOAD_DIR_CARTERAS, basename)
+        if not os.path.exists(full_path) and os.path.exists(doc.ruta_archivo):
+            full_path = doc.ruta_archivo
+        return FileResponse(path=full_path, filename=doc.nombre_archivo, media_type=doc.tipo_archivo or "application/octet-stream")

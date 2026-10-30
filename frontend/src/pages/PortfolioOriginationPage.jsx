@@ -6,6 +6,14 @@ import ExportExcelButton from '../components/ExportExcelButton';
 import ExcelNumberRangeFilter from '../components/ExcelNumberRangeFilter';
 import ExcelListFilter from '../components/ExcelListFilter';
 import ExcelDateFilter from '../components/ExcelDateFilter';
+import { 
+  COLUMNS_PREVIEW_CREDITOS_VENTA, 
+  COLUMNS_PREVIEW_CREDITOS_COMPRA, 
+  COLUMNS_PREVIEW_CUOTAS_VENTA, 
+  COLUMNS_PREVIEW_CUOTAS_COMPRA, 
+  COLUMNS_PREVIEW_RESUMEN_VENTA, 
+  COLUMNS_PREVIEW_RESUMEN_COMPRA 
+} from '../utils/carteraExcelColumns';
 
 const PortfolioOriginationPage = () => {
   const { editingCompra, setEditingCompra } = useAppStore();
@@ -927,7 +935,7 @@ const PortfolioOriginationPage = () => {
                         >
                           <FilterX size={14} /> Limpiar Filtros
                         </button>
-                        <ExportExcelButton data={previewData.creditos} filteredData={filtered} filename="preview_creditos" />
+                        <ExportExcelButton data={previewData.creditos} filteredData={filtered} filename="preview_creditos" columns={tipoOperacion === 'VENTA' ? COLUMNS_PREVIEW_CREDITOS_VENTA : COLUMNS_PREVIEW_CREDITOS_COMPRA} />
                         <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: 'auto' }}>
                           Mostrando {filtered.length} de {previewData.creditos.length} créditos
                         </span>
@@ -1152,7 +1160,7 @@ const PortfolioOriginationPage = () => {
                         >
                           <FilterX size={14} /> Limpiar Filtros
                         </button>
-                        <ExportExcelButton data={previewData.cuotas} filteredData={filtered} filename="preview_cuotas" />
+                        <ExportExcelButton data={previewData.cuotas} filteredData={filtered} filename="preview_cuotas" columns={tipoOperacion === 'VENTA' ? COLUMNS_PREVIEW_CUOTAS_VENTA : COLUMNS_PREVIEW_CUOTAS_COMPRA} />
                         <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: 'auto' }}>
                           Mostrando {filtered.length} de {previewData.cuotas.length} cuotas
                         </span>
@@ -1406,7 +1414,7 @@ const PortfolioOriginationPage = () => {
                         >
                           <FilterX size={14} /> Limpiar Filtros
                         </button>
-                        <ExportExcelButton data={resumenData} filteredData={filtered} filename="preview_vencimientos" />
+                        <ExportExcelButton data={resumenData} filteredData={filtered} filename="preview_vencimientos" columns={tipoOperacion === 'VENTA' ? COLUMNS_PREVIEW_RESUMEN_VENTA : COLUMNS_PREVIEW_RESUMEN_COMPRA} />
                         <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: 'auto' }}>
                           Mostrando {filtered.length} de {resumenData.length} períodos de vencimiento
                         </span>

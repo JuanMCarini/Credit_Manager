@@ -1055,6 +1055,17 @@ def generar_papeleria_cartera(cartera_id: int, formato: str = 'pdf', db: Session
     cartera = db.query(Cartera).filter(Cartera.id == cartera_id).first()
     if not cartera:
         raise HTTPException(status_code=404, detail="Cartera no encontrada.")
+
+    from src.database.models import DocumentoCartera
+    tiene_firmado = db.query(DocumentoCartera).filter(
+        DocumentoCartera.cartera_id == cartera_id,
+        DocumentoCartera.es_contrato_firmado == True
+    ).first()
+    if tiene_firmado:
+        raise HTTPException(
+            status_code=400,
+            detail="No se pueden descargar los modelos de contrato: la cartera ya cuenta con contrato(s) firmado(s) adjunto(s)."
+        )
     
     socio_id = cartera.socio_id
     

@@ -1,58 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { Download } from 'lucide-react';
-
-const formatExcelValue = (value) => {
-  if (value === undefined || value === null) return '';
-  if (typeof value === 'number' || typeof value === 'boolean') return value;
-  if (value instanceof Date) return value;
-  
-  if (typeof value === 'string') {
-    const strVal = value.trim();
-    if (strVal === '-' || strVal === '') {
-      return '';
-    }
-    
-    // Regex para fechas YYYY-MM-DD o YYYY-MM-DD HH:mm:ss o ISO
-    const dateRegex = /^\d{4}-\d{2}-\d{2}(T|\s)\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?$|^\d{4}-\d{2}-\d{2}$/;
-    // Regex para números (enteros o decimales)
-    const numRegex = /^-?\d+(\.\d+)?$/;
-
-    if (dateRegex.test(strVal)) {
-      if (strVal.length === 10) {
-        // "YYYY-MM-DD" exactly - parse manually to avoid timezone shifting
-        const [year, month, day] = strVal.split('-');
-        const parsedDate = new Date(Number(year), Number(month) - 1, Number(day));
-        
-        // Compensar el bug de SheetJS (xlsx) con las zonas horarias históricas.
-        const epoch = new Date(1899, 11, 30);
-        const offsetDiff = epoch.getTimezoneOffset() - parsedDate.getTimezoneOffset();
-        parsedDate.setMinutes(parsedDate.getMinutes() + offsetDiff);
-        
-        return parsedDate;
-      } else {
-        const parsedDate = new Date(strVal);
-        if (!isNaN(parsedDate.getTime())) {
-          return parsedDate;
-        } else {
-          return value;
-        }
-      }
-    } else if (numRegex.test(strVal)) {
-      // Evitar quitar ceros a la izquierda (ej: '0123') y evitar pérdida de precisión en números muy largos
-      if (strVal.length > 1 && strVal.startsWith('0') && !strVal.startsWith('0.')) {
-        return value;
-      } else if (strVal.length > 15) {
-        return value;
-      } else {
-        return Number(strVal);
-      }
-    } else {
-      return value;
-    }
-  }
-  return value;
-};
+import { formatExcelValue } from '../utils/carteraExcelColumns';
 
 const ExportExcelButton = ({ data, filteredData, filename = 'exportacion', fetchData, columns }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -107,7 +56,24 @@ const ExportExcelButton = ({ data, filteredData, filename = 'exportacion', fetch
         return newRow;
       });
 
-      const worksheet = XLSX.utils.json_to_sheet(processedData, { cellDates: true });
+      const worksheet = XLSX.utils.json_to_sheet(processedData);
+      
+      // Auto-fit column widths
+      if (processedData && processedData.length > 0) {
+        const colKeys = Object.keys(processedData[0]);
+        worksheet['!cols'] = colKeys.map(k => {
+          let maxLen = k.length;
+          for (let i = 0; i < Math.min(processedData.length, 500); i++) {
+            const val = processedData[i][k];
+            if (val !== undefined && val !== null) {
+              const len = (val && typeof val === 'object' && val.v !== undefined) ? (val.z === 'mm/yyyy' ? 7 : 10) : String(val).length;
+              if (len > maxLen) maxLen = len;
+            }
+          }
+          return { wch: Math.min(Math.max(maxLen + 4, 12), 48) };
+        });
+      }
+
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, "Datos");
       
@@ -128,7 +94,7 @@ const ExportExcelButton = ({ data, filteredData, filename = 'exportacion', fetch
         className="btn-secondary" 
         onClick={() => !isExporting && setIsOpen(!isOpen)}
         disabled={isExporting}
-        style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', height: '100%' }}
+        style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: isExporting ? 'not-allowed' : 'pointer', height: '100%' }}
       >
         <Download size={16} />
         {isExporting ? 'Exportando...' : 'Exportar a Excel'}
@@ -136,51 +102,55 @@ const ExportExcelButton = ({ data, filteredData, filename = 'exportacion', fetch
 
       {isOpen && (
         <div 
+          className="glass-panel" 
           style={{
             position: 'absolute',
-            top: '100%',
             right: 0,
+            top: '100%',
             marginTop: '4px',
-            background: 'var(--surface-color)',
-            border: '1px solid var(--border-color)',
-            borderRadius: '4px',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
             zIndex: 100,
-            minWidth: '160px',
             display: 'flex',
-            flexDirection: 'column'
+            flexDirection: 'column',
+            minWidth: '160px',
+            padding: '4px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+            borderRadius: '6px'
           }}
         >
           <button 
-            onClick={() => handleExport('completa')}
             style={{
-              padding: '8px 16px',
+              padding: '8px 12px',
               textAlign: 'left',
               background: 'transparent',
               border: 'none',
               color: 'var(--text-color)',
               cursor: 'pointer',
-              borderBottom: '1px solid var(--border-color)'
+              fontSize: '13px',
+              borderRadius: '4px'
             }}
-            onMouseOver={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
-            onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
-          >
-            Descargar Completa
-          </button>
-          <button 
+            onMouseOver={(e) => e.target.style.backgroundColor = 'rgba(255, 255, 255, 0.05)'}
+            onMouseOut={(e) => e.target.style.backgroundColor = 'transparent'}
             onClick={() => handleExport('filtrada')}
+          >
+            Vista Actual {filteredData && `(${filteredData.length})`}
+          </button>
+          
+          <button 
             style={{
-              padding: '8px 16px',
+              padding: '8px 12px',
               textAlign: 'left',
               background: 'transparent',
               border: 'none',
               color: 'var(--text-color)',
-              cursor: 'pointer'
+              cursor: 'pointer',
+              fontSize: '13px',
+              borderRadius: '4px'
             }}
-            onMouseOver={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
-            onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
+            onMouseOver={(e) => e.target.style.backgroundColor = 'rgba(255, 255, 255, 0.05)'}
+            onMouseOut={(e) => e.target.style.backgroundColor = 'transparent'}
+            onClick={() => handleExport('completa')}
           >
-            Descargar Filtrada
+            Tabla Completa {data && `(${data.length})`}
           </button>
         </div>
       )}

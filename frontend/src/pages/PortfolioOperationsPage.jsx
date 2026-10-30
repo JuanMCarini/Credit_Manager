@@ -4,10 +4,12 @@ import { CheckCircle, Edit, Trash2, XCircle, Eye } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import useAppStore from '../store/useAppStore';
 import CarteraPreviewModal from '../components/CarteraPreviewModal';
+import CarteraContratoModal from '../components/CarteraContratoModal';
 import ExcelDateFilter from '../components/ExcelDateFilter';
 import ExportExcelButton from '../components/ExportExcelButton';
 import * as XLSX from 'xlsx';
 import { getLocalDateISO } from '../utils/dates';
+import { CARTERAS_EXPORT_COLUMNS, formatExcelValue } from '../utils/carteraExcelColumns';
 
 const PortfolioOperationsPage = () => {
   const navigate = useNavigate();
@@ -16,6 +18,9 @@ const PortfolioOperationsPage = () => {
   const [loading, setLoading] = useState(false);
   const [filterFecha, setFilterFecha] = useState([]);
   
+  // State for Contratos Firmados Modal
+  const [viewContratoCartera, setViewContratoCartera] = useState(null);
+
   // States for Edit Modal
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingCartera, setEditingCartera] = useState(null);
@@ -115,41 +120,119 @@ const PortfolioOperationsPage = () => {
       }
 
       const { creditos, cuotas, resumen } = res.data;
+      const isCompra = cartera.tipo_operacion === 'COMPRA';
 
-      const formatDates = (arr, dateFields) => {
-        return arr.map(item => {
-          const newItem = { ...item };
-          for (const field of dateFields) {
-            if (newItem[field]) {
-              let dateStr = String(newItem[field]).split('T')[0];
-              if (dateStr.length === 7) dateStr += "-01";
-              
-              const parts = dateStr.split('-');
-              if (parts.length === 3) {
-                // Formatting directly as DD/MM/YYYY string to avoid SheetJS timezone shift bugs
-                newItem[field] = `${parts[2]}/${parts[1]}/${parts[0]}`;
-              }
+
+
+      // 1. Mapeo de Créditos con encabezados amigables
+      const mappedCreditos = (creditos || []).map(c => {
+        if (isCompra) {
+          return {
+            'ID Externo': c.id_externo ?? '',
+            'Cliente': c.cliente_nombre ?? '',
+            'Fecha de Emisión': formatExcelValue(c.fecha_emision),
+            'Capital Vendido': c.capital_vendido ?? 0,
+            'Plazo': c.plazo ?? 0,
+            'Cuotas Adquiridas': c.cuotas_compradas ?? 0,
+            'Valor Actual': c.valor_actual ?? 0
+          };
+        }
+        return {
+          'ID Crédito': c.id ?? '',
+          'Cliente': c.cliente ?? '',
+          'Fecha de Emisión': formatExcelValue(c.fecha_emision),
+          'Estado': c.estado ?? '',
+          'Monto Otorgado': c.monto_otorgado ?? 0,
+          'Total Cuotas': c.total_cuotas ?? 0,
+          'Cuotas a Ceder': c.cuotas_a_ceder ?? 0,
+          'Valor Actual': c.valor_actual ?? 0
+        };
+      });
+
+      // 2. Mapeo de Cuotas con encabezados amigables
+      const mappedCuotas = (cuotas || []).map(q => {
+        if (isCompra) {
+          return {
+            'ID Crédito Externo': q.credito_id_externo ?? '',
+            'Nro. Cuota': q.nro_cuota ?? '',
+            'Fecha Vencimiento': formatExcelValue(q.fecha_vencimiento),
+            'Fecha Vto. Pago': formatExcelValue(q.fecha_vencimiento_pago),
+            'Capital': q.capital ?? 0,
+            'Interés': q.interes ?? 0,
+            'IVA': q.iva ?? 0,
+            'Total Cuota': q.total ?? 0,
+            'Valor Actual': q.valor_actual ?? 0,
+            'Comprada': (q.comprada === true || q.comprada === 'Sí' || q.comprada === 'SI') ? 'Sí' : 'No'
+          };
+        }
+        return {
+          'ID Cuota': q.id ?? '',
+          'ID Crédito': q.credito_id ?? '',
+          'Nro. Cuota': q.nro_cuota ?? '',
+          'Fecha Vencimiento': formatExcelValue(q.fecha_vencimiento),
+          'Capital': q.capital ?? 0,
+          'Interés': q.interes ?? 0,
+          'IVA': q.iva ?? 0,
+          'Total Cuota': q.total_cuota ?? 0,
+          'Valor Actual': q.valor_actual ?? 0,
+          'Incluida en Operación': (q.incluida === true || q.incluida === 'Sí' || q.incluida === 'SI') ? 'Sí' : 'No'
+        };
+      });
+
+      // 3. Mapeo de Resumen/Vencimientos con encabezados amigables
+      const mappedResumen = (resumen || []).map(r => {
+        if (isCompra) {
+          return {
+            'Mes Vencimiento': formatExcelValue(r.mes),
+            'Cantidad de Cuotas': r.cantidad_cuotas ?? 0,
+            'Capital Total': r.capital_total ?? 0,
+            'Interés Total': r.interes_total ?? 0,
+            'IVA Total': r.iva_total ?? 0,
+            'Monto Total': r.monto_total ?? 0,
+            'Valor Actual': r.valor_actual ?? 0
+          };
+        }
+        return {
+          'Mes Vencimiento': formatExcelValue(r.fecha_vencimiento),
+          'Cantidad de Cuotas': r.cantidad ?? 0,
+          'Capital Total': r.capital ?? 0,
+          'Interés Total': r.interes ?? 0,
+          'IVA Total': r.iva ?? 0,
+          'Monto Total': r.total_cuota ?? 0,
+          'Valor Actual': r.valor_actual ?? 0
+        };
+      });
+
+      const autoFitCols = (data) => {
+        if (!data || data.length === 0) return [];
+        const keys = Object.keys(data[0]);
+        return keys.map(k => {
+          let maxLen = k.length;
+          for (let i = 0; i < Math.min(data.length, 500); i++) {
+            const val = data[i][k];
+            if (val !== undefined && val !== null) {
+              const len = (val && typeof val === 'object' && val.v !== undefined) 
+                ? (val.z === 'mm/yyyy' ? 7 : 10) 
+                : String(val).length;
+              if (len > maxLen) maxLen = len;
             }
           }
-          return newItem;
+          return { wch: Math.min(Math.max(maxLen + 4, 12), 48) };
         });
       };
 
-      const formattedCreditos = formatDates(creditos || [], ['fecha_emision']);
-      const formattedCuotas = formatDates(cuotas || [], ['fecha_vencimiento', 'fecha_vencimiento_pago']);
-      const formattedResumen = formatDates(resumen || [], ['mes', 'mes_pago', 'fecha_vencimiento']);
-
       const wb = XLSX.utils.book_new();
       
-      const sheetOptions = {};
-      
-      const wsCreditos = XLSX.utils.json_to_sheet(formattedCreditos, sheetOptions);
+      const wsCreditos = XLSX.utils.json_to_sheet(mappedCreditos);
+      wsCreditos['!cols'] = autoFitCols(mappedCreditos);
       XLSX.utils.book_append_sheet(wb, wsCreditos, "Créditos");
       
-      const wsCuotas = XLSX.utils.json_to_sheet(formattedCuotas, sheetOptions);
+      const wsCuotas = XLSX.utils.json_to_sheet(mappedCuotas);
+      wsCuotas['!cols'] = autoFitCols(mappedCuotas);
       XLSX.utils.book_append_sheet(wb, wsCuotas, "Cuotas");
       
-      const wsResumen = XLSX.utils.json_to_sheet(formattedResumen, sheetOptions);
+      const wsResumen = XLSX.utils.json_to_sheet(mappedResumen);
+      wsResumen['!cols'] = autoFitCols(mappedResumen);
       XLSX.utils.book_append_sheet(wb, wsResumen, "Vencimientos");
       
       XLSX.writeFile(wb, `Operacion_${cartera.id}_${cartera.nombre}.xlsx`);
@@ -267,6 +350,7 @@ const PortfolioOperationsPage = () => {
             data={carteras} 
             filteredData={filteredCarteras} 
             filename="operaciones_cartera_export" 
+            columns={CARTERAS_EXPORT_COLUMNS}
           />
         </div>
       </header>
@@ -313,82 +397,137 @@ const PortfolioOperationsPage = () => {
                   <td>{(c.tna_descuento * 100).toFixed(2)}%</td>
                   <td>{c.recurso ? 'Sí' : 'No'}</td>
                   <td>{c.iva ? 'Sí' : 'No'}</td>
-                  <td>
-                    {c.estado === 'PENDIENTE' ? (
-                      <div style={{ display: 'grid', gridTemplateColumns: 'auto auto', gap: '8px', alignItems: 'stretch' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                          <div style={{ display: 'flex', gap: '4px' }}>
-                            <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadExcel(c)} title="Descargar Excel de la Operación" disabled={loadingActions[`excel-${c.id}`]}>
-                              {loadingActions[`excel-${c.id}`] ? '⏳' : '📊'}
-                            </button>
-                            <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadLegajos(c)} title="Descargar Legajos (PDF)" disabled={loadingActions[`legajos-${c.id}`]}>
-                              {loadingActions[`legajos-${c.id}`] ? '⏳' : '📑'}
-                            </button>
-                            {c.tipo_operacion === 'VENTA' && (
-                              <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadCsvs(c)} title="Descargar CSVs Generados" disabled={loadingActions[`csvs-${c.id}`]}>
-                                {loadingActions[`csvs-${c.id}`] ? '⏳' : '📁'}
-                              </button>
-                            )}
-                            <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadContrato(c, 'pdf')} title="Descargar Contrato (PDF)" disabled={loadingActions[`contrato-pdf-${c.id}`]}>
-                              {loadingActions[`contrato-pdf-${c.id}`] ? '⏳' : '📜'}
-                            </button>
-                            <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadContrato(c, 'docx')} title="Descargar Contrato (DOCX)" disabled={loadingActions[`contrato-docx-${c.id}`]}>
-                              {loadingActions[`contrato-docx-${c.id}`] ? '⏳' : '📝'}
-                            </button>
-                          </div>
-                          <div style={{ display: 'flex', gap: '4px' }}>
-                            <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleEditClick(c, true)} title="Ver Detalles">
-                              👁️
-                            </button>
-                            <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleEditClick(c)} title="Editar">
-                              ✏️
-                            </button>
-                            <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px', color: 'var(--danger-color)' }} onClick={() => handleDelete(c.id)} title="Eliminar" disabled={loadingActions[`delete-${c.id}`]}>
-                              {loadingActions[`delete-${c.id}`] ? '⏳' : '🗑️'}
-                            </button>
-                          </div>
-                        </div>
+                  <td style={{ textAlign: 'center', verticalAlign: 'middle', width: '135px' }}>
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(4, 28px)',
+                      gap: '4px',
+                      justifyContent: 'center',
+                      alignItems: 'center'
+                    }}>
+                      {/* 1. Excel */}
+                      <button 
+                        className="btn-secondary" 
+                        style={{ width: '28px', height: '28px', padding: 0, fontSize: '13px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px' }} 
+                        onClick={() => handleDownloadExcel(c)} 
+                        title="Descargar Excel de la Operación" 
+                        disabled={loadingActions[`excel-${c.id}`]}
+                      >
+                        {loadingActions[`excel-${c.id}`] ? '⏳' : '📊'}
+                      </button>
+
+                      {/* 2. Legajos */}
+                      <button 
+                        className="btn-secondary" 
+                        style={{ width: '28px', height: '28px', padding: 0, fontSize: '13px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px' }} 
+                        onClick={() => handleDownloadLegajos(c)} 
+                        title="Descargar Legajos (PDF)" 
+                        disabled={loadingActions[`legajos-${c.id}`]}
+                      >
+                        {loadingActions[`legajos-${c.id}`] ? '⏳' : '📑'}
+                      </button>
+
+                      {/* 3. CSVs (solo si VENTA) */}
+                      {c.tipo_operacion === 'VENTA' && (
                         <button 
                           className="btn-secondary" 
-                          style={{ padding: '4px', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} 
+                          style={{ width: '28px', height: '28px', padding: 0, fontSize: '13px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px' }} 
+                          onClick={() => handleDownloadCsvs(c)} 
+                          title="Descargar CSVs Generados" 
+                          disabled={loadingActions[`csvs-${c.id}`]}
+                        >
+                          {loadingActions[`csvs-${c.id}`] ? '⏳' : '📁'}
+                        </button>
+                      )}
+
+                      {/* 4. Modelo Contrato PDF (solo si NO tiene contrato firmado) */}
+                      {!c.tiene_contrato_firmado && (
+                        <button 
+                          className="btn-secondary" 
+                          style={{ width: '28px', height: '28px', padding: 0, fontSize: '13px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px' }} 
+                          onClick={() => handleDownloadContrato(c, 'pdf')} 
+                          title="Descargar Modelo Contrato (PDF)" 
+                          disabled={loadingActions[`contrato-pdf-${c.id}`]}
+                        >
+                          {loadingActions[`contrato-pdf-${c.id}`] ? '⏳' : '📜'}
+                        </button>
+                      )}
+
+                      {/* 5. Modelo Contrato DOCX (solo si NO tiene contrato firmado) */}
+                      {!c.tiene_contrato_firmado && (
+                        <button 
+                          className="btn-secondary" 
+                          style={{ width: '28px', height: '28px', padding: 0, fontSize: '13px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px' }} 
+                          onClick={() => handleDownloadContrato(c, 'docx')} 
+                          title="Descargar Modelo Contrato (DOCX)" 
+                          disabled={loadingActions[`contrato-docx-${c.id}`]}
+                        >
+                          {loadingActions[`contrato-docx-${c.id}`] ? '⏳' : '📝'}
+                        </button>
+                      )}
+
+                      {/* 6. Contratos Firmados */}
+                      <button 
+                        className="btn-secondary" 
+                        style={{ 
+                          width: '28px', height: '28px', padding: 0, fontSize: '13px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px',
+                          borderColor: c.tiene_contrato_firmado ? '#10b981' : undefined,
+                          color: c.tiene_contrato_firmado ? '#10b981' : undefined
+                        }} 
+                        onClick={() => setViewContratoCartera(c)} 
+                        title={c.tiene_contrato_firmado ? `Ver / Gestionar Contrato Firmado (${c.cant_documentos || 1})` : "Adjuntar Contrato Firmado"}
+                      >
+                        ✍️
+                      </button>
+
+                      {/* 7. Ver Detalles */}
+                      <button 
+                        className="btn-secondary" 
+                        style={{ width: '28px', height: '28px', padding: 0, fontSize: '13px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px' }} 
+                        onClick={() => handleEditClick(c, true)} 
+                        title="Ver Detalles"
+                      >
+                        👁️
+                      </button>
+
+                      {/* 8. Editar (solo PENDIENTE) */}
+                      {c.estado === 'PENDIENTE' && (
+                        <button 
+                          className="btn-secondary" 
+                          style={{ width: '28px', height: '28px', padding: 0, fontSize: '13px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px' }} 
+                          onClick={() => handleEditClick(c)} 
+                          title="Editar"
+                        >
+                          ✏️
+                        </button>
+                      )}
+
+                      {/* 9. Eliminar (solo PENDIENTE) */}
+                      {c.estado === 'PENDIENTE' && (
+                        <button 
+                          className="btn-secondary" 
+                          style={{ width: '28px', height: '28px', padding: 0, fontSize: '13px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--danger-color)' }} 
+                          onClick={() => handleDelete(c.id)} 
+                          title="Eliminar" 
+                          disabled={loadingActions[`delete-${c.id}`]}
+                        >
+                          {loadingActions[`delete-${c.id}`] ? '⏳' : '🗑️'}
+                        </button>
+                      )}
+
+                      {/* 10. Confirmar (solo PENDIENTE) */}
+                      {c.estado === 'PENDIENTE' && (
+                        <button 
+                          className="btn-secondary" 
+                          style={{ width: '28px', height: '28px', padding: 0, fontSize: '13px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: '#10b981' }} 
                           onClick={() => handleChangeEstado(c.id, c.tipo_operacion === 'VENTA' ? 'VENDIDA' : 'COMPRADA')} 
                           title="Confirmar"
                           disabled={loadingActions[`estado-${c.id}`]}
                         >
                           {loadingActions[`estado-${c.id}`] ? '⏳' : '✅'}
                         </button>
-                      </div>
-                    ) : (
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadExcel(c)} title="Descargar Excel de la Operación" disabled={loadingActions[`excel-${c.id}`]}>
-                          {loadingActions[`excel-${c.id}`] ? '⏳' : '📊'}
-                        </button>
-                        <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadLegajos(c)} title="Descargar Legajos (PDF)" disabled={loadingActions[`legajos-${c.id}`]}>
-                          {loadingActions[`legajos-${c.id}`] ? '⏳' : '📑'}
-                        </button>
-                        {c.tipo_operacion === 'VENTA' && (
-                          <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadCsvs(c)} title="Descargar CSVs Generados" disabled={loadingActions[`csvs-${c.id}`]}>
-                            {loadingActions[`csvs-${c.id}`] ? '⏳' : '📁'}
-                          </button>
-                        )}
-                        <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadContrato(c, 'pdf')} title="Descargar Contrato (PDF)" disabled={loadingActions[`contrato-pdf-${c.id}`]}>
-                          {loadingActions[`contrato-pdf-${c.id}`] ? '⏳' : '📜'}
-                        </button>
-                        <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleDownloadContrato(c, 'docx')} title="Descargar Contrato (DOCX)" disabled={loadingActions[`contrato-docx-${c.id}`]}>
-                          {loadingActions[`contrato-docx-${c.id}`] ? '⏳' : '📝'}
-                        </button>
-                        {(c.estado === 'VENDIDA' || c.estado === 'COMPRADA') && (
-                          <>
-                            <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px' }} onClick={() => handleEditClick(c, true)} title="Ver Detalles">
-                              👁️
-                            </button>
-                            <button className="btn-secondary" style={{ padding: '4px', fontSize: '14px', color: 'var(--danger-color)' }} onClick={() => alert('No se puede anular una cartera ya confirmada directamente.')} title="Anular (No Permitido)">
-                              ❌
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))
@@ -403,6 +542,16 @@ const PortfolioOperationsPage = () => {
           onClose={handleEditClose}
           onSuccess={handleEditSuccess}
           isReadOnly={isReadOnly}
+        />
+      )}
+
+      {viewContratoCartera && (
+        <CarteraContratoModal 
+          cartera={viewContratoCartera}
+          onClose={() => setViewContratoCartera(null)}
+          onSuccess={() => {
+            fetchCarteras();
+          }}
         />
       )}
     </section>

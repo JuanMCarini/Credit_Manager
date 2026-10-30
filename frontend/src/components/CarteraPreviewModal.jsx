@@ -5,6 +5,14 @@ import ExportExcelButton from './ExportExcelButton';
 import ExcelNumberRangeFilter from './ExcelNumberRangeFilter';
 import ExcelListFilter from './ExcelListFilter';
 import ExcelDateFilter from './ExcelDateFilter';
+import { 
+  COLUMNS_PREVIEW_CREDITOS_VENTA, 
+  COLUMNS_PREVIEW_CREDITOS_COMPRA, 
+  COLUMNS_PREVIEW_CUOTAS_VENTA, 
+  COLUMNS_PREVIEW_CUOTAS_COMPRA, 
+  COLUMNS_PREVIEW_RESUMEN_VENTA, 
+  COLUMNS_PREVIEW_RESUMEN_COMPRA 
+} from '../utils/carteraExcelColumns';
 
 const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }) => {
   const [loading, setLoading] = useState(false);
@@ -435,7 +443,7 @@ const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }
                     >
                       <FilterX size={16} /> Limpiar Filtros
                     </button>
-                    <ExportExcelButton data={previewData.creditos} filteredData={filtered} filename="preview_creditos" />
+                    <ExportExcelButton data={previewData.creditos} filteredData={filtered} filename="preview_creditos" columns={tipoOperacion === 'VENTA' ? COLUMNS_PREVIEW_CREDITOS_VENTA : COLUMNS_PREVIEW_CREDITOS_COMPRA} />
                   </div>
                   <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', overflow: 'auto', flex: 1, minHeight: 0 }}>
                     <table className="data-table compact" style={{ width: '100%' }}>
@@ -661,7 +669,7 @@ const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }
                     >
                       <FilterX size={16} /> Limpiar Filtros
                     </button>
-                    <ExportExcelButton data={previewData.cuotas} filteredData={filtered} filename="preview_cuotas" />
+                    <ExportExcelButton data={previewData.cuotas} filteredData={filtered} filename="preview_cuotas" columns={tipoOperacion === 'VENTA' ? COLUMNS_PREVIEW_CUOTAS_VENTA : COLUMNS_PREVIEW_CUOTAS_COMPRA} />
                   </div>
                   <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', overflow: 'auto', flex: 1, minHeight: 0 }}>
                     <table className="data-table compact" style={{ width: '100%' }}>
@@ -890,7 +898,7 @@ const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }
                     >
                       <FilterX size={16} /> Limpiar Filtros
                     </button>
-                    <ExportExcelButton data={previewData.resumen} filteredData={filtered} filename="preview_vencimientos" />
+                    <ExportExcelButton data={previewData.resumen} filteredData={filtered} filename="preview_vencimientos" columns={tipoOperacion === 'VENTA' ? COLUMNS_PREVIEW_RESUMEN_VENTA : COLUMNS_PREVIEW_RESUMEN_COMPRA} />
                   </div>
                   <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', overflow: 'auto', flex: 1, minHeight: 0 }}>
                     <table className="data-table compact" style={{ width: '100%' }}>

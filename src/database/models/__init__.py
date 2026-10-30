@@ -3,7 +3,7 @@ from .creditos.uif import RiesgoCliente
 from .deuda.series import Serie, Comision, ComisionesSerie
 from .socios import SocioComercial, AnticiposSinAplicar, Relacion, EstadoComisionEnum, TasaYComision, PoliticaCrediticia, Comercializador
 from .creditos.creditos import OrigenCredito, EstadoCredito, TipoCredito, Credito, EstadoCuota, EstadoCuotaCedida, Cuota
-from .creditos.carteras import TipoOperacionCartera, EstadoCartera, Cartera, OperacionCartera
+from .creditos.carteras import TipoOperacionCartera, EstadoCartera, Cartera, OperacionCartera, DocumentoCartera
 from .creditos.cobranzas import TipoProcesoEnum, EstadoProcesoEnum, Proceso, TipoCobranzaEnum, Cobranza, TipoLiquidacionEnum, LiquidacionCuotaCedida
 from .auth import TipoRolEnum, Rol, Usuario, RegistroAuditoria
 from .creditos.creditos import Transferencia, DocumentoLegajo
@@ -27,7 +27,7 @@ __all__ = [
     "SocioComercial", "AnticiposSinAplicar", "Relacion", "EstadoComisionEnum", "TasaYComision", "PoliticaCrediticia", "Comercializador",
     "OrigenCredito", "EstadoCredito", "TipoCredito", "Credito", "EstadoCuota", "EstadoCuotaCedida", "Cuota",
     "HistorialEstadoCredito", "HistorialEstadoCliente",
-    "TipoOperacionCartera", "EstadoCartera", "Cartera", "OperacionCartera",
+    "TipoOperacionCartera", "EstadoCartera", "Cartera", "OperacionCartera", "DocumentoCartera",
     "TipoProcesoEnum", "EstadoProcesoEnum", "Proceso", "TipoCobranzaEnum", "Cobranza", "TipoLiquidacionEnum", "LiquidacionCuotaCedida",
     "TipoRolEnum", "Rol", "Usuario", "RegistroAuditoria", "Transferencia", "DocumentoLegajo",
     "DocumentoPapeleria", "DocumentoVariable", "RepetPerson", "RepetEntity", "RepetAuditLog", "Factura",

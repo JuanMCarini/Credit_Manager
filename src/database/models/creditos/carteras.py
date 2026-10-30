@@ -5,11 +5,13 @@ from sqlalchemy import (
     Boolean,
     Column,
     Date,
+    DateTime,
     Enum,
     Numeric,
     ForeignKey,
     Integer,
     String,
+    func,
 )
 from sqlalchemy.orm import relationship
 
@@ -61,6 +63,7 @@ class Cartera(Base):
     operaciones = relationship("OperacionCartera", back_populates="cartera")
     socio = relationship("SocioComercial", back_populates="carteras")
     liquidaciones = relationship("LiquidacionCuotaCedida", back_populates="cartera")
+    documentos = relationship("DocumentoCartera", back_populates="cartera", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Cartera(nombre='{self.nombre}', socio_id={self.socio_id}, tipo={self.tipo_operacion}, fecha_compra={self.fecha_compra}, tna_desc={self.tna_descuento})>"
@@ -84,3 +87,26 @@ class OperacionCartera(Base):
     # Relationships
     cuota = relationship("Cuota", back_populates="movimientos_cartera")
     cartera = relationship("Cartera", back_populates="operaciones")
+
+
+class DocumentoCartera(Base):
+    """
+    Model: DocumentoCartera
+    Attached documents and signed contracts for a Cartera batch.
+    """
+
+    __tablename__ = "documentos_cartera"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    cartera_id = Column(Integer, ForeignKey("carteras.id", ondelete="CASCADE"), nullable=False)
+    nombre_archivo = Column(String(255), nullable=False)
+    ruta_archivo = Column(String(500), nullable=False)
+    tipo_archivo = Column(String(50), nullable=False)
+    fecha_subida = Column(DateTime, default=func.now(), nullable=False)
+    es_contrato_firmado = Column(Boolean, default=True, nullable=False)
+
+    # Relationships
+    cartera = relationship("Cartera", back_populates="documentos")
+
+    def __repr__(self):
+        return f"<DocumentoCartera(id={self.id}, cartera_id={self.cartera_id}, nombre_archivo='{self.nombre_archivo}')>"

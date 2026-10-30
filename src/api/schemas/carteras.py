@@ -1,6 +1,6 @@
 from typing import Optional, List
-from datetime import date
-from pydantic import BaseModel, Field
+from datetime import date, datetime
+from pydantic import BaseModel, Field, ConfigDict
 
 class VentaCarteraRequest(BaseModel):
     nombre_cartera: str
@@ -28,3 +28,14 @@ class UpdateCarteraRequest(BaseModel):
     recurso: Optional[bool] = None
     iva: Optional[bool] = None
     estado: Optional[str] = None
+
+class DocumentoCarteraOut(BaseModel):
+    id: int
+    cartera_id: int
+    nombre_archivo: str
+    ruta_archivo: str
+    tipo_archivo: str
+    fecha_subida: datetime
+    es_contrato_firmado: bool = True
+
+    model_config = ConfigDict(from_attributes=True)
