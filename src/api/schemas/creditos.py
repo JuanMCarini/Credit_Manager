@@ -30,6 +30,11 @@ class CreditoEstadoUpdate(BaseModel):
     motivo: Optional[str] = None
 
 
+class CreditoCorrerVencimientos(BaseModel):
+    meses: int
+    motivo: Optional[str] = None
+
+
 class HistorialEstadoCreditoOut(BaseModel):
     id: int
     credito_id: int

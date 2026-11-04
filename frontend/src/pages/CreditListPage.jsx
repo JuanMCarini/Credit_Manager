@@ -6,6 +6,7 @@ import axiosClient from '../api/axiosClient';
 import { useDebounce } from '../hooks/useDebounce';
 import ClientCCModal from '../components/ClientCCModal';
 import CreditEditEstadoModal from '../components/CreditEditEstadoModal';
+import CreditShiftVencimientosModal from '../components/CreditShiftVencimientosModal';
 import CreditHistorialModal from '../components/CreditHistorialModal';
 import TransfersModal from '../components/TransfersModal';
 import LegajoModal from '../components/LegajoModal';
@@ -40,6 +41,7 @@ const CreditListPage = () => {
   const [viewTransfersCredito, setViewTransfersCredito] = useState(null);
   const [viewLegajoCredito, setViewLegajoCredito] = useState(null);
   const [viewHistorialCredito, setViewHistorialCredito] = useState(null);
+  const [shiftVencimientosCredito, setShiftVencimientosCredito] = useState(null);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -411,7 +413,7 @@ const CreditListPage = () => {
                     <td>{c["Días de Mora"]}</td>
                     <td>{c["Fecha Emisión"]}</td>
                     <td>
-                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'nowrap', alignItems: 'center' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, max-content)', gap: '6px', justifyContent: 'center', alignItems: 'center' }}>
                         <button className="btn-secondary" onClick={() => navigate(`/dashboard-clientes?cuil=${c["Cliente CUIL"]}&credito_id=${c.ID}`)} style={{ padding: '4px 8px', fontSize: '14px' }} title="Dashboard de Cliente">
                           📊
                         </button>
@@ -429,6 +431,9 @@ const CreditListPage = () => {
                         </button>
                         {!isAuditor && (
                           <>
+                            <button className="btn-secondary" onClick={() => setShiftVencimientosCredito({ id: c.ID, estado: c.Estado, diaVto: c["Día Vto"] })} disabled={c.Estado === 'CANCELADO'} style={{ padding: '4px 8px', fontSize: '14px', opacity: c.Estado === 'CANCELADO' ? 0.4 : 1 }} title={c.Estado === 'CANCELADO' ? "Crédito cancelado" : "Correr Vencimientos"}>
+                              📅
+                            </button>
                             <button className="btn-secondary" onClick={() => setEditCredito({ id: c.ID, estado: c.Estado })} style={{ padding: '4px 8px', fontSize: '14px' }} title="Editar Estado">
                               ✏️
                             </button>
@@ -460,6 +465,7 @@ const CreditListPage = () => {
 
       {ccCuil && <ClientCCModal cuil={ccCuil} onClose={() => setCcCuil(null)} />}
       {editCredito && <CreditEditEstadoModal creditoId={editCredito.id} currentEstado={editCredito.estado} onClose={() => setEditCredito(null)} onSuccess={() => refetch()} />}
+      {shiftVencimientosCredito && <CreditShiftVencimientosModal credito={shiftVencimientosCredito} onClose={() => setShiftVencimientosCredito(null)} onSuccess={() => refetch()} />}
       {viewHistorialCredito && <CreditHistorialModal creditoId={viewHistorialCredito} onClose={() => setViewHistorialCredito(null)} />}
       {viewTransfersCredito && <TransfersModal creditoId={viewTransfersCredito} onClose={() => setViewTransfersCredito(null)} />}
       {viewLegajoCredito && <LegajoModal creditoId={viewLegajoCredito.id} creditoEstado={viewLegajoCredito.estado} onClose={() => { setViewLegajoCredito(null); refetch(); }} />}

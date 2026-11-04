@@ -14,7 +14,7 @@ from PIL import Image
 
 from src.database import get_db, Credito, Transferencia
 from src.database.models import EstadoCredito, Cuota, DocumentoLegajo, EstadoCuota, HistorialEstadoCredito
-from src.api.schemas.creditos import CreditoCreate, CreditoEstadoUpdate, DocumentoLegajoOut, HistorialEstadoCreditoOut
+from src.api.schemas.creditos import CreditoCreate, CreditoEstadoUpdate, CreditoCorrerVencimientos, DocumentoLegajoOut, HistorialEstadoCreditoOut
 from src.logic.creditos.origination import LoanOriginator
 from src.logic.creditos.amortization import AmortizationEngine
 from src.api.dependencies.auth import get_current_user, get_current_user_optional
@@ -333,6 +333,87 @@ def update_credito_estado(
     db.commit()
     return {"status": "success", "message": "Estado actualizado"}
 
+@router.patch("/api/v1/creditos/{credito_id:int}/correr-vencimientos")
+def correr_vencimientos_credito(
+    credito_id: int,
+    data: CreditoCorrerVencimientos,
+    db: Session = Depends(get_db),
+    current_user: Optional[Usuario] = Depends(get_current_user_optional)
+):
+    if data.meses == 0:
+        raise HTTPException(status_code=400, detail="La cantidad de meses debe ser distinta de 0.")
+
+    credito = (
+        db.query(Credito)
+        .options(
+            joinedload(Credito.cuotas).joinedload(Cuota.cobranzas),
+            joinedload(Credito.cuotas).joinedload(Cuota.liquidaciones),
+        )
+        .filter(Credito.id == credito_id)
+        .first()
+    )
+    if not credito:
+        raise HTTPException(status_code=404, detail="Crédito no encontrado")
+
+    cuotas_elegibles = [
+        c for c in credito.cuotas
+        if (c.estado.value if hasattr(c.estado, "value") else str(c.estado))
+        not in [EstadoCuota.CANCELADA.value, EstadoCuota.NO_COMPRADA.value]
+    ]
+
+    if not cuotas_elegibles:
+        raise HTTPException(
+            status_code=400,
+            detail="El crédito no posee cuotas no canceladas disponibles para desplazar."
+        )
+
+    from dateutil.relativedelta import relativedelta
+    hoy = date.today()
+    dia_vto = credito.dia_vencimiento
+
+    for cuota in cuotas_elegibles:
+        if not cuota.fecha_vencimiento:
+            continue
+        target_month = cuota.fecha_vencimiento + relativedelta(months=data.meses)
+        if dia_vto and cuota.nro_cuota != 99:
+            try:
+                nueva_fecha = target_month.replace(day=dia_vto)
+            except ValueError:
+                nueva_fecha = target_month + relativedelta(day=31)
+        else:
+            nueva_fecha = target_month
+        cuota.fecha_vencimiento = nueva_fecha
+        cuota.actualizar_estado(hoy)
+        cuota.actualizar_estado_cedido(hoy)
+
+    estado_anterior_str = credito.estado.value if hasattr(credito.estado, "value") else str(credito.estado)
+    if estado_anterior_str in [EstadoCredito.ACTIVO.value, EstadoCredito.MOROSO.value]:
+        nuevo_estado_str = credito.actualizar_estado()
+        if nuevo_estado_str != estado_anterior_str:
+            credito.estado = EstadoCredito(estado_anterior_str)
+            sentido = f"+{data.meses}" if data.meses > 0 else str(data.meses)
+            motivo_audit = (
+                f"Corrimiento de vencimientos ({sentido} meses) - {data.motivo.strip()}"
+                if data.motivo and data.motivo.strip()
+                else f"Corrimiento de vencimientos ({sentido} meses)"
+            )
+            registrar_cambio_estado_credito(
+                db=db,
+                credito=credito,
+                nuevo_estado=EstadoCredito(nuevo_estado_str),
+                usuario_id=current_user.id if current_user else None,
+                motivo=motivo_audit,
+                origen="CORRIMIENTO_VTO"
+            )
+
+    db.commit()
+    return {
+        "status": "success",
+        "message": f"Se desplazaron {len(cuotas_elegibles)} cuotas ({'+' if data.meses > 0 else ''}{data.meses} meses).",
+        "cuotas_modificadas": len(cuotas_elegibles),
+        "estado_credito": credito.estado.value if hasattr(credito.estado, "value") else str(credito.estado)
+    }
+
 @router.get("/api/v1/creditos/{credito_id:int}/historial-estados", response_model=List[HistorialEstadoCreditoOut])
 def get_historial_credito_estados(credito_id: int, db: Session = Depends(get_db)):
     credito = db.query(Credito).filter(Credito.id == credito_id).first()
@@ -377,21 +458,27 @@ def get_credito_cuotas(credito_id: int, db: Session = Depends(get_db)):
     
     result = []
     for c in cuotas:
-        total_esperado = round(c.capital + c.interes + c.iva, 2)
+        cap = float(c.capital or 0.0)
+        inte = float(c.interes or 0.0)
+        iva_val = float(c.iva or 0.0)
+        total_esperado = round(cap + inte + iva_val, 2)
         total_cobrado = 0.0
         detalle_cobranzas = []
         
         sorted_cobranzas = sorted(c.cobranzas, key=lambda cob: cob.fecha)
         for cob in sorted_cobranzas:
-            tot = round(cob.capital + cob.interes + cob.iva, 2)
+            cob_cap = float(cob.capital or 0.0)
+            cob_int = float(cob.interes or 0.0)
+            cob_iva = float(cob.iva or 0.0)
+            tot = round(cob_cap + cob_int + cob_iva, 2)
             total_cobrado += tot
             detalle_cobranzas.append({
                 "id": cob.id,
                 "fecha": cob.fecha.strftime("%d/%m/%Y"),
                 "tipo": cob.tipo_cobranza.value if hasattr(cob.tipo_cobranza, "value") else str(cob.tipo_cobranza),
-                "capital": round(cob.capital, 2),
-                "interes": round(cob.interes, 2),
-                "iva": round(cob.iva, 2),
+                "capital": round(cob_cap, 2),
+                "interes": round(cob_int, 2),
+                "iva": round(cob_iva, 2),
                 "total": tot
             })
             
@@ -401,13 +488,13 @@ def get_credito_cuotas(credito_id: int, db: Session = Depends(get_db)):
         result.append({
             "nro_cuota": c.nro_cuota,
             "vencimiento": c.fecha_vencimiento.strftime("%d/%m/%Y"),
-            "capital": round(c.capital, 2),
-            "interes": round(c.interes, 2),
-            "iva": round(c.iva, 2),
+            "capital": round(cap, 2),
+            "interes": round(inte, 2),
+            "iva": round(iva_val, 2),
             "total_esperado": total_esperado,
             "total_cobrado": total_cobrado,
             "saldo_pendiente": saldo,
-            "estado": c.estado.value,
+            "estado": c.estado.value if hasattr(c.estado, "value") else str(c.estado),
             "detalle_cobranzas": detalle_cobranzas
         })
         
