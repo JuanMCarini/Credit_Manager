@@ -140,6 +140,7 @@ const PortfolioOperationsPage = () => {
         return {
           'ID Crédito': c.id ?? '',
           'Cliente': c.cliente ?? '',
+          'Socio Originador': c.socio_originador ?? '',
           'Fecha de Emisión': formatExcelValue(c.fecha_emision),
           'Estado': c.estado ?? '',
           'Monto Otorgado': c.monto_otorgado ?? 0,

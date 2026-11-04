@@ -960,6 +960,17 @@ const PortfolioOriginationPage = () => {
                                   <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content' }} onClick={() => handleSort('cliente', sortConfigCreditos, setSortConfigCreditos)}>Cliente {renderSortIcon(sortConfigCreditos, 'cliente')}</div>
                                   <input type="text" placeholder="Filtrar..." value={filterCreditos.cliente || ''} onChange={e => handleFilterChange('cliente', e.target.value)} style={{ width: '100%', marginTop: '4px', padding: '3px 6px', fontSize: '11px' }} />
                                 </th>
+                                <th style={{ textAlign: 'left', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                  <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content' }} onClick={() => handleSort('socio_originador', sortConfigCreditos, setSortConfigCreditos)}>Originador {renderSortIcon(sortConfigCreditos, 'socio_originador')}</div>
+                                  <div style={{ marginTop: '4px' }} onClick={e => e.stopPropagation()}>
+                                    <ExcelListFilter
+                                      availableOptions={Array.from(new Set(previewData.creditos.map(c => c.socio_originador).filter(Boolean))).map(String)}
+                                      selectedOptions={filterCreditos.socio_originador || []}
+                                      onChange={val => handleFilterChange('socio_originador', val)}
+                                      title="Filtrar Originador..."
+                                    />
+                                  </div>
+                                </th>
                                 <th style={{ textAlign: 'center', padding: '8px 10px', verticalAlign: 'top', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
                                   <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', width: 'fit-content', margin: '0 auto' }} onClick={() => handleSort('fecha_emision', sortConfigCreditos, setSortConfigCreditos)}>F. Emisión {renderSortIcon(sortConfigCreditos, 'fecha_emision')}</div>
                                   <div style={{ marginTop: '4px' }} onClick={e => e.stopPropagation()}>
@@ -1057,13 +1068,14 @@ const PortfolioOriginationPage = () => {
                           </thead>
                           <tbody>
                             {sortedCreditos.length === 0 && (
-                              <tr><td colSpan={tipoOperacion === 'VENTA' ? 9 : 7} style={{ textAlign: 'center', padding: '16px' }}>No hay créditos que coincidan.</td></tr>
+                              <tr><td colSpan={tipoOperacion === 'VENTA' ? 10 : 7} style={{ textAlign: 'center', padding: '16px' }}>No hay créditos que coincidan.</td></tr>
                             )}
                             {sortedCreditos.map((c, i) => (
                               tipoOperacion === 'VENTA' ? (
                                 <tr key={i} style={{ opacity: creditosExcluidos.includes(c.id) ? 0.45 : 1 }}>
                                   <td style={{ textAlign: 'left', padding: '7px 10px' }}>{c.id}</td>
                                   <td style={{ textAlign: 'left', padding: '7px 10px' }}>{c.cliente}</td>
+                                  <td style={{ textAlign: 'left', padding: '7px 10px' }}>{c.socio_originador || '-'}</td>
                                   <td style={{ textAlign: 'center', padding: '7px 10px' }}>{c.fecha_emision || '-'}</td>
                                   <td style={{ textAlign: 'left', padding: '7px 10px' }}>{c.estado}</td>
                                   <td style={{ textAlign: 'right', padding: '7px 10px' }}>${(c.monto_otorgado || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
@@ -1105,7 +1117,7 @@ const PortfolioOriginationPage = () => {
                           </tbody>
                           <tfoot style={{ position: 'sticky', bottom: 0, zIndex: 10, background: '#0e1217', boxShadow: '0 -2px 6px rgba(0,0,0,0.4)', borderTop: '2px solid rgba(255,255,255,0.15)' }}>
                             <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
-                              <td colSpan={tipoOperacion === 'VENTA' ? 4 : 3} style={{ textAlign: 'right', padding: '9px 10px', fontWeight: 'bold' }}>Totales:</td>
+                              <td colSpan={tipoOperacion === 'VENTA' ? 5 : 3} style={{ textAlign: 'right', padding: '9px 10px', fontWeight: 'bold' }}>Totales:</td>
                               <td style={{ textAlign: 'right', padding: '9px 10px', fontWeight: 'bold' }}>${totalMonto.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
                               <td style={{ textAlign: 'center', padding: '9px 10px', fontWeight: 'bold' }}>{totalCuotas}</td>
                               <td style={{ textAlign: 'center', padding: '9px 10px', fontWeight: 'bold' }}>{totalCeder}</td>

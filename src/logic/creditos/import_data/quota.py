@@ -6,12 +6,62 @@ from datetime import date
 import os
 import re
 import shutil
-from src.database.models.creditos.clientes import Cliente, SexoEnum, EstadoClienteEnum, Provincia, Empleador
+from src.database.models.creditos.clientes import Cliente, SexoEnum, EstadoClienteEnum, Provincia, Empleador, Nacionalidad
 from src.database.models.creditos.creditos import Credito, Cuota, TipoCredito, EstadoCredito, EstadoCuota, DocumentoLegajo, Transferencia
 from src.database.models.socios import SocioComercial, TasaYComision
 from sqlalchemy import func
 from src.logic.creditos.amortization import AmortizationEngine
 from src.config import get_company_data
+
+def safe_parse_date(val):
+    if pd.isna(val) or val is None or str(val).strip() == "" or str(val).strip().lower() == "nat":
+        return None
+    if isinstance(val, date):
+        return val
+    if hasattr(val, 'date'):
+        return val.date()
+    val_str = str(val).strip()
+    try:
+        if re.match(r'^\d{4}-\d{2}-\d{2}', val_str):
+            dt = pd.to_datetime(val_str, format='%Y-%m-%d')
+            return dt.date()
+        dt = pd.to_datetime(val_str, dayfirst=True)
+        return dt.date()
+    except Exception:
+        try:
+            dt = pd.to_datetime(val_str)
+            return dt.date()
+        except Exception:
+            return None
+
+def safe_parse_cbu(cbu_val):
+    if pd.isna(cbu_val) or cbu_val is None or str(cbu_val).strip() == "":
+        return None
+    s = str(cbu_val).strip()
+    if not s or s.lower() == 'nan':
+        return None
+    try:
+        if '.' in s or 'e' in s.lower():
+            val = int(float(s))
+            return str(val).zfill(22)
+        digits = "".join(filter(str.isdigit, s))
+        if digits:
+            return digits.zfill(22)
+    except Exception:
+        pass
+    return s.zfill(22) if len(s) <= 22 else s
+
+def get_or_create_nacionalidad(session: Session, nombre_nacionalidad: str):
+    if pd.isna(nombre_nacionalidad) or not str(nombre_nacionalidad).strip():
+        return None
+    nombre = str(nombre_nacionalidad).strip().upper()
+    nacionalidad = session.query(Nacionalidad).filter_by(nombre=nombre).first()
+    if not nacionalidad:
+        nacionalidad = Nacionalidad(nombre=nombre)
+        session.add(nacionalidad)
+        session.commit()
+    return nacionalidad.id
+
 def map_sexo(sexo_str: str) -> SexoEnum:
     if pd.isna(sexo_str):
         return None
@@ -63,10 +113,10 @@ def import_clients_from_dataframe(df: pd.DataFrame, session: Session):
             if pd.isna(row.get('C.U.I.L.')):
                 errores.append(f"Fila {index}: CUIL faltante")
                 continue
-            cuil_val = str(int(row['C.U.I.L.'])) if not pd.isna(row['C.U.I.L.']) else None
+            cuil_val = str(int(float(row['C.U.I.L.']))) if not pd.isna(row['C.U.I.L.']) else None
             
             # Obtener DNI
-            dni_val = str(int(row['D.N.I.'])) if not pd.isna(row['D.N.I.']) else None
+            dni_val = str(int(float(row['D.N.I.']))) if not pd.isna(row['D.N.I.']) else None
 
             # Buscar si el cliente ya existe
             cliente = session.query(Cliente).filter_by(cuil=cuil_val).first()
@@ -79,31 +129,32 @@ def import_clients_from_dataframe(df: pd.DataFrame, session: Session):
             cliente.apellido = str(row['APELLIDO']).strip() if not pd.isna(row.get('APELLIDO')) else ""
             cliente.nombre = str(row['NOMBRE']).strip() if not pd.isna(row.get('NOMBRE')) else ""
             
-            if not pd.isna(row.get('FECHA NACIMIENTO')):
-                cliente.fecha_nacimiento = row['FECHA NACIMIENTO'].date()
+            cliente.fecha_nacimiento = safe_parse_date(row.get('FECHA NACIMIENTO'))
             
             cliente.sexo = map_sexo(row.get('SEXO'))
             cliente.estado_civil = str(row['ESTADO CIVIL']).strip() if not pd.isna(row.get('ESTADO CIVIL')) else None
-            cliente.nacionalidad = str(row['NACIONALIDAD']).strip() if not pd.isna(row.get('NACIONALIDAD')) else None
             
-            cliente.legajo = str(int(row['LEGAJO'])) if not pd.isna(row.get('LEGAJO')) else None
+            # Nacionalidad lookup
+            nacionalidad_id = get_or_create_nacionalidad(session, row.get('NACIONALIDAD'))
+            cliente.id_nacionalidad = nacionalidad_id
+            
+            cliente.legajo = str(int(float(row['LEGAJO']))) if not pd.isna(row.get('LEGAJO')) else None
             cliente.estado = map_estado(row.get('ESTADO'))
             
-            if not pd.isna(row.get('FECHA ESTADO')):
-                cliente.fecha_estado = row['FECHA ESTADO'].date()
+            cliente.fecha_estado = safe_parse_date(row.get('FECHA ESTADO'))
                 
-            cliente.cbu = str(int(row['CBU'])).zfill(22) if not pd.isna(row.get('CBU')) else None
+            cliente.cbu = safe_parse_cbu(row.get('CBU'))
             
             cliente.telefono = str(row['TELÉFONO']).strip() if not pd.isna(row.get('TELÉFONO')) else None
             cliente.telefono_2 = str(row['CELULAR']).strip() if not pd.isna(row.get('CELULAR')) else None
             cliente.mail = str(row['E-MAIL']).strip() if not pd.isna(row.get('E-MAIL')) else None
             
             cliente.calle = str(row['CALLE']).strip() if not pd.isna(row.get('CALLE')) else None
-            cliente.calle_nro = int(row['CALLE NÚMERO']) if not pd.isna(row.get('CALLE NÚMERO')) else None
+            cliente.calle_nro = int(float(row['CALLE NÚMERO'])) if not pd.isna(row.get('CALLE NÚMERO')) else None
             cliente.piso = str(row['PISO']).strip() if not pd.isna(row.get('PISO')) else None
             cliente.depto = str(row['DEPTO.']).strip() if not pd.isna(row.get('DEPTO.')) else None
             cliente.localidad = str(row['LOCALIDAD']).strip() if not pd.isna(row.get('LOCALIDAD')) else None
-            cliente.id_codigo_postal = str(int(row['CÓDIGO POSTAL'])) if not pd.isna(row.get('CÓDIGO POSTAL')) else None
+            cliente.id_codigo_postal = str(int(float(row['CÓDIGO POSTAL']))) if not pd.isna(row.get('CÓDIGO POSTAL')) else None
             
             # Provincia lookup
             provincia_id = get_or_create_provincia(session, row.get('PROVINCIA'))
@@ -152,7 +203,7 @@ def update_clients_from_crts_dataframe(df: pd.DataFrame, session: Session):
             if pd.isna(row.get('DNI')):
                 continue
             
-            dni_val = str(int(row['DNI']))
+            dni_val = str(int(float(row['DNI'])))
             
             # Buscar el cliente por DNI
             cliente = session.query(Cliente).filter_by(documento=dni_val).first()
@@ -164,8 +215,8 @@ def update_clients_from_crts_dataframe(df: pd.DataFrame, session: Session):
             
             # Actualizar CBU si está presente en el excel y es válido
             if not pd.isna(row.get('CBU')):
-                nuevo_cbu = str(int(row['CBU'])).zfill(22)
-                if cliente.cbu != nuevo_cbu:
+                nuevo_cbu = safe_parse_cbu(row.get('CBU'))
+                if nuevo_cbu and cliente.cbu != nuevo_cbu:
                     cliente.cbu = nuevo_cbu
                     modificado = True
             
@@ -210,7 +261,7 @@ def import_credits_from_dataframe(df: pd.DataFrame, session: Session, map_socios
             if pd.isna(row.get('DNI')) or pd.isna(row.get('ID Externo')):
                 continue
             
-            dni_val = str(int(row['DNI']))
+            dni_val = str(int(float(row['DNI'])))
             id_ext = str(row['ID Externo']).strip()
             
             # Buscar el cliente para obtener su CUIL
@@ -233,7 +284,7 @@ def import_credits_from_dataframe(df: pd.DataFrame, session: Session, map_socios
             if tasa > 2:
                 tasa = tasa / 100.0
                 
-            emision = row['Emisión'].date() if not pd.isna(row.get('Emisión')) else date.today()
+            emision = safe_parse_date(row.get('Emisión')) or date.today()
             
             # Obtener socio originador
             linea_val = str(row.get('Línea', row.get('Linea', ''))).strip()

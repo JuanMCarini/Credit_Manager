@@ -465,6 +465,17 @@ const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }
                               Cliente
                               <input type="text" placeholder="Filtrar..." value={filterCreditos.cliente || ''} onChange={e => handleFilterChange('cliente', e.target.value)} style={{ width: '100%', marginTop: '5px', padding: '4px', fontSize: '12px' }} />
                             </th>
+                            <th style={{textAlign: 'left', padding: '12px', verticalAlign: 'top'}}>
+                              Originador
+                              <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
+                                <ExcelListFilter 
+                                  availableOptions={Array.from(new Set(previewData.creditos.map(c => c.socio_originador).filter(Boolean))).map(String)}
+                                  selectedOptions={filterCreditos.socio_originador || []}
+                                  onChange={val => handleFilterChange('socio_originador', val)}
+                                  title="Filtrar Originador..."
+                                />
+                              </div>
+                            </th>
                             <th style={{textAlign: 'center', padding: '12px', verticalAlign: 'top'}}>
                               F. Emisión
                               <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
@@ -562,13 +573,14 @@ const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }
                       </thead>
                       <tbody>
                         {filtered.length === 0 && (
-                          <tr><td colSpan={tipoOperacion === 'VENTA' ? 9 : 7} style={{ textAlign: 'center', padding: '16px' }}>No hay créditos que coincidan.</td></tr>
+                          <tr><td colSpan={tipoOperacion === 'VENTA' ? 10 : 7} style={{ textAlign: 'center', padding: '16px' }}>No hay créditos que coincidan.</td></tr>
                         )}
                         {filtered.map((c, i) => (
                           tipoOperacion === 'VENTA' ? (
                             <tr key={i} style={{ opacity: creditosExcluidos.includes(c.id) ? 0.5 : 1 }}>
                               <td style={{ textAlign: 'left', padding: '12px' }}>{c.id}</td>
                               <td style={{ textAlign: 'left', padding: '12px' }}>{c.cliente}</td>
+                              <td style={{ textAlign: 'left', padding: '12px' }}>{c.socio_originador || '-'}</td>
                               <td style={{ textAlign: 'center', padding: '12px' }}>{c.fecha_emision || '-'}</td>
                               <td style={{ textAlign: 'left', padding: '12px' }}>{c.estado}</td>
                               <td style={{ textAlign: 'right', padding: '12px' }}>${(c.monto_otorgado||0).toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
@@ -616,7 +628,7 @@ const CarteraPreviewModal = ({ cartera, onClose, onSuccess, isReadOnly = false }
                       </tbody>
                       <tfoot>
                         <tr>
-                          <td colSpan={tipoOperacion === 'VENTA' ? 4 : 3} style={{ textAlign: 'right', padding: '12px', fontWeight: 'bold' }}>Totales:</td>
+                          <td colSpan={tipoOperacion === 'VENTA' ? 5 : 3} style={{ textAlign: 'right', padding: '12px', fontWeight: 'bold' }}>Totales:</td>
                           <td style={{ textAlign: 'right', padding: '12px', fontWeight: 'bold' }}>${totalMonto.toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
                           <td style={{ textAlign: 'center', padding: '12px', fontWeight: 'bold' }}>{totalCuotas}</td>
                           <td style={{ textAlign: 'center', padding: '12px', fontWeight: 'bold' }}>{totalCeder}</td>

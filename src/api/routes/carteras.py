@@ -86,7 +86,13 @@ def preview_venta_cartera(data: VentaCarteraRequest, db: Session = Depends(get_d
             dias = max(0, (fv - fecha_v_dt).days)
             return round(float(monto) / ((1 + (tna *30 / 365)) ** (dias/30)), 2)
 
-        creditos_db = db.query(Credito, Cliente).join(Cliente, Credito.cliente_cuil == Cliente.cuil).filter(Credito.id.in_(creditos_ids_all)).all()
+        creditos_db = (
+            db.query(Credito, Cliente)
+            .join(Cliente, Credito.cliente_cuil == Cliente.cuil)
+            .options(joinedload(Credito.socio_originador))
+            .filter(Credito.id.in_(creditos_ids_all))
+            .all()
+        )
         va_por_credito = {c.id: 0.0 for c, _ in creditos_db}
         
         cuotas_db = db.query(Cuota).filter(Cuota.credito_id.in_(creditos_ids_all)).order_by(Cuota.credito_id, Cuota.nro_cuota).all()
@@ -119,9 +125,11 @@ def preview_venta_cartera(data: VentaCarteraRequest, db: Session = Depends(get_d
 
         creditos_res = []
         for cred, cli in creditos_db:
+            socio_orig = cred.socio_originador.razon_social if cred.socio_originador else "-"
             creditos_res.append({
                 "id": cred.id,
                 "cliente": f"{cli.nombre} {cli.apellido}",
+                "socio_originador": socio_orig,
                 "monto_otorgado": float(cred.capital),
                 "fecha_emision": cred.fecha_emision.isoformat() if cred.fecha_emision else None,
                 "total_cuotas": cred.plazo,

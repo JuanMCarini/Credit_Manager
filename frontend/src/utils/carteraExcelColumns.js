@@ -118,6 +118,7 @@ export const CARTERAS_EXPORT_COLUMNS = [
 export const COLUMNS_PREVIEW_CREDITOS_VENTA = [
   { key: 'id', label: 'ID Crédito' },
   { key: 'cliente', label: 'Cliente' },
+  { key: 'socio_originador', label: 'Socio Originador' },
   { key: 'fecha_emision', label: 'Fecha de Emisión' },
   { key: 'estado', label: 'Estado' },
   { key: 'monto_otorgado', label: 'Monto Otorgado' },

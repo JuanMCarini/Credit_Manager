@@ -993,12 +993,26 @@ async def importacion_masiva_creditos(
             if not clientes_file or not creditos_file or not transferencias_file:
                 raise HTTPException(status_code=400, detail="Faltan archivos requeridos para Quota.")
                 
+            def _load_df(b_data):
+                try:
+                    return pd.read_excel(BytesIO(b_data))
+                except Exception:
+                    for enc in ['utf-8', 'latin-1']:
+                        for sep in [',', ';', '\t']:
+                            try:
+                                d = pd.read_csv(BytesIO(b_data), sep=sep, encoding=enc)
+                                if len(d.columns) > 1:
+                                    return d
+                            except Exception:
+                                pass
+                    return pd.read_csv(BytesIO(b_data), encoding='latin-1', on_bad_lines='skip')
+
             clts_bytes = await clientes_file.read()
-            df_clts = pd.read_excel(BytesIO(clts_bytes))
+            df_clts = _load_df(clts_bytes)
             df_clts.columns = [str(c).strip() for c in df_clts.columns]
             
             crts_bytes = await creditos_file.read()
-            df_crts = pd.read_excel(BytesIO(crts_bytes))
+            df_crts = _load_df(crts_bytes)
             df_crts.columns = [str(c).strip() for c in df_crts.columns]
 
             col_mappings = {
