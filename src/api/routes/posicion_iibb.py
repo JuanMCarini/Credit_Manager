@@ -37,41 +37,69 @@ def calcular_posicion(
 
     percepciones_compras = float(comprobantes_result.percepcion_iibb or 0)
 
-    # 2. Calcular IIBB Ventas por Provincia (Solo sobre intereses)
+    # 2. Calcular IIBB Ventas por Provincia (Cobranzas sobre interés + Facturas individuales de Finanzas, restando Notas de Crédito)
+    from sqlalchemy.orm import joinedload
     from src.database.models.creditos.cobranzas import Cobranza
     from src.database.models.creditos.creditos import Credito, Cuota
     from src.database.models.creditos.clientes import Cliente, Provincia
+    from src.database.models.creditos.facturacion import CODIGOS_NOTA_CREDITO
+    from src.api.routes.facturacion import _extract_factura_breakdown
 
-    facturas_result = db.query(
-        Provincia.nombre.label("provincia"),
-        Provincia.id.label("provincia_id"),
-        func.sum(Cobranza.interes).label("total_neto")
-    ).select_from(Factura).join(
-        Cobranza, Factura.cobranza_id == Cobranza.id
-    ).join(
-        Cuota, Cobranza.cuota_id == Cuota.id
-    ).join(
-        Credito, Cuota.credito_id == Credito.id
-    ).join(
-        Cliente, Credito.cliente_cuil == Cliente.cuil
-    ).outerjoin(
-        Provincia, Cliente.id_provincia == Provincia.id
-    ).filter(
-        extract('year', Factura.fecha_emision) == anio,
-        extract('month', Factura.fecha_emision) == mes,
-        Factura.tipo_comprobante.in_([1, 6])
-    ).group_by(
-        Provincia.id
-    ).all()
+    facturas_mes = (
+        db.query(Factura)
+        .options(
+            joinedload(Factura.cobranza)
+            .joinedload(Cobranza.cuota)
+            .joinedload(Cuota.credito)
+            .joinedload(Credito.cliente)
+            .joinedload(Cliente.provincia),
+            joinedload(Factura.provincia),
+        )
+        .filter(
+            extract('year', Factura.fecha_emision) == anio,
+            extract('month', Factura.fecha_emision) == mes,
+        )
+        .all()
+    )
 
-    ventas_por_provincia = []
-    for row in facturas_result:
-        prov = row.provincia or "Sin Provincia"
-        ventas_por_provincia.append({
-            "provincia": prov,
-            "provincia_id": row.provincia_id,
-            "neto": float(row.total_neto or 0)
-        })
+    totales_por_prov: dict[tuple, float] = {}
+    for fac in facturas_mes:
+        bd = _extract_factura_breakdown(fac)
+        signo = -1.0 if fac.tipo_comprobante in CODIGOS_NOTA_CREDITO else 1.0
+
+        prov_obj = fac.provincia
+        if (
+            prov_obj is None
+            and fac.cobranza
+            and fac.cobranza.cuota
+            and fac.cobranza.cuota.credito
+            and fac.cobranza.cuota.credito.cliente
+        ):
+            prov_obj = fac.cobranza.cuota.credito.cliente.provincia
+
+        prov_id = prov_obj.id if prov_obj else fac.provincia_id
+        prov_nombre = prov_obj.nombre if prov_obj else "Sin Provincia"
+
+        if fac.cobranza is not None:
+            base_imponible = float(fac.cobranza.interes or 0.0)
+        else:
+            base_imponible = bd["neto_gravado_total"] + bd["importe_exento"]
+
+        if base_imponible != 0:
+            key = (prov_id, prov_nombre)
+            totales_por_prov[key] = round(
+                totales_por_prov.get(key, 0.0) + signo * base_imponible, 2
+            )
+
+    ventas_por_provincia = [
+        {
+            "provincia": prov_nombre,
+            "provincia_id": prov_id,
+            "neto": round(neto_val, 2),
+        }
+        for (prov_id, prov_nombre), neto_val in totales_por_prov.items()
+        if neto_val != 0
+    ]
 
     iibb_ventas = 0.0 # El frontend lo calculará con las alícuotas
 

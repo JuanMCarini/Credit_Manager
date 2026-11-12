@@ -45,18 +45,27 @@ def calcular_posicion(
     ])
     percepciones_compras = comprobantes_result.percepcion_iva or 0
 
-    # 2. Calcular IVA Ventas (de Facturas emitidas)
-    # Sumamos el campo 'iva' de la Cobranza asociada a las Facturas A (1) y B (6)
-    from src.database.models.creditos.cobranzas import Cobranza
-    facturas_result = db.query(
-        func.sum(Cobranza.iva).label("total_iva")
-    ).join(Factura, Factura.cobranza_id == Cobranza.id).filter(
-        extract('year', Factura.fecha_emision) == anio,
-        extract('month', Factura.fecha_emision) == mes,
-        Factura.tipo_comprobante.in_([1, 6])
-    ).first()
+    # 2. Calcular IVA Ventas (de Facturas emitidas: cobranzas + individuales de Finanzas, restando Notas de Crédito)
+    from sqlalchemy.orm import joinedload
+    from src.database.models.creditos.facturacion import CODIGOS_NOTA_CREDITO
+    from src.api.routes.facturacion import _extract_factura_breakdown
 
-    iva_ventas = float(facturas_result.total_iva or 0)
+    facturas_mes = (
+        db.query(Factura)
+        .options(joinedload(Factura.cobranza))
+        .filter(
+            extract('year', Factura.fecha_emision) == anio,
+            extract('month', Factura.fecha_emision) == mes,
+        )
+        .all()
+    )
+
+    iva_ventas = 0.0
+    for fac in facturas_mes:
+        bd = _extract_factura_breakdown(fac)
+        signo = -1.0 if fac.tipo_comprobante in CODIGOS_NOTA_CREDITO else 1.0
+        iva_ventas += signo * (bd["iva_total"] + bd["percepcion_iva"])
+    iva_ventas = round(iva_ventas, 2)
 
     # 3. Retenciones Bancarias
     # Buscamos movimientos del mes donde el concepto contenga "IVA"

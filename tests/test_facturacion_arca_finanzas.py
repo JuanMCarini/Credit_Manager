@@ -1,0 +1,361 @@
+from datetime import date
+import io
+import pandas as pd
+import pytest
+from fastapi import HTTPException
+
+from src.database.models import Provincia, SocioComercial
+from src.api.routes.facturacion import (
+    EmitirFacturaIndividualRequest,
+    ItemFacturaInput,
+    emitir_factura_individual,
+    get_facturas_emitidas,
+    get_receptores_facturacion,
+    get_tipos_comprobante,
+    descargar_pdf_individual,
+    descargar_libro_iva,
+)
+from src.api.routes.posicion_iva import calcular_posicion as calcular_posicion_iva
+from src.api.routes.posicion_iibb import calcular_posicion as calcular_posicion_iibb
+
+
+def test_catalogo_tipos_y_receptores(db_session):
+    prov = Provincia(nombre="Santa Fe")
+    socio = SocioComercial(
+        razon_social="Inversora Litoral SA",
+        cuit="30712345678",
+        domicilio_legal="San Martín 1200, Rosario",
+    )
+    db_session.add_all([prov, socio])
+    db_session.commit()
+
+    tipos = get_tipos_comprobante()
+    codigos = {t["codigo"] for t in tipos}
+    # Verificar presencia de Facturas A, B, C, M, E, Notas de Crédito/Débito, Recibos y FCE MiPyME
+    for esperado in (1, 2, 3, 4, 6, 7, 8, 9, 11, 12, 13, 15, 19, 20, 21, 51, 52, 53, 54, 201, 202, 203, 206, 211):
+        assert esperado in codigos
+
+    rec_data = get_receptores_facturacion(db=db_session)
+    assert any(r["nro_doc"] == "30712345678" for r in rec_data["receptores"])
+    assert any(p["nombre"] == "Santa Fe" for p in rec_data["provincias"])
+
+
+def test_emision_individual_multitipo_correlatividad_y_validaciones(db_session):
+    prov = Provincia(nombre="Córdoba")
+    db_session.add(prov)
+    db_session.commit()
+
+    # 1. Factura A sin CUIT válido de 11 dígitos debe rechazarse
+    with pytest.raises(HTTPException) as exc_cuit:
+        emitir_factura_individual(
+            EmitirFacturaIndividualRequest(
+                punto_venta=2,
+                tipo_comprobante=1,
+                cuit_cliente="12345",
+                razon_social_receptor="Empresa Inválida",
+                items=[ItemFacturaInput(descripcion="Asesoramiento", cantidad=1, precio_unitario=10000, alicuota_iva="21")],
+            ),
+            db=db_session,
+        )
+    assert exc_cuit.value.status_code == 400
+
+    # 2. Nota de Crédito sin comprobante asociado debe rechazarse
+    with pytest.raises(HTTPException) as exc_nc:
+        emitir_factura_individual(
+            EmitirFacturaIndividualRequest(
+                punto_venta=2,
+                tipo_comprobante=3,
+                cuit_cliente="30711122233",
+                razon_social_receptor="Cliente RI SA",
+                items=[ItemFacturaInput(descripcion="Anulación", cantidad=1, precio_unitario=5000, alicuota_iva="21")],
+            ),
+            db=db_session,
+        )
+    assert exc_nc.value.status_code == 400
+
+    # 3. Emitir dos Facturas A seguidas en PV 2 -> correlatividad 1 y 2
+    f1 = emitir_factura_individual(
+        EmitirFacturaIndividualRequest(
+            punto_venta=2,
+            tipo_comprobante=1,
+            fecha_emision=date(2026, 6, 10),
+            cuit_cliente="30711122233",
+            razon_social_receptor="Cliente RI SA",
+            condicion_iva_receptor="Responsable Inscripto",
+            provincia_id=prov.id,
+            items=[
+                ItemFacturaInput(descripcion="Comisión estructuración", cantidad=1, precio_unitario=100000, alicuota_iva="21"),
+                ItemFacturaInput(descripcion="Servicio técnico", cantidad=2, precio_unitario=20000, alicuota_iva="10.5"),
+            ],
+        ),
+        db=db_session,
+    )
+    assert f1["nro_comprobante"] == 1
+    assert f1["letra"] == "A"
+    # Neto = 100.000 + 40.000 = 140.000 | IVA = 21.000 + 4.200 = 25.200 | Total = 165.200
+    assert f1["importe_total"] == pytest.approx(165200.0)
+
+    f2 = emitir_factura_individual(
+        EmitirFacturaIndividualRequest(
+            punto_venta=2,
+            tipo_comprobante=1,
+            fecha_emision=date(2026, 6, 11),
+            cuit_cliente="30711122233",
+            razon_social_receptor="Cliente RI SA",
+            condicion_iva_receptor="Responsable Inscripto",
+            provincia_id=prov.id,
+            items=[
+                ItemFacturaInput(descripcion="Gestión de cartera", cantidad=1, precio_unitario=50000, alicuota_iva="21"),
+            ],
+        ),
+        db=db_session,
+    )
+    assert f2["nro_comprobante"] == 2
+    assert f2["importe_total"] == pytest.approx(60500.0)
+
+    # 4. Emitir Factura B (6), Factura C (11), Factura M (51), Factura E (19) y FCE MiPyME A (201)
+    fb = emitir_factura_individual(
+        EmitirFacturaIndividualRequest(
+            punto_venta=2,
+            tipo_comprobante=6,
+            fecha_emision=date(2026, 6, 12),
+            tipo_doc_receptor="DNI",
+            cuit_cliente="30111222",
+            razon_social_receptor="Juan Consumidor",
+            condicion_iva_receptor="Consumidor Final",
+            provincia_id=prov.id,
+            items=[ItemFacturaInput(descripcion="Cargo administrativo", cantidad=1, precio_unitario=12100, alicuota_iva="21")],
+        ),
+        db=db_session,
+    )
+    assert fb["letra"] == "B"
+    assert fb["nro_comprobante"] == 1
+    assert fb["importe_total"] == pytest.approx(12100.0)
+
+    fc = emitir_factura_individual(
+        EmitirFacturaIndividualRequest(
+            punto_venta=2,
+            tipo_comprobante=11,
+            fecha_emision=date(2026, 6, 12),
+            razon_social_receptor="Monotributista Receptor",
+            items=[ItemFacturaInput(descripcion="Servicio exento C", cantidad=1, precio_unitario=15000, alicuota_iva="EXENTO")],
+        ),
+        db=db_session,
+    )
+    assert fc["letra"] == "C"
+    assert fc["importe_total"] == pytest.approx(15000.0)
+
+    fm = emitir_factura_individual(
+        EmitirFacturaIndividualRequest(
+            punto_venta=2,
+            tipo_comprobante=51,
+            fecha_emision=date(2026, 6, 12),
+            cuit_cliente="30799988877",
+            razon_social_receptor="Receptor Clase M SA",
+            items=[ItemFacturaInput(descripcion="Honorarios M", cantidad=1, precio_unitario=10000, alicuota_iva="21")],
+        ),
+        db=db_session,
+    )
+    assert fm["letra"] == "M"
+    assert fm["importe_total"] == pytest.approx(12100.0)
+
+    fe = emitir_factura_individual(
+        EmitirFacturaIndividualRequest(
+            punto_venta=2,
+            tipo_comprobante=19,
+            fecha_emision=date(2026, 6, 12),
+            cuit_cliente="55000000018",
+            razon_social_receptor="Foreign Corp LLC",
+            condicion_iva_receptor="Cliente del Exterior",
+            items=[ItemFacturaInput(descripcion="Exportación de software", cantidad=1, precio_unitario=25000, alicuota_iva="EXENTO")],
+        ),
+        db=db_session,
+    )
+    assert fe["letra"] == "E"
+    assert fe["importe_total"] == pytest.approx(25000.0)
+
+    fce = emitir_factura_individual(
+        EmitirFacturaIndividualRequest(
+            punto_venta=2,
+            tipo_comprobante=201,
+            fecha_emision=date(2026, 6, 12),
+            cuit_cliente="30711122233",
+            razon_social_receptor="Gran Empresa SA",
+            cbu_emisor="0720000720000000123456",
+            items=[ItemFacturaInput(descripcion="Consultoría FCE MiPyME", cantidad=1, precio_unitario=200000, alicuota_iva="21")],
+        ),
+        db=db_session,
+    )
+    assert fce["tipo_comprobante"] == 201
+    assert fce["importe_total"] == pytest.approx(242000.0)
+
+
+def test_impacto_iva_iibb_libro_iva_y_pdf_con_nota_de_credito(db_session):
+    prov_ba = Provincia(nombre="Buenos Aires")
+    db_session.add(prov_ba)
+    db_session.commit()
+
+    # 1. Emitir Factura A en Julio 2026: Neto = $100.000, IVA 21% = $21.000, Total = $121.000
+    fac_a = emitir_factura_individual(
+        EmitirFacturaIndividualRequest(
+            punto_venta=5,
+            tipo_comprobante=1,
+            fecha_emision=date(2026, 7, 15),
+            cuit_cliente="30744455566",
+            razon_social_receptor="Fiduciaria del Sur SA",
+            condicion_iva_receptor="Responsable Inscripto",
+            provincia_id=prov_ba.id,
+            items=[
+                ItemFacturaInput(
+                    descripcion="Comisión de administración financiera",
+                    cantidad=1,
+                    precio_unitario=100000.0,
+                    alicuota_iva="21",
+                )
+            ],
+        ),
+        db=db_session,
+    )
+
+    # 2. Emitir Nota de Crédito A (código 3) vinculada a fac_a por Neto = $30.000, IVA 21% = $6.300, Total = $36.300
+    nc_a = emitir_factura_individual(
+        EmitirFacturaIndividualRequest(
+            punto_venta=5,
+            tipo_comprobante=3,
+            fecha_emision=date(2026, 7, 20),
+            cuit_cliente="30744455566",
+            razon_social_receptor="Fiduciaria del Sur SA",
+            condicion_iva_receptor="Responsable Inscripto",
+            provincia_id=prov_ba.id,
+            comprobante_asociado_id=fac_a["id"],
+            items=[
+                ItemFacturaInput(
+                    descripcion="Bonificación sobre comisión de administración",
+                    cantidad=1,
+                    precio_unitario=30000.0,
+                    alicuota_iva="21",
+                )
+            ],
+        ),
+        db=db_session,
+    )
+
+    # 3. Verificar listado de emitidas y KPIs netos ($121.000 - $36.300 = $84.700; IVA $21.000 - $6.300 = $14.700)
+    listado = get_facturas_emitidas(
+        skip=0,
+        limit=100,
+        fecha_desde=date(2026, 7, 1),
+        fecha_hasta=date(2026, 7, 31),
+        origen="FINANZAS",
+        punto_venta=None,
+        tipo_comprobante=None,
+        search=None,
+        db=db_session,
+    )
+    assert listado["total"] == 2
+    assert listado["kpis"]["total_facturado_neto"] == pytest.approx(84700.0)
+    assert listado["kpis"]["total_iva_debito"] == pytest.approx(14700.0)
+    assert listado["kpis"]["total_notas_credito"] == pytest.approx(36300.0)
+
+    # 4. Verificar impacto en Posición de IVA (Julio 2026): IVA Ventas = $21.000 - $6.300 = $14.700
+    pos_iva = calcular_posicion_iva(anio=2026, mes=7, db=db_session)
+    assert pos_iva["iva_ventas"] == pytest.approx(14700.0)
+
+    # 5. Verificar impacto en Posición de IIBB (Julio 2026): Base neta Buenos Aires = $100.000 - $30.000 = $70.000
+    pos_iibb = calcular_posicion_iibb(anio=2026, mes=7, db=db_session)
+    prov_entry = next(
+        (v for v in pos_iibb["ventas_por_provincia"] if v["provincia"] == "Buenos Aires"),
+        None,
+    )
+    assert prov_entry is not None
+    assert prov_entry["neto"] == pytest.approx(70000.0)
+
+    # 6. Verificar Libro IVA Ventas Excel (Nota de Crédito con signo negativo)
+    res_libro = descargar_libro_iva(
+        fecha_desde=date(2026, 7, 1),
+        fecha_hasta=date(2026, 7, 31),
+        db=db_session,
+    )
+    df_libro = pd.read_excel(io.BytesIO(res_libro.body))
+    assert len(df_libro) == 2
+    row_nc = df_libro[df_libro["Tipo Comprobante"] == "Nota de Crédito A"].iloc[0]
+    assert float(row_nc["GRAVADO"]) == pytest.approx(-30000.0)
+    assert float(row_nc["IVA"]) == pytest.approx(-6300.0)
+    assert float(row_nc["Importe Total"]) == pytest.approx(-36300.0)
+
+    # 7. Verificar descarga de PDF individual (firma %PDF-)
+    res_pdf = descargar_pdf_individual(factura_id=fac_a["id"], db=db_session)
+    assert res_pdf.media_type == "application/pdf"
+    assert res_pdf.body.startswith(b"%PDF-")
+
+    res_pdf_nc = descargar_pdf_individual(factura_id=nc_a["id"], db=db_session)
+    assert res_pdf_nc.body.startswith(b"%PDF-")
+
+    # 8. Verificar estado de NC parcial en el listado y bloqueo cuando se supera el saldo o se anula el 100%
+    fac_item_parcial = next(it for it in listado["items"] if it["id"] == fac_a["id"])
+    assert fac_item_parcial["tiene_nc_parcial"] is True
+    assert fac_item_parcial["anulada_por_nc"] is False
+    assert fac_item_parcial["saldo_pendiente_nc"] == pytest.approx(84700.0)
+
+    # Intentar emitir una NC que supere el saldo restante ($84.700) debe fallar con 400
+    with pytest.raises(HTTPException) as exc_exceso:
+        emitir_factura_individual(
+            EmitirFacturaIndividualRequest(
+                punto_venta=5,
+                tipo_comprobante=3,
+                fecha_emision=date(2026, 7, 22),
+                cuit_cliente="30744455566",
+                razon_social_receptor="Fiduciaria del Sur SA",
+                comprobante_asociado_id=fac_a["id"],
+                items=[ItemFacturaInput(descripcion="Exceso NC", cantidad=1, precio_unitario=80000.0, alicuota_iva="21")],
+            ),
+            db=db_session,
+        )
+    assert exc_exceso.value.status_code == 400
+
+    # Emitir NC por el saldo exacto restante (Neto $70.000 + IVA $14.700 = $84.700)
+    emitir_factura_individual(
+        EmitirFacturaIndividualRequest(
+            punto_venta=5,
+            tipo_comprobante=3,
+            fecha_emision=date(2026, 7, 25),
+            cuit_cliente="30744455566",
+            razon_social_receptor="Fiduciaria del Sur SA",
+            comprobante_asociado_id=fac_a["id"],
+            items=[ItemFacturaInput(descripcion="Anulación saldo restante", cantidad=1, precio_unitario=70000.0, alicuota_iva="21")],
+        ),
+        db=db_session,
+    )
+
+    listado_final = get_facturas_emitidas(
+        skip=0,
+        limit=100,
+        fecha_desde=date(2026, 7, 1),
+        fecha_hasta=date(2026, 7, 31),
+        origen="FINANZAS",
+        punto_venta=None,
+        tipo_comprobante=None,
+        search=None,
+        db=db_session,
+    )
+    fac_item_final = next(it for it in listado_final["items"] if it["id"] == fac_a["id"])
+    assert fac_item_final["anulada_por_nc"] is True
+    assert fac_item_final["tiene_nc_parcial"] is False
+    assert fac_item_final["saldo_pendiente_nc"] == pytest.approx(0.0)
+
+    # Intentar emitir una nueva NC sobre la factura ya anulada al 100% debe fallar con 400
+    with pytest.raises(HTTPException) as exc_anulada:
+        emitir_factura_individual(
+            EmitirFacturaIndividualRequest(
+                punto_venta=5,
+                tipo_comprobante=3,
+                fecha_emision=date(2026, 7, 26),
+                cuit_cliente="30744455566",
+                razon_social_receptor="Fiduciaria del Sur SA",
+                comprobante_asociado_id=fac_a["id"],
+                items=[ItemFacturaInput(descripcion="NC extra", cantidad=1, precio_unitario=100.0, alicuota_iva="21")],
+            ),
+            db=db_session,
+        )
+    assert exc_anulada.value.status_code == 400
+

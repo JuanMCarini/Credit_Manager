@@ -36,6 +36,7 @@ const CuentasComitentesPage = lazy(() => import('./pages/CuentasComitentesPage')
 const SeriesPage = lazy(() => import('./pages/SeriesPage'));
 const MovimientosDeudaPage = lazy(() => import('./pages/MovimientosDeudaPage'));
 const PosicionIibbPage = lazy(() => import('./pages/PosicionIibbPage'));
+const FacturacionArcaFinanzasPage = lazy(() => import('./pages/FacturacionArcaFinanzasPage'));
 
 const IndexRedirect = () => {
   const { systemModules } = useAppStore();
@@ -60,7 +61,7 @@ function App() {
       <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', color: 'var(--text-primary)' }}>Cargando...</div>}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
-          
+
           {/* Rutas protegidas genéricas (cualquier rol) */}
           <Route element={<ProtectedRoute allowedRoles={['Auditor / Solo Lectura', 'Operador de Cobranzas', 'Oficial de Crédito', 'Gerente', 'Operador de Inversiones', 'Responsable de Finanzas']} />}>
             <Route path="/" element={<MainLayout />}>
@@ -105,6 +106,7 @@ function App() {
               {/* Rutas de Finanzas */}
               <Route element={<ModuleGuard moduleKey="finanzas" />}>
                 <Route path="finanzas" element={<FinanzasPage />} />
+                <Route path="finanzas/facturacion-arca" element={<FacturacionArcaFinanzasPage />} />
                 <Route path="bancos" element={<BancosPage />} />
                 <Route path="comprobantes" element={<ComprobantesPage />} />
                 <Route path="posicion-iva" element={<PosicionIvaPage />} />
@@ -114,7 +116,7 @@ function App() {
               {/* Configuración y comunes */}
               <Route path="auxiliares" element={<AuxiliaryTablesPage />} />
               <Route path="acciones" element={<SystemActionsPage />} />
-              
+
               {/* Rutas exclusivas Administrador */}
               <Route element={<ProtectedRoute allowedRoles={[]} />}>
                 <Route path="usuarios" element={<UsersListPage />} />

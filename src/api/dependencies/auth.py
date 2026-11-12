@@ -375,6 +375,13 @@ def audit_log(accion: str):
 
 def _resolve_module_code(path: str) -> str | None:
     if path.startswith((
+        "/api/v1/facturacion/emitir-individual",
+        "/api/v1/facturacion/emitidas",
+        "/api/v1/facturacion/receptores",
+        "/api/v1/facturacion/tipos-comprobante",
+    )):
+        return "finanzas"
+    if path.startswith((
         "/api/v1/clientes",
         "/api/v1/creditos",
         "/api/v1/cobranzas",
