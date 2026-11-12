@@ -21,6 +21,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy source code (environment variables are injected via docker-compose / runtime)
 COPY src/ ./src/
 
+# Create non-root user (ISO/IEC 27017 / Control 8.2) and prepare writable data directories
+RUN groupadd -g 10001 appuser && \
+    useradd -u 10001 -g appuser -d /app -s /usr/sbin/nologin appuser && \
+    mkdir -p /app/data/uploads /app/data/public && \
+    chown -R appuser:appuser /app
+
+USER appuser
+
 # Expose port
 EXPOSE 8000
 

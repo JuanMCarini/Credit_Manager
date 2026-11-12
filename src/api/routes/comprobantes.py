@@ -338,30 +338,29 @@ def delete_cancelacion(cancelacion_id: int, db: Session = Depends(get_db)):
     return {"message": "Cancelación eliminada exitosamente"}
 
 @router.post("/comprobantes/{comprobante_id}/upload")
-
 def upload_comprobante_pdf(
     comprobante_id: int,
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
+    from src.utils.file_validation import (
+        DOCUMENT_AND_IMAGE_EXTS,
+        stream_save_upload_file,
+        validate_upload_file,
+    )
+
     db_comprobante = db.query(Comprobante).filter(Comprobante.id == comprobante_id).first()
     if not db_comprobante:
         raise HTTPException(status_code=404, detail="Comprobante no encontrado")
         
-    clean_name = os.path.basename(file.filename or "")
-    ext = os.path.splitext(clean_name)[1].lower()
-    allowed_exts = {".pdf", ".png", ".jpg", ".jpeg", ".webp"}
-    allowed_mimes = {"application/pdf", "image/png", "image/jpeg", "image/webp"}
-    if ext not in allowed_exts or (file.content_type and file.content_type.lower() not in allowed_mimes):
-        raise HTTPException(status_code=400, detail="Solo se permiten archivos PDF o imágenes (.pdf, .png, .jpg, .jpeg, .webp)")
+    _, ext = validate_upload_file(file, DOCUMENT_AND_IMAGE_EXTS)
         
     upload_dir = "data/uploads/comprobantes"
     os.makedirs(upload_dir, exist_ok=True)
     filename = f"comp_{comprobante_id}_{uuid.uuid4().hex}{ext}"
     filepath = os.path.join(upload_dir, filename)
     
-    with open(filepath, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    stream_save_upload_file(file, filepath)
         
     db_comprobante.archivo_pdf = filepath
     db.commit()

@@ -7,8 +7,10 @@ Author: Juan Martín Carini
 Date: 2026-05-13
 """
 
+import os
+import secrets
 from typing import List, Union
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
 
@@ -88,6 +90,8 @@ def get_company_data(db=None) -> CompanyConfig:
                 dia_corte=socio.dia_corte or 28
             )
         return COMPANY_DATA
+    except Exception:
+        return COMPANY_DATA
     finally:
         if db is None:
             session.close()
@@ -147,27 +151,71 @@ def update_company_env(socio):
     COMPANY_DATA.dia_corte = dia_corte
 
 
+INSECURE_SECRET_KEYS = {
+    "super_secret_key_change_in_production",
+    "cambiar_por_salida_de_openssl_rand_hex_32_caracteres_minimo",
+    "changeme",
+    "secret",
+}
+
+
 class APIConfig(BaseSettings):
     """
     Configuration for the API server (CORS, security, etc.).
     """
+    env: str = Field(
+        default="development",
+        validation_alias=AliasChoices("ENV", "API_ENV"),
+        description="Application runtime environment (development, testing, production)."
+    )
     allowed_origins: List[str] = Field(
         default=["http://localhost:5173", "http://127.0.0.1:5173"],
         description="List of allowed origins for CORS."
     )
     secret_key: str = Field(
-        default="super_secret_key_change_in_production",
-        description="Secret key for JWT signing."
+        default_factory=lambda: (
+            ""
+            if os.getenv("ENV", os.getenv("API_ENV", "development")).strip().lower() == "production"
+            else secrets.token_urlsafe(32)
+        ),
+        min_length=32,
+        alias="API_SECRET_KEY",
+        description="Secret key for JWT signing (minimum 32 characters)."
     )
     access_token_expire_minutes: int = Field(
-        default=60 * 12,
-        description="JWT token expiration time in minutes."
+        default=120,
+        description="JWT token expiration time in minutes (default 2 hours)."
+    )
+    login_max_attempts: int = Field(
+        default=5,
+        description="Maximum failed login attempts allowed within the rate-limit window."
+    )
+    login_window_seconds: int = Field(
+        default=900,
+        description="Sliding window in seconds for login rate limiting (default 15 minutes)."
+    )
+    max_single_file_mb: int = Field(
+        default=100,
+        description="Maximum size in MB for a single uploaded document."
+    )
+    max_zip_files: int = Field(
+        default=15000,
+        description="Maximum number of entries allowed inside a single ZIP archive."
+    )
+    max_zip_compression_ratio: float = Field(
+        default=50.0,
+        description="Maximum compression ratio allowed per ZIP entry (>10MB) to prevent Zip Bombs."
+    )
+    min_free_disk_mb: int = Field(
+        default=1024,
+        description="Minimum free disk space (MB) required after extracting a ZIP archive."
     )
 
     model_config = SettingsConfigDict(
         env_file=ENV_PATH,
         env_file_encoding="utf-8",
-        env_prefix="API_", 
+        env_prefix="API_",
+        populate_by_name=True,
         extra="ignore",
     )
 
@@ -178,8 +226,28 @@ class APIConfig(BaseSettings):
             return [origin.strip() for origin in v.split(",") if origin.strip()]
         return v
 
+    @field_validator("secret_key")
+    @classmethod
+    def validate_secret_key_strength(cls, v: str) -> str:
+        clean = (v or "").strip()
+        if len(clean) < 32:
+            raise ValueError("API_SECRET_KEY must be at least 32 characters long.")
+        if clean == "super_secret_key_change_in_production":
+            raise ValueError("Insecure default API_SECRET_KEY is not allowed.")
+        return clean
+
+    @model_validator(mode="after")
+    def validate_production_secrets(self) -> "APIConfig":
+        if self.env.lower() == "production":
+            if not self.secret_key or len(self.secret_key) < 32 or self.secret_key in INSECURE_SECRET_KEYS:
+                raise ValueError(
+                    "In production (ENV=production), API_SECRET_KEY must be at least 32 characters and cannot use placeholder values."
+                )
+        return self
+
 
 API_SETTINGS = APIConfig()
+settings = API_SETTINGS
 
 
 class DatabaseConfig(BaseSettings):

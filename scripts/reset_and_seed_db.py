@@ -22,7 +22,17 @@ from src.database.seed_modulos import seed_modulos
 from src.config import COMPANY_DATA
 
 
+def _verify_safe_dev_environment() -> None:
+    if os.getenv("ENV", "production").strip().lower() != "development" or "--force-destroy-dev" not in sys.argv:
+        print(
+            "⛔ ABORTADO: Este script destructivo solo puede ejecutarse cuando ENV='development' "
+            "y pasando explícitamente el argumento '--force-destroy-dev'."
+        )
+        sys.exit(1)
+
+
 def reset_database():
+    _verify_safe_dev_environment()
     print("1. Limpiando la base de datos completamente (Drop Schema public CASCADE)...")
     with engine.connect() as conn:
         conn.execute(text("DROP SCHEMA public CASCADE;"))
@@ -36,7 +46,7 @@ def reset_database():
     print("   ✅ Tablas y tipos ENUM creados exitosamente.")
 
     print("3. Ejecutando seeders del sistema...")
-    # A. Roles y usuario admin (admin@creditmanager.com / 123456)
+    # A. Roles y usuario administrador inicial
     seed_admin()
     print("   ✅ Roles y Usuario Maestro inicializados.")
 
@@ -93,4 +103,5 @@ def reset_database():
 
 
 if __name__ == "__main__":
+    _verify_safe_dev_environment()
     reset_database()

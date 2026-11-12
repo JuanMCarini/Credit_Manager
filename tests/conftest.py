@@ -1,4 +1,12 @@
 # pyrefly: ignore [missing-import]
+import os
+
+os.environ.setdefault("ENV", "testing")
+os.environ.setdefault(
+    "API_SECRET_KEY",
+    "test_secret_key_for_pytest_suite_minimum_32_characters_long_9876543210",
+)
+
 import pytest
 from datetime import date
 from sqlalchemy import create_engine, event
@@ -26,6 +34,9 @@ def engine():
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()
+
+    from src.database.connection import SessionLocal
+    SessionLocal.configure(bind=engine)
         
     return engine
 

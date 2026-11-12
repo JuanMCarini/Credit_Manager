@@ -5,8 +5,8 @@ Description: Main entry point for the Credit Manager API.
 """
 
 import os
-from fastapi import FastAPI, Depends
-from fastapi.staticfiles import StaticFiles
+import shutil
+from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from contextlib import asynccontextmanager
@@ -48,7 +48,9 @@ import src.database.models.system  # noqa: F401
 # -------------------------------------------------------------------
 # Inicialización de la Aplicación
 # -------------------------------------------------------------------
-from src.api.dependencies.auth import enforce_rbac
+from src.api.dependencies.auth import enforce_rbac, get_current_user
+from src.api.routes.system import download_uploaded_file, PUBLIC_ASSETS_DIR, UPLOADS_BASE_DIR
+from src.database.models.auth import Usuario
 from src.api.scheduler import start_scheduler, stop_scheduler
 from src.database.seed_admin import seed_admin
 from src.database.seed_geography import seed_provincias
@@ -105,27 +107,56 @@ async def lifespan(app: FastAPI):
     stop_scheduler()
 
 
+_is_production = API_SETTINGS.env.strip().lower() == "production"
+
 app = FastAPI(
     title="Credit Manager Core Engine API",
     description="API RESTful para interactuar con el motor financiero de gestión de cartera de créditos.",
     version="1.0.0",
     dependencies=[Depends(enforce_rbac)],
-    lifespan=lifespan
+    lifespan=lifespan,
+    docs_url=None if _is_production else "/docs",
+    redoc_url=None if _is_production else "/redoc",
+    openapi_url=None if _is_production else "/openapi.json",
 )
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=API_SETTINGS.allowed_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "X-Requested-With"],
 )
 
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault(
+        "Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()"
+    )
+    if request.url.path.startswith("/api/"):
+        response.headers.setdefault("Cache-Control", "no-store")
+    return response
+
 os.makedirs("data/uploads", exist_ok=True)
-app.mount("/static", StaticFiles(directory="data/uploads"), name="static")
+os.makedirs("data/public", exist_ok=True)
+
+# Migrar activos públicos institucionales (logo/favicon) a data/public si existían en data/uploads
+for _public_asset in ("logo.png", "favicon.png", "favicon.ico"):
+    _src_asset = UPLOADS_BASE_DIR / _public_asset
+    _dst_asset = PUBLIC_ASSETS_DIR / _public_asset
+    if _src_asset.is_file() and not _dst_asset.is_file():
+        try:
+            shutil.copy2(_src_asset, _dst_asset)
+        except OSError:
+            pass
 
 # -------------------------------------------------------------------
-# Endpoints Root & Health
+# Endpoints Root, Health & Descarga Segura de Archivos
 # -------------------------------------------------------------------
 
 @app.get("/", tags=["Health"])
@@ -140,13 +171,28 @@ def health_check() -> Dict[str, str]:
 
 @app.get("/favicon.ico", include_in_schema=False)
 def get_favicon():
-    file_path = "data/uploads/favicon.ico"
-    if os.path.exists(file_path):
-        return FileResponse(file_path)
-    file_png = "data/uploads/favicon.png"
-    if os.path.exists(file_png):
-        return FileResponse(file_png)
+    for candidate in (
+        PUBLIC_ASSETS_DIR / "favicon.ico",
+        PUBLIC_ASSETS_DIR / "favicon.png",
+        UPLOADS_BASE_DIR / "favicon.ico",
+        UPLOADS_BASE_DIR / "favicon.png",
+    ):
+        if candidate.is_file():
+            return FileResponse(str(candidate))
     return Response(status_code=204)
+
+
+@app.get("/api/v1/uploads/{categoria}/{filename}", tags=["Uploads"])
+def get_uploaded_file(
+    categoria: str,
+    filename: str,
+    current_user: Usuario = Depends(get_current_user),
+):
+    """
+    Descarga autenticada de documentos en data/uploads/{categoria}/{filename}
+    con validación estricta contra Path Traversal.
+    """
+    return download_uploaded_file(categoria=categoria, filename=filename, current_user=current_user)
 
 # -------------------------------------------------------------------
 # Registro de Routers

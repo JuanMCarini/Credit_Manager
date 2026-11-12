@@ -193,7 +193,7 @@ const DashboardCarteraPage = () => {
 
         try {
           const img = new Image();
-          img.src = '/static/logo.png';
+          img.src = '/api/v1/system/logo';
           await new Promise((resolve, reject) => {
             img.onload = () => resolve();
             img.onerror = () => reject(new Error('Image failed to load'));

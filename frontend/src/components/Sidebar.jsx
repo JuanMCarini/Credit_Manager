@@ -54,7 +54,7 @@ const Sidebar = () => {
       >
         {!logoError ? (
           <img 
-            src="/static/logo.png" 
+            src="/api/v1/system/logo" 
             alt="App Logo" 
             style={{ maxWidth: '100%', maxHeight: '80px', objectFit: 'contain' }}
             onError={() => setLogoError(true)}

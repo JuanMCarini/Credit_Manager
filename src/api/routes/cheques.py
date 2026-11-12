@@ -232,6 +232,12 @@ def upload_cheque_imagen(
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
+    from src.utils.file_validation import (
+        DOCUMENT_AND_IMAGE_EXTS,
+        stream_save_upload_file,
+        validate_upload_file,
+    )
+
     db_cheque = db.query(Cheque).filter(Cheque.id == cheque_id).first()
     if not db_cheque:
         raise HTTPException(status_code=404, detail="Cheque no encontrado")
@@ -239,19 +245,13 @@ def upload_cheque_imagen(
     upload_dir = "data/uploads/cheques"
     os.makedirs(upload_dir, exist_ok=True)
     
-    # Generate unique filename
-    ext = os.path.splitext(file.filename)[1].lower()
-    if ext not in [".jpg", ".jpeg", ".png", ".pdf"]:
-        raise HTTPException(status_code=400, detail="Formato no soportado. Solo JPG, PNG o PDF.")
+    _, ext = validate_upload_file(file, DOCUMENT_AND_IMAGE_EXTS)
         
     filename = f"cheque_{cheque_id}_{uuid.uuid4().hex}{ext}"
     filepath = os.path.join(upload_dir, filename)
     
-    # Store relative path so the frontend can query it directly via /static
     db_path = f"cheques/{filename}"
-    
-    with open(filepath, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    stream_save_upload_file(file, filepath)
         
     db_cheque.imagen_path = db_path
     db.commit()

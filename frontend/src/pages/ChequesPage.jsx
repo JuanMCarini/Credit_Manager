@@ -24,6 +24,31 @@ const ChequesPage = () => {
   
   const [selectedCheque, setSelectedCheque] = useState(null);
   const [imagenFile, setImagenFile] = useState(null);
+  const [chequeImageBlobUrl, setChequeImageBlobUrl] = useState(null);
+
+  useEffect(() => {
+    let activeObjectUrl = null;
+    if (showImageModal && selectedCheque?.imagen_path) {
+      const cleanRelPath = selectedCheque.imagen_path.replace(/\\/g, '/').replace(/^\/+/, '');
+      axiosClient
+        .get(`/api/v1/uploads/${cleanRelPath}`, { responseType: 'blob' })
+        .then((res) => {
+          const mime = res.headers['content-type'] || (cleanRelPath.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg');
+          activeObjectUrl = window.URL.createObjectURL(new Blob([res.data], { type: mime }));
+          setChequeImageBlobUrl(activeObjectUrl);
+        })
+        .catch(() => {
+          setChequeImageBlobUrl(null);
+        });
+    } else {
+      setChequeImageBlobUrl(null);
+    }
+    return () => {
+      if (activeObjectUrl) {
+        window.URL.revokeObjectURL(activeObjectUrl);
+      }
+    };
+  }, [showImageModal, selectedCheque?.imagen_path]);
   const [showListadoOperaciones, setShowListadoOperaciones] = useState(false);
   const [operacionesList, setOperacionesList] = useState([]);
   const [editingOperacionId, setEditingOperacionId] = useState(null);
@@ -843,12 +868,14 @@ const ChequesPage = () => {
             
             {selectedCheque.imagen_path ? (
                <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-                  {selectedCheque.imagen_path.endsWith('.pdf') ? (
-                     <a href={`/static/${selectedCheque.imagen_path}`} target="_blank" rel="noreferrer" className="btn btn-primary" style={{ display: 'inline-block' }}>
+                  {!chequeImageBlobUrl ? (
+                     <p style={{ opacity: 0.7 }}>Cargando archivo...</p>
+                  ) : selectedCheque.imagen_path.endsWith('.pdf') ? (
+                     <a href={chequeImageBlobUrl} target="_blank" rel="noreferrer" className="btn btn-primary" style={{ display: 'inline-block' }}>
                         Abrir PDF en nueva pestaña
                      </a>
                   ) : (
-                     <img src={`/static/${selectedCheque.imagen_path}`} alt="Cheque" style={{ maxWidth: '100%', maxHeight: '400px', borderRadius: '8px' }} />
+                     <img src={chequeImageBlobUrl} alt="Cheque" style={{ maxWidth: '100%', maxHeight: '400px', borderRadius: '8px' }} />
                   )}
                </div>
             ) : (

@@ -350,15 +350,23 @@ const ComprobantesPage = () => {
     }
   };
 
-  const handleDownloadPdf = (filepath) => {
-    // Assuming filepath is served via static route. 
-    // Usually, in a real app, it would be a proper URL or an API endpoint that returns the file.
-    // Given the previous setup, uploads are in data/uploads and served at /static.
+  const handleDownloadPdf = async (filepath) => {
     if (!filepath) return;
-    // Extract filename from path (e.g. data/uploads/comprobantes/file.pdf -> comprobantes/file.pdf)
-    // Actually, filepath might be absolute or relative. Let's just create a link to /static/...
-    const url = `/static/${filepath.split('uploads/')[1] || filepath.split('uploads\\')[1]}`;
-    window.open(url, '_blank');
+    try {
+      const normalized = filepath.replace(/\\/g, '/');
+      const relativePath = normalized.includes('uploads/')
+        ? normalized.split('uploads/')[1]
+        : normalized.replace(/^\/+/, '');
+      const response = await axiosClient.get(`/api/v1/uploads/${relativePath}`, {
+        responseType: 'blob',
+      });
+      const contentType = response.headers['content-type'] || 'application/pdf';
+      const blobUrl = window.URL.createObjectURL(new Blob([response.data], { type: contentType }));
+      window.open(blobUrl, '_blank', 'noopener,noreferrer');
+      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60000);
+    } catch (err) {
+      alert(err.response?.data?.detail || "Error al abrir el comprobante.");
+    }
   };
 
   return (

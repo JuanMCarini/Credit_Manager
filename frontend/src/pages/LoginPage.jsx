@@ -82,7 +82,7 @@ const LoginPage = () => {
         
         {!logoError ? (
           <img 
-            src="/static/logo.png" 
+            src="/api/v1/system/logo" 
             alt="App Logo" 
             style={{ maxHeight: '100px', maxWidth: '100%', marginBottom: '24px', objectFit: 'contain' }}
             onError={() => setLogoError(true)}

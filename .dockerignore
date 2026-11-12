@@ -1,0 +1,40 @@
+# Git & Version Control
+.git
+.gitignore
+.gitattributes
+
+# Environments & Secrets
+.env
+.env.*
+!.env.example
+
+# IDEs & Editors
+.vscode/
+.idea/
+
+# Notebooks, Scratch & Destructive Dev Scripts
+notebooks/
+scratch/
+scripts/reset_and_seed_db.py
+data_imports/
+
+# Tests & Caches
+tests/
+__pycache__/
+*.py[codz]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Runtime Uploaded & Local Data
+data/uploads/
+data/*.db
+*.xlsx
+*.log
+
+# Frontend (built separately in frontend/Dockerfile)
+frontend/
+

@@ -4,26 +4,36 @@ services:
   db:
     image: postgres:15-alpine
     restart: always
+    security_opt:
+      - no-new-privileges:true
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
       POSTGRES_DB: ${DB_NAME:-credit_manager}
     ports:
-      - "${HOST_PORT_DB:-5432}:5432"
+      - "127.0.0.1:${HOST_PORT_DB:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_DB:-credit_manager}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   backend:
     build:
       context: .
       dockerfile: Dockerfile.backend
     restart: always
+    security_opt:
+      - no-new-privileges:true
     ports:
-      - "${HOST_PORT_BACKEND:-8000}:8000"
+      - "127.0.0.1:${HOST_PORT_BACKEND:-8000}:8000"
     volumes:
       - ./data:/app/data
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     env_file:
       - .env
     environment:
@@ -35,6 +45,8 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     restart: always
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "${HOST_PORT_FRONTEND:-80}:80"
     depends_on:

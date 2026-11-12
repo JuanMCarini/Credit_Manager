@@ -79,6 +79,8 @@ def update_my_password(
     """Permite al usuario logueado cambiar su propia contraseña"""
     if not verify_password(password_data.current_password, current_user.hashed_password):
         raise HTTPException(status_code=400, detail="La contraseña actual es incorrecta")
+    if verify_password(password_data.new_password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="La nueva contraseña no puede ser igual a la contraseña actual")
         
     current_user.hashed_password = get_password_hash(password_data.new_password)
     db.commit()

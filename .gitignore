@@ -217,8 +217,9 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# Local Database
+# Local Database & Scratch
 data/
+scratch/
 *.db
 *.xlsx
 

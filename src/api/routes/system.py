@@ -1,20 +1,29 @@
 import os
 import shutil
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 from datetime import date
 
+from src.config import ROOT_DIR
 from src.database import get_db
 from src.database.models import Cuota, Credito, Cliente, EstadoCredito, EstadoClienteEnum, Cobranza
+from src.database.models.auth import Usuario, TipoRolEnum
+from src.api.dependencies.auth import get_current_user, admin_only
 
 router = APIRouter(prefix="/api/v1/system", tags=["System"])
+
+PUBLIC_ASSETS_DIR = (ROOT_DIR / "data" / "public").resolve()
+UPLOADS_BASE_DIR = (ROOT_DIR / "data" / "uploads").resolve()
+ALLOWED_UPLOAD_CATEGORIES = {"legajos", "contratos_carteras", "comprobantes", "cheques"}
 
 _LAST_SYNC_DATE = None
 _LAST_SYNC_STATE_HASH = None
 
-@router.post("/sync-states")
-@router.post("/actualizar_estados")
+@router.post("/sync-states", dependencies=[Depends(admin_only)])
+@router.post("/actualizar_estados", dependencies=[Depends(admin_only)])
 def sync_system_states(db: Session = Depends(get_db)):
     global _LAST_SYNC_DATE, _LAST_SYNC_STATE_HASH
     hoy = date.today()
@@ -106,7 +115,7 @@ def get_company_info(db: Session = Depends(get_db)):
         "dia_corte": company.dia_corte
     }
 
-@router.put("/company")
+@router.put("/company", dependencies=[Depends(admin_only)])
 def update_company_info(data: CompanyUpdateSchema, db: Session = Depends(get_db)):
     from src.config import COMPANY_DATA, ENV_PATH, _sanitize_env_value, update_company_env
     from src.database.models.socios import SocioComercial
@@ -170,7 +179,7 @@ def update_company_info(data: CompanyUpdateSchema, db: Session = Depends(get_db)
     
     return {"status": "success", "message": "Datos de la empresa actualizados correctamente."}
 
-@router.post("/repet/sync")
+@router.post("/repet/sync", dependencies=[Depends(admin_only)])
 async def sync_repet(db: Session = Depends(get_db)):
     """
     Fuerza la sincronización manual de los listados del RePET.
@@ -182,30 +191,54 @@ async def sync_repet(db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/logo")
+
+@router.get("/logo")
+def get_logo():
+    """Sirve públicamente únicamente el logo institucional desde data/public (con fallback a data/uploads)."""
+    for candidate in (PUBLIC_ASSETS_DIR / "logo.png", UPLOADS_BASE_DIR / "logo.png"):
+        if candidate.is_file():
+            return FileResponse(path=str(candidate), media_type="image/png")
+    raise HTTPException(status_code=404, detail="Logo no encontrado.")
+
+
+@router.post("/logo", dependencies=[Depends(admin_only)])
 async def upload_logo(file: UploadFile = File(...)):
-    if not file.content_type.startswith('image/'):
-        raise HTTPException(status_code=400, detail="El archivo debe ser una imagen.")
+    from src.utils.file_validation import stream_save_upload_file, validate_upload_file
+
+    validate_upload_file(file, {".png", ".jpg", ".jpeg", ".webp"}, max_size_mb=10)
     
-    os.makedirs("data/uploads", exist_ok=True)
-    file_location = "data/uploads/logo.png"
+    PUBLIC_ASSETS_DIR.mkdir(parents=True, exist_ok=True)
+    file_location = PUBLIC_ASSETS_DIR / "logo.png"
     
     try:
-        with open(file_location, "wb+") as file_object:
-            shutil.copyfileobj(file.file, file_object)
+        stream_save_upload_file(file, file_location)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al guardar la imagen: {str(e)}")
         
     return {"status": "success", "message": "Logo actualizado correctamente. Recarga la página para ver los cambios."}
 
-@router.post("/favicon")
+
+@router.get("/favicon")
+def get_favicon_asset():
+    """Sirve públicamente únicamente el favicon institucional desde data/public (con fallback a data/uploads)."""
+    for candidate, media in (
+        (PUBLIC_ASSETS_DIR / "favicon.png", "image/png"),
+        (PUBLIC_ASSETS_DIR / "favicon.ico", "image/x-icon"),
+        (UPLOADS_BASE_DIR / "favicon.png", "image/png"),
+        (UPLOADS_BASE_DIR / "favicon.ico", "image/x-icon"),
+    ):
+        if candidate.is_file():
+            return FileResponse(path=str(candidate), media_type=media)
+    return Response(status_code=204)
+
+
+@router.post("/favicon", dependencies=[Depends(admin_only)])
 async def upload_favicon(file: UploadFile = File(...)):
-    filename = (file.filename or "").lower()
-    valid_exts = ('.ico', '.png', '.svg', '.jpg', '.jpeg', '.webp')
-    if not (file.content_type.startswith('image/') or filename.endswith(valid_exts)):
-        raise HTTPException(status_code=400, detail="El archivo debe ser un icono o imagen (.ico, .png, .svg, .jpg).")
+    from src.utils.file_validation import validate_upload_file
+
+    validate_upload_file(file, {".ico", ".png", ".jpg", ".jpeg", ".webp"}, max_size_mb=10)
     
-    os.makedirs("data/uploads", exist_ok=True)
+    PUBLIC_ASSETS_DIR.mkdir(parents=True, exist_ok=True)
     
     try:
         content = await file.read()
@@ -219,19 +252,46 @@ async def upload_favicon(file: UploadFile = File(...)):
         # 1. Guardar PNG optimizado (192x192)
         png_img = img.copy()
         png_img.thumbnail((192, 192), Image.Resampling.LANCZOS)
-        png_img.save("data/uploads/favicon.png", format="PNG", optimize=True)
+        png_img.save(PUBLIC_ASSETS_DIR / "favicon.png", format="PNG", optimize=True)
 
         # 2. Guardar binario ICO genuino con múltiples resoluciones (16, 32, 48, 64)
-        img.save("data/uploads/favicon.ico", format="ICO", sizes=[(16, 16), (32, 32), (48, 48), (64, 64)])
+        img.save(PUBLIC_ASSETS_DIR / "favicon.ico", format="ICO", sizes=[(16, 16), (32, 32), (48, 48), (64, 64)])
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al procesar y guardar el favicon: {str(e)}")
         
     return {"status": "success", "message": "Favicon actualizado y optimizado correctamente. Recarga la página para ver los cambios."}
 
+
+@router.get("/uploads/{categoria}/{filename}")
+def download_uploaded_file(
+    categoria: str,
+    filename: str,
+    current_user: Usuario = Depends(get_current_user),
+):
+    """
+    Descarga segura y autenticada de documentos en data/uploads/{categoria}/{filename}.
+    Valida estrictamente contra Path Traversal mediante Path.resolve().
+    """
+    if categoria not in ALLOWED_UPLOAD_CATEGORIES:
+        raise HTTPException(status_code=400, detail="Categoría de documento inválida.")
+
+    if not filename or Path(filename).name != filename or ".." in filename or "/" in filename or "\\" in filename:
+        raise HTTPException(status_code=400, detail="Nombre de archivo inválido.")
+
+    category_dir = (UPLOADS_BASE_DIR / categoria).resolve()
+    target_path = (category_dir / filename).resolve()
+
+    if not target_path.is_relative_to(UPLOADS_BASE_DIR) or not target_path.is_relative_to(category_dir):
+        raise HTTPException(status_code=403, detail="Acceso denegado: ruta fuera del directorio permitido.")
+
+    if not target_path.is_file():
+        raise HTTPException(status_code=404, detail="Archivo no encontrado.")
+
+    return FileResponse(path=str(target_path), filename=target_path.name)
+
+
 from typing import Dict, List, Any
 from src.database.models.system import ModuloSistema
-from src.database.models.auth import Usuario, TipoRolEnum
-from src.api.dependencies.auth import get_current_user
 from src.database.seed_modulos import seed_modulos
 
 class ModuloUpdateSchema(BaseModel):
@@ -252,10 +312,10 @@ def get_system_modules(db: Session = Depends(get_db)):
     items = [{"codigo": m.codigo, "nombre": m.nombre, "activo": m.activo} for m in mods]
     return {"modulos": result, "items": items}
 
-@router.put("/modules")
+@router.put("/modules", dependencies=[Depends(admin_only)])
 def update_system_modules(
     payload: ModuloUpdateSchema,
-    current_user: Usuario = Depends(get_current_user),
+    current_user: Usuario = Depends(admin_only),
     db: Session = Depends(get_db)
 ):
     """

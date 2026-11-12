@@ -368,7 +368,7 @@ def get_cliente_cuenta_corriente(
     import traceback
     try:
         from src.config import get_company_data
-        company_data = get_company_data()
+        company_data = get_company_data(db)
         empresa_nombre = company_data.razon_social
         
         cliente = db.query(Cliente).options(

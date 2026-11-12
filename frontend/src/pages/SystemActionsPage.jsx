@@ -79,7 +79,7 @@ const SystemActionsPage = () => {
       const t = Date.now();
       const linkPng = document.getElementById('app-favicon') || document.querySelector("link[rel~='icon']");
       if (linkPng) {
-        linkPng.href = `/static/favicon.png?v=${t}`;
+        linkPng.href = `/api/v1/system/favicon?v=${t}`;
       }
       setTimeout(() => {
         window.location.reload();

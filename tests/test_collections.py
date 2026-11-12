@@ -104,9 +104,9 @@ def test_process_standard_payment_partial(db_session, test_credito):
     cobranzas = db_session.query(Cobranza).join(Cuota).filter(Cuota.credito_id == test_credito.id).all()
     assert len(cobranzas) == 1
     c = cobranzas[0]
-    assert c.iva == 4.20
-    assert c.interes == 20.00
-    assert c.capital == 25.80
+    assert float(c.iva) == 4.20
+    assert float(c.interes) == 20.00
+    assert float(c.capital) == 25.80
     assert c.tipo_cobranza == TipoCobranzaEnum.COMUN
 
 
@@ -145,7 +145,7 @@ def test_process_standard_payment_overpayment_penalty(db_session, test_credito):
     assert penalty_cuota.estado == EstadoCuota.CANCELADA
     
     # Sum of capital + interest + iva in penalty cuota should equal the leftover (30.55)
-    total_penalty = round(penalty_cuota.capital + penalty_cuota.interes + penalty_cuota.iva, 2)
+    total_penalty = round(float(penalty_cuota.capital + penalty_cuota.interes + penalty_cuota.iva), 2)
     assert total_penalty == 30.55
 
 
@@ -187,9 +187,9 @@ def test_process_early_cancellation(db_session, test_credito):
     assert c2_ca.iva == 0.00
 
     c2_bca = db_session.query(Cobranza).filter_by(cuota_id=cuotas[1].id, tipo_cobranza=TipoCobranzaEnum.BCA).one()
-    assert c2_bca.capital == 0.00
-    assert c2_bca.interes == 15.00
-    assert c2_bca.iva == 3.15
+    assert float(c2_bca.capital) == 0.00
+    assert float(c2_bca.interes) == 15.00
+    assert float(c2_bca.iva) == 3.15
 
 
 def test_process_massive_collection_atomic_rollback(db_session, test_credito):

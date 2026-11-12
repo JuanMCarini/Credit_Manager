@@ -17,7 +17,8 @@ from src.database.models import EstadoCredito, Cuota, DocumentoLegajo, EstadoCuo
 from src.api.schemas.creditos import CreditoCreate, CreditoEstadoUpdate, CreditoCorrerVencimientos, DocumentoLegajoOut, HistorialEstadoCreditoOut
 from src.logic.creditos.origination import LoanOriginator
 from src.logic.creditos.amortization import AmortizationEngine
-from src.api.dependencies.auth import get_current_user, get_current_user_optional
+from pathlib import Path
+from src.api.dependencies.auth import get_current_user
 from src.database.models.auth import Usuario
 from src.services.estado_audit import registrar_cambio_estado_credito
 
@@ -297,7 +298,7 @@ def update_credito_estado(
     credito_id: int,
     data: CreditoEstadoUpdate,
     db: Session = Depends(get_db),
-    current_user: Optional[Usuario] = Depends(get_current_user_optional)
+    current_user: Usuario = Depends(get_current_user)
 ):
     credito = db.query(Credito).options(joinedload(Credito.cuotas)).filter(Credito.id == credito_id).first()
     if not credito:
@@ -338,7 +339,7 @@ def correr_vencimientos_credito(
     credito_id: int,
     data: CreditoCorrerVencimientos,
     db: Session = Depends(get_db),
-    current_user: Optional[Usuario] = Depends(get_current_user_optional)
+    current_user: Usuario = Depends(get_current_user)
 ):
     if data.meses == 0:
         raise HTTPException(status_code=400, detail="La cantidad de meses debe ser distinta de 0.")
@@ -696,7 +697,7 @@ async def upload_documento(
     transferencia_id: Optional[int] = Form(None),
     es_legajo_firmado: bool = Form(False),
     db: Session = Depends(get_db),
-    current_user: Optional[Usuario] = Depends(get_current_user_optional),
+    current_user: Usuario = Depends(get_current_user),
 ):
     try:
         credito = db.query(Credito).filter(Credito.id == credito_id).first()
@@ -835,7 +836,11 @@ def _merge_uploaded_docs_for_credito(credito_id: int, db: Session) -> BytesIO:
     return output_pdf
 
 @router.get("/api/v1/creditos/{credito_id:int}/documentos/merged/download")
-def download_merged_pdf(credito_id: int, db: Session = Depends(get_db)):
+def download_merged_pdf(
+    credito_id: int,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
     try:
         output_pdf = _merge_uploaded_docs_for_credito(credito_id, db)
     except ValueError as e:
@@ -850,18 +855,25 @@ def download_merged_pdf(credito_id: int, db: Session = Depends(get_db)):
     )
 
 @router.get("/api/v1/creditos/{credito_id:int}/documentos/{doc_id:int}/download")
-def download_documento(credito_id: int, doc_id: int, db: Session = Depends(get_db)):
+def download_documento(
+    credito_id: int,
+    doc_id: int,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
     doc = db.query(DocumentoLegajo).filter(DocumentoLegajo.id == doc_id, DocumentoLegajo.credito_id == credito_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Documento no encontrado")
         
     basename = os.path.basename(doc.ruta_archivo.replace('\\', '/'))
-    full_path = os.path.join(UPLOAD_DIR, basename)
-    
-    if not os.path.exists(full_path):
+    upload_base = Path(UPLOAD_DIR).resolve()
+    full_path = (upload_base / basename).resolve()
+    if not full_path.is_relative_to(upload_base):
+        raise HTTPException(status_code=403, detail="Acceso denegado: ruta fuera del directorio permitido")
+    if not full_path.is_file():
         raise HTTPException(status_code=404, detail="El archivo físico no existe")
         
-    return FileResponse(full_path, filename=doc.nombre_archivo)
+    return FileResponse(str(full_path), filename=doc.nombre_archivo)
 
 @router.post("/api/v1/creditos/procesos/upload-batch")
 async def upload_batch_documentos(files: List[UploadFile] = File(...), db: Session = Depends(get_db)):

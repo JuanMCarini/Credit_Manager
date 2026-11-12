@@ -28,6 +28,7 @@ def patch_session_local(db_session, monkeypatch):
     monkeypatch.setattr("src.database.connection.SessionLocal", factory)
     monkeypatch.setattr("src.logic.deuda.vencimiento.SessionLocal", factory)
     monkeypatch.setattr("src.logic.deuda.ctas_ctes.SessionLocal", factory)
+    monkeypatch.setattr("src.logic.deuda.series.SessionLocal", factory, raising=False)
     return db_session
 
 

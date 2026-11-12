@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse, FileResponse
 from sqlalchemy.orm import Session, joinedload
 
 from src.database import get_db
+from src.api.dependencies.auth import get_current_user
 import shutil
 from pypdf import PdfWriter
 from src.database.models import Cartera, EstadoCartera, EstadoCuotaCedida, TipoOperacionCartera, Cuota, OperacionCartera, Credito, Cliente, DocumentoCartera
@@ -921,12 +922,16 @@ async def upload_documento_cartera(
             raise HTTPException(status_code=404, detail="Cartera no encontrada")
 
         os.makedirs(UPLOAD_DIR_CARTERAS, exist_ok=True)
-        clean_filename = os.path.basename(file.filename or "contrato.pdf")
+        from src.utils.file_validation import (
+            DOCUMENT_AND_IMAGE_EXTS,
+            stream_save_upload_file,
+            validate_upload_file,
+        )
+        clean_filename, _ = validate_upload_file(file, DOCUMENT_AND_IMAGE_EXTS)
         stored_filename = f"{cartera_id}_{clean_filename}"
         file_path = os.path.join(UPLOAD_DIR_CARTERAS, stored_filename)
 
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        stream_save_upload_file(file, file_path)
 
         doc_existente = db.query(DocumentoCartera).filter(
             DocumentoCartera.cartera_id == cartera_id,
@@ -968,7 +973,13 @@ def get_documentos_cartera(cartera_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{cartera_id}/documentos/{doc_id}/download")
-def download_documento_cartera(cartera_id: int, doc_id: int, db: Session = Depends(get_db)):
+def download_documento_cartera(
+    cartera_id: int,
+    doc_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    from pathlib import Path
     doc = db.query(DocumentoCartera).filter(
         DocumentoCartera.id == doc_id,
         DocumentoCartera.cartera_id == cartera_id
@@ -977,15 +988,15 @@ def download_documento_cartera(cartera_id: int, doc_id: int, db: Session = Depen
         raise HTTPException(status_code=404, detail="Documento no encontrado")
 
     basename = os.path.basename(doc.ruta_archivo.replace("\\", "/"))
-    full_path = os.path.join(UPLOAD_DIR_CARTERAS, basename)
-    if not os.path.exists(full_path):
-        if os.path.exists(doc.ruta_archivo):
-            full_path = doc.ruta_archivo
-        else:
-            raise HTTPException(status_code=404, detail="Archivo físico no encontrado en el servidor")
+    upload_base = Path(UPLOAD_DIR_CARTERAS).resolve()
+    full_path = (upload_base / basename).resolve()
+    if not full_path.is_relative_to(upload_base):
+        raise HTTPException(status_code=403, detail="Acceso denegado: ruta fuera del directorio permitido")
+    if not full_path.is_file():
+        raise HTTPException(status_code=404, detail="Archivo físico no encontrado en el servidor")
 
     return FileResponse(
-        path=full_path,
+        path=str(full_path),
         filename=doc.nombre_archivo,
         media_type=doc.tipo_archivo or "application/octet-stream"
     )

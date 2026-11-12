@@ -54,7 +54,7 @@ def test_api_cuenta_corriente(db_session, dummy_cliente):
     db_session.commit()
     
     # Call the controller directly
-    data = get_cliente_cuenta_corriente(dummy_cliente.cuil, db_session)
+    data = get_cliente_cuenta_corriente(dummy_cliente.cuil, fecha_corte="2026-07-28", db=db_session)
     assert len(data) == 2
     
     # Verify cuota1

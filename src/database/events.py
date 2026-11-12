@@ -1,8 +1,39 @@
 from sqlalchemy.event import listens_for
 from sqlalchemy.orm import Session
 from datetime import date, datetime
-from src.database.models import Cobranza, Cuota, Credito, EstadoCuota, TipoCobranzaEnum
+from src.database.models import (
+    Cobranza,
+    Cuota,
+    Credito,
+    EstadoCuota,
+    TipoCobranzaEnum,
+    HistorialEstadoCredito,
+    HistorialEstadoCliente,
+)
+from src.database.models.auth import RegistroAuditoria
 from src.utils.dates import normalize_date
+
+IMMUTABLE_AUDIT_MODELS = (
+    RegistroAuditoria,
+    HistorialEstadoCredito,
+    HistorialEstadoCliente,
+)
+
+
+def _prevent_audit_mutation(mapper, connection, target):
+    """
+    Garantiza que las tablas de auditoría e historial de estados sean estrictamente
+    Append-Only (ISO/IEC 27001 Control 8.15 - Protección de registros de eventos).
+    """
+    raise ValueError(
+        "Los registros de auditoría e historial son inmutables (Append-Only) y no pueden modificarse ni eliminarse."
+    )
+
+
+for _audit_model in IMMUTABLE_AUDIT_MODELS:
+    listens_for(_audit_model, "before_update")(_prevent_audit_mutation)
+    listens_for(_audit_model, "before_delete")(_prevent_audit_mutation)
+
 
 # Umbral máximo permitido para considerar una diferencia como "error de redondeo"
 ROUNDING_THRESHOLD = 0.05 

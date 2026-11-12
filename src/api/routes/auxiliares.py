@@ -44,6 +44,21 @@ def _parse_aux_payload(payload: dict) -> dict:
         parsed[k] = v
     return parsed
 
+
+def _filter_allowed_columns(model, payload: dict) -> dict:
+    """
+    Filtra el payload recibido permitiendo únicamente las columnas reales definidas en
+    model.__table__.columns (excluyendo la clave primaria 'id') para prevenir Mass Assignment.
+    """
+    allowed_cols = {c.name for c in model.__table__.columns if c.name != "id"}
+    filtered = {k: v for k, v in payload.items() if k in allowed_cols}
+    if not filtered:
+        raise HTTPException(
+            status_code=400,
+            detail="No se enviaron campos válidos para la tabla seleccionada.",
+        )
+    return filtered
+
 @router.post("/{tabla}/data")
 def get_aux_table_data(tabla: str, request: TabulatorRequest, db: Session = Depends(get_db)):
     if tabla not in AUX_TABLES:
@@ -159,12 +174,12 @@ def create_aux_record(tabla: str, payload: dict, db: Session = Depends(get_db)):
     if tabla not in AUX_TABLES:
         raise HTTPException(status_code=404, detail="Tabla auxiliar no encontrada.")
     
-    payload = _parse_aux_payload(payload)
+    model = AUX_TABLES[tabla]
+    payload = _filter_allowed_columns(model, _parse_aux_payload(payload))
     try:
         if tabla == "socios":
             nuevo = SocioComercial.create_socio(db=db, **payload)
         else:
-            model = AUX_TABLES[tabla]
             nuevo = model(**payload)
             db.add(nuevo)
         db.commit()
@@ -193,7 +208,7 @@ def update_aux_record(tabla: str, record_id: int, payload: dict, db: Session = D
     if not record:
         raise HTTPException(status_code=404, detail="Registro no encontrado.")
     
-    payload = _parse_aux_payload(payload)
+    payload = _filter_allowed_columns(model, _parse_aux_payload(payload))
 
     if tabla == "tasas_y_comisiones":
         from src.database.models import Credito
