@@ -253,3 +253,236 @@ def test_calculo_alerta_vencimiento_y_estados(isolated_arca_dir):
     assert decoded["tipoCmp"] == 1
     assert decoded["nroCmp"] == 42
     assert decoded["codAut"] == 74123456789012
+    assert decoded["cuit"] == 30712345678
+
+
+def test_wsfev1_soap_xsd_order_y_reglas_arca(isolated_arca_dir, monkeypatch):
+    """
+    4. Verifica la serialización SOAP de FECAEDetRequest contra el XSD de WSFEv1:
+       - Orden estricto de nodos XML (<CondicionIVAReceptorId>, <CbtesAsoc>, <Tributos>, <Iva>, <Opcionales>)
+       - Alícuota 0% (<Id>3</Id>)
+       - Factura C (ImpNeto = subtotal, ImpOpEx = 0, ImpIVA = 0, sin <Iva>)
+       - Bloqueo de Clase E (19, 20, 21) en homologación/producción
+    """
+    import xml.etree.ElementTree as ET
+    from src.services.arca_service import ArcaService, ArcaServiceError
+
+    arca_service.save_arca_config(
+        {
+            "environment": "homologacion",
+            "cuit": "30712345678",
+            "punto_venta_default": 4,
+            "condicion_iva_emisor": "RESPONSABLE_INSCRIPTO",
+            "nro_iibb": "901-888999-1",
+            "inicio_actividades": "01/03/2021",
+            "cbu_fce_default": "0720000720000000123456",
+            "fce_sistema_circulacion": "SCA",
+        }
+    )
+
+    captured_xmls = []
+
+    def fake_creds(self, service: str = "wsfe"):
+        return {"token": "TOK_TEST", "sign": "SIGN_TEST", "cuit": "30712345678"}
+
+    def fake_soap_call(environment: str, soap_action: str, body_xml: str):
+        captured_xmls.append((soap_action, body_xml))
+        if soap_action == "FECompUltimoAutorizado":
+            xml_resp = """<?xml version="1.0" encoding="utf-8"?>
+            <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+              <soap:Body>
+                <FECompUltimoAutorizadoResponse xmlns="http://ar.gov.afip.dif.FEV1/">
+                  <FECompUltimoAutorizadoResult>
+                    <CbteNro>10</CbteNro>
+                  </FECompUltimoAutorizadoResult>
+                </FECompUltimoAutorizadoResponse>
+              </soap:Body>
+            </soap:Envelope>"""
+            return ET.fromstring(xml_resp)
+
+        if soap_action == "FECAESolicitar":
+            xml_resp = """<?xml version="1.0" encoding="utf-8"?>
+            <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+              <soap:Body>
+                <FECAESolicitarResponse xmlns="http://ar.gov.afip.dif.FEV1/">
+                  <FECAESolicitarResult>
+                    <FeCabResp><Resultado>A</Resultado></FeCabResp>
+                    <FeDetResp>
+                      <FECAEDetResponse>
+                        <Resultado>A</Resultado>
+                        <CAE>75000011112222</CAE>
+                        <CAEFchVto>20261123</CAEFchVto>
+                      </FECAEDetResponse>
+                    </FeDetResp>
+                  </FECAESolicitarResult>
+                </FECAESolicitarResponse>
+              </soap:Body>
+            </soap:Envelope>"""
+            return ET.fromstring(xml_resp)
+
+        raise AssertionError(f"Unexpected SOAP action {soap_action}")
+
+    monkeypatch.setattr(ArcaService, "obtener_ticket_acceso", fake_creds)
+    monkeypatch.setattr(arca_service, "_call_wsfev1_soap", fake_soap_call)
+
+    svc = ArcaService(use_mock=False)
+
+    # Caso 1: Nota de Crédito FCE MiPyME A (203) con CbtesAsoc, Tributos, IVA (21% + 0%) y Opcional 22
+    res_fce_nc = svc.emitir_factura(
+        cuit_cliente="30711122233",
+        tipo_doc_receptor="CUIT",
+        tipo_comprobante=203,
+        punto_venta=4,
+        concepto=2,
+        importe_total=126000.0,
+        importe_no_gravado=0.0,
+        importe_exento=0.0,
+        neto_gravado_0=1000.0,
+        neto_gravado_21=100000.0,
+        iva_21=21000.0,
+        percepcion_iva=1500.0,
+        percepcion_iibb=2500.0,
+        condicion_iva_receptor="Responsable Inscripto",
+        comprobantes_asociados=[
+            {
+                "tipo": 201,
+                "pto_vta": 4,
+                "nro": 9,
+                "cuit": "30712345678",
+                "fecha": date(2026, 11, 1),
+            }
+        ],
+        fce_anulacion="N",
+    )
+    assert res_fce_nc["cae"] == "75000011112222"
+    assert res_fce_nc["nro_comprobante"] == 11
+
+    _, fecae_xml = captured_xmls[-1]
+    root = ET.fromstring(fecae_xml)
+    det = next(el for el in root.iter() if el.tag.endswith("FECAEDetRequest"))
+    child_tags = [ch.tag.split("}")[-1] for ch in list(det)]
+
+    expected_order = [
+        "Concepto",
+        "DocTipo",
+        "DocNro",
+        "CbteDesde",
+        "CbteHasta",
+        "CbteFch",
+        "ImpTotal",
+        "ImpTotConc",
+        "ImpNeto",
+        "ImpOpEx",
+        "ImpTrib",
+        "ImpIVA",
+        "FchServDesde",
+        "FchServHasta",
+        "MonId",
+        "MonCotiz",
+        "CondicionIVAReceptorId",
+        "CbtesAsoc",
+        "Tributos",
+        "Iva",
+        "Opcionales",
+    ]
+    assert child_tags == expected_order
+    assert "<Id>3</Id>" in fecae_xml  # IVA 0%
+    assert "<Id>5</Id>" in fecae_xml  # IVA 21%
+    assert "<Id>22</Id><Valor>N</Valor>" in fecae_xml  # FCE Anulación
+
+    # Caso 2: Factura C (11) -> ImpNeto = subtotal, ImpOpEx = 0, ImpIVA = 0, sin nodo <Iva>
+    svc.emitir_factura(
+        cuit_cliente="20301112223",
+        tipo_doc_receptor="CUIT",
+        tipo_comprobante=11,
+        punto_venta=4,
+        concepto=2,
+        importe_total=15000.0,
+        importe_exento=15000.0,
+        condicion_iva_receptor="Monotributista",
+    )
+    _, fc_xml = captured_xmls[-1]
+    assert "<ImpNeto>15000.00</ImpNeto>" in fc_xml
+    assert "<ImpOpEx>0.00</ImpOpEx>" in fc_xml
+    assert "<ImpIVA>0.00</ImpIVA>" in fc_xml
+    assert "<Iva>" not in fc_xml
+
+    # Caso 3: Factura E (19) bloqueada en entorno real
+    with pytest.raises(ArcaServiceError) as exc_e:
+        svc.emitir_factura(
+            cuit_cliente="55000000018",
+            tipo_comprobante=19,
+            punto_venta=4,
+            importe_total=1000.0,
+            importe_exento=1000.0,
+        )
+    assert exc_e.value.code == "CLASE_E_NO_SOPORTADA"
+
+
+def test_padron_a5_soap_parser(isolated_arca_dir, monkeypatch):
+    """
+    5. Verifica que ArcaConsultaService parsee correctamente la respuesta SOAP
+       getPersona_v2 de ws_sr_constancia_inscripcion en modo real.
+    """
+    from src.services.arca_consulta import ArcaConsultaService
+
+    arca_service.save_arca_config(
+        {
+            "environment": "homologacion",
+            "cuit": "30712345678",
+            "punto_venta_default": 1,
+        }
+    )
+
+    monkeypatch.setattr(
+        "src.services.arca_consulta.login_cms_wsaa",
+        lambda env, service="ws_sr_constancia_inscripcion": {
+            "token": "PADRON_TOKEN",
+            "sign": "PADRON_SIGN",
+        },
+    )
+
+    class FakeResponse:
+        status_code = 200
+        text = """<?xml version="1.0" encoding="utf-8"?>
+        <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+          <soap:Body>
+            <ns2:getPersona_v2Response xmlns:ns2="http://a5.soap.ws.server.puc.sr/">
+              <personaReturn>
+                <datosGenerales>
+                  <idPersona>30712345678</idPersona>
+                  <razonSocial>FINANCIERA DEL LITORAL S.A.</razonSocial>
+                  <estadoClave>ACTIVO</estadoClave>
+                  <tipoPersona>JURIDICA</tipoPersona>
+                  <domicilioFiscal>
+                    <direccion>AV CORRIENTES 1234</direccion>
+                    <localidad>CABA</localidad>
+                    <codPostal>1043</codPostal>
+                    <descripcionProvincia>CIUDAD AUTONOMA BUENOS AIRES</descripcionProvincia>
+                  </domicilioFiscal>
+                </datosGenerales>
+                <datosRegimenGeneral>
+                  <impuesto>
+                    <idImpuesto>30</idImpuesto>
+                    <descripcionImpuesto>IVA</descripcionImpuesto>
+                  </impuesto>
+                </datosRegimenGeneral>
+              </personaReturn>
+            </ns2:getPersona_v2Response>
+          </soap:Body>
+        </soap:Envelope>"""
+
+    monkeypatch.setattr(
+        "src.services.arca_consulta.httpx.Client.post",
+        lambda self, url, content=None, headers=None: FakeResponse(),
+    )
+
+    consulta = ArcaConsultaService(use_mock=False)
+    res = consulta.consultar_cuit("30-71234567-8")
+    assert res["cuit"] == "30712345678"
+    assert res["razon_social"] == "FINANCIERA DEL LITORAL S.A."
+    assert res["condicion_iva"] == "Responsable Inscripto"
+    assert res["condicion_iva_receptor_id"] == 1
+    assert res["domicilio_fiscal"] == "AV CORRIENTES 1234"
+    assert res["provincia"] == "CIUDAD AUTONOMA BUENOS AIRES"
+

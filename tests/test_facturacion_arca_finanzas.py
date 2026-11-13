@@ -359,3 +359,82 @@ def test_impacto_iva_iibb_libro_iva_y_pdf_con_nota_de_credito(db_session):
         )
     assert exc_anulada.value.status_code == 400
 
+
+def test_factura_b_redondeo_exacto_y_consulta_padron(db_session):
+    """
+    Verifica que en Factura B con precio final $100.00 (IVA 21% incluido):
+      - neto_21 = $82.64
+      - iva_21 = $17.36 (por diferencia exacta bruto - neto)
+      - importe_total = $100.00 (sin desfase de $0.01)
+    Y verifica el endpoint de consulta de CUIT en padrón con sugerencia de provincia.
+    """
+    from src.api.routes.facturacion import consultar_cuit_padron_arca
+    import asyncio
+
+    prov_caba = Provincia(nombre="Capital Federal")
+    db_session.add(prov_caba)
+    db_session.commit()
+
+    fb_100 = emitir_factura_individual(
+        EmitirFacturaIndividualRequest(
+            punto_venta=1,
+            tipo_comprobante=6,
+            fecha_emision=date(2026, 8, 10),
+            tipo_doc_receptor="DNI",
+            cuit_cliente="28999111",
+            razon_social_receptor="Consumidor Redondeo",
+            condicion_iva_receptor="Consumidor Final",
+            items=[
+                ItemFacturaInput(
+                    descripcion="Servicio redondo $100 final",
+                    cantidad=1,
+                    precio_unitario=100.0,
+                    alicuota_iva="21",
+                )
+            ],
+        ),
+        db=db_session,
+    )
+    assert fb_100["neto_gravado_21"] == pytest.approx(82.64)
+    assert fb_100["iva_21"] == pytest.approx(17.36)
+    assert fb_100["importe_total"] == pytest.approx(100.00)
+
+    padron_res = consultar_cuit_padron_arca("30-71234567-8", db=db_session)
+    assert padron_res["cuit"] == "30712345678"
+    assert padron_res["condicion_iva_receptor_id"] == 1
+    assert padron_res["provincia_id_sugerida"] == prov_caba.id
+
+
+def test_facturacion_masiva_cobranzas_repregunta_entorno_real(db_session, tmp_path, monkeypatch):
+    """
+    Verifica que POST /api/v1/facturacion/procesar exija confirmar_real=True
+    cuando ARCA está configurado en homologacion o produccion.
+    """
+    import src.services.arca_service as arca_service
+    from src.api.routes.facturacion import ProcesarRequest, procesar_facturacion
+
+    certs_dir = tmp_path / "certs_batch" / "arca"
+    monkeypatch.setattr(arca_service, "ARCA_CERTS_DIR", certs_dir)
+    monkeypatch.setattr(arca_service, "ARCA_CONFIG_PATH", certs_dir / "arca_config.json")
+
+    arca_service.save_arca_config(
+        {
+            "environment": "homologacion",
+            "cuit": "30712345678",
+            "punto_venta_default": 2,
+        }
+    )
+
+    with pytest.raises(HTTPException) as exc_conf:
+        procesar_facturacion(
+            ProcesarRequest(
+                fecha_desde=date(2026, 8, 1),
+                fecha_hasta=date(2026, 8, 31),
+                confirmar_real=False,
+            ),
+            db=db_session,
+        )
+    assert exc_conf.value.status_code == 400
+    assert "confirmar explícitamente" in exc_conf.value.detail.lower()
+
+

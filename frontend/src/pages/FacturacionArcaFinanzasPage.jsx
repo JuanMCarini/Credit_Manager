@@ -88,6 +88,14 @@ const FacturacionArcaFinanzasPage = () => {
 
   const [receptorSearch, setReceptorSearch] = useState('');
   const [selectedReceptorKey, setSelectedReceptorKey] = useState('');
+  const [arcaStatus, setArcaStatus] = useState({
+    environment: 'mock',
+    punto_venta_default: 1,
+    cbu_fce_default: '',
+    fce_sistema_circulacion: 'ADC',
+  });
+  const [consultingPadron, setConsultingPadron] = useState(false);
+  const [padronMsg, setPadronMsg] = useState('');
 
   const [formData, setFormData] = useState({
     punto_venta: 1,
@@ -105,7 +113,13 @@ const FacturacionArcaFinanzasPage = () => {
     provincia_id: '',
     comprobante_asociado_id: '',
     comprobante_asociado_str: '',
+    comprobante_asociado_tipo: 1,
+    comprobante_asociado_punto_venta: 1,
+    comprobante_asociado_nro: '',
+    comprobante_asociado_fecha: getLocalDateISO(),
     cbu_emisor: '',
+    fce_sistema_circulacion: 'ADC',
+    fce_anulacion: 'N',
     percepcion_iva: 0,
     percepcion_iibb: 0,
     otros_impuestos: 0,
@@ -125,13 +139,23 @@ const FacturacionArcaFinanzasPage = () => {
 
   const fetchCatalogos = useCallback(async () => {
     try {
-      const [resTipos, resRec] = await Promise.all([
+      const [resTipos, resRec, resStatus] = await Promise.all([
         axiosClient.get('/api/v1/facturacion/tipos-comprobante'),
         axiosClient.get('/api/v1/facturacion/receptores'),
+        axiosClient.get('/api/v1/system/arca/status').catch(() => ({ data: null })),
       ]);
       setTiposComprobante(resTipos.data || []);
       setReceptores(resRec.data?.receptores || []);
       setProvincias(resRec.data?.provincias || []);
+      if (resStatus?.data) {
+        setArcaStatus({
+          environment: resStatus.data.environment || 'mock',
+          punto_venta_default: resStatus.data.punto_venta_default || 1,
+          cbu_fce_default: resStatus.data.cbu_fce_default || '',
+          fce_sistema_circulacion: resStatus.data.fce_sistema_circulacion || 'ADC',
+          condicion_iva_emisor_label: resStatus.data.condicion_iva_emisor_label || '',
+        });
+      }
     } catch (err) {
       console.error('Error cargando catálogos ARCA:', err);
     }
@@ -192,12 +216,15 @@ const FacturacionArcaFinanzasPage = () => {
   const tiposPorClase = useMemo(() => {
     const groups = {};
     tiposComprobante.forEach((t) => {
+      if (arcaStatus.environment !== 'mock' && [19, 20, 21].includes(Number(t.codigo))) {
+        return;
+      }
       const cl = t.clase || 'Otros';
       if (!groups[cl]) groups[cl] = [];
       groups[cl].push(t);
     });
     return groups;
-  }, [tiposComprobante]);
+  }, [tiposComprobante, arcaStatus.environment]);
 
   const receptoresFiltrados = useMemo(() => {
     if (!receptorSearch.trim()) return receptores.slice(0, 150);
@@ -231,9 +258,13 @@ const FacturacionArcaFinanzasPage = () => {
   const resumenCalculado = useMemo(() => {
     let no_gravado = 0;
     let exento = 0;
+    let neto_0 = 0;
     let neto_21 = 0;
     let neto_105 = 0;
     let neto_27 = 0;
+    let bruto_21 = 0;
+    let bruto_105 = 0;
+    let bruto_27 = 0;
 
     const esClaseCoE = ['C', 'E'].includes(tipoSeleccionadoInfo.letra);
     const discrimina = Boolean(tipoSeleccionadoInfo.discrimina_iva);
@@ -244,34 +275,55 @@ const FacturacionArcaFinanzasPage = () => {
       const sub = Math.round(cant * unit * 100) / 100;
       const alic = String(it.alicuota_iva || '21').toUpperCase();
 
-      if (esClaseCoE || alic === '0' || alic === 'EXENTO') {
+      if (esClaseCoE || alic === 'EXENTO') {
         exento += sub;
+      } else if (alic === '0') {
+        neto_0 += sub;
       } else if (alic === 'NO_GRAVADO') {
         no_gravado += sub;
       } else if (alic === '10.5') {
+        bruto_105 += sub;
         neto_105 += discrimina ? sub : sub / 1.105;
       } else if (alic === '27') {
+        bruto_27 += sub;
         neto_27 += discrimina ? sub : sub / 1.27;
       } else {
+        bruto_21 += sub;
         neto_21 += discrimina ? sub : sub / 1.21;
       }
     });
 
     no_gravado = Math.round(no_gravado * 100) / 100;
     exento = Math.round(exento * 100) / 100;
+    neto_0 = Math.round(neto_0 * 100) / 100;
     neto_21 = Math.round(neto_21 * 100) / 100;
     neto_105 = Math.round(neto_105 * 100) / 100;
     neto_27 = Math.round(neto_27 * 100) / 100;
+    bruto_21 = Math.round(bruto_21 * 100) / 100;
+    bruto_105 = Math.round(bruto_105 * 100) / 100;
+    bruto_27 = Math.round(bruto_27 * 100) / 100;
 
-    const iva_21 = esClaseCoE ? 0 : Math.round(neto_21 * 0.21 * 100) / 100;
-    const iva_105 = esClaseCoE ? 0 : Math.round(neto_105 * 0.105 * 100) / 100;
-    const iva_27 = esClaseCoE ? 0 : Math.round(neto_27 * 0.27 * 100) / 100;
+    const iva_21 = esClaseCoE
+      ? 0
+      : discrimina
+      ? Math.round(neto_21 * 0.21 * 100) / 100
+      : Math.round((bruto_21 - neto_21) * 100) / 100;
+    const iva_105 = esClaseCoE
+      ? 0
+      : discrimina
+      ? Math.round(neto_105 * 0.105 * 100) / 100
+      : Math.round((bruto_105 - neto_105) * 100) / 100;
+    const iva_27 = esClaseCoE
+      ? 0
+      : discrimina
+      ? Math.round(neto_27 * 0.27 * 100) / 100
+      : Math.round((bruto_27 - neto_27) * 100) / 100;
 
     const perc_iva = parseFloat(formData.percepcion_iva) || 0;
     const perc_iibb = parseFloat(formData.percepcion_iibb) || 0;
     const otros_imp = parseFloat(formData.otros_impuestos) || 0;
 
-    const neto_total = Math.round((neto_21 + neto_105 + neto_27) * 100) / 100;
+    const neto_total = Math.round((neto_0 + neto_21 + neto_105 + neto_27) * 100) / 100;
     const iva_total = Math.round((iva_21 + iva_105 + iva_27) * 100) / 100;
     const otros_total = Math.round((perc_iva + perc_iibb + otros_imp) * 100) / 100;
     const importe_total =
@@ -280,6 +332,7 @@ const FacturacionArcaFinanzasPage = () => {
     return {
       importe_no_gravado: no_gravado,
       importe_exento: exento,
+      neto_gravado_0: neto_0,
       neto_gravado_21: neto_21,
       neto_gravado_105: neto_105,
       neto_gravado_27: neto_27,
@@ -295,14 +348,18 @@ const FacturacionArcaFinanzasPage = () => {
 
   const handleOpenNewModal = (presetFactura = null) => {
     setModalError('');
+    setPadronMsg('');
     setEmittedSuccess(null);
     setSelectedReceptorKey('');
     setReceptorSearch('');
+    const ptoVtaDefault = Number(arcaStatus.punto_venta_default) || 1;
+    const cbuDefault = arcaStatus.cbu_fce_default || '';
+    const fceCircDefault = arcaStatus.fce_sistema_circulacion || 'ADC';
 
     if (presetFactura) {
       const ncCodigo = NC_CODE_BY_FACTURA[presetFactura.tipo_comprobante] || 3;
       setFormData({
-        punto_venta: presetFactura.punto_venta || 1,
+        punto_venta: presetFactura.punto_venta || ptoVtaDefault,
         tipo_comprobante: ncCodigo,
         fecha_emision: getLocalDateISO(),
         concepto_arca: 2,
@@ -317,7 +374,13 @@ const FacturacionArcaFinanzasPage = () => {
         provincia_id: presetFactura.provincia_id || '',
         comprobante_asociado_id: presetFactura.id,
         comprobante_asociado_str: `${presetFactura.tipo_comprobante_nombre} ${presetFactura.comprobante_formateado}`,
-        cbu_emisor: '',
+        comprobante_asociado_tipo: presetFactura.tipo_comprobante || 1,
+        comprobante_asociado_punto_venta: presetFactura.punto_venta || ptoVtaDefault,
+        comprobante_asociado_nro: presetFactura.nro_comprobante || '',
+        comprobante_asociado_fecha: presetFactura.fecha_emision || getLocalDateISO(),
+        cbu_emisor: cbuDefault,
+        fce_sistema_circulacion: fceCircDefault,
+        fce_anulacion: 'N',
         percepcion_iva: 0,
         percepcion_iibb: 0,
         otros_impuestos: 0,
@@ -343,7 +406,7 @@ const FacturacionArcaFinanzasPage = () => {
       ]);
     } else {
       setFormData({
-        punto_venta: 1,
+        punto_venta: ptoVtaDefault,
         tipo_comprobante: 1,
         fecha_emision: getLocalDateISO(),
         concepto_arca: 2,
@@ -358,7 +421,13 @@ const FacturacionArcaFinanzasPage = () => {
         provincia_id: '',
         comprobante_asociado_id: '',
         comprobante_asociado_str: '',
-        cbu_emisor: '',
+        comprobante_asociado_tipo: 1,
+        comprobante_asociado_punto_venta: ptoVtaDefault,
+        comprobante_asociado_nro: '',
+        comprobante_asociado_fecha: getLocalDateISO(),
+        cbu_emisor: cbuDefault,
+        fce_sistema_circulacion: fceCircDefault,
+        fce_anulacion: 'N',
         percepcion_iva: 0,
         percepcion_iibb: 0,
         otros_impuestos: 0,
@@ -368,6 +437,39 @@ const FacturacionArcaFinanzasPage = () => {
     }
 
     setIsModalOpen(true);
+  };
+
+  const handleConsultarPadronArca = async () => {
+    const cleanCuit = String(formData.cuit_cliente || '').replace(/\D/g, '');
+    if (cleanCuit.length !== 11) {
+      setPadronMsg('Ingrese un CUIT/CUIL válido de 11 dígitos para consultar en ARCA.');
+      return;
+    }
+    setConsultingPadron(true);
+    setPadronMsg('');
+    try {
+      const res = await axiosClient.get(`/api/v1/facturacion/consultar-cuit/${cleanCuit}`);
+      const d = res.data;
+      setFormData((prev) => ({
+        ...prev,
+        cuit_cliente: cleanCuit,
+        razon_social_receptor: d.razon_social || prev.razon_social_receptor,
+        domicilio_receptor:
+          [d.domicilio_fiscal, d.localidad, d.provincia].filter(Boolean).join(', ') ||
+          prev.domicilio_receptor,
+        condicion_iva_receptor: d.condicion_iva || prev.condicion_iva_receptor,
+        provincia_id: d.provincia_id_sugerida || prev.provincia_id,
+      }));
+      setPadronMsg(
+        `✅ Padrón ARCA: ${d.razon_social} — ${d.condicion_iva} (${d.estado_clave || 'ACTIVO'})`
+      );
+    } catch (err) {
+      setPadronMsg(
+        `⚠️ ${err.response?.data?.detail || 'No se pudo consultar el CUIT en Padrón ARCA.'}`
+      );
+    } finally {
+      setConsultingPadron(false);
+    }
   };
 
   const handleItemChange = (index, field, value) => {
@@ -412,9 +514,22 @@ const FacturacionArcaFinanzasPage = () => {
           ? Number(formData.comprobante_asociado_id)
           : null,
         comprobante_asociado_str: formData.comprobante_asociado_str?.trim() || null,
+        comprobante_asociado_tipo: formData.comprobante_asociado_tipo
+          ? Number(formData.comprobante_asociado_tipo)
+          : null,
+        comprobante_asociado_punto_venta: formData.comprobante_asociado_punto_venta
+          ? Number(formData.comprobante_asociado_punto_venta)
+          : null,
+        comprobante_asociado_nro: formData.comprobante_asociado_nro
+          ? Number(formData.comprobante_asociado_nro)
+          : null,
+        comprobante_asociado_fecha: formData.comprobante_asociado_fecha || null,
         cbu_emisor: formData.cbu_emisor?.trim() || null,
+        fce_sistema_circulacion: formData.fce_sistema_circulacion || null,
+        fce_anulacion: formData.fce_anulacion || null,
         importe_no_gravado: resumenCalculado.importe_no_gravado,
         importe_exento: resumenCalculado.importe_exento,
+        neto_gravado_0: resumenCalculado.neto_gravado_0,
         neto_gravado_21: resumenCalculado.neto_gravado_21,
         neto_gravado_105: resumenCalculado.neto_gravado_105,
         neto_gravado_27: resumenCalculado.neto_gravado_27,
@@ -484,13 +599,40 @@ const FacturacionArcaFinanzasPage = () => {
         <div>
           <h1
             className="page-title"
-            style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '28px', fontWeight: 'bold', margin: 0 }}
+            style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '28px', fontWeight: 'bold', margin: 0, flexWrap: 'wrap' }}
           >
             <Receipt size={32} color="var(--primary-color)" />
             Finanzas — Facturación Electrónica ARCA
+            <span
+              style={{
+                padding: '4px 12px',
+                borderRadius: '999px',
+                fontSize: '12px',
+                fontWeight: 700,
+                background:
+                  arcaStatus.environment === 'produccion'
+                    ? 'rgba(239, 68, 68, 0.15)'
+                    : arcaStatus.environment === 'homologacion'
+                    ? 'rgba(245, 158, 11, 0.15)'
+                    : 'rgba(100, 116, 139, 0.15)',
+                color:
+                  arcaStatus.environment === 'produccion'
+                    ? '#ef4444'
+                    : arcaStatus.environment === 'homologacion'
+                    ? '#f59e0b'
+                    : 'var(--text-muted)',
+                border: '1px solid currentColor',
+              }}
+            >
+              {arcaStatus.environment === 'produccion'
+                ? '🔴 PRODUCCIÓN ARCA'
+                : arcaStatus.environment === 'homologacion'
+                ? '🟡 HOMOLOGACIÓN ARCA'
+                : '🧪 MODO MOCK'}
+            </span>
           </h1>
           <p className="page-description" style={{ color: 'var(--text-muted)', fontSize: '15px', marginTop: '6px' }}>
-            Emisión individual de comprobantes electrónicos de ARCA (Facturas A, B, C, M, E, Notas de Crédito/Débito, Recibos y FCE MiPyME) con impacto automático en Libro IVA, Posición IVA e IIBB.
+            Emisión individual de comprobantes electrónicos de ARCA (Facturas A, B, C, M, Notas de Crédito/Débito, Recibos y FCE MiPyME) con impacto automático en Libro IVA, Posición IVA e IIBB.
           </p>
         </div>
 
@@ -959,87 +1101,35 @@ const FacturacionArcaFinanzasPage = () => {
                   </div>
                 </div>
 
-                {/* Comprobante asociado si es Nota de Crédito o Débito */}
-                {(tipoSeleccionadoInfo.es_nota_credito || tipoSeleccionadoInfo.es_nota_debito) && (
-                  <div
-                    style={{
-                      padding: '14px',
-                      borderRadius: 'var(--radius-md)',
-                      background: 'rgba(239, 68, 68, 0.06)',
-                      border: '1px solid rgba(239, 68, 68, 0.3)',
-                      display: 'grid',
-                      gridTemplateColumns: '1fr 1fr',
-                      gap: '14px',
-                    }}
-                  >
+                {/* Fechas de servicio si Concepto ARCA es 2 o 3 */}
+                {(Number(formData.concepto_arca) === 2 || Number(formData.concepto_arca) === 3) && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
                     <div>
-                      <label className="form-label">Seleccionar Factura Emitida Asociada</label>
-                      <select
-                        className="form-control"
-                        value={formData.comprobante_asociado_id || ''}
-                        onChange={(e) => {
-                          const idVal = e.target.value;
-                          const fAsoc = facturas.find((f) => String(f.id) === String(idVal));
-                          setFormData((prev) => ({
-                            ...prev,
-                            comprobante_asociado_id: idVal,
-                            comprobante_asociado_str: fAsoc
-                              ? `${fAsoc.tipo_comprobante_nombre} ${fAsoc.comprobante_formateado}`
-                              : prev.comprobante_asociado_str,
-                          }));
-                        }}
-                      >
-                        <option value="">-- Seleccionar del historial o escribir manualmente --</option>
-                        {facturas
-                          .filter(
-                            (f) =>
-                              !f.es_nota_credito &&
-                              !(tipoSeleccionadoInfo.es_nota_credito && f.anulada_por_nc)
-                          )
-                          .map((f) => (
-                            <option key={f.id} value={f.id}>
-                              {f.tipo_comprobante_nombre} {f.comprobante_formateado} — {f.razon_social_receptor} (
-                              {f.tiene_nc_parcial
-                                ? `Saldo disp.: ${formatCurrency(f.saldo_pendiente_nc)}`
-                                : formatCurrency(f.importe_total)}
-                              )
-                            </option>
-                          ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="form-label">Referencia Comprobante Asociado *</label>
+                      <label className="form-label">Período Facturado Desde *</label>
                       <input
                         required
-                        type="text"
+                        type="date"
                         className="form-control"
-                        placeholder="Ej: Factura A 0001-00000125"
-                        value={formData.comprobante_asociado_str}
+                        value={formData.fecha_servicio_desde}
                         onChange={(e) =>
-                          setFormData((prev) => ({ ...prev, comprobante_asociado_str: e.target.value }))
+                          setFormData((prev) => ({ ...prev, fecha_servicio_desde: e.target.value }))
                         }
                       />
                     </div>
-                  </div>
-                )}
-
-                {/* Campos adicionales si es FCE MiPyME */}
-                {tipoSeleccionadoInfo.es_fce && (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                     <div>
-                      <label className="form-label">CBU del Emisor (FCE MiPyME) *</label>
+                      <label className="form-label">Período Facturado Hasta *</label>
                       <input
                         required
-                        type="text"
-                        maxLength={22}
+                        type="date"
                         className="form-control"
-                        placeholder="22 dígitos del CBU"
-                        value={formData.cbu_emisor}
-                        onChange={(e) => setFormData((prev) => ({ ...prev, cbu_emisor: e.target.value }))}
+                        value={formData.fecha_servicio_hasta}
+                        onChange={(e) =>
+                          setFormData((prev) => ({ ...prev, fecha_servicio_hasta: e.target.value }))
+                        }
                       />
                     </div>
                     <div>
-                      <label className="form-label">Fecha Vencimiento para el Pago *</label>
+                      <label className="form-label">Vencimiento para el Pago *</label>
                       <input
                         required
                         type="date"
@@ -1050,6 +1140,217 @@ const FacturacionArcaFinanzasPage = () => {
                         }
                       />
                     </div>
+                  </div>
+                )}
+
+                {/* Comprobante asociado si es Nota de Crédito o Débito */}
+                {(tipoSeleccionadoInfo.es_nota_credito || tipoSeleccionadoInfo.es_nota_debito) && (
+                  <div
+                    style={{
+                      padding: '14px',
+                      borderRadius: 'var(--radius-md)',
+                      background: 'rgba(239, 68, 68, 0.06)',
+                      border: '1px solid rgba(239, 68, 68, 0.3)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '12px',
+                    }}
+                  >
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                      <div>
+                        <label className="form-label">Seleccionar Factura Emitida Asociada</label>
+                        <select
+                          className="form-control"
+                          value={formData.comprobante_asociado_id || ''}
+                          onChange={(e) => {
+                            const idVal = e.target.value;
+                            const fAsoc = facturas.find((f) => String(f.id) === String(idVal));
+                            setFormData((prev) => ({
+                              ...prev,
+                              comprobante_asociado_id: idVal,
+                              comprobante_asociado_str: fAsoc
+                                ? `${fAsoc.tipo_comprobante_nombre} ${fAsoc.comprobante_formateado}`
+                                : prev.comprobante_asociado_str,
+                              comprobante_asociado_tipo: fAsoc
+                                ? fAsoc.tipo_comprobante
+                                : prev.comprobante_asociado_tipo,
+                              comprobante_asociado_punto_venta: fAsoc
+                                ? fAsoc.punto_venta
+                                : prev.comprobante_asociado_punto_venta,
+                              comprobante_asociado_nro: fAsoc
+                                ? fAsoc.nro_comprobante
+                                : prev.comprobante_asociado_nro,
+                              comprobante_asociado_fecha: fAsoc
+                                ? fAsoc.fecha_emision
+                                : prev.comprobante_asociado_fecha,
+                            }));
+                          }}
+                        >
+                          <option value="">-- Seleccionar del historial o cargar manualmente --</option>
+                          {facturas
+                            .filter(
+                              (f) =>
+                                !f.es_nota_credito &&
+                                !(tipoSeleccionadoInfo.es_nota_credito && f.anulada_por_nc)
+                            )
+                            .map((f) => (
+                              <option key={f.id} value={f.id}>
+                                {f.tipo_comprobante_nombre} {f.comprobante_formateado} — {f.razon_social_receptor} (
+                                {f.tiene_nc_parcial
+                                  ? `Saldo disp.: ${formatCurrency(f.saldo_pendiente_nc)}`
+                                  : formatCurrency(f.importe_total)}
+                                )
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="form-label">Referencia Comprobante Asociado *</label>
+                        <input
+                          required
+                          type="text"
+                          className="form-control"
+                          placeholder="Ej: Factura A 0001-00000125"
+                          value={formData.comprobante_asociado_str}
+                          onChange={(e) =>
+                            setFormData((prev) => ({ ...prev, comprobante_asociado_str: e.target.value }))
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    {!formData.comprobante_asociado_id && (
+                      <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr', gap: '12px' }}>
+                        <div>
+                          <label className="form-label">Tipo Cbte. Asociado (ARCA) *</label>
+                          <select
+                            className="form-control"
+                            value={formData.comprobante_asociado_tipo}
+                            onChange={(e) =>
+                              setFormData((prev) => ({
+                                ...prev,
+                                comprobante_asociado_tipo: Number(e.target.value),
+                              }))
+                            }
+                          >
+                            {tiposComprobante
+                              .filter((t) => !t.es_nota_credito)
+                              .map((t) => (
+                                <option key={t.codigo} value={t.codigo}>
+                                  [{t.letra}] {t.nombre} (Cód. {t.codigo})
+                                </option>
+                              ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="form-label">Pto. Venta Asoc. *</label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="99999"
+                            className="form-control"
+                            value={formData.comprobante_asociado_punto_venta}
+                            onChange={(e) =>
+                              setFormData((prev) => ({
+                                ...prev,
+                                comprobante_asociado_punto_venta: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                        <div>
+                          <label className="form-label">Nro. Cbte. Asoc. *</label>
+                          <input
+                            type="number"
+                            min="1"
+                            className="form-control"
+                            placeholder="Ej: 125"
+                            value={formData.comprobante_asociado_nro}
+                            onChange={(e) =>
+                              setFormData((prev) => ({
+                                ...prev,
+                                comprobante_asociado_nro: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                        <div>
+                          <label className="form-label">Fecha Cbte. Asoc. *</label>
+                          <input
+                            type="date"
+                            className="form-control"
+                            value={formData.comprobante_asociado_fecha}
+                            onChange={(e) =>
+                              setFormData((prev) => ({
+                                ...prev,
+                                comprobante_asociado_fecha: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Campos adicionales si es FCE MiPyME */}
+                {tipoSeleccionadoInfo.es_fce && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr', gap: '14px' }}>
+                    {!tipoSeleccionadoInfo.es_nota_credito && !tipoSeleccionadoInfo.es_nota_debito ? (
+                      <>
+                        <div>
+                          <label className="form-label">CBU del Emisor (FCE MiPyME) *</label>
+                          <input
+                            required
+                            type="text"
+                            maxLength={22}
+                            className="form-control"
+                            placeholder="22 dígitos del CBU"
+                            value={formData.cbu_emisor}
+                            onChange={(e) => setFormData((prev) => ({ ...prev, cbu_emisor: e.target.value }))}
+                          />
+                        </div>
+                        <div>
+                          <label className="form-label">Sistema Circulación FCE (Opc. 27) *</label>
+                          <select
+                            className="form-control"
+                            value={formData.fce_sistema_circulacion}
+                            onChange={(e) =>
+                              setFormData((prev) => ({ ...prev, fce_sistema_circulacion: e.target.value }))
+                            }
+                          >
+                            <option value="ADC">ADC — Agente de Depósito Colectivo</option>
+                            <option value="SCA">SCA — Sistema de Circulación Abierta</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="form-label">Fecha Vencimiento Pago *</label>
+                          <input
+                            required
+                            type="date"
+                            className="form-control"
+                            value={formData.fecha_vencimiento_pago}
+                            onChange={(e) =>
+                              setFormData((prev) => ({ ...prev, fecha_vencimiento_pago: e.target.value }))
+                            }
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <div>
+                        <label className="form-label">¿Es Anulación de FCE Rechazada? (Opc. 22) *</label>
+                        <select
+                          className="form-control"
+                          value={formData.fce_anulacion}
+                          onChange={(e) =>
+                            setFormData((prev) => ({ ...prev, fce_anulacion: e.target.value }))
+                          }
+                        >
+                          <option value="N">N — No (Nota de Crédito / Débito normal)</option>
+                          <option value="S">S — Sí (Por rechazo del receptor)</option>
+                        </select>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1109,16 +1410,28 @@ const FacturacionArcaFinanzasPage = () => {
                       <label className="form-label">
                         Nro. Documento {tipoSeleccionadoInfo.requiere_cuit ? '*' : ''}
                       </label>
-                      <input
-                        required={tipoSeleccionadoInfo.requiere_cuit}
-                        type="text"
-                        className="form-control"
-                        placeholder="11 dígitos sin guiones"
-                        value={formData.cuit_cliente}
-                        onChange={(e) =>
-                          setFormData((prev) => ({ ...prev, cuit_cliente: e.target.value }))
-                        }
-                      />
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <input
+                          required={tipoSeleccionadoInfo.requiere_cuit}
+                          type="text"
+                          className="form-control"
+                          placeholder="11 dígitos sin guiones"
+                          value={formData.cuit_cliente}
+                          onChange={(e) =>
+                            setFormData((prev) => ({ ...prev, cuit_cliente: e.target.value }))
+                          }
+                        />
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          title="Consultar CUIT en Padrón ARCA (A5)"
+                          disabled={consultingPadron || String(formData.cuit_cliente || '').replace(/\D/g, '').length !== 11}
+                          onClick={handleConsultarPadronArca}
+                          style={{ padding: '0 10px', whiteSpace: 'nowrap', fontSize: '12px' }}
+                        >
+                          {consultingPadron ? '...' : '🔍 ARCA'}
+                        </button>
+                      </div>
                     </div>
                     <div>
                       <label className="form-label">Razón Social / Apellido y Nombre *</label>
@@ -1182,6 +1495,22 @@ const FacturacionArcaFinanzasPage = () => {
                       </select>
                     </div>
                   </div>
+                  {padronMsg && (
+                    <div
+                      style={{
+                        marginTop: '8px',
+                        fontSize: '12px',
+                        padding: '6px 10px',
+                        borderRadius: '6px',
+                        background: padronMsg.startsWith('✅')
+                          ? 'rgba(34, 197, 94, 0.12)'
+                          : 'rgba(245, 158, 11, 0.12)',
+                        color: padronMsg.startsWith('✅') ? '#22c55e' : '#f59e0b',
+                      }}
+                    >
+                      {padronMsg}
+                    </div>
+                  )}
                 </div>
 
                 <hr style={{ margin: '2px 0', borderColor: 'var(--border-color)' }} />

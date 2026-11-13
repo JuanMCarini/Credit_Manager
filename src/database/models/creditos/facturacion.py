@@ -436,6 +436,7 @@ class Factura(Base):
     # Desglose de Importes e Impuestos
     importe_no_gravado = Column(Numeric(15, 2), nullable=False, default=0.0)
     importe_exento = Column(Numeric(15, 2), nullable=False, default=0.0)
+    neto_gravado_0 = Column(Numeric(15, 2), nullable=False, default=0.0)
     neto_gravado_21 = Column(Numeric(15, 2), nullable=False, default=0.0)
     neto_gravado_105 = Column(Numeric(15, 2), nullable=False, default=0.0)
     neto_gravado_27 = Column(Numeric(15, 2), nullable=False, default=0.0)
@@ -449,6 +450,8 @@ class Factura(Base):
 
     cae = Column(String(50), nullable=True)
     vencimiento_cae = Column(Date, nullable=True)
+    condicion_iva_receptor_id = Column(Integer, nullable=True)
+    estado_arca = Column(String(30), nullable=True, default="MOCK")
 
     items_detalle = Column(JSON, nullable=True)
     observaciones = Column(String(500), nullable=True)
@@ -495,6 +498,7 @@ def ensure_facturas_schema(engine) -> None:
             ("cbu_emisor", "VARCHAR(22) NULL"),
             ("importe_no_gravado", "NUMERIC(15, 2) NOT NULL DEFAULT 0.00"),
             ("importe_exento", "NUMERIC(15, 2) NOT NULL DEFAULT 0.00"),
+            ("neto_gravado_0", "NUMERIC(15, 2) NOT NULL DEFAULT 0.00"),
             ("neto_gravado_21", "NUMERIC(15, 2) NOT NULL DEFAULT 0.00"),
             ("neto_gravado_105", "NUMERIC(15, 2) NOT NULL DEFAULT 0.00"),
             ("neto_gravado_27", "NUMERIC(15, 2) NOT NULL DEFAULT 0.00"),
@@ -504,6 +508,8 @@ def ensure_facturas_schema(engine) -> None:
             ("percepcion_iva", "NUMERIC(15, 2) NOT NULL DEFAULT 0.00"),
             ("percepcion_iibb", "NUMERIC(15, 2) NOT NULL DEFAULT 0.00"),
             ("otros_impuestos", "NUMERIC(15, 2) NOT NULL DEFAULT 0.00"),
+            ("condicion_iva_receptor_id", "INTEGER NULL"),
+            ("estado_arca", "VARCHAR(30) NULL DEFAULT 'MOCK'"),
             ("items_detalle", "JSON NULL"),
             ("observaciones", "VARCHAR(500) NULL"),
         ]

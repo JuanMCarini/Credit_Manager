@@ -362,6 +362,11 @@ class ArcaConfigUpdateSchema(BaseModel):
     cuit: str | int | None = None
     punto_venta_default: int | None = None
     dias_alerta_vencimiento: int | None = None
+    condicion_iva_emisor: str | None = None
+    nro_iibb: str | None = None
+    inicio_actividades: str | None = None
+    cbu_fce_default: str | None = None
+    fce_sistema_circulacion: str | None = None
 
 
 class ArcaGenerarCsrSchema(BaseModel):
@@ -383,11 +388,24 @@ def get_arca_system_status(current_user: Usuario = Depends(get_current_user)):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
+    cuit_empresa = arca_service._clean_cuit(arca_service.COMPANY_DATA.cuit)
+    cuit_coincide = not cuit_empresa or cuit_empresa == cfg["cuit"]
+
     return {
         "environment": cfg["environment"],
         "cuit": cfg["cuit"],
+        "cuit_empresa": cuit_empresa,
+        "cuit_coincide_empresa": cuit_coincide,
         "punto_venta_default": cfg["punto_venta_default"],
         "dias_alerta_vencimiento": cfg["dias_alerta_vencimiento"],
+        "condicion_iva_emisor": cfg.get("condicion_iva_emisor", "RESPONSABLE_INSCRIPTO"),
+        "condicion_iva_emisor_label": cfg.get(
+            "condicion_iva_emisor_label", "IVA Responsable Inscripto"
+        ),
+        "nro_iibb": cfg.get("nro_iibb", cfg["cuit"]),
+        "inicio_actividades": cfg.get("inicio_actividades", "01/01/2020"),
+        "cbu_fce_default": cfg.get("cbu_fce_default", ""),
+        "fce_sistema_circulacion": cfg.get("fce_sistema_circulacion", "ADC"),
         "config": cfg,
         "estado_vigencia": cert_info["estado"],
         "status": cert_info["status"],
@@ -562,6 +580,12 @@ def test_arca_connection_endpoint(current_user: Usuario = Depends(admin_only)):
             wsaa_ok = bool(ta.get("token") and ta.get("sign"))
             wsaa_exp = ta.get("expiration_time")
 
+        puntos_venta_habilitados = []
+        try:
+            puntos_venta_habilitados = svc.fe_param_get_ptos_venta()
+        except Exception:
+            puntos_venta_habilitados = []
+
         return {
             "status": "success",
             "ok": bool(dummy_res.get("ok")),
@@ -572,6 +596,7 @@ def test_arca_connection_endpoint(current_user: Usuario = Depends(admin_only)):
             "AuthServer": dummy_res.get("AuthServer"),
             "wsaa_autenticado": wsaa_ok,
             "wsaa_expiration": wsaa_exp,
+            "puntos_venta_habilitados": puntos_venta_habilitados,
             "estado_vigencia": cert_status["estado"],
             "message": (
                 "Conexión simulada exitosa en modo MOCK."
@@ -579,6 +604,8 @@ def test_arca_connection_endpoint(current_user: Usuario = Depends(admin_only)):
                 else f"Conexión exitosa con ARCA ({cfg['environment']})."
             ),
         }
+    except arca_service.ArcaServiceError as exc:
+        raise HTTPException(status_code=exc.status_http or 400, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:

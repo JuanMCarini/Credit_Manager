@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+import Swal from 'sweetalert2';
 import { useDebounce } from '../hooks/useDebounce';
 import axiosClient, { downloadFile } from '../api/axiosClient';
 import ExportExcelButton from '../components/ExportExcelButton';
@@ -146,6 +147,10 @@ const FacturacionPage = () => {
   const [fechaFacturacion, setFechaFacturacion] = useState(getLocalDateISO());
   const [minDateStr, setMinDateStr] = useState('');
   const maxDateStr = getLocalDateISO();
+  const [arcaStatus, setArcaStatus] = useState(null);
+  const [puntoVenta, setPuntoVenta] = useState(1);
+  const [tipoComprobante, setTipoComprobante] = useState(6);
+  const [ultimoResultadoLote, setUltimoResultadoLote] = useState(null);
   
   const [fechaDesde, setFechaDesde] = useState('');
   const [fechaHasta, setFechaHasta] = useState('');
@@ -223,6 +228,24 @@ const FacturacionPage = () => {
 
   useEffect(() => {
     fetchUltimaFecha();
+    axiosClient
+      .get('/api/v1/system/arca/status')
+      .then((res) => {
+        const st = res.data || {};
+        setArcaStatus(st);
+        if (st.punto_venta_default) {
+          setPuntoVenta(Number(st.punto_venta_default));
+        }
+        if (
+          st.condicion_iva_emisor === 'MONOTRIBUTISTA' ||
+          st.condicion_iva_emisor === 'EXENTO'
+        ) {
+          setTipoComprobante(11);
+        } else {
+          setTipoComprobante(6);
+        }
+      })
+      .catch(() => {});
     
     // Set default dates to current month
     const now = new Date();
@@ -234,20 +257,77 @@ const FacturacionPage = () => {
   }, [fetchUltimaFecha]);
 
   const handleProcesar = async () => {
-    if (!window.confirm(`¿Estás seguro que deseas procesar la facturación de ${filteredPendientes.length} cobranzas filtradas con fecha ${fechaFacturacion}?`)) return;
+    const envActual = (arcaStatus?.environment || 'mock').toLowerCase();
+    const esReal = envActual === 'homologacion' || envActual === 'produccion';
+    const tipoLabel =
+      Number(tipoComprobante) === 11
+        ? 'Factura C (Cod. 011)'
+        : 'Factura B (Cod. 006)';
+    const pvStr = String(puntoVenta || 1).padStart(4, '0');
+
+    if (esReal) {
+      const confirmReal = await Swal.fire({
+        icon: 'warning',
+        title:
+          envActual === 'produccion'
+            ? '⚠️ Confirmar Emisión Fiscal REAL en ARCA (PRODUCCIÓN)'
+            : 'Confirmar Emisión en ARCA (HOMOLOGACIÓN)',
+        html: `
+          <div style="text-align:left;font-size:14px;line-height:1.6;">
+            <p>Estás por emitir comprobantes electrónicos reales ante <strong>ARCA (${envActual.toUpperCase()})</strong>:</p>
+            <ul style="margin:8px 0;padding-left:18px;">
+              <li><strong>Cantidad de cobranzas:</strong> ${filteredPendientes.length}</li>
+              <li><strong>Punto de Venta:</strong> ${pvStr}</li>
+              <li><strong>Tipo de Comprobante:</strong> ${tipoLabel}</li>
+              <li><strong>Fecha de Emisión:</strong> ${fechaFacturacion}</li>
+              <li><strong>Importe Total:</strong> ${formatCurrency(totales.importe_total)}</li>
+            </ul>
+            <p style="color:#f59e0b;margin-top:8px;"><strong>¿Confirmás que deseás emitir estas facturas reales en ARCA?</strong></p>
+          </div>
+        `,
+        showCancelButton: true,
+        confirmButtonColor: envActual === 'produccion' ? '#dc2626' : '#2563eb',
+        cancelButtonColor: '#64748b',
+        confirmButtonText: 'Sí, emitir facturas reales en ARCA',
+        cancelButtonText: 'Cancelar',
+      });
+      if (!confirmReal.isConfirmed) return;
+    } else {
+      if (
+        !window.confirm(
+          `¿Estás seguro que deseas simular (modo MOCK) la facturación de ${filteredPendientes.length} cobranzas con fecha ${fechaFacturacion}?`
+        )
+      ) {
+        return;
+      }
+    }
     
     setProcesando(true);
+    setUltimoResultadoLote(null);
     try {
       const payload = { 
         cobranza_ids: filteredPendientes.map(p => p.id),
-        fecha_emision: fechaFacturacion
+        fecha_emision: fechaFacturacion,
+        punto_venta: Number(puntoVenta || 1),
+        tipo_comprobante: Number(tipoComprobante || 6),
+        confirmar_real: esReal,
       };
       const res = await axiosClient.post('/api/v1/facturacion/procesar', payload);
-      alert(res.data.message || "Proceso finalizado.");
+      setUltimoResultadoLote(res.data);
+      const errCount = Array.isArray(res.data?.errores) ? res.data.errores.length : 0;
+      await Swal.fire({
+        icon: errCount > 0 ? 'warning' : 'success',
+        title: errCount > 0 ? 'Lote procesado con observaciones' : 'Facturación completada',
+        text: res.data.message || 'Proceso finalizado.',
+      });
       queryClient.invalidateQueries({ queryKey: ['pendientes'] });
       fetchUltimaFecha(); // Refresh ultima fecha
     } catch (error) {
-      alert("Error procesando facturas: " + (error.response?.data?.detail || error.message));
+      await Swal.fire({
+        icon: 'error',
+        title: 'Error procesando facturas',
+        text: error.response?.data?.detail || error.message,
+      });
     } finally {
       setProcesando(false);
     }
@@ -291,24 +371,94 @@ const FacturacionPage = () => {
 
   return (
     <section className="tab-content active" style={{ animation: 'fadeIn 0.4s ease' }}>
-      <header className="section-header">
-        <h2>Gestión de Facturación (ARCA)</h2>
-        <p>Visualizá cobranzas pendientes de facturar, procesá emisiones automáticas y descargá reportes.</p>
+      <header className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+        <div>
+          <h2>Gestión de Facturación (ARCA)</h2>
+          <p>Visualizá cobranzas pendientes de facturar, procesá emisiones automáticas y descargá reportes.</p>
+        </div>
+        <div
+          style={{
+            padding: '8px 14px',
+            borderRadius: '999px',
+            fontSize: '12px',
+            fontWeight: '700',
+            backgroundColor:
+              arcaStatus?.environment === 'produccion'
+                ? 'rgba(239, 68, 68, 0.15)'
+                : arcaStatus?.environment === 'homologacion'
+                ? 'rgba(59, 130, 246, 0.15)'
+                : 'rgba(245, 158, 11, 0.15)',
+            color:
+              arcaStatus?.environment === 'produccion'
+                ? '#f87171'
+                : arcaStatus?.environment === 'homologacion'
+                ? '#60a5fa'
+                : '#fbbf24',
+            border: '1px solid currentColor',
+          }}
+        >
+          Entorno ARCA: {(arcaStatus?.environment || 'mock').toUpperCase()}
+          {arcaStatus?.environment === 'mock' ? ' (Simulación sin validez fiscal)' : ''}
+        </div>
       </header>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        {ultimoResultadoLote?.errores?.length > 0 && (
+          <div
+            className="glass-panel"
+            style={{
+              padding: '14px 18px',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid rgba(239, 68, 68, 0.4)',
+              background: 'rgba(239, 68, 68, 0.1)',
+              fontSize: '13px',
+            }}
+          >
+            <strong>Errores detectados en el último lote ({ultimoResultadoLote.errores.length}):</strong>
+            <ul style={{ margin: '6px 0 0 18px' }}>
+              {ultimoResultadoLote.errores.slice(0, 10).map((err, idx) => (
+                <li key={idx}>
+                  Cobranza #{err.cobranza_id}: {err.error}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         
         {/* Panel Superior - Pendientes */}
         <div className="glass-panel" style={{ padding: '24px', borderRadius: 'var(--radius-lg)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '10px' }}>
             <h3 style={{ margin: 0 }}>Cobranzas Pendientes ({filteredPendientes.length})</h3>
-            <div style={{ display: 'flex', gap: '10px' }}>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
               <ExportExcelButton 
                 data={pendientes} 
                 filteredData={filteredPendientes} 
                 filename="cobranzas_pendientes" 
               />
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--surface-color)', padding: '0 8px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--surface-color)', padding: '0 8px', height: '40px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+                <label style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 500 }}>PV:</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="99999"
+                  value={puntoVenta}
+                  onChange={(e) => setPuntoVenta(Number(e.target.value) || 1)}
+                  style={{ width: '64px', background: 'transparent', border: 'none', color: 'var(--text-color)', fontSize: '13px', outline: 'none' }}
+                  title="Punto de Venta ARCA"
+                />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--surface-color)', padding: '0 8px', height: '40px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+                <label style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 500 }}>Comprobante:</label>
+                <select
+                  value={tipoComprobante}
+                  onChange={(e) => setTipoComprobante(Number(e.target.value))}
+                  style={{ background: 'transparent', border: 'none', color: 'var(--text-color)', fontSize: '13px', outline: 'none' }}
+                >
+                  <option value={6}>Factura B (006)</option>
+                  <option value={11}>Factura C (011)</option>
+                </select>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--surface-color)', padding: '0 8px', height: '40px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
                 <label style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 500 }}>Fecha Factura:</label>
                 <input 
                   type="date" 

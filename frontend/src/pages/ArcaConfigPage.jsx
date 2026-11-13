@@ -72,12 +72,17 @@ const ArcaConfigPage = () => {
   const [keyFile, setKeyFile] = useState(null);
   const [uploadingCert, setUploadingCert] = useState(false);
 
-  // Paso 3: Entorno y Punto de Venta
+  // Paso 3: Entorno, Perfil Fiscal y Punto de Venta
   const [configForm, setConfigForm] = useState({
     environment: 'mock',
     cuit: '',
     punto_venta_default: 1,
     dias_alerta_vencimiento: 5,
+    condicion_iva_emisor: 'RESPONSABLE_INSCRIPTO',
+    nro_iibb: '',
+    inicio_actividades: '01/01/2020',
+    cbu_fce_default: '',
+    fce_sistema_circulacion: 'ADC',
   });
   const [savingConfig, setSavingConfig] = useState(false);
   const [testingConn, setTestingConn] = useState(false);
@@ -94,11 +99,17 @@ const ArcaConfigPage = () => {
       const comp = companyRes.data || {};
       setStatusData(data);
 
+      const resolvedCuit = data.cuit || comp.cuit || '';
       setConfigForm({
         environment: data.environment || 'mock',
-        cuit: data.cuit || comp.cuit || '',
+        cuit: resolvedCuit,
         punto_venta_default: data.punto_venta_default ?? 1,
         dias_alerta_vencimiento: data.dias_alerta_vencimiento ?? 5,
+        condicion_iva_emisor: data.condicion_iva_emisor || 'RESPONSABLE_INSCRIPTO',
+        nro_iibb: data.nro_iibb ?? resolvedCuit,
+        inicio_actividades: data.inicio_actividades || '01/01/2020',
+        cbu_fce_default: data.cbu_fce_default || '',
+        fce_sistema_circulacion: data.fce_sistema_circulacion || 'ADC',
       });
 
       setCsrForm((prev) => ({
@@ -236,6 +247,11 @@ const ArcaConfigPage = () => {
         cuit: configForm.cuit,
         punto_venta_default: Number(configForm.punto_venta_default),
         dias_alerta_vencimiento: Number(configForm.dias_alerta_vencimiento),
+        condicion_iva_emisor: configForm.condicion_iva_emisor,
+        nro_iibb: configForm.nro_iibb,
+        inicio_actividades: configForm.inicio_actividades,
+        cbu_fce_default: configForm.cbu_fce_default,
+        fce_sistema_circulacion: configForm.fce_sistema_circulacion,
       });
       setFeedback({
         type: 'success',
@@ -354,8 +370,27 @@ const ArcaConfigPage = () => {
               | Punto de Venta por defecto:{' '}
               <strong>
                 {String(statusData?.punto_venta_default || 1).padStart(4, '0')}
+              </strong>{' '}
+              | Condición IVA Emisor:{' '}
+              <strong>
+                {statusData?.condicion_iva_emisor_label || 'IVA Responsable Inscripto'}
               </strong>
             </p>
+            {statusData?.cuit_coincide_empresa === false && (
+              <div
+                style={{
+                  marginTop: '8px',
+                  padding: '6px 10px',
+                  borderRadius: '6px',
+                  background: 'rgba(245, 158, 11, 0.15)',
+                  border: '1px solid rgba(245, 158, 11, 0.4)',
+                  color: '#fbbf24',
+                  fontSize: '12px',
+                }}
+              >
+                El CUIT configurado en ARCA ({statusData?.cuit}) difiere del CUIT en Configuración de Empresa ({statusData?.cuit_empresa}). Se recomienda unificarlos.
+              </div>
+            )}
           </div>
 
           <span
@@ -705,13 +740,13 @@ const ArcaConfigPage = () => {
             </form>
           </div>
 
-          {/* Paso 3: Entorno y Prueba de Conexión */}
+          {/* Paso 3: Perfil Fiscal, Entorno y Prueba de Conexión */}
           <div
             className="glass-panel"
             style={{ padding: '24px', borderRadius: 'var(--radius-lg)' }}
           >
             <h3 style={{ marginTop: 0, marginBottom: '8px' }}>
-              Paso 3 — Entorno y Prueba de Conexión
+              Paso 3 — Perfil Fiscal, Entorno y Conexión
             </h3>
             <p
               style={{
@@ -720,9 +755,8 @@ const ArcaConfigPage = () => {
                 marginBottom: '16px',
               }}
             >
-              Seleccione el entorno operativo de facturación electrónica y
-              verifique la conectividad con los servidores de ARCA (FEDummy y
-              WSAA).
+              Configure el entorno operativo, condición frente al IVA del emisor,
+              datos impresos en PDF y verifique la conectividad con ARCA.
             </p>
 
             <form onSubmit={handleSaveConfig}>
@@ -745,18 +779,28 @@ const ArcaConfigPage = () => {
 
               <div style={{ marginBottom: '12px' }}>
                 <label style={{ display: 'block', fontSize: '13px', marginBottom: '4px' }}>
-                  CUIT Emisor (11 dígitos)
+                  Condición frente al IVA del Emisor
                 </label>
-                <input
-                  type="text"
-                  value={configForm.cuit}
+                <select
+                  value={configForm.condicion_iva_emisor}
                   onChange={(e) =>
-                    setConfigForm({ ...configForm, cuit: e.target.value })
+                    setConfigForm({
+                      ...configForm,
+                      condicion_iva_emisor: e.target.value,
+                    })
                   }
-                  placeholder="30712345678"
-                  required
                   style={{ width: '100%' }}
-                />
+                >
+                  <option value="RESPONSABLE_INSCRIPTO">
+                    IVA Responsable Inscripto (Emite A, B, M, FCE)
+                  </option>
+                  <option value="MONOTRIBUTISTA">
+                    Responsable Monotributo (Emite Clase C)
+                  </option>
+                  <option value="EXENTO">
+                    IVA Sujeto Exento (Emite Clase C)
+                  </option>
+                </select>
               </div>
 
               <div
@@ -764,12 +808,52 @@ const ArcaConfigPage = () => {
                   display: 'grid',
                   gridTemplateColumns: '1fr 1fr',
                   gap: '12px',
-                  marginBottom: '16px',
+                  marginBottom: '12px',
                 }}
               >
                 <div>
                   <label style={{ display: 'block', fontSize: '13px', marginBottom: '4px' }}>
-                    Punto de Venta Default
+                    CUIT Emisor (11 dígitos)
+                  </label>
+                  <input
+                    type="text"
+                    value={configForm.cuit}
+                    onChange={(e) =>
+                      setConfigForm({ ...configForm, cuit: e.target.value })
+                    }
+                    placeholder="30712345678"
+                    required
+                    style={{ width: '100%' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', marginBottom: '4px' }}>
+                    Nro. Ingresos Brutos (PDF)
+                  </label>
+                  <input
+                    type="text"
+                    value={configForm.nro_iibb}
+                    onChange={(e) =>
+                      setConfigForm({ ...configForm, nro_iibb: e.target.value })
+                    }
+                    placeholder="Ej. 30-71234567-8 o CM 901-..."
+                    style={{ width: '100%' }}
+                  />
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr 1fr',
+                  gap: '12px',
+                  marginBottom: '12px',
+                }}
+              >
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', marginBottom: '4px' }}>
+                    Punto de Venta
                   </label>
                   <input
                     type="number"
@@ -783,6 +867,24 @@ const ArcaConfigPage = () => {
                       })
                     }
                     required
+                    style={{ width: '100%' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', marginBottom: '4px' }}>
+                    Inicio Actividades
+                  </label>
+                  <input
+                    type="text"
+                    value={configForm.inicio_actividades}
+                    onChange={(e) =>
+                      setConfigForm({
+                        ...configForm,
+                        inicio_actividades: e.target.value,
+                      })
+                    }
+                    placeholder="01/01/2020"
                     style={{ width: '100%' }}
                   />
                 </div>
@@ -807,6 +909,72 @@ const ArcaConfigPage = () => {
                   />
                 </div>
               </div>
+
+              <details
+                style={{
+                  marginBottom: '16px',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  background: 'rgba(255,255,255,0.02)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                }}
+              >
+                <summary
+                  style={{
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    fontWeight: '600',
+                    color: 'var(--text-muted)',
+                  }}
+                >
+                  Opcional: Parámetros FCE MiPyME (códigos 201–213)
+                </summary>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '2fr 1fr',
+                    gap: '10px',
+                    marginTop: '10px',
+                  }}
+                >
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px' }}>
+                      CBU Emisor (22 dígitos)
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={22}
+                      value={configForm.cbu_fce_default}
+                      onChange={(e) =>
+                        setConfigForm({
+                          ...configForm,
+                          cbu_fce_default: e.target.value,
+                        })
+                      }
+                      placeholder="Solo si emite FCE MiPyME"
+                      style={{ width: '100%', fontSize: '12px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px' }}>
+                      Circulación
+                    </label>
+                    <select
+                      value={configForm.fce_sistema_circulacion}
+                      onChange={(e) =>
+                        setConfigForm({
+                          ...configForm,
+                          fce_sistema_circulacion: e.target.value,
+                        })
+                      }
+                      style={{ width: '100%', fontSize: '12px' }}
+                    >
+                      <option value="ADC">ADC</option>
+                      <option value="SCA">SCA</option>
+                    </select>
+                  </div>
+                </div>
+              </details>
 
               <button
                 type="submit"
@@ -854,6 +1022,18 @@ const ArcaConfigPage = () => {
                     ? 'Autenticado correctamente'
                     : 'Sin certificado / Modo Mock'}
                 </div>
+                {Array.isArray(connResult.puntos_venta_habilitados) &&
+                  connResult.puntos_venta_habilitados.length > 0 && (
+                    <div style={{ marginTop: '6px' }}>
+                      <strong>Puntos de Venta WSFE:</strong>{' '}
+                      {connResult.puntos_venta_habilitados
+                        .map(
+                          (p) =>
+                            `${String(p.nro).padStart(4, '0')} (${p.emision_tipo || 'RECE'})`
+                        )
+                        .join(', ')}
+                    </div>
+                  )}
               </div>
             )}
           </div>

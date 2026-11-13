@@ -35,8 +35,19 @@ from src.database.models.socios import SocioComercial
 from src.database.models.finance.comprobantes import Proveedor
 from src.database.models.deuda.inversores import Inversor
 from src.logic.creditos.facturacion import procesar_facturacion_pendiente
-from src.services.arca_service import ArcaService
+from src.services.arca_service import (
+    ArcaService,
+    ArcaServiceError,
+    CONDICIONES_IVA_RECEPTOR_CATALOGO,
+    TIPOS_TRIBUTO_CATALOGO,
+    get_arca_config,
+    resolve_condicion_iva_receptor_id,
+)
+from src.services.arca_consulta import ArcaConsultaService
 from src.config import get_company_data
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/facturacion", tags=["Facturación"])
 
@@ -49,6 +60,7 @@ def _extract_factura_breakdown(f: Factura) -> dict[str, float]:
     """
     no_gravado = float(f.importe_no_gravado or 0.0)
     exento = float(f.importe_exento or 0.0)
+    neto_0 = float(getattr(f, "neto_gravado_0", 0.0) or 0.0)
     neto_21 = float(f.neto_gravado_21 or 0.0)
     neto_105 = float(f.neto_gravado_105 or 0.0)
     neto_27 = float(f.neto_gravado_27 or 0.0)
@@ -60,7 +72,7 @@ def _extract_factura_breakdown(f: Factura) -> dict[str, float]:
     otros_imp = float(f.otros_impuestos or 0.0)
 
     own_sum = (
-        no_gravado + exento + neto_21 + neto_105 + neto_27
+        no_gravado + exento + neto_0 + neto_21 + neto_105 + neto_27
         + iva_21 + iva_105 + iva_27 + perc_iva + perc_iibb + otros_imp
     )
     if own_sum == 0.0 and f.cobranza is not None:
@@ -68,7 +80,7 @@ def _extract_factura_breakdown(f: Factura) -> dict[str, float]:
         neto_21 = float(f.cobranza.interes or 0.0)
         iva_21 = float(f.cobranza.iva or 0.0)
 
-    neto_gravado_total = round(neto_21 + neto_105 + neto_27, 2)
+    neto_gravado_total = round(neto_0 + neto_21 + neto_105 + neto_27, 2)
     iva_total = round(iva_21 + iva_105 + iva_27, 2)
     otros_tributos_total = round(perc_iva + perc_iibb + otros_imp, 2)
     importe_total = round(float(f.importe_total or 0.0), 2)
@@ -76,6 +88,7 @@ def _extract_factura_breakdown(f: Factura) -> dict[str, float]:
     return {
         "importe_no_gravado": round(no_gravado, 2),
         "importe_exento": round(exento, 2),
+        "neto_gravado_0": round(neto_0, 2),
         "neto_gravado_21": round(neto_21, 2),
         "neto_gravado_105": round(neto_105, 2),
         "neto_gravado_27": round(neto_27, 2),
@@ -107,7 +120,9 @@ def generar_qr_afip_url(
     https://www.afip.gob.ar/fe/qr/?p=<payload_json_base64>
     """
     bd = breakdown or _extract_factura_breakdown(f)
-    cuit_emisor_digits = re.sub(r"\D", "", str(getattr(company_data_db, "cuit", "") or "30000000000"))
+    cfg_arca = get_arca_config()
+    cuit_raw = cfg_arca.get("cuit") or getattr(company_data_db, "cuit", "") or "30000000000"
+    cuit_emisor_digits = re.sub(r"\D", "", str(cuit_raw))
     cuit_emisor = int(cuit_emisor_digits) if cuit_emisor_digits else 30000000000
 
     doc_rec_digits = re.sub(r"\D", "", str(f.cuit_cliente or ""))
@@ -231,19 +246,24 @@ def generar_factura_pdf_bytes(f: Factura, company_data_db) -> bytes:
         )
 
     # Datos de la Empresa Emisora
+    cfg_arca = get_arca_config()
+    cond_emisor_label = cfg_arca.get("condicion_iva_emisor_label") or "IVA Responsable Inscripto"
+    c_cuit = str(cfg_arca.get("cuit") or company_data_db.cuit or "")
+    nro_iibb_str = str(cfg_arca.get("nro_iibb") or c_cuit)
+    inicio_act_str = str(cfg_arca.get("inicio_actividades") or "01/01/2020")
+
     c.setFont("Helvetica-Bold", 10)
     c.drawString(1.5 * cm, height - 5.5 * cm, f"Razón Social: {company_data_db.razon_social}")
     c.setFont("Helvetica", 9)
     c.drawString(1.5 * cm, height - 6.0 * cm, f"Domicilio Comercial: {company_data_db.domicilio}")
-    c.drawString(1.5 * cm, height - 6.5 * cm, "Condición frente al IVA: Responsable Inscripto")
+    c.drawString(1.5 * cm, height - 6.5 * cm, f"Condición frente al IVA: {cond_emisor_label}")
 
     c.setFont("Helvetica-Bold", 10)
-    c_cuit = str(company_data_db.cuit or "")
     cuit_formateado = f"{c_cuit[:2]}-{c_cuit[2:10]}-{c_cuit[10:]}" if len(c_cuit) == 11 else c_cuit
     c.drawString(11 * cm, height - 5.5 * cm, f"CUIT: {cuit_formateado}")
     c.setFont("Helvetica", 9)
-    c.drawString(11 * cm, height - 6.0 * cm, f"Ingresos Brutos: {c_cuit}")
-    c.drawString(11 * cm, height - 6.5 * cm, "Fecha de Inicio de Actividades: 01/01/2020")
+    c.drawString(11 * cm, height - 6.0 * cm, f"Ingresos Brutos: {nro_iibb_str}")
+    c.drawString(11 * cm, height - 6.5 * cm, f"Fecha de Inicio de Actividades: {inicio_act_str}")
 
     # Sección de datos del Receptor
     c.setStrokeColorRGB(0.7, 0.7, 0.7)
@@ -508,7 +528,65 @@ def get_receptores_facturacion(db: Session = Depends(get_db)):
         for pr in db.query(Provincia).order_by(Provincia.nombre).all()
     ]
 
-    return {"receptores": receptores, "provincias": provincias}
+    return {
+        "receptores": receptores,
+        "provincias": provincias,
+        "condiciones_iva_receptor": CONDICIONES_IVA_RECEPTOR_CATALOGO,
+        "tipos_tributo": TIPOS_TRIBUTO_CATALOGO,
+    }
+
+
+@router.get("/condiciones-iva-receptor")
+def get_condiciones_iva_receptor():
+    """Retorna el catálogo oficial RG 5616 de Condición frente al IVA del Receptor."""
+    return CONDICIONES_IVA_RECEPTOR_CATALOGO
+
+
+@router.get("/tipos-tributo")
+def get_tipos_tributo_arca():
+    """Retorna el catálogo oficial de Tipos de Tributo ARCA (FEParamGetTiposTributos)."""
+    try:
+        return ArcaService().fe_param_get_tipos_tributos()
+    except Exception:
+        return TIPOS_TRIBUTO_CATALOGO
+
+
+@router.get("/consultar-cuit/{cuit}")
+def consultar_cuit_padron_arca(cuit: str, db: Session = Depends(get_db)):
+    """
+    Consulta el CUIT/CUIL en el Padrón de ARCA (ws_sr_constancia_inscripcion / getPersona_v2)
+    y resuelve automáticamente Razón Social, Domicilio, Provincia y Condición frente al IVA.
+    """
+    try:
+        svc = ArcaConsultaService()
+        datos = svc.consultar_cuit(cuit)
+    except ArcaServiceError as exc:
+        raise HTTPException(status_code=exc.status_http or 400, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"No se pudo consultar el Padrón de ARCA: {exc}",
+        )
+
+    prov_id = None
+    prov_nombre_arca = str(datos.get("provincia") or "").strip().upper()
+    if prov_nombre_arca:
+        provincias_db = db.query(Provincia).all()
+        for pr in provincias_db:
+            p_nom = (pr.nombre or "").strip().upper()
+            if p_nom and (p_nom in prov_nombre_arca or prov_nombre_arca in p_nom):
+                prov_id = pr.id
+                break
+            if "CIUDAD AUTONOMA" in prov_nombre_arca and p_nom in ("CABA", "CAPITAL FEDERAL", "CIUDAD AUTONOMA DE BUENOS AIRES"):
+                prov_id = pr.id
+                break
+
+    return {
+        **datos,
+        "provincia_id_sugerida": prov_id,
+    }
 
 
 class ItemFacturaInput(BaseModel):
@@ -532,14 +610,23 @@ class EmitirFacturaIndividualRequest(BaseModel):
     razon_social_receptor: str = Field(default="Consumidor Final", max_length=200)
     domicilio_receptor: Optional[str] = Field(default=None, max_length=255)
     condicion_iva_receptor: str = Field(default="Consumidor Final", max_length=60)
+    condicion_iva_receptor_id: Optional[int] = None
     provincia_id: Optional[int] = None
 
     comprobante_asociado_id: Optional[int] = None
     comprobante_asociado_str: Optional[str] = Field(default=None, max_length=100)
+    comprobante_asociado_tipo: Optional[int] = None
+    comprobante_asociado_punto_venta: Optional[int] = None
+    comprobante_asociado_nro: Optional[int] = None
+    comprobante_asociado_fecha: Optional[date] = None
+
     cbu_emisor: Optional[str] = Field(default=None, max_length=22)
+    fce_sistema_circulacion: Optional[str] = Field(default=None, max_length=10)
+    fce_anulacion: Optional[str] = Field(default=None, max_length=5)
 
     importe_no_gravado: float = Field(default=0.0, ge=0)
     importe_exento: float = Field(default=0.0, ge=0)
+    neto_gravado_0: float = Field(default=0.0, ge=0)
     neto_gravado_21: float = Field(default=0.0, ge=0)
     neto_gravado_105: float = Field(default=0.0, ge=0)
     neto_gravado_27: float = Field(default=0.0, ge=0)
@@ -549,6 +636,8 @@ class EmitirFacturaIndividualRequest(BaseModel):
     percepcion_iva: float = Field(default=0.0, ge=0)
     percepcion_iibb: float = Field(default=0.0, ge=0)
     otros_impuestos: float = Field(default=0.0, ge=0)
+    tipo_tributo_otros_id: Optional[int] = Field(default=99)
+    desc_tributo_otros: Optional[str] = Field(default="Otros Tributos", max_length=100)
     importe_total: Optional[float] = Field(default=None, ge=0)
 
     items: Optional[List[ItemFacturaInput]] = None
@@ -562,7 +651,7 @@ def emitir_factura_individual(
 ):
     """
     Emite un comprobante individual de ARCA desde el módulo de Finanzas
-    (Facturas A, B, C, M, E, Notas de Crédito, Notas de Débito, Recibos y FCE MiPyME).
+    (Facturas A, B, C, M, Notas de Crédito, Notas de Débito, Recibos y FCE MiPyME).
     """
     if payload.tipo_comprobante not in TIPOS_COMPROBANTE_MAP:
         raise HTTPException(
@@ -571,6 +660,26 @@ def emitir_factura_individual(
         )
 
     info_tipo = TIPOS_COMPROBANTE_MAP[payload.tipo_comprobante]
+    arca_service = ArcaService()
+
+    # En entornos reales (Homologación / Producción), bloquear exportación (Clase E) y validar condición del emisor
+    if not arca_service.use_mock and arca_service.environment != "mock":
+        if info_tipo["letra"] == "E":
+            raise HTTPException(
+                status_code=400,
+                detail="Los comprobantes de exportación (Clase E) están deshabilitados.",
+            )
+
+    cond_emisor = arca_service.config.get("condicion_iva_emisor", "RESPONSABLE_INSCRIPTO")
+    if cond_emisor in ("MONOTRIBUTISTA", "EXENTO") and info_tipo["letra"] != "C":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"El emisor está configurado como {arca_service.config.get('condicion_iva_emisor_label', cond_emisor)} "
+                "y únicamente puede emitir comprobantes Clase C."
+            ),
+        )
+
     cuit_clean = re.sub(r"\D", "", payload.cuit_cliente or "")
 
     if info_tipo["requiere_cuit"]:
@@ -587,6 +696,7 @@ def emitir_factura_individual(
             )
 
     comp_asoc_str = (payload.comprobante_asociado_str or "").strip() or None
+    comprobante_asociado_dict: dict[str, Any] | None = None
     fact_asoc = None
     saldo_disponible_nc = None
     if payload.comprobante_asociado_id:
@@ -600,6 +710,12 @@ def emitir_factura_individual(
             )
         info_asoc = get_info_tipo_comprobante(fact_asoc.tipo_comprobante)
         comp_asoc_str = f"{info_asoc['nombre']} {fact_asoc.punto_venta:04d}-{fact_asoc.nro_comprobante:08d}"
+        comprobante_asociado_dict = {
+            "tipo_comprobante": fact_asoc.tipo_comprobante,
+            "punto_venta": fact_asoc.punto_venta,
+            "nro_comprobante": fact_asoc.nro_comprobante,
+            "fecha_emision": fact_asoc.fecha_emision,
+        }
 
         if payload.tipo_comprobante in CODIGOS_NOTA_CREDITO:
             ncs_previas = (
@@ -617,6 +733,22 @@ def emitir_factura_individual(
                     status_code=400,
                     detail="El comprobante asociado ya fue anulado en su totalidad mediante Nota(s) de Crédito.",
                 )
+    elif payload.comprobante_asociado_nro:
+        pv_asoc = int(payload.comprobante_asociado_punto_venta or payload.punto_venta)
+        nro_asoc = int(payload.comprobante_asociado_nro)
+        tipo_asoc = int(
+            payload.comprobante_asociado_tipo
+            or (1 if info_tipo["letra"] == "A" else 6 if info_tipo["letra"] == "B" else 11)
+        )
+        comprobante_asociado_dict = {
+            "tipo_comprobante": tipo_asoc,
+            "punto_venta": pv_asoc,
+            "nro_comprobante": nro_asoc,
+            "fecha_emision": payload.comprobante_asociado_fecha,
+        }
+        if not comp_asoc_str:
+            info_asoc_m = get_info_tipo_comprobante(tipo_asoc)
+            comp_asoc_str = f"{info_asoc_m['nombre']} {pv_asoc:04d}-{nro_asoc:08d}"
 
     if (
         payload.tipo_comprobante in CODIGOS_NOTA_CREDITO
@@ -629,12 +761,17 @@ def emitir_factura_individual(
 
     no_gravado = round(float(payload.importe_no_gravado or 0.0), 2)
     exento = round(float(payload.importe_exento or 0.0), 2)
+    neto_0 = round(float(payload.neto_gravado_0 or 0.0), 2)
     neto_21 = round(float(payload.neto_gravado_21 or 0.0), 2)
     neto_105 = round(float(payload.neto_gravado_105 or 0.0), 2)
     neto_27 = round(float(payload.neto_gravado_27 or 0.0), 2)
 
     items_serializados: list[dict] = []
-    has_explicit_netos = (no_gravado + exento + neto_21 + neto_105 + neto_27) > 0
+    has_explicit_netos = (no_gravado + exento + neto_0 + neto_21 + neto_105 + neto_27) > 0
+
+    bruto_21 = 0.0
+    bruto_105 = 0.0
+    bruto_27 = 0.0
 
     if payload.items:
         for it in payload.items:
@@ -648,30 +785,49 @@ def emitir_factura_individual(
                 "subtotal": sub,
             })
             if not has_explicit_netos:
-                if info_tipo["letra"] in ("C", "E") or alicuota in ("0", "EXENTO"):
+                if info_tipo["letra"] in ("C", "E") or alicuota == "EXENTO":
                     exento = round(exento + sub, 2)
+                elif alicuota == "0":
+                    neto_0 = round(neto_0 + sub, 2)
                 elif alicuota == "NO_GRAVADO":
                     no_gravado = round(no_gravado + sub, 2)
                 elif alicuota == "10.5":
                     if info_tipo["discrimina_iva"]:
                         neto_105 = round(neto_105 + sub, 2)
                     else:
-                        neto_105 = round(neto_105 + (sub / 1.105), 2)
+                        bruto_105 = round(bruto_105 + sub, 2)
                 elif alicuota == "27":
                     if info_tipo["discrimina_iva"]:
                         neto_27 = round(neto_27 + sub, 2)
                     else:
-                        neto_27 = round(neto_27 + (sub / 1.27), 2)
+                        bruto_27 = round(bruto_27 + sub, 2)
                 else:
                     if info_tipo["discrimina_iva"]:
                         neto_21 = round(neto_21 + sub, 2)
                     else:
-                        neto_21 = round(neto_21 + (sub / 1.21), 2)
+                        bruto_21 = round(bruto_21 + sub, 2)
 
     if info_tipo["letra"] in ("C", "E"):
         iva_21 = 0.0
         iva_105 = 0.0
         iva_27 = 0.0
+    elif not info_tipo["discrimina_iva"] and not has_explicit_netos and (bruto_21 + bruto_105 + bruto_27) > 0:
+        # En comprobantes B, calcular IVA por diferencia exacta (subtotal - neto) para evitar error de $0.01
+        if bruto_21 > 0:
+            neto_21 = round(bruto_21 / 1.21, 2)
+            iva_21 = round(float(payload.iva_21) if payload.iva_21 is not None else (bruto_21 - neto_21), 2)
+        else:
+            iva_21 = 0.0
+        if bruto_105 > 0:
+            neto_105 = round(bruto_105 / 1.105, 2)
+            iva_105 = round(float(payload.iva_105) if payload.iva_105 is not None else (bruto_105 - neto_105), 2)
+        else:
+            iva_105 = 0.0
+        if bruto_27 > 0:
+            neto_27 = round(bruto_27 / 1.27, 2)
+            iva_27 = round(float(payload.iva_27) if payload.iva_27 is not None else (bruto_27 - neto_27), 2)
+        else:
+            iva_27 = 0.0
     else:
         iva_21 = round(float(payload.iva_21) if payload.iva_21 is not None else (neto_21 * 0.21), 2)
         iva_105 = round(float(payload.iva_105) if payload.iva_105 is not None else (neto_105 * 0.105), 2)
@@ -682,7 +838,7 @@ def emitir_factura_individual(
     otros_imp = round(float(payload.otros_impuestos or 0.0), 2)
 
     total_calculado = round(
-        no_gravado + exento + neto_21 + neto_105 + neto_27
+        no_gravado + exento + neto_0 + neto_21 + neto_105 + neto_27
         + iva_21 + iva_105 + iva_27
         + perc_iva + perc_iibb + otros_imp,
         2,
@@ -713,29 +869,53 @@ def emitir_factura_individual(
         )
 
     fecha_eff = payload.fecha_emision or date.today()
-    arca_service = ArcaService()
-    res_arca = arca_service.emitir_factura(
-        punto_venta=payload.punto_venta,
+    doc_tipo_num = 80 if len(cuit_clean) == 11 else (96 if len(cuit_clean) >= 7 else 99)
+    cond_iva_id = resolve_condicion_iva_receptor_id(
+        payload.condicion_iva_receptor_id or payload.condicion_iva_receptor,
         tipo_comprobante=payload.tipo_comprobante,
-        importe_total=total_calculado,
-        cuit_cliente=cuit_clean or (payload.cuit_cliente or "").strip() or None,
-        fecha_emision=fecha_eff,
-        db=db,
-        concepto_arca=payload.concepto_arca,
-        tipo_doc_receptor=payload.tipo_doc_receptor,
-        importe_no_gravado=no_gravado,
-        importe_exento=exento,
-        neto_gravado_21=neto_21,
-        neto_gravado_105=neto_105,
-        neto_gravado_27=neto_27,
-        iva_21=iva_21,
-        iva_105=iva_105,
-        iva_27=iva_27,
-        otros_tributos=round(perc_iva + perc_iibb + otros_imp, 2),
-        fecha_servicio_desde=payload.fecha_servicio_desde,
-        fecha_servicio_hasta=payload.fecha_servicio_hasta,
-        fecha_vencimiento_pago=payload.fecha_vencimiento_pago,
+        doc_tipo=doc_tipo_num,
     )
+
+    try:
+        res_arca = arca_service.emitir_factura(
+            punto_venta=payload.punto_venta,
+            tipo_comprobante=payload.tipo_comprobante,
+            importe_total=total_calculado,
+            cuit_cliente=cuit_clean or (payload.cuit_cliente or "").strip() or None,
+            fecha_emision=fecha_eff,
+            db=db,
+            concepto_arca=payload.concepto_arca,
+            tipo_doc_receptor=payload.tipo_doc_receptor,
+            condicion_iva_receptor=payload.condicion_iva_receptor,
+            condicion_iva_receptor_id=cond_iva_id,
+            comprobante_asociado=comprobante_asociado_dict,
+            comprobante_asociado_str=comp_asoc_str,
+            cbu_emisor=payload.cbu_emisor,
+            fce_sistema_circulacion=payload.fce_sistema_circulacion,
+            fce_anulacion=payload.fce_anulacion,
+            importe_no_gravado=no_gravado,
+            importe_exento=exento,
+            neto_gravado_0=neto_0,
+            neto_gravado_21=neto_21,
+            neto_gravado_105=neto_105,
+            neto_gravado_27=neto_27,
+            iva_21=iva_21,
+            iva_105=iva_105,
+            iva_27=iva_27,
+            percepcion_iva=perc_iva,
+            percepcion_iibb=perc_iibb,
+            otros_impuestos=otros_imp,
+            tipo_tributo_otros_id=payload.tipo_tributo_otros_id,
+            desc_tributo_otros=payload.desc_tributo_otros,
+            otros_tributos=round(perc_iva + perc_iibb + otros_imp, 2),
+            fecha_servicio_desde=payload.fecha_servicio_desde,
+            fecha_servicio_hasta=payload.fecha_servicio_hasta,
+            fecha_vencimiento_pago=payload.fecha_vencimiento_pago,
+        )
+    except ArcaServiceError as exc:
+        raise HTTPException(status_code=exc.status_http or 400, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
     nueva_factura = Factura(
         cobranza_id=None,
@@ -753,12 +933,14 @@ def emitir_factura_individual(
         razon_social_receptor=payload.razon_social_receptor.strip() or "Consumidor Final",
         domicilio_receptor=(payload.domicilio_receptor or "").strip() or None,
         condicion_iva_receptor=payload.condicion_iva_receptor,
+        condicion_iva_receptor_id=cond_iva_id,
         provincia_id=payload.provincia_id,
         comprobante_asociado_id=payload.comprobante_asociado_id,
         comprobante_asociado_str=comp_asoc_str,
-        cbu_emisor=payload.cbu_emisor,
+        cbu_emisor=payload.cbu_emisor or arca_service.config.get("cbu_fce_default") or None,
         importe_no_gravado=no_gravado,
         importe_exento=exento,
+        neto_gravado_0=neto_0,
         neto_gravado_21=neto_21,
         neto_gravado_105=neto_105,
         neto_gravado_27=neto_27,
@@ -771,16 +953,34 @@ def emitir_factura_individual(
         importe_total=total_calculado,
         cae=res_arca["cae"],
         vencimiento_cae=res_arca["vencimiento_cae"],
+        estado_arca="MOCK" if arca_service.use_mock else f"AUTORIZADA_{arca_service.environment.upper()}",
         items_detalle=items_serializados or None,
         observaciones=(payload.observaciones or "").strip() or None,
     )
-    db.add(nueva_factura)
-    db.commit()
-    db.refresh(nueva_factura)
+    try:
+        db.add(nueva_factura)
+        db.commit()
+        db.refresh(nueva_factura)
+    except Exception as db_exc:
+        db.rollback()
+        logger.critical(
+            f"[ARCA CRITICAL] Comprobante autorizado en ARCA pero falló el guardado en BD: "
+            f"PV={res_arca['punto_venta']} Tipo={res_arca['tipo_comprobante']} "
+            f"Nro={res_arca['nro_comprobante']} CAE={res_arca['cae']} "
+            f"Vto={res_arca['vencimiento_cae']} Total={total_calculado} Error={db_exc}"
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                f"El comprobante fue autorizado en ARCA (Nro {res_arca['punto_venta']:04d}-{res_arca['nro_comprobante']:08d}, "
+                f"CAE {res_arca['cae']}), pero ocurrió un error al guardar en la base de datos: {db_exc}"
+            ),
+        )
 
     return {
         "id": nueva_factura.id,
         "origen": nueva_factura.origen,
+        "environment": arca_service.environment,
         "punto_venta": nueva_factura.punto_venta,
         "tipo_comprobante": nueva_factura.tipo_comprobante,
         "tipo_comprobante_nombre": info_tipo["nombre"],
@@ -790,6 +990,17 @@ def emitir_factura_individual(
         "fecha_emision": str(nueva_factura.fecha_emision),
         "cuit_cliente": nueva_factura.cuit_cliente,
         "razon_social_receptor": nueva_factura.razon_social_receptor,
+        "condicion_iva_receptor": nueva_factura.condicion_iva_receptor,
+        "condicion_iva_receptor_id": nueva_factura.condicion_iva_receptor_id,
+        "importe_no_gravado": float(nueva_factura.importe_no_gravado or 0.0),
+        "importe_exento": float(nueva_factura.importe_exento or 0.0),
+        "neto_gravado_0": float(nueva_factura.neto_gravado_0 or 0.0),
+        "neto_gravado_21": float(nueva_factura.neto_gravado_21 or 0.0),
+        "neto_gravado_105": float(nueva_factura.neto_gravado_105 or 0.0),
+        "neto_gravado_27": float(nueva_factura.neto_gravado_27 or 0.0),
+        "iva_21": float(nueva_factura.iva_21 or 0.0),
+        "iva_105": float(nueva_factura.iva_105 or 0.0),
+        "iva_27": float(nueva_factura.iva_27 or 0.0),
         "importe_total": float(nueva_factura.importe_total),
         "cae": nueva_factura.cae,
         "vencimiento_cae": str(nueva_factura.vencimiento_cae) if nueva_factura.vencimiento_cae else None,
@@ -1054,14 +1265,39 @@ def get_ultima_fecha_factura(db: Session = Depends(get_db)):
 class ProcesarRequest(BaseModel):
     cobranza_ids: Optional[List[int]] = None
     fecha_emision: Optional[date] = None
+    punto_venta: Optional[int] = Field(default=None, ge=1, le=99999)
+    tipo_comprobante: Optional[int] = None
+    confirmar_real: bool = False
 
 
 @router.post("/procesar")
 def procesar_facturacion(request: ProcesarRequest, db: Session = Depends(get_db)):
-    cantidad = procesar_facturacion_pendiente(
-        db, cobranza_ids=request.cobranza_ids, fecha_emision=request.fecha_emision
+    cfg = get_arca_config()
+    if cfg.get("environment") in ("homologacion", "produccion") and not request.confirmar_real:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"El sistema está en modo '{cfg.get('environment').upper()}'. "
+                "Debe confirmar explícitamente la emisión de facturas reales (confirmar_real=true)."
+            ),
+        )
+    res_lote = procesar_facturacion_pendiente(
+        db,
+        cobranza_ids=request.cobranza_ids,
+        fecha_emision=request.fecha_emision,
+        punto_venta=request.punto_venta,
+        tipo_comprobante=request.tipo_comprobante,
+        retornar_detalle=True,
     )
-    return {"message": f"Se procesaron {cantidad} facturas."}
+    cantidad = res_lote["procesadas"]
+    errores = res_lote["errores"]
+    msg = f"Se procesaron {cantidad} facturas."
+    if errores:
+        msg += f" ({len(errores)} con error)."
+    return {
+        "message": msg,
+        **res_lote,
+    }
 
 
 @router.get("/libro-iva")

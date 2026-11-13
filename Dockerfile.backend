@@ -24,7 +24,7 @@ COPY src/ ./src/
 # Create non-root user (ISO/IEC 27017 / Control 8.2) and prepare writable data directories
 RUN groupadd -g 10001 appuser && \
     useradd -u 10001 -g appuser -d /app -s /usr/sbin/nologin appuser && \
-    mkdir -p /app/data/uploads /app/data/public && \
+    mkdir -p /app/data/uploads /app/data/public /app/data/certs/arca && \
     chown -R appuser:appuser /app
 
 USER appuser

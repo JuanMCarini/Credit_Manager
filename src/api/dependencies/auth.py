@@ -373,14 +373,31 @@ def audit_log(accion: str):
     return _audit_log
 
 
+def _is_shared_facturacion_path(path: str) -> bool:
+    if path.startswith((
+        "/api/v1/facturacion/libro-iva",
+        "/api/v1/facturacion/descargar-masivo",
+        "/api/v1/facturacion/ultima-fecha",
+    )):
+        return True
+    if path.startswith("/api/v1/facturacion/") and path.endswith("/pdf"):
+        return True
+    return False
+
+
 def _resolve_module_code(path: str) -> str | None:
     if path.startswith((
         "/api/v1/facturacion/emitir-individual",
         "/api/v1/facturacion/emitidas",
         "/api/v1/facturacion/receptores",
         "/api/v1/facturacion/tipos-comprobante",
+        "/api/v1/facturacion/condiciones-iva-receptor",
+        "/api/v1/facturacion/tipos-tributo",
+        "/api/v1/facturacion/consultar-cuit",
     )):
         return "finanzas"
+    if _is_shared_facturacion_path(path):
+        return "finanzas_or_creditos"
     if path.startswith((
         "/api/v1/clientes",
         "/api/v1/creditos",
@@ -522,7 +539,18 @@ async def enforce_rbac(request: Request, db: Session = Depends(get_db)):
 
     # Verificar si el módulo asociado a la ruta está activo
     mod_code = _resolve_module_code(path)
-    if mod_code:
+    if mod_code == "finanzas_or_creditos":
+        mods_fc = (
+            db.query(ModuloSistema)
+            .filter(ModuloSistema.codigo.in_(["finanzas", "creditos"]))
+            .all()
+        )
+        if mods_fc and all(not m.activo for m in mods_fc):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Los módulos 'Finanzas' y 'Créditos' se encuentran desactivados.",
+            )
+    elif mod_code:
         mod = db.query(ModuloSistema).filter(ModuloSistema.codigo == mod_code).first()
         if mod is not None and not mod.activo:
             raise HTTPException(
