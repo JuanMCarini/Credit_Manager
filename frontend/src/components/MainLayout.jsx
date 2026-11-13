@@ -14,6 +14,7 @@ const MainLayout = () => {
   const navigate = useNavigate();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [arcaAlertData, setArcaAlertData] = useState(null);
 
   const timeoutRef = useRef(null);
   const intervalRef = useRef(null);
@@ -43,7 +44,32 @@ const MainLayout = () => {
     checkApiStatus();
     fetchAuxiliares();
     fetchSystemModules();
+
+    const dismissed = sessionStorage.getItem('arca_cert_alert_dismissed');
+    if (dismissed !== 'true') {
+      axiosClient
+        .get('/api/v1/system/arca/status')
+        .then((res) => {
+          if (res.data && res.data.alerta_vencimiento === true) {
+            setArcaAlertData(res.data);
+          }
+        })
+        .catch(() => {
+          // Ignorar errores silenciosamente al verificar estado de certificado
+        });
+    }
   }, [checkApiStatus, fetchAuxiliares, fetchSystemModules]);
+
+  const handleDismissArcaAlert = () => {
+    sessionStorage.setItem('arca_cert_alert_dismissed', 'true');
+    setArcaAlertData(null);
+  };
+
+  const handleGoToArcaConfig = () => {
+    sessionStorage.setItem('arca_cert_alert_dismissed', 'true');
+    setArcaAlertData(null);
+    navigate('/configuracion/arca');
+  };
 
   useEffect(() => {
     const events = ['mousemove', 'keydown', 'click', 'scroll'];
@@ -104,6 +130,110 @@ const MainLayout = () => {
             onClose={() => setShowPasswordModal(false)} 
             onSuccess={() => setShowPasswordModal(false)} 
           />
+        )}
+        {arcaAlertData && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 9999,
+              backgroundColor: 'rgba(0, 0, 0, 0.72)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '20px',
+            }}
+          >
+            <div
+              className="glass-panel"
+              style={{
+                maxWidth: '480px',
+                width: '100%',
+                padding: '28px',
+                borderRadius: 'var(--radius-lg)',
+                border: '1px solid rgba(245, 158, 11, 0.5)',
+                boxShadow: '0 20px 50px rgba(0, 0, 0, 0.6)',
+              }}
+            >
+              <h3
+                style={{
+                  marginTop: 0,
+                  marginBottom: '12px',
+                  color:
+                    arcaAlertData.estado_vigencia === 'VENCIDO'
+                      ? '#f87171'
+                      : '#fbbf24',
+                }}
+              >
+                {arcaAlertData.estado_vigencia === 'VENCIDO'
+                  ? 'Certificado Digital ARCA Vencido'
+                  : 'Alerta de Vencimiento de Certificado ARCA'}
+              </h3>
+              <p
+                style={{
+                  fontSize: '14px',
+                  color: 'var(--text-primary)',
+                  lineHeight: '1.5',
+                  marginBottom: '12px',
+                }}
+              >
+                {arcaAlertData.estado_vigencia === 'VENCIDO' ? (
+                  <>
+                    El certificado digital X.509 utilizado para facturación
+                    electrónica en ARCA se encuentra <strong>vencido</strong> (
+                    {Math.abs(arcaAlertData.dias_restantes ?? 0)} días desde su
+                    expiración).
+                  </>
+                ) : (
+                  <>
+                    El certificado digital X.509 de ARCA vencerá en{' '}
+                    <strong>{arcaAlertData.dias_restantes} días</strong>. Renueve
+                    el certificado con anticipación para evitar interrupciones en
+                    la emisión de comprobantes electrónicos.
+                  </>
+                )}
+              </p>
+              {arcaAlertData.fecha_vencimiento && (
+                <p
+                  style={{
+                    fontSize: '12px',
+                    color: 'var(--text-muted)',
+                    marginBottom: '20px',
+                  }}
+                >
+                  Fecha de vencimiento:{' '}
+                  <strong>
+                    {new Date(arcaAlertData.fecha_vencimiento).toLocaleDateString(
+                      'es-AR'
+                    )}
+                  </strong>
+                </p>
+              )}
+              <div
+                style={{
+                  display: 'flex',
+                  gap: '12px',
+                  justifyContent: 'flex-end',
+                  marginTop: '18px',
+                }}
+              >
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={handleDismissArcaAlert}
+                >
+                  Entendido
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={handleGoToArcaConfig}
+                >
+                  Ir a Configuración ARCA
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </main>
     </div>

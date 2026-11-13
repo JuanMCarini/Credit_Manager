@@ -37,6 +37,7 @@ const SeriesPage = lazy(() => import('./pages/SeriesPage'));
 const MovimientosDeudaPage = lazy(() => import('./pages/MovimientosDeudaPage'));
 const PosicionIibbPage = lazy(() => import('./pages/PosicionIibbPage'));
 const FacturacionArcaFinanzasPage = lazy(() => import('./pages/FacturacionArcaFinanzasPage'));
+const ArcaConfigPage = lazy(() => import('./pages/ArcaConfigPage'));
 
 const IndexRedirect = () => {
   const { systemModules } = useAppStore();
@@ -116,6 +117,7 @@ function App() {
               {/* Configuración y comunes */}
               <Route path="auxiliares" element={<AuxiliaryTablesPage />} />
               <Route path="acciones" element={<SystemActionsPage />} />
+              <Route path="configuracion/arca" element={<ArcaConfigPage />} />
 
               {/* Rutas exclusivas Administrador */}
               <Route element={<ProtectedRoute allowedRoles={[]} />}>

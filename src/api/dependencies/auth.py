@@ -531,7 +531,12 @@ async def enforce_rbac(request: Request, db: Session = Depends(get_db)):
             )
 
     # Rutas propias de sesión habilitadas para cualquier usuario autenticado
-    if path in {"/api/usuarios/me/password", "/api/auth/logout", "/api/auth/refresh"}:
+    if path in {
+        "/api/usuarios/me/password",
+        "/api/auth/logout",
+        "/api/auth/refresh",
+        "/api/v1/system/arca/status",
+    }:
         return current_user
 
     rol = current_user.rol.nombre

@@ -350,3 +350,242 @@ def update_system_modules(
     return {"status": "success", "message": "Módulos actualizados correctamente.", "modulos": result, "items": items}
 
 
+# ==============================================================================
+# ETAPA 3: Endpoints REST de Configuración y Estado ARCA (/api/v1/system/arca)
+# ==============================================================================
+
+import src.services.arca_service as arca_service
+
+
+class ArcaConfigUpdateSchema(BaseModel):
+    environment: str | None = None
+    cuit: str | int | None = None
+    punto_venta_default: int | None = None
+    dias_alerta_vencimiento: int | None = None
+
+
+class ArcaGenerarCsrSchema(BaseModel):
+    cuit: str | int
+    razon_social: str
+    alias: str = "credit-manager-arca"
+
+
+@router.get("/arca/status")
+def get_arca_system_status(current_user: Usuario = Depends(get_current_user)):
+    """
+    Devuelve la configuración actual de ARCA (sin exponer rutas internas ni claves)
+    junto con el estado de vigencia del certificado digital X.509.
+    Accesible para cualquier usuario autenticado.
+    """
+    try:
+        cfg = arca_service.get_arca_config()
+        cert_info = arca_service.get_certificate_status()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    return {
+        "environment": cfg["environment"],
+        "cuit": cfg["cuit"],
+        "punto_venta_default": cfg["punto_venta_default"],
+        "dias_alerta_vencimiento": cfg["dias_alerta_vencimiento"],
+        "config": cfg,
+        "estado_vigencia": cert_info["estado"],
+        "status": cert_info["status"],
+        "estado": cert_info["estado"],
+        "fecha_emision": cert_info["fecha_emision"],
+        "fecha_vencimiento": cert_info["fecha_vencimiento"],
+        "dias_restantes": cert_info["dias_restantes"],
+        "alerta_vencimiento": bool(cert_info["alerta_vencimiento"]),
+        "has_private_key": bool(cert_info["has_private_key"]),
+        "has_csr": bool(cert_info["has_csr"]),
+        "has_certificate": bool(cert_info["has_certificate"]),
+        "subject": cert_info["subject"],
+        "issuer": cert_info["issuer"],
+        "serial_number": cert_info["serial_number"],
+    }
+
+
+@router.put("/arca/config", dependencies=[Depends(admin_only)])
+def update_arca_system_config(
+    payload: ArcaConfigUpdateSchema,
+    current_user: Usuario = Depends(admin_only),
+):
+    """
+    Actualiza los parámetros de configuración local de ARCA:
+    environment, cuit, punto_venta_default y dias_alerta_vencimiento.
+    """
+    try:
+        updated = arca_service.save_arca_config(payload.model_dump(exclude_none=True))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    return {
+        "status": "success",
+        "message": "Configuración de ARCA actualizada correctamente.",
+        "config": updated,
+        **updated,
+    }
+
+
+@router.post("/arca/generar-csr", dependencies=[Depends(admin_only)])
+def generate_arca_csr_endpoint(
+    payload: ArcaGenerarCsrSchema,
+    current_user: Usuario = Depends(admin_only),
+):
+    """
+    Genera el par clave privada RSA 2048 (.key) + solicitud de certificado (.csr)
+    a partir de cuit, razon_social y alias, y retorna el archivo .csr descargable.
+    """
+    try:
+        res = arca_service.generar_key_y_csr(
+            cuit=payload.cuit,
+            razon_social=payload.razon_social,
+            alias=payload.alias,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    return Response(
+        content=res["csr_pem"].encode("utf-8"),
+        media_type="application/pkcs10",
+        headers={"Content-Disposition": 'attachment; filename="arca.csr"'},
+    )
+
+
+@router.get("/arca/descargar-csr", dependencies=[Depends(admin_only)])
+def download_arca_csr_endpoint(current_user: Usuario = Depends(admin_only)):
+    """Descarga el archivo arca.csr generado en data/certs/arca/."""
+    if not arca_service.ARCA_CSR_PATH.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail="No se encontró una solicitud de certificado generada (arca.csr).",
+        )
+    return Response(
+        content=arca_service.ARCA_CSR_PATH.read_bytes(),
+        media_type="application/pkcs10",
+        headers={"Content-Disposition": 'attachment; filename="arca.csr"'},
+    )
+
+
+@router.get("/arca/descargar-key", dependencies=[Depends(admin_only)])
+def download_arca_key_endpoint(current_user: Usuario = Depends(admin_only)):
+    """Descarga el archivo arca.key generado en data/certs/arca/ para respaldo."""
+    if not arca_service.ARCA_KEY_PATH.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail="No se encontró una clave privada generada (arca.key).",
+        )
+    return Response(
+        content=arca_service.ARCA_KEY_PATH.read_bytes(),
+        media_type="application/x-pem-file",
+        headers={"Content-Disposition": 'attachment; filename="arca.key"'},
+    )
+
+
+@router.post("/arca/subir-certificado", dependencies=[Depends(admin_only)])
+def upload_arca_certificate_endpoint(
+    crt_file: UploadFile | None = File(default=None),
+    file: UploadFile | None = File(default=None),
+    certificado: UploadFile | None = File(default=None),
+    cert: UploadFile | None = File(default=None),
+    key_file: UploadFile | None = File(default=None),
+    key: UploadFile | None = File(default=None),
+    clave_privada: UploadFile | None = File(default=None),
+    current_user: Usuario = Depends(admin_only),
+):
+    """
+    Recibe vía UploadFile el archivo .crt (y opcionalmente .key), ejecuta la
+    validación criptográfica y los almacena en data/certs/arca/.
+    """
+    target_crt = next(
+        (f for f in (crt_file, file, certificado, cert) if hasattr(f, "file")),
+        None,
+    )
+    if target_crt is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Debe adjuntar un archivo de certificado digital (.crt o .pem).",
+        )
+
+    crt_bytes = target_crt.file.read()
+    target_key = next(
+        (f for f in (key_file, key, clave_privada) if hasattr(f, "file")),
+        None,
+    )
+    key_bytes = target_key.file.read() if target_key is not None else None
+
+    try:
+        meta = arca_service.guardar_y_validar_certificado(crt_bytes, key_bytes=key_bytes)
+        cert_status = arca_service.get_certificate_status()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    return {
+        "status": "success",
+        "message": "Certificado digital validado y almacenado correctamente.",
+        "estado_vigencia": cert_status["estado"],
+        "alerta_vencimiento": bool(cert_status["alerta_vencimiento"]),
+        **meta,
+    }
+
+
+@router.post("/arca/probar-conexion", dependencies=[Depends(admin_only)])
+def test_arca_connection_endpoint(current_user: Usuario = Depends(admin_only)):
+    """
+    Ejecuta FEDummy para verificar el estado de los servidores de ARCA y valida
+    la obtención de Ticket de Acceso WSAA si existe un certificado cargado.
+    """
+    try:
+        cfg = arca_service.get_arca_config()
+        cert_status = arca_service.get_certificate_status()
+        svc = arca_service.ArcaService()
+
+        dummy_res = svc.fe_dummy()
+        wsaa_ok = False
+        wsaa_exp = None
+
+        if cfg["environment"] == "mock":
+            if cert_status["has_certificate"]:
+                if cert_status["estado"] == "VENCIDO":
+                    raise ValueError("El certificado digital cargado se encuentra vencido.")
+                ta = svc.obtener_ticket_acceso("wsfe")
+                wsaa_ok = bool(ta.get("token") and ta.get("sign"))
+                wsaa_exp = ta.get("expiration_time")
+        else:
+            if not cert_status["has_certificate"]:
+                raise ValueError(
+                    "No existe un certificado digital (.crt) cargado para autenticar contra WSAA."
+                )
+            if cert_status["estado"] == "VENCIDO":
+                raise ValueError("El certificado digital cargado se encuentra vencido.")
+            ta = svc.obtener_ticket_acceso("wsfe")
+            wsaa_ok = bool(ta.get("token") and ta.get("sign"))
+            wsaa_exp = ta.get("expiration_time")
+
+        return {
+            "status": "success",
+            "ok": bool(dummy_res.get("ok")),
+            "environment": cfg["environment"],
+            "dummy": dummy_res,
+            "AppServer": dummy_res.get("AppServer"),
+            "DbServer": dummy_res.get("DbServer"),
+            "AuthServer": dummy_res.get("AuthServer"),
+            "wsaa_autenticado": wsaa_ok,
+            "wsaa_expiration": wsaa_exp,
+            "estado_vigencia": cert_status["estado"],
+            "message": (
+                "Conexión simulada exitosa en modo MOCK."
+                if cfg["environment"] == "mock"
+                else f"Conexión exitosa con ARCA ({cfg['environment']})."
+            ),
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Error al probar la conexión con ARCA: {str(exc)}",
+        )
+
+
+

@@ -5,13 +5,18 @@ from typing import List, Optional, Any
 from sqlalchemy.orm import Session, joinedload
 from datetime import date
 import pandas as pd
+import base64
 import io
+import json
 import os
 import re
 import zipfile
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
+from reportlab.graphics.barcode.qr import QrCodeWidget
+from reportlab.graphics.shapes import Drawing
+from reportlab.graphics import renderPDF
 
 from src.database import get_db
 from src.database.models.creditos.cobranzas import Cobranza
@@ -90,6 +95,61 @@ def _extract_factura_breakdown(f: Factura) -> dict[str, float]:
 def _format_currency_ar(val: float) -> str:
     s = f"{float(val or 0.0):,.2f}"
     return "$ " + s.replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def generar_qr_afip_url(
+    f: Factura,
+    company_data_db,
+    breakdown: dict[str, float] | None = None,
+) -> str:
+    """
+    Construye la URL oficial del Código QR de ARCA/AFIP exigida por la RG 4892/2020:
+    https://www.afip.gob.ar/fe/qr/?p=<payload_json_base64>
+    """
+    bd = breakdown or _extract_factura_breakdown(f)
+    cuit_emisor_digits = re.sub(r"\D", "", str(getattr(company_data_db, "cuit", "") or "30000000000"))
+    cuit_emisor = int(cuit_emisor_digits) if cuit_emisor_digits else 30000000000
+
+    doc_rec_digits = re.sub(r"\D", "", str(f.cuit_cliente or ""))
+    t_doc_str = str(f.tipo_doc_receptor or "").upper().strip()
+    if doc_rec_digits and len(doc_rec_digits) == 11:
+        tipo_doc_rec = 86 if t_doc_str == "CUIL" else 80
+        nro_doc_rec = int(doc_rec_digits)
+    elif doc_rec_digits and len(doc_rec_digits) >= 7:
+        tipo_doc_rec = 96
+        nro_doc_rec = int(doc_rec_digits)
+    else:
+        tipo_doc_rec = 99
+        nro_doc_rec = 0
+
+    cae_digits = re.sub(r"\D", "", str(f.cae or "0"))
+    cod_aut = int(cae_digits) if cae_digits else 0
+
+    fecha_str = (
+        f.fecha_emision.strftime("%Y-%m-%d")
+        if hasattr(f.fecha_emision, "strftime")
+        else str(f.fecha_emision)
+    )
+
+    qr_payload = {
+        "ver": 1,
+        "fecha": fecha_str,
+        "cuit": cuit_emisor,
+        "ptoVta": int(f.punto_venta or 1),
+        "tipoCmp": int(f.tipo_comprobante or 1),
+        "nroCmp": int(f.nro_comprobante or 1),
+        "importe": round(float(bd["importe_total"]), 2),
+        "moneda": "PES",
+        "ctz": 1,
+        "tipoDocRec": tipo_doc_rec,
+        "nroDocRec": nro_doc_rec,
+        "tipoCodAut": "E",
+        "codAut": cod_aut,
+    }
+
+    qr_json = json.dumps(qr_payload, separators=(",", ":"))
+    qr_b64 = base64.b64encode(qr_json.encode("utf-8")).decode("ascii")
+    return f"https://www.afip.gob.ar/fe/qr/?p={qr_b64}"
 
 
 def generar_factura_pdf_bytes(f: Factura, company_data_db) -> bytes:
@@ -340,17 +400,33 @@ def generar_factura_pdf_bytes(f: Factura, company_data_db) -> bytes:
         c.setFont("Helvetica", 9.5)
         c.drawString(4.3 * cm, 3.2 * cm, str(obs_text)[:85])
 
-    # CAE y Vencimiento CAE
+    # Código QR Reglamentario RG 4892/2020 + CAE y Vencimiento CAE
+    qr_url = generar_qr_afip_url(f, company_data_db, breakdown=breakdown)
+    qr_widget = QrCodeWidget(qr_url)
+    bounds = qr_widget.getBounds()
+    qr_w = bounds[2] - bounds[0]
+    qr_h = bounds[3] - bounds[1]
+    qr_size = 2.4 * cm
+    qr_drawing = Drawing(
+        qr_size,
+        qr_size,
+        transform=[qr_size / qr_w, 0, 0, qr_size / qr_h, 0, 0],
+    )
+    qr_drawing.add(qr_widget)
+    renderPDF.draw(qr_drawing, c, 1.3 * cm, 1.15 * cm)
+
+    c.setFont("Helvetica-Bold", 9.5)
+    c.drawString(4.0 * cm, 2.7 * cm, "Comprobante Autorizado por ARCA")
     c.setFont("Helvetica-Bold", 10)
-    c.drawString(1.5 * cm, 2.3 * cm, "CAE Nro:")
+    c.drawString(4.0 * cm, 2.15 * cm, "CAE Nro:")
     c.setFont("Helvetica", 10)
-    c.drawString(3.5 * cm, 2.3 * cm, f"{f.cae or '-'}")
+    c.drawString(5.8 * cm, 2.15 * cm, f"{f.cae or '-'}")
 
     if f.vencimiento_cae:
         c.setFont("Helvetica-Bold", 10)
-        c.drawString(1.5 * cm, 1.8 * cm, "Fecha Vto. CAE:")
+        c.drawString(4.0 * cm, 1.65 * cm, "Fecha Vto. CAE:")
         c.setFont("Helvetica", 10)
-        c.drawString(4.5 * cm, 1.8 * cm, f"{f.vencimiento_cae.strftime('%d/%m/%Y')}")
+        c.drawString(6.9 * cm, 1.65 * cm, f"{f.vencimiento_cae.strftime('%d/%m/%Y')}")
 
     c.showPage()
     c.save()
@@ -637,7 +713,7 @@ def emitir_factura_individual(
         )
 
     fecha_eff = payload.fecha_emision or date.today()
-    arca_service = ArcaService(use_mock=True)
+    arca_service = ArcaService()
     res_arca = arca_service.emitir_factura(
         punto_venta=payload.punto_venta,
         tipo_comprobante=payload.tipo_comprobante,
@@ -645,6 +721,20 @@ def emitir_factura_individual(
         cuit_cliente=cuit_clean or (payload.cuit_cliente or "").strip() or None,
         fecha_emision=fecha_eff,
         db=db,
+        concepto_arca=payload.concepto_arca,
+        tipo_doc_receptor=payload.tipo_doc_receptor,
+        importe_no_gravado=no_gravado,
+        importe_exento=exento,
+        neto_gravado_21=neto_21,
+        neto_gravado_105=neto_105,
+        neto_gravado_27=neto_27,
+        iva_21=iva_21,
+        iva_105=iva_105,
+        iva_27=iva_27,
+        otros_tributos=round(perc_iva + perc_iibb + otros_imp, 2),
+        fecha_servicio_desde=payload.fecha_servicio_desde,
+        fecha_servicio_hasta=payload.fecha_servicio_hasta,
+        fecha_vencimiento_pago=payload.fecha_vencimiento_pago,
     )
 
     nueva_factura = Factura(

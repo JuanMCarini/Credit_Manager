@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axiosClient from '../api/axiosClient';
 import useAppStore from '../store/useAppStore';
 import { useAuthStore } from '../store/useAuthStore';
@@ -14,6 +15,7 @@ const SystemActionsPage = () => {
 
   const { systemModules, updateSystemModules } = useAppStore();
   const { user } = useAuthStore();
+  const navigate = useNavigate();
   const isAdmin = user?.rol === 'Administrador' || user?.rol?.nombre === 'Administrador';
 
   const handleSyncStates = async () => {
@@ -312,6 +314,15 @@ const SystemActionsPage = () => {
           />
           <button className="btn-primary" onClick={handleFaviconUpload} disabled={!faviconFile || uploadingFavicon} style={{ width: '100%', maxWidth: '300px', margin: '0 auto', display: 'block' }}>
             {uploadingFavicon ? "Subiendo..." : "Subir Favicon"}
+          </button>
+        </div>
+        <div className="glass-panel" style={{ padding: '24px', borderRadius: 'var(--radius-lg)', textAlign: 'center' }}>
+          <h3 style={{ marginBottom: '12px' }}>Facturación Electrónica ARCA 🏛️</h3>
+          <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '24px' }}>
+            Gestiona los certificados digitales X.509 (.csr / .crt), el entorno fiscal (Mock, Homologación o Producción) y el Punto de Venta por defecto.
+          </p>
+          <button className="btn-primary" onClick={() => navigate('/configuracion/arca')} style={{ width: '100%', maxWidth: '300px', margin: '0 auto', display: 'block' }}>
+            Configurar ARCA / Certificados
           </button>
         </div>
       </div>

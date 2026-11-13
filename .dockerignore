@@ -31,6 +31,7 @@ htmlcov/
 
 # Runtime Uploaded & Local Data
 data/uploads/
+data/certs/
 data/*.db
 *.xlsx
 *.log
