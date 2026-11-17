@@ -929,6 +929,15 @@ def emitir_factura_individual(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
+    fecha_serv_desde = payload.fecha_servicio_desde or (fecha_eff if payload.concepto_arca in (2, 3) else None)
+    fecha_serv_hasta = payload.fecha_servicio_hasta or (fecha_eff if payload.concepto_arca in (2, 3) else None)
+    fecha_vto_pago = payload.fecha_vencimiento_pago or (fecha_eff if payload.concepto_arca in (2, 3) else None)
+    razon_social_rec = payload.razon_social_receptor.strip() or "Consumidor Final"
+    domicilio_rec = (payload.domicilio_receptor or "").strip() or None
+    cbu_emisor_val = payload.cbu_emisor or arca_service.config.get("cbu_fce_default") or None
+    estado_arca_val = "MOCK" if arca_service.use_mock else f"AUTORIZADA_{arca_service.environment.upper()}"
+    obs_val = (payload.observaciones or "").strip() or None
+
     nueva_factura = Factura(
         cobranza_id=None,
         origen="FINANZAS",
@@ -937,19 +946,19 @@ def emitir_factura_individual(
         nro_comprobante=res_arca["nro_comprobante"],
         fecha_emision=res_arca["fecha_emision"],
         concepto_arca=payload.concepto_arca,
-        fecha_servicio_desde=payload.fecha_servicio_desde or (fecha_eff if payload.concepto_arca in (2, 3) else None),
-        fecha_servicio_hasta=payload.fecha_servicio_hasta or (fecha_eff if payload.concepto_arca in (2, 3) else None),
-        fecha_vencimiento_pago=payload.fecha_vencimiento_pago or (fecha_eff if payload.concepto_arca in (2, 3) else None),
+        fecha_servicio_desde=fecha_serv_desde,
+        fecha_servicio_hasta=fecha_serv_hasta,
+        fecha_vencimiento_pago=fecha_vto_pago,
         tipo_doc_receptor=payload.tipo_doc_receptor,
         cuit_cliente=res_arca["cuit_cliente"],
-        razon_social_receptor=payload.razon_social_receptor.strip() or "Consumidor Final",
-        domicilio_receptor=(payload.domicilio_receptor or "").strip() or None,
+        razon_social_receptor=razon_social_rec,
+        domicilio_receptor=domicilio_rec,
         condicion_iva_receptor=cond_iva_receptor_label,
         condicion_iva_receptor_id=cond_iva_id,
         provincia_id=payload.provincia_id,
         comprobante_asociado_id=payload.comprobante_asociado_id,
         comprobante_asociado_str=comp_asoc_str,
-        cbu_emisor=payload.cbu_emisor or arca_service.config.get("cbu_fce_default") or None,
+        cbu_emisor=cbu_emisor_val,
         importe_no_gravado=no_gravado,
         importe_exento=exento,
         neto_gravado_0=neto_0,
@@ -965,9 +974,9 @@ def emitir_factura_individual(
         importe_total=total_calculado,
         cae=res_arca["cae"],
         vencimiento_cae=res_arca["vencimiento_cae"],
-        estado_arca="MOCK" if arca_service.use_mock else f"AUTORIZADA_{arca_service.environment.upper()}",
+        estado_arca=estado_arca_val,
         items_detalle=items_serializados or None,
-        observaciones=(payload.observaciones or "").strip() or None,
+        observaciones=obs_val,
     )
     try:
         db.add(nueva_factura)
@@ -975,7 +984,41 @@ def emitir_factura_individual(
         db.refresh(nueva_factura)
     except Exception as db_exc:
         db.rollback()
-        registrar_cae_contingencia(res_arca, str(db_exc))
+        registrar_cae_contingencia(
+            res_arca,
+            str(db_exc),
+            extra_data={
+                "origen": "FINANZAS",
+                "concepto_arca": payload.concepto_arca,
+                "fecha_servicio_desde": fecha_serv_desde,
+                "fecha_servicio_hasta": fecha_serv_hasta,
+                "fecha_vencimiento_pago": fecha_vto_pago,
+                "tipo_doc_receptor": payload.tipo_doc_receptor,
+                "razon_social_receptor": razon_social_rec,
+                "domicilio_receptor": domicilio_rec,
+                "condicion_iva_receptor": cond_iva_receptor_label,
+                "condicion_iva_receptor_id": cond_iva_id,
+                "provincia_id": payload.provincia_id,
+                "comprobante_asociado_id": payload.comprobante_asociado_id,
+                "comprobante_asociado_str": comp_asoc_str,
+                "cbu_emisor": cbu_emisor_val,
+                "importe_no_gravado": no_gravado,
+                "importe_exento": exento,
+                "neto_gravado_0": neto_0,
+                "neto_gravado_21": neto_21,
+                "neto_gravado_105": neto_105,
+                "neto_gravado_27": neto_27,
+                "iva_21": iva_21,
+                "iva_105": iva_105,
+                "iva_27": iva_27,
+                "percepcion_iva": perc_iva,
+                "percepcion_iibb": perc_iibb,
+                "otros_impuestos": otros_imp,
+                "estado_arca": estado_arca_val,
+                "items_detalle": items_serializados or None,
+                "observaciones": obs_val,
+            },
+        )
         logger.critical(
             f"[ARCA CRITICAL] Comprobante autorizado en ARCA pero falló el guardado en BD: "
             f"PV={res_arca['punto_venta']} Tipo={res_arca['tipo_comprobante']} "

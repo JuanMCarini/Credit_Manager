@@ -431,6 +431,7 @@ def get_arca_system_status(current_user: Usuario = Depends(get_current_user)):
         "subject": cert_info["subject"],
         "issuer": cert_info["issuer"],
         "serial_number": cert_info["serial_number"],
+        "cae_contingencia_pendientes": arca_service.count_cae_contingencia_pendientes(),
     }
 
 
@@ -688,5 +689,24 @@ def test_arca_connection_endpoint(current_user: Usuario = Depends(admin_only)):
             detail=f"Error al probar la conexión con ARCA: {str(exc)}",
         )
 
+
+@router.post("/arca/reconciliar-contingencia", dependencies=[Depends(admin_only)])
+def reconciliar_cae_contingencia_endpoint(
+    current_user: Usuario = Depends(admin_only),
+    db: Session = Depends(get_db),
+):
+    """
+    Reprocesa los registros de data/certs/arca/cae_recovery.jsonl e inserta en
+    PostgreSQL aquellos comprobantes con CAE otorgado que aún no figuren en `facturas`.
+    """
+    try:
+        return arca_service.reconciliar_cae_contingencia(db)
+    except arca_service.ArcaServiceError as exc:
+        raise HTTPException(status_code=exc.status_http or 400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al reconciliar contingencias de ARCA: {exc}",
+        )
 
 

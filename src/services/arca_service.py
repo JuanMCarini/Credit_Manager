@@ -213,10 +213,16 @@ def _ensure_arca_dir() -> Path:
 def _create_arca_ssl_context() -> ssl.SSLContext | bool:
     """
     Crea un contexto SSL compatible con los servidores de ARCA/AFIP bajo OpenSSL 3+,
-    permitiendo ciphers con SECLEVEL=1 (ej. evita DH_KEY_TOO_SMALL).
+    permitiendo ciphers con SECLEVEL=1 (ej. evita DH_KEY_TOO_SMALL) y cargando el
+    bundle de CAs de certifi.
     """
     try:
-        ctx = ssl.create_default_context()
+        try:
+            import certifi
+
+            ctx = ssl.create_default_context(cafile=certifi.where())
+        except Exception:
+            ctx = ssl.create_default_context()
         try:
             ctx.set_ciphers("DEFAULT@SECLEVEL=1")
         except ssl.SSLError:
@@ -266,7 +272,11 @@ def _get_wsfe_http_client() -> httpx.Client:
         return _WSFE_HTTP_CLIENT
 
 
-def registrar_cae_contingencia(datos_cae: dict[str, Any], error_db: str) -> None:
+def registrar_cae_contingencia(
+    datos_cae: dict[str, Any],
+    error_db: str,
+    extra_data: dict[str, Any] | None = None,
+) -> None:
     """
     Persiste en un log append-only (cae_recovery.jsonl) cualquier CAE otorgado por ARCA
     que haya fallado al guardarse en PostgreSQL para permitir su recuperación fiscal.
@@ -284,13 +294,172 @@ def registrar_cae_contingencia(datos_cae: dict[str, Any], error_db: str) -> None
             "fecha_emision": str(datos_cae.get("fecha_emision") or ""),
             "importe_total": datos_cae.get("importe_total"),
             "cuit_cliente": datos_cae.get("cuit_cliente"),
+            "condicion_iva_receptor_id": datos_cae.get("condicion_iva_receptor_id"),
+            **(extra_data or {}),
             "error_db": error_db,
         }
         with _arca_lock("cae_recovery_log"):
             with open(recovery_path, "a", encoding="utf-8") as fh:
-                fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                fh.write(json.dumps(entry, ensure_ascii=False, default=str) + "\n")
     except Exception as exc:
         logger.critical(f"No se pudo escribir cae_recovery.jsonl: {exc}")
+
+
+def _parse_recovery_date(val: Any) -> date | None:
+    """Convierte fechas serializadas en cae_recovery.jsonl a datetime.date."""
+    if isinstance(val, datetime):
+        return val.date()
+    if isinstance(val, date):
+        return val
+    raw = str(val or "").strip()
+    if not raw:
+        return None
+    if len(raw) == 8 and raw.isdigit():
+        return datetime.strptime(raw, "%Y%m%d").date()
+    return date.fromisoformat(raw[:10])
+
+
+def count_cae_contingencia_pendientes() -> int:
+    """Retorna la cantidad de registros pendientes en data/certs/arca/cae_recovery.jsonl."""
+    recovery_path = ARCA_CERTS_DIR / "cae_recovery.jsonl"
+    if not recovery_path.is_file():
+        return 0
+    try:
+        with _arca_lock("cae_recovery_log"):
+            if not recovery_path.is_file():
+                return 0
+            return sum(
+                1
+                for ln in recovery_path.read_text(encoding="utf-8").splitlines()
+                if ln.strip()
+            )
+    except Exception:
+        return 0
+
+
+def reconciliar_cae_contingencia(db) -> dict[str, Any]:
+    """
+    Reprocesa los registros de data/certs/arca/cae_recovery.jsonl e inserta en
+    PostgreSQL los comprobantes con CAE otorgado que aún no existan en `facturas`.
+    Si el registro pertenece a una cobranza (`cobranza_id`), marca `facturada = True`.
+    """
+    from src.database.models.creditos.cobranzas import Cobranza
+    from src.database.models.creditos.facturacion import Factura
+
+    recovery_path = ARCA_CERTS_DIR / "cae_recovery.jsonl"
+    if not recovery_path.is_file():
+        return {"status": "success", "reconciliadas": 0, "pendientes": 0, "errores": []}
+
+    pendientes_lines: list[str] = []
+    errores: list[str] = []
+    reconciliadas = 0
+
+    with _arca_lock("cae_recovery_log"):
+        if not recovery_path.is_file():
+            return {"status": "success", "reconciliadas": 0, "pendientes": 0, "errores": []}
+
+        lines = [
+            ln.strip()
+            for ln in recovery_path.read_text(encoding="utf-8").splitlines()
+            if ln.strip()
+        ]
+        for raw_line in lines:
+            try:
+                item = json.loads(raw_line)
+                pv_val = int(item["punto_venta"])
+                tipo_val = int(item["tipo_comprobante"])
+                nro_val = int(item["nro_comprobante"])
+                cae_val = str(item.get("cae") or "").strip()
+                if not cae_val:
+                    raise ValueError("Registro de contingencia sin CAE válido.")
+
+                cob_id_raw = item.get("cobranza_id")
+                cob_id = int(cob_id_raw) if cob_id_raw is not None else None
+
+                existente = (
+                    db.query(Factura)
+                    .filter(
+                        Factura.punto_venta == pv_val,
+                        Factura.tipo_comprobante == tipo_val,
+                        Factura.nro_comprobante == nro_val,
+                    )
+                    .first()
+                )
+                if existente:
+                    if cob_id is not None:
+                        cob = db.query(Cobranza).filter(Cobranza.id == cob_id).first()
+                        if cob and not cob.facturada:
+                            cob.facturada = True
+                            db.commit()
+                    reconciliadas += 1
+                    continue
+
+                fecha_emision_val = _parse_recovery_date(item.get("fecha_emision")) or date.today()
+                venc_cae_val = _parse_recovery_date(item.get("vencimiento_cae"))
+
+                fac = Factura(
+                    cobranza_id=cob_id,
+                    origen=item.get("origen") or ("COBRANZA" if cob_id is not None else "FINANZAS"),
+                    punto_venta=pv_val,
+                    tipo_comprobante=tipo_val,
+                    nro_comprobante=nro_val,
+                    fecha_emision=fecha_emision_val,
+                    concepto_arca=int(item.get("concepto_arca") or 2),
+                    fecha_servicio_desde=_parse_recovery_date(item.get("fecha_servicio_desde")),
+                    fecha_servicio_hasta=_parse_recovery_date(item.get("fecha_servicio_hasta")),
+                    fecha_vencimiento_pago=_parse_recovery_date(item.get("fecha_vencimiento_pago")),
+                    tipo_doc_receptor=item.get("tipo_doc_receptor") or "CUIT",
+                    cuit_cliente=item.get("cuit_cliente"),
+                    razon_social_receptor=item.get("razon_social_receptor") or "Consumidor Final",
+                    domicilio_receptor=item.get("domicilio_receptor"),
+                    condicion_iva_receptor=item.get("condicion_iva_receptor"),
+                    condicion_iva_receptor_id=item.get("condicion_iva_receptor_id"),
+                    provincia_id=item.get("provincia_id"),
+                    comprobante_asociado_id=item.get("comprobante_asociado_id"),
+                    comprobante_asociado_str=item.get("comprobante_asociado_str"),
+                    cbu_emisor=item.get("cbu_emisor"),
+                    importe_no_gravado=float(item.get("importe_no_gravado") or 0.0),
+                    importe_exento=float(item.get("importe_exento") or 0.0),
+                    neto_gravado_0=float(item.get("neto_gravado_0") or 0.0),
+                    neto_gravado_21=float(item.get("neto_gravado_21") or 0.0),
+                    neto_gravado_105=float(item.get("neto_gravado_105") or 0.0),
+                    neto_gravado_27=float(item.get("neto_gravado_27") or 0.0),
+                    iva_21=float(item.get("iva_21") or 0.0),
+                    iva_105=float(item.get("iva_105") or 0.0),
+                    iva_27=float(item.get("iva_27") or 0.0),
+                    percepcion_iva=float(item.get("percepcion_iva") or 0.0),
+                    percepcion_iibb=float(item.get("percepcion_iibb") or 0.0),
+                    otros_impuestos=float(item.get("otros_impuestos") or 0.0),
+                    importe_total=float(item.get("importe_total") or 0.0),
+                    cae=cae_val,
+                    vencimiento_cae=venc_cae_val,
+                    estado_arca=item.get("estado_arca") or "RECUPERADA_CONTINGENCIA",
+                    items_detalle=item.get("items_detalle"),
+                    observaciones=item.get("observaciones"),
+                )
+                db.add(fac)
+                if cob_id is not None:
+                    cob = db.query(Cobranza).filter(Cobranza.id == cob_id).first()
+                    if cob:
+                        cob.facturada = True
+                db.commit()
+                reconciliadas += 1
+            except Exception as exc:
+                db.rollback()
+                pendientes_lines.append(raw_line)
+                errores.append(str(exc))
+
+        recovery_path.write_text(
+            ("\n".join(pendientes_lines) + "\n") if pendientes_lines else "",
+            encoding="utf-8",
+        )
+
+    return {
+        "status": "success",
+        "reconciliadas": reconciliadas,
+        "pendientes": len(pendientes_lines),
+        "errores": errores,
+    }
 
 
 @contextlib.contextmanager

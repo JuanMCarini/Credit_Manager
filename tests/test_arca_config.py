@@ -20,6 +20,7 @@ from src.api.routes.system import (
     download_arca_key_endpoint,
     generate_arca_csr_endpoint,
     get_arca_system_status,
+    reconciliar_cae_contingencia_endpoint,
     test_arca_connection_endpoint as probar_conexion_arca_endpoint,
     update_arca_system_config,
     upload_arca_certificate_endpoint,
@@ -711,6 +712,168 @@ def test_auditoria_recuperacion_cae_der_mod11_y_rg5616(isolated_arca_dir, monkey
     recovery_file = isolated_arca_dir / "cae_recovery.jsonl"
     assert recovery_file.is_file()
     assert "75000088889999" in recovery_file.read_text(encoding="utf-8")
+
+
+def test_reconciliar_cae_contingencia_y_ssl_context(isolated_arca_dir, db_session, dummy_cliente, dummy_cartera):
+    """
+    8. Verifica:
+       - Contexto TLS _create_arca_ssl_context() con bundle de CA cargado
+       - Persistencia enriquecida en cae_recovery.jsonl (cobranza_id, fechas y desglose)
+       - Contador cae_contingencia_pendientes en /arca/status
+       - Reconciliación vía reconciliar_cae_contingencia_endpoint e idempotencia
+    """
+    import ssl
+    from src.database.models import Cobranza, Credito, Cuota, EstadoCuota, TipoCobranzaEnum, TipoCredito
+
+    ctx = arca_service._create_arca_ssl_context()
+    assert isinstance(ctx, ssl.SSLContext)
+    assert ctx.cert_store_stats().get("x509_ca", 0) > 0
+
+    credito = Credito(
+        cliente_cuil=dummy_cliente.cuil,
+        cartera_id=dummy_cartera.id,
+        capital=1000.0,
+        tna_c_iva=0.5,
+        plazo=1,
+        fecha_emision=date(2026, 10, 1),
+        tipo_credito=TipoCredito.FRANCES,
+        dia_vencimiento=10,
+    )
+    db_session.add(credito)
+    db_session.flush()
+
+    cuota = Cuota(
+        credito_id=credito.id,
+        nro_cuota=1,
+        fecha_vencimiento=date(2026, 10, 10),
+        capital=1000.0,
+        interes=200.0,
+        iva=42.0,
+        estado=EstadoCuota.CANCELADA,
+    )
+    db_session.add(cuota)
+    db_session.flush()
+
+    cobranza = Cobranza(
+        cuota_id=cuota.id,
+        tipo_cobranza=TipoCobranzaEnum.COMUN,
+        capital=1000.0,
+        interes=200.0,
+        iva=42.0,
+        fecha=date(2026, 10, 10),
+        facturada=False,
+    )
+    db_session.add(cobranza)
+    db_session.commit()
+
+    # Registrar contingencia de Cobranza + contingencia de Finanzas individual
+    arca_service.registrar_cae_contingencia(
+        {
+            "punto_venta": 2,
+            "tipo_comprobante": 6,
+            "nro_comprobante": 101,
+            "cae": "75123456789012",
+            "vencimiento_cae": date(2026, 11, 27),
+            "fecha_emision": date(2026, 11, 17),
+            "importe_total": 1242.0,
+            "cuit_cliente": dummy_cliente.cuil,
+            "condicion_iva_receptor_id": 5,
+        },
+        "PostgreSQL connection lost",
+        extra_data={
+            "origen": "COBRANZA",
+            "cobranza_id": cobranza.id,
+            "concepto_arca": 2,
+            "fecha_vencimiento_pago": date(2026, 11, 17),
+            "tipo_doc_receptor": "CUIL",
+            "razon_social_receptor": "Perez, Juan",
+            "condicion_iva_receptor": "Consumidor Final",
+            "importe_no_gravado": 1000.0,
+            "neto_gravado_21": 200.0,
+            "iva_21": 42.0,
+            "estado_arca": "AUTORIZADA_HOMOLOGACION",
+        },
+    )
+    arca_service.registrar_cae_contingencia(
+        {
+            "punto_venta": 2,
+            "tipo_comprobante": 1,
+            "nro_comprobante": 55,
+            "cae": "75999988887777",
+            "vencimiento_cae": date(2026, 11, 27),
+            "fecha_emision": date(2026, 11, 17),
+            "importe_total": 12100.0,
+            "cuit_cliente": "30711122233",
+            "condicion_iva_receptor_id": 1,
+        },
+        "Deadlock detected",
+        extra_data={
+            "origen": "FINANZAS",
+            "razon_social_receptor": "Cliente RI SA",
+            "condicion_iva_receptor": "Responsable Inscripto",
+            "neto_gravado_21": 10000.0,
+            "iva_21": 2100.0,
+            "estado_arca": "AUTORIZADA_HOMOLOGACION",
+        },
+    )
+
+    st_before = get_arca_system_status(current_user=None)
+    assert st_before["cae_contingencia_pendientes"] == 2
+
+    res_rec = reconciliar_cae_contingencia_endpoint(current_user=None, db=db_session)
+    assert res_rec["status"] == "success"
+    assert res_rec["reconciliadas"] == 2
+    assert res_rec["pendientes"] == 0
+
+    st_after = get_arca_system_status(current_user=None)
+    assert st_after["cae_contingencia_pendientes"] == 0
+
+    db_session.refresh(cobranza)
+    assert cobranza.facturada is True
+
+    fac_cob = (
+        db_session.query(Factura)
+        .filter(Factura.cobranza_id == cobranza.id)
+        .first()
+    )
+    assert fac_cob is not None
+    assert fac_cob.cae == "75123456789012"
+    assert float(fac_cob.importe_no_gravado) == pytest.approx(1000.0)
+    assert float(fac_cob.neto_gravado_21) == pytest.approx(200.0)
+    assert float(fac_cob.iva_21) == pytest.approx(42.0)
+
+    fac_fin = (
+        db_session.query(Factura)
+        .filter(Factura.punto_venta == 2, Factura.tipo_comprobante == 1, Factura.nro_comprobante == 55)
+        .first()
+    )
+    assert fac_fin is not None
+    assert fac_fin.cae == "75999988887777"
+    assert fac_fin.origen == "FINANZAS"
+
+    # Idempotencia: si vuelve a registrarse un CAE ya existente en BD, se concilia sin duplicar
+    arca_service.registrar_cae_contingencia(
+        {
+            "punto_venta": 2,
+            "tipo_comprobante": 1,
+            "nro_comprobante": 55,
+            "cae": "75999988887777",
+            "vencimiento_cae": date(2026, 11, 27),
+            "fecha_emision": date(2026, 11, 17),
+            "importe_total": 12100.0,
+        },
+        "Duplicate entry",
+    )
+    res_idem = reconciliar_cae_contingencia_endpoint(current_user=None, db=db_session)
+    assert res_idem["reconciliadas"] == 1
+    assert res_idem["pendientes"] == 0
+    assert (
+        db_session.query(Factura)
+        .filter(Factura.punto_venta == 2, Factura.tipo_comprobante == 1, Factura.nro_comprobante == 55)
+        .count()
+        == 1
+    )
+
 
 
 

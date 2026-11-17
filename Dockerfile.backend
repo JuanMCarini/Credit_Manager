@@ -3,13 +3,23 @@ FROM python:3.11-slim
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app
+    PYTHONPATH=/app \
+    TZ=America/Argentina/Buenos_Aires
 
 WORKDIR /app
 
-# Install system dependencies needed for postgres/pg8000 and libreoffice for PDF generation
+# Install system dependencies needed for postgres/pg8000, TLS/ARCA (ca-certificates, openssl, tzdata) and libreoffice for PDF generation
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends gcc libreoffice-core libreoffice-writer default-jre-headless fonts-liberation && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        ca-certificates \
+        openssl \
+        tzdata \
+        gcc \
+        libreoffice-core \
+        libreoffice-writer \
+        default-jre-headless \
+        fonts-liberation && \
+    update-ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy requirements
@@ -24,8 +34,9 @@ COPY src/ ./src/
 # Create non-root user (ISO/IEC 27017 / Control 8.2) and prepare writable data directories
 RUN groupadd -g 10001 appuser && \
     useradd -u 10001 -g appuser -d /app -s /usr/sbin/nologin appuser && \
-    mkdir -p /app/data/uploads /app/data/public /app/data/certs/arca && \
-    chown -R appuser:appuser /app
+    mkdir -p /app/data/uploads /app/data/public /app/data/certs/arca/.locks && \
+    chown -R appuser:appuser /app && \
+    chmod 750 /app/data/certs/arca
 
 USER appuser
 

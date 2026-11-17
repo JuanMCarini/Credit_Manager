@@ -213,7 +213,28 @@ def procesar_facturacion_pendiente(
             db.rollback()
             err_msg = str(e)
             if isinstance(res, dict) and res.get("cae"):
-                registrar_cae_contingencia(res, err_msg)
+                registrar_cae_contingencia(
+                    res,
+                    err_msg,
+                    extra_data={
+                        "origen": "COBRANZA",
+                        "cobranza_id": cob_id,
+                        "concepto_arca": 2,
+                        "fecha_vencimiento_pago": max(fecha_emision or date.today(), date.today()),
+                        "tipo_doc_receptor": tipo_doc_rec,
+                        "razon_social_receptor": razon_social_receptor,
+                        "domicilio_receptor": domicilio_receptor,
+                        "condicion_iva_receptor": "Consumidor Final",
+                        "condicion_iva_receptor_id": 5,
+                        "provincia_id": provincia_id,
+                        "importe_no_gravado": capital_val,
+                        "neto_gravado_21": interes_val,
+                        "iva_21": iva_val,
+                        "estado_arca": "MOCK"
+                        if arca_service.use_mock
+                        else f"AUTORIZADA_{arca_service.environment.upper()}",
+                    },
+                )
                 logger.critical(
                     f"[ARCA CRITICAL] CAE {res.get('cae')} otorgado para cobranza {cob_id} pero falló commit en BD: {err_msg}"
                 )
