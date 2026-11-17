@@ -11,6 +11,7 @@ from src.config import COMPANY_DATA
 from src.services.arca_service import (
     ArcaServiceError,
     _clean_cuit,
+    _create_arca_ssl_context,
     _find_text_local,
     _strip_ns,
     get_arca_config,
@@ -85,6 +86,7 @@ class ArcaConsultaService:
                 "cuit": clean_cuit,
                 "tipoPersona": "FISICA" if es_fisica else "JURIDICA",
                 "estadoClave": "ACTIVO",
+                "estado_clave": "ACTIVO",
                 "nombre": "MOCK PEREZ JUAN" if es_fisica else "MOCK EMPRESA S.A.",
                 "apellido": "PEREZ" if es_fisica else None,
                 "razon_social": razon_social,
@@ -145,7 +147,7 @@ class ArcaConsultaService:
         }
 
         try:
-            with httpx.Client(timeout=30.0) as client:
+            with httpx.Client(timeout=30.0, verify=_create_arca_ssl_context()) as client:
                 response = client.post(
                     PADRON_A5_URLS[self.environment],
                     content=soap_envelope.encode("utf-8"),
@@ -276,6 +278,7 @@ class ArcaConsultaService:
             "cuit": clean_cuit,
             "tipoPersona": tipo_persona,
             "estadoClave": estado_clave,
+            "estado_clave": estado_clave,
             "nombre": nombre_xml or razon_social,
             "apellido": apellido_xml or None,
             "razon_social": razon_social,

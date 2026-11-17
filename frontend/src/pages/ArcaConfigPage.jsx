@@ -146,6 +146,15 @@ const ArcaConfigPage = () => {
 
   const handleGenerateCsr = async (e) => {
     e.preventDefault();
+    if (
+      statusData?.has_certificate &&
+      statusData?.estado_vigencia === 'VIGENTE' &&
+      !window.confirm(
+        'Ya existe un certificado digital VIGENTE. Al generar un nuevo CSR se creará una nueva clave privada para renovación (manteniendo respaldada la clave actual hasta que suba el nuevo .crt). ¿Desea continuar?'
+      )
+    ) {
+      return;
+    }
     setGeneratingCsr(true);
     setFeedback(null);
     try {
@@ -202,6 +211,7 @@ const ArcaConfigPage = () => {
       return;
     }
 
+    const formEl = e.currentTarget;
     setUploadingCert(true);
     setFeedback(null);
     try {
@@ -218,6 +228,7 @@ const ArcaConfigPage = () => {
       );
       setCrtFile(null);
       setKeyFile(null);
+      formEl?.reset();
       setFeedback({
         type: 'success',
         text:
@@ -389,6 +400,51 @@ const ArcaConfigPage = () => {
                 }}
               >
                 El CUIT configurado en ARCA ({statusData?.cuit}) difiere del CUIT en Configuración de Empresa ({statusData?.cuit_empresa}). Se recomienda unificarlos.
+              </div>
+            )}
+            {statusData?.has_certificate && statusData?.cuit_coincide_certificado === false && (
+              <div
+                style={{
+                  marginTop: '8px',
+                  padding: '6px 10px',
+                  borderRadius: '6px',
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  border: '1px solid rgba(239, 68, 68, 0.4)',
+                  color: '#f87171',
+                  fontSize: '12px',
+                }}
+              >
+                El CUIT del certificado digital ({statusData?.cuit_certificado}) no coincide con el CUIT emisor configurado ({statusData?.cuit}).
+              </div>
+            )}
+            {statusData?.has_certificate && statusData?.key_matches_cert === false && (
+              <div
+                style={{
+                  marginTop: '8px',
+                  padding: '6px 10px',
+                  borderRadius: '6px',
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  border: '1px solid rgba(239, 68, 68, 0.4)',
+                  color: '#f87171',
+                  fontSize: '12px',
+                }}
+              >
+                El certificado almacenado (arca.crt) no coincide con la clave privada actual (arca.key). Suba el nuevo certificado correspondiente o restaure la clave anterior.
+              </div>
+            )}
+            {statusData?.cuit_mod11_valido === false && (
+              <div
+                style={{
+                  marginTop: '8px',
+                  padding: '6px 10px',
+                  borderRadius: '6px',
+                  background: 'rgba(245, 158, 11, 0.15)',
+                  border: '1px solid rgba(245, 158, 11, 0.4)',
+                  color: '#fbbf24',
+                  fontSize: '12px',
+                }}
+              >
+                El CUIT configurado ({statusData?.cuit}) no supera la validación de dígito verificador Módulo 11. Verifíquelo antes de generar el CSR o emitir comprobantes.
               </div>
             )}
           </div>
@@ -676,7 +732,9 @@ const ArcaConfigPage = () => {
                 </li>
                 <li>
                   Vincule el computador fiscal al servicio{' '}
-                  <strong>Facturación Electrónica (wsfe)</strong>.
+                  <strong>Facturación Electrónica (wsfe)</strong> y opcionalmente a{' '}
+                  <strong>Consulta Constancia de Inscripción (ws_sr_constancia_inscripcion)</strong>{' '}
+                  para autocompletar CUITs desde el Padrón A5.
                 </li>
               </ol>
             </div>
@@ -1032,6 +1090,26 @@ const ArcaConfigPage = () => {
                             `${String(p.nro).padStart(4, '0')} (${p.emision_tipo || 'RECE'})`
                         )
                         .join(', ')}
+                    </div>
+                  )}
+                {Array.isArray(connResult.advertencias) &&
+                  connResult.advertencias.length > 0 && (
+                    <div
+                      style={{
+                        marginTop: '8px',
+                        padding: '8px 10px',
+                        borderRadius: '6px',
+                        background: 'rgba(245, 158, 11, 0.15)',
+                        border: '1px solid rgba(245, 158, 11, 0.35)',
+                        color: '#fbbf24',
+                      }}
+                    >
+                      <strong>Advertencias:</strong>
+                      <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
+                        {connResult.advertencias.map((adv, idx) => (
+                          <li key={idx}>{adv}</li>
+                        ))}
+                      </ul>
                     </div>
                   )}
               </div>

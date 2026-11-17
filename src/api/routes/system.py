@@ -390,12 +390,23 @@ def get_arca_system_status(current_user: Usuario = Depends(get_current_user)):
 
     cuit_empresa = arca_service._clean_cuit(arca_service.COMPANY_DATA.cuit)
     cuit_coincide = not cuit_empresa or cuit_empresa == cfg["cuit"]
+    cuit_cert = cert_info.get("cuit_certificado")
+    cuit_coincide_cert = not cuit_cert or cuit_cert == cfg["cuit"]
+    key_matches_cert = (
+        cert_info.get("key_matches_cert", True)
+        if cert_info.get("has_certificate")
+        else True
+    )
 
     return {
         "environment": cfg["environment"],
         "cuit": cfg["cuit"],
         "cuit_empresa": cuit_empresa,
         "cuit_coincide_empresa": cuit_coincide,
+        "cuit_certificado": cuit_cert,
+        "cuit_coincide_certificado": cuit_coincide_cert,
+        "cuit_mod11_valido": arca_service.validar_cuit_mod11(cfg["cuit"]),
+        "key_matches_cert": bool(key_matches_cert),
         "punto_venta_default": cfg["punto_venta_default"],
         "dias_alerta_vencimiento": cfg["dias_alerta_vencimiento"],
         "condicion_iva_emisor": cfg.get("condicion_iva_emisor", "RESPONSABLE_INSCRIPTO"),
@@ -525,12 +536,25 @@ def upload_arca_certificate_endpoint(
             detail="Debe adjuntar un archivo de certificado digital (.crt o .pem).",
         )
 
-    crt_bytes = target_crt.file.read()
+    MAX_CERT_BYTES = 64 * 1024
+    crt_bytes = target_crt.file.read(MAX_CERT_BYTES + 1)
+    if len(crt_bytes) > MAX_CERT_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail="El archivo de certificado excede el tamaño máximo permitido (64 KB).",
+        )
     target_key = next(
         (f for f in (key_file, key, clave_privada) if hasattr(f, "file")),
         None,
     )
-    key_bytes = target_key.file.read() if target_key is not None else None
+    key_bytes = None
+    if target_key is not None:
+        key_bytes = target_key.file.read(MAX_CERT_BYTES + 1)
+        if len(key_bytes) > MAX_CERT_BYTES:
+            raise HTTPException(
+                status_code=400,
+                detail="El archivo de clave privada excede el tamaño máximo permitido (64 KB).",
+            )
 
     try:
         meta = arca_service.guardar_y_validar_certificado(crt_bytes, key_bytes=key_bytes)
@@ -561,6 +585,13 @@ def test_arca_connection_endpoint(current_user: Usuario = Depends(admin_only)):
         dummy_res = svc.fe_dummy()
         wsaa_ok = False
         wsaa_exp = None
+        advertencias: list[str] = []
+
+        if cert_status.get("has_certificate") and cert_status.get("key_matches_cert") is False:
+            raise ValueError(
+                "El certificado cargado (arca.crt) no coincide con la clave privada actual (arca.key). "
+                "Vuelva a cargar el certificado o clave correspondiente."
+            )
 
         if cfg["environment"] == "mock":
             if cert_status["has_certificate"]:
@@ -580,11 +611,53 @@ def test_arca_connection_endpoint(current_user: Usuario = Depends(admin_only)):
             wsaa_ok = bool(ta.get("token") and ta.get("sign"))
             wsaa_exp = ta.get("expiration_time")
 
+        cuit_cert = cert_status.get("cuit_certificado")
+        if cuit_cert and cuit_cert != cfg["cuit"]:
+            advertencias.append(
+                f"El CUIT del certificado ({cuit_cert}) difiere del CUIT configurado ({cfg['cuit']})."
+            )
+        if not arca_service.validar_cuit_mod11(cfg["cuit"]):
+            advertencias.append(
+                f"El CUIT configurado ({cfg['cuit']}) no supera la validación de dígito verificador Módulo 11."
+            )
+
         puntos_venta_habilitados = []
         try:
             puntos_venta_habilitados = svc.fe_param_get_ptos_venta()
-        except Exception:
+        except arca_service.ArcaServiceError as ptos_exc:
+            msg_lower = str(ptos_exc).lower()
+            if (
+                str(ptos_exc.code or "") == "600"
+                or "validaciondetoken" in msg_lower
+                or "no aparecio cuit" in msg_lower
+                or "no se encuentra autorizado" in msg_lower
+            ):
+                raise arca_service.ArcaServiceError(
+                    f"El certificado autenticó en WSAA pero ARCA rechazó el CUIT {cfg['cuit']} en WSFEv1 "
+                    f"(verifique la relación del servicio 'wsfe' con Clave Fiscal): {ptos_exc}",
+                    code=ptos_exc.code,
+                    status_http=400,
+                    observations=ptos_exc.observations,
+                ) from ptos_exc
+            advertencias.append(f"Consulta de Puntos de Venta: {ptos_exc}")
             puntos_venta_habilitados = []
+        except Exception as ptos_exc:
+            advertencias.append(f"No se pudieron consultar los puntos de venta: {ptos_exc}")
+            puntos_venta_habilitados = []
+
+        if cfg["environment"] != "mock":
+            if puntos_venta_habilitados:
+                nros_habilitados = [int(p["nro"]) for p in puntos_venta_habilitados if p.get("nro")]
+                if int(cfg["punto_venta_default"]) not in nros_habilitados:
+                    pv_list_str = ", ".join(f"{n:04d}" for n in nros_habilitados)
+                    advertencias.append(
+                        f"El Punto de Venta por defecto ({int(cfg['punto_venta_default']):04d}) no figura "
+                        f"entre los habilitados para Web Services ({pv_list_str})."
+                    )
+            elif not any("Puntos de Venta" in w or "puntos de venta" in w for w in advertencias):
+                advertencias.append(
+                    "No se encontraron Puntos de Venta RECE/WebServices habilitados en ARCA para este CUIT."
+                )
 
         return {
             "status": "success",
@@ -597,6 +670,7 @@ def test_arca_connection_endpoint(current_user: Usuario = Depends(admin_only)):
             "wsaa_autenticado": wsaa_ok,
             "wsaa_expiration": wsaa_exp,
             "puntos_venta_habilitados": puntos_venta_habilitados,
+            "advertencias": advertencias,
             "estado_vigencia": cert_status["estado"],
             "message": (
                 "Conexión simulada exitosa en modo MOCK."

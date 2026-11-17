@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 from typing import List, Optional, Any
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 from datetime import date
 import pandas as pd
@@ -41,7 +42,9 @@ from src.services.arca_service import (
     CONDICIONES_IVA_RECEPTOR_CATALOGO,
     TIPOS_TRIBUTO_CATALOGO,
     get_arca_config,
+    registrar_cae_contingencia,
     resolve_condicion_iva_receptor_id,
+    validar_compatibilidad_iva_receptor_comprobante,
 )
 from src.services.arca_consulta import ArcaConsultaService
 from src.config import get_company_data
@@ -609,7 +612,7 @@ class EmitirFacturaIndividualRequest(BaseModel):
     cuit_cliente: Optional[str] = Field(default=None, max_length=20)
     razon_social_receptor: str = Field(default="Consumidor Final", max_length=200)
     domicilio_receptor: Optional[str] = Field(default=None, max_length=255)
-    condicion_iva_receptor: str = Field(default="Consumidor Final", max_length=60)
+    condicion_iva_receptor: Optional[str] = Field(default=None, max_length=60)
     condicion_iva_receptor_id: Optional[int] = None
     provincia_id: Optional[int] = None
 
@@ -870,11 +873,20 @@ def emitir_factura_individual(
 
     fecha_eff = payload.fecha_emision or date.today()
     doc_tipo_num = 80 if len(cuit_clean) == 11 else (96 if len(cuit_clean) >= 7 else 99)
+    cond_iva_receptor_label = (payload.condicion_iva_receptor or "").strip() or (
+        "Responsable Inscripto"
+        if info_tipo["letra"] in ("A", "M")
+        else ("Cliente del Exterior" if info_tipo["letra"] == "E" else "Consumidor Final")
+    )
     cond_iva_id = resolve_condicion_iva_receptor_id(
-        payload.condicion_iva_receptor_id or payload.condicion_iva_receptor,
+        payload.condicion_iva_receptor_id or cond_iva_receptor_label,
         tipo_comprobante=payload.tipo_comprobante,
         doc_tipo=doc_tipo_num,
     )
+    try:
+        validar_compatibilidad_iva_receptor_comprobante(cond_iva_id, payload.tipo_comprobante)
+    except ArcaServiceError as exc:
+        raise HTTPException(status_code=exc.status_http or 400, detail=str(exc))
 
     try:
         res_arca = arca_service.emitir_factura(
@@ -886,7 +898,7 @@ def emitir_factura_individual(
             db=db,
             concepto_arca=payload.concepto_arca,
             tipo_doc_receptor=payload.tipo_doc_receptor,
-            condicion_iva_receptor=payload.condicion_iva_receptor,
+            condicion_iva_receptor=cond_iva_receptor_label,
             condicion_iva_receptor_id=cond_iva_id,
             comprobante_asociado=comprobante_asociado_dict,
             comprobante_asociado_str=comp_asoc_str,
@@ -932,7 +944,7 @@ def emitir_factura_individual(
         cuit_cliente=res_arca["cuit_cliente"],
         razon_social_receptor=payload.razon_social_receptor.strip() or "Consumidor Final",
         domicilio_receptor=(payload.domicilio_receptor or "").strip() or None,
-        condicion_iva_receptor=payload.condicion_iva_receptor,
+        condicion_iva_receptor=cond_iva_receptor_label,
         condicion_iva_receptor_id=cond_iva_id,
         provincia_id=payload.provincia_id,
         comprobante_asociado_id=payload.comprobante_asociado_id,
@@ -963,6 +975,7 @@ def emitir_factura_individual(
         db.refresh(nueva_factura)
     except Exception as db_exc:
         db.rollback()
+        registrar_cae_contingencia(res_arca, str(db_exc))
         logger.critical(
             f"[ARCA CRITICAL] Comprobante autorizado en ARCA pero falló el guardado en BD: "
             f"PV={res_arca['punto_venta']} Tipo={res_arca['tipo_comprobante']} "
@@ -1017,11 +1030,15 @@ def get_facturas_emitidas(
     origen: Optional[str] = None,
     punto_venta: Optional[int] = None,
     search: Optional[str] = None,
+    incluir_mock: Optional[bool] = None,
     db: Session = Depends(get_db),
 ):
     """
     Lista los comprobantes ARCA emitidos con filtros y KPIs agregados del período.
     """
+    cfg = get_arca_config()
+    env_actual = str(cfg.get("environment") or "mock").lower()
+
     query = db.query(Factura).options(
         joinedload(Factura.cobranza)
         .joinedload(Cobranza.cuota)
@@ -1029,6 +1046,9 @@ def get_facturas_emitidas(
         .joinedload(Credito.cliente),
         joinedload(Factura.provincia),
     )
+
+    if incluir_mock is False or (incluir_mock is None and env_actual == "produccion"):
+        query = query.filter(or_(Factura.estado_arca.is_(None), Factura.estado_arca != "MOCK"))
 
     if fecha_desde:
         query = query.filter(Factura.fecha_emision >= fecha_desde)
@@ -1088,10 +1108,13 @@ def get_facturas_emitidas(
             if search_lower not in haystack:
                 continue
 
-        total_facturado_neto += signo * bd["importe_total"]
-        total_iva_debito += signo * bd["iva_total"]
-        if es_nc:
-            total_notas_credito += bd["importe_total"]
+        estado_arca_val = f.estado_arca or "MOCK"
+        incluir_en_kpi = env_actual == "mock" or estado_arca_val != "MOCK"
+        if incluir_en_kpi:
+            total_facturado_neto += signo * bd["importe_total"]
+            total_iva_debito += signo * bd["iva_total"]
+            if es_nc:
+                total_notas_credito += bd["importe_total"]
 
         monto_nc_aplicado = 0.0 if es_nc else nc_por_comprobante.get(f.id, 0.0)
         saldo_pendiente_nc = (
@@ -1103,6 +1126,7 @@ def get_facturas_emitidas(
         items.append({
             "id": f.id,
             "origen": f.origen or ("COBRANZA" if f.cobranza_id else "FINANZAS"),
+            "estado_arca": estado_arca_val,
             "cobranza_id": f.cobranza_id,
             "punto_venta": f.punto_venta,
             "tipo_comprobante": f.tipo_comprobante,
@@ -1257,8 +1281,20 @@ def get_pendientes(
 
 
 @router.get("/ultima-fecha")
-def get_ultima_fecha_factura(db: Session = Depends(get_db)):
-    ultima = db.query(Factura).order_by(Factura.fecha_emision.desc(), Factura.id.desc()).first()
+def get_ultima_fecha_factura(
+    punto_venta: Optional[int] = None,
+    tipo_comprobante: Optional[int] = None,
+    db: Session = Depends(get_db),
+):
+    cfg = get_arca_config()
+    query = db.query(Factura)
+    if cfg.get("environment") in ("homologacion", "produccion"):
+        query = query.filter(or_(Factura.estado_arca.is_(None), Factura.estado_arca != "MOCK"))
+    if punto_venta is not None:
+        query = query.filter(Factura.punto_venta == punto_venta)
+    if tipo_comprobante is not None:
+        query = query.filter(Factura.tipo_comprobante == tipo_comprobante)
+    ultima = query.order_by(Factura.fecha_emision.desc(), Factura.id.desc()).first()
     return {"ultima_fecha": str(ultima.fecha_emision) if ultima else None}
 
 
@@ -1292,7 +1328,12 @@ def procesar_facturacion(request: ProcesarRequest, db: Session = Depends(get_db)
     cantidad = res_lote["procesadas"]
     errores = res_lote["errores"]
     msg = f"Se procesaron {cantidad} facturas."
-    if errores:
+    if res_lote.get("lote_abortado"):
+        msg += (
+            f" Lote detenido automáticamente por error global de conexión/configuración con ARCA: "
+            f"{res_lote.get('motivo_aborto')}"
+        )
+    elif errores:
         msg += f" ({len(errores)} con error)."
     return {
         "message": msg,
@@ -1306,12 +1347,15 @@ def descargar_libro_iva(
     fecha_hasta: date = Query(None),
     db: Session = Depends(get_db),
 ):
+    cfg = get_arca_config()
     query = db.query(Factura).options(
         joinedload(Factura.cobranza)
         .joinedload(Cobranza.cuota)
         .joinedload(Cuota.credito)
         .joinedload(Credito.socio_originador)
     )
+    if cfg.get("environment") in ("homologacion", "produccion"):
+        query = query.filter(or_(Factura.estado_arca.is_(None), Factura.estado_arca != "MOCK"))
     if fecha_desde:
         query = query.filter(Factura.fecha_emision >= fecha_desde)
     if fecha_hasta:
@@ -1376,6 +1420,7 @@ def descargar_pdfs_masivo(
     db: Session = Depends(get_db),
 ):
     company_data_db = get_company_data(db)
+    cfg = get_arca_config()
 
     query = db.query(Factura).options(
         joinedload(Factura.cobranza)
@@ -1383,6 +1428,8 @@ def descargar_pdfs_masivo(
         .joinedload(Cuota.credito)
         .joinedload(Credito.cliente)
     )
+    if cfg.get("environment") in ("homologacion", "produccion"):
+        query = query.filter(or_(Factura.estado_arca.is_(None), Factura.estado_arca != "MOCK"))
     if fecha_desde:
         query = query.filter(Factura.fecha_emision >= fecha_desde)
     if fecha_hasta:

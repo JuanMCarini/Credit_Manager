@@ -6,6 +6,7 @@ from sqlalchemy import (
     Numeric,
     Date,
     DateTime,
+    Index,
     JSON,
     inspect,
     text,
@@ -405,6 +406,10 @@ class Factura(Base):
     como las emisiones individuales desde el módulo de Finanzas (`origen='FINANZAS'`).
     """
     __tablename__ = "facturas"
+    __table_args__ = (
+        Index("ix_facturas_pv_tipo_nro", "punto_venta", "tipo_comprobante", "nro_comprobante"),
+        Index("ix_facturas_fecha_emision", "fecha_emision"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     cobranza_id = Column(Integer, ForeignKey("cobranzas.id"), nullable=True, unique=True)
@@ -523,5 +528,18 @@ def ensure_facturas_schema(engine) -> None:
             for col_name, col_def in new_columns_sql:
                 if col_name not in existing_cols:
                     conn.execute(text(f"ALTER TABLE facturas ADD COLUMN {col_name} {col_def}"))
+
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_facturas_pv_tipo_nro "
+                    "ON facturas (punto_venta, tipo_comprobante, nro_comprobante)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_facturas_fecha_emision "
+                    "ON facturas (fecha_emision)"
+                )
+            )
     except Exception as exc:
         print(f"⚠️ Warning al verificar esquema de facturas: {exc}")

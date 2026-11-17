@@ -262,6 +262,10 @@ def _resolve_sensitive_read_action(path: str, method: str) -> str | None:
         return f"Descarga de Documento ({path.split('/')[-1]})"
     if "/documentos/" in path and path.endswith("/download"):
         return f"Descarga de Documento ({path})"
+    if path == "/api/v1/system/arca/descargar-key":
+        return "Descarga de Clave Privada Fiscal ARCA (arca.key)"
+    if path == "/api/v1/system/arca/descargar-csr":
+        return "Descarga de Solicitud CSR ARCA (arca.csr)"
     return None
 
 

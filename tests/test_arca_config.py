@@ -485,4 +485,232 @@ def test_padron_a5_soap_parser(isolated_arca_dir, monkeypatch):
     assert res["condicion_iva_receptor_id"] == 1
     assert res["domicilio_fiscal"] == "AV CORRIENTES 1234"
     assert res["provincia"] == "CIUDAD AUTONOMA BUENOS AIRES"
+    assert res["estado_clave"] == "ACTIVO"
+
+
+def test_arca_resiliencia_fchvtopago_neto_sin_iva_ta_cache_y_backup_key(isolated_arca_dir, monkeypatch):
+    """
+    6. Verifica:
+       - Extracción de cuit_certificado y respaldo arca.active_backup.key al generar nuevo CSR
+       - Invalidación de arca_ta_cache.json al cambiar certificado o CUIT/entorno
+       - Ajuste de FchVtoPago >= today cuando fecha_emision es retroactiva
+       - Reclasificación de neto_gravado_21 con iva_21=0 a AlicIva Id=3 (0%)
+       - Resolución de alias en CbtesAsoc y advertencias en probar-conexion
+    """
+    import xml.etree.ElementTree as ET
+    from src.services.arca_service import ArcaService
+
+    # 1. Generar primer par key/csr y certificado activo
+    arca_service.save_arca_config({"environment": "homologacion", "cuit": "30712345678", "punto_venta_default": 5})
+    csr1 = arca_service.generar_key_y_csr("30712345678", "Yoyo S.A.", "alias-1")
+    key1 = serialization.load_pem_private_key((isolated_arca_dir / "arca.key").read_bytes(), password=None)
+    subj1 = x509.load_pem_x509_csr(csr1["csr_pem"].encode("utf-8")).subject
+    crt1 = _build_synthetic_cert_pem(key1, subj1, days_valid=30, serial_number=111)
+    arca_service.guardar_y_validar_certificado(crt1)
+
+    st = get_arca_system_status(current_user=None)
+    assert st["cuit_certificado"] == "30712345678"
+    assert st["cuit_coincide_certificado"] is True
+    assert st["key_matches_cert"] is True
+
+    # Guardar un TA cacheado y verificar que sobrevive mientras no cambie config/cert
+    arca_service._save_cached_ta("homologacion", "wsfe", "TOK_1", "SIGN_1", (datetime.now(timezone.utc) + timedelta(hours=6)).isoformat())
+    arca_service.save_arca_config({"environment": "homologacion", "cuit": "30712345678", "punto_venta_default": 5})
+    assert arca_service._load_cached_ta("homologacion", "wsfe") is not None
+
+    # Cambiar CUIT en config debe invalidar la caché de TA
+    arca_service.save_arca_config({"environment": "homologacion", "cuit": "30799988877", "punto_venta_default": 5})
+    assert arca_service._load_cached_ta("homologacion", "wsfe") is None
+    st_diff = get_arca_system_status(current_user=None)
+    assert st_diff["cuit_coincide_certificado"] is False
+
+    # 2. Al generar un segundo CSR sin subir aún el nuevo .crt, debe conservar respaldo activo para firmar TRA
+    arca_service.save_arca_config({"environment": "homologacion", "cuit": "30712345678", "punto_venta_default": 5})
+    csr2 = arca_service.generar_key_y_csr("30712345678", "Yoyo S.A.", "alias-2")
+    assert (isolated_arca_dir / "arca.active_backup.key").is_file()
+    assert get_arca_system_status(current_user=None)["key_matches_cert"] is True
+    tra = arca_service.generar_login_ticket_request("wsfe")
+    cms_b64 = arca_service.firmar_tra_cms(tra)
+    assert len(cms_b64) > 50
+
+    # Al subir el segundo .crt coincidente con la nueva clave, se limpia el backup e invalida TA
+    key2 = serialization.load_pem_private_key((isolated_arca_dir / "arca.key").read_bytes(), password=None)
+    subj2 = x509.load_pem_x509_csr(csr2["csr_pem"].encode("utf-8")).subject
+    crt2 = _build_synthetic_cert_pem(key2, subj2, days_valid=60, serial_number=222)
+    arca_service._save_cached_ta("homologacion", "wsfe", "TOK_OLD", "SIGN_OLD", (datetime.now(timezone.utc) + timedelta(hours=6)).isoformat())
+    arca_service.guardar_y_validar_certificado(crt2)
+    assert not (isolated_arca_dir / "arca.active_backup.key").exists()
+    assert arca_service._load_cached_ta("homologacion", "wsfe") is None
+
+    # 3. Verificar FchVtoPago >= today, neto_21 sin IVA -> Id=3, y CbtesAsoc con alias cortos
+    captured = []
+    monkeypatch.setattr(ArcaService, "obtener_ticket_acceso", lambda self, service="wsfe": {"token": "T", "sign": "S"})
+
+    def fake_wsfe(environment, action, body_xml):
+        captured.append((action, body_xml))
+        if action == "FECompUltimoAutorizado":
+            return ET.fromstring(
+                '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body>'
+                '<FECompUltimoAutorizadoResponse xmlns="http://ar.gov.afip.dif.FEV1/">'
+                '<FECompUltimoAutorizadoResult><CbteNro>5</CbteNro></FECompUltimoAutorizadoResult>'
+                '</FECompUltimoAutorizadoResponse></soap:Body></soap:Envelope>'
+            )
+        if action == "FEParamGetPtosVenta":
+            return ET.fromstring(
+                '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body>'
+                '<FEParamGetPtosVentaResponse xmlns="http://ar.gov.afip.dif.FEV1/">'
+                '<FEParamGetPtosVentaResult><ResultGet><PtoVenta><Nro>1</Nro><EmisionTipo>RECE</EmisionTipo><Bloqueado>N</Bloqueado></PtoVenta></ResultGet></FEParamGetPtosVentaResult>'
+                '</FEParamGetPtosVentaResponse></soap:Body></soap:Envelope>'
+            )
+        if action == "FEDummy":
+            return ET.fromstring(
+                '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body>'
+                '<FEDummyResponse xmlns="http://ar.gov.afip.dif.FEV1/">'
+                '<FEDummyResult><AppServer>OK</AppServer><DbServer>OK</DbServer><AuthServer>OK</AuthServer></FEDummyResult>'
+                '</FEDummyResponse></soap:Body></soap:Envelope>'
+            )
+        return ET.fromstring(
+            '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body>'
+            '<FECAESolicitarResponse xmlns="http://ar.gov.afip.dif.FEV1/">'
+            '<FECAESolicitarResult><FeCabResp><Resultado>A</Resultado></FeCabResp>'
+            '<FeDetResp><FECAEDetResponse><Resultado>A</Resultado><CAE>75000099998888</CAE><CAEFchVto>20261201</CAEFchVto></FECAEDetResponse></FeDetResp>'
+            '</FECAESolicitarResult></FECAESolicitarResponse></soap:Body></soap:Envelope>'
+        )
+
+    monkeypatch.setattr(arca_service, "_call_wsfev1_soap", fake_wsfe)
+
+    svc = ArcaService(use_mock=False)
+    fecha_ayer = date.today() - timedelta(days=3)
+    svc.emitir_factura(
+        punto_venta=5,
+        tipo_comprobante=8,  # NC B
+        importe_total=1000.0,
+        fecha_emision=fecha_ayer,
+        tipo_doc_receptor="CF",
+        cuit_cliente="99999999999",
+        neto_gravado_21=1000.0,
+        iva_21=0.0,
+        comprobantes_asociados=[{"tipo": 6, "pto_vta": 5, "nro": 4, "fecha": fecha_ayer}],
+    )
+    _, xml_nc = captured[-1]
+    assert f"<FchVtoPago>{date.today().strftime('%Y%m%d')}</FchVtoPago>" in xml_nc
+    assert "<DocTipo>99</DocTipo><DocNro>0</DocNro>" in xml_nc
+    assert "<AlicIva><Id>3</Id><BaseImp>1000.00</BaseImp><Importe>0.00</Importe></AlicIva>" in xml_nc
+    assert "<Id>5</Id>" not in xml_nc
+    assert "<Tipo>6</Tipo><PtoVta>5</PtoVta><Nro>4</Nro>" in xml_nc
+
+    # 4. Probar conexión advierte que PV=5 no está entre los habilitados (solo está PV=1)
+    conn_res = probar_conexion_arca_endpoint(current_user=None)
+    assert conn_res["ok"] is True
+    assert len(conn_res["advertencias"]) >= 1
+    assert any("0005" in adv for adv in conn_res["advertencias"])
+
+
+def test_auditoria_recuperacion_cae_der_mod11_y_rg5616(isolated_arca_dir, monkeypatch):
+    """
+    7. Verifica los hallazgos críticos y de seguridad implementados tras la auditoría técnica:
+       - C-01: Recuperación automática de CAE vía FECompConsultar tras HTTP 502 en FECAESolicitar
+               y persistencia en cae_recovery.jsonl ante error de guardado local
+       - C-03: Validación Módulo 11 de CUIT y rechazo RG 5616 ante clase incompatible (ej. Factura A a Consumidor Final)
+       - A-02: Soporte de certificado X.509 en formato DER binario (.cer) y cota de 64 KB en upload
+    """
+    import xml.etree.ElementTree as ET
+    from src.services.arca_service import (
+        ArcaService,
+        ArcaServiceError,
+        registrar_cae_contingencia,
+        validar_compatibilidad_iva_receptor_comprobante,
+        validar_cuit_mod11,
+    )
+
+    # 1. Validación Módulo 11
+    assert validar_cuit_mod11("33-69345023-9") is True
+    assert validar_cuit_mod11("30-71234567-8") is False
+    assert validar_cuit_mod11("123") is False
+
+    # 2. Matriz RG 5616: Factura A (1) no admite Consumidor Final (5) ni Exento (4)
+    with pytest.raises(ArcaServiceError) as exc_rg:
+        validar_compatibilidad_iva_receptor_comprobante(5, 1)
+    assert exc_rg.value.code == "RG5616_CLASE_INCOMPATIBLE"
+
+    with pytest.raises(ArcaServiceError) as exc_rg_b:
+        validar_compatibilidad_iva_receptor_comprobante(1, 6)  # Factura B no admite RI (1)
+    assert exc_rg_b.value.code == "RG5616_CLASE_INCOMPATIBLE"
+
+    # Factura A admite Responsable Inscripto (1) y Monotributista (6)
+    validar_compatibilidad_iva_receptor_comprobante(1, 1)
+    validar_compatibilidad_iva_receptor_comprobante(6, 1)
+
+    # 3. Certificado en formato DER binario (.cer) + límite 64 KB en endpoint
+    csr_info = arca_service.generar_key_y_csr("33693450239", "ARCA Test SA", "arca-der")
+    key_local = serialization.load_pem_private_key((isolated_arca_dir / "arca.key").read_bytes(), password=None)
+    subj = x509.load_pem_x509_csr(csr_info["csr_pem"].encode("utf-8")).subject
+    crt_pem = _build_synthetic_cert_pem(key_local, subj, days_valid=30, serial_number=333)
+    crt_der = x509.load_pem_x509_certificate(crt_pem).public_bytes(serialization.Encoding.DER)
+
+    up_der = upload_arca_certificate_endpoint(
+        crt_file=UploadFile(filename="arca.cer", file=io.BytesIO(crt_der)),
+        current_user=None,
+    )
+    assert up_der["status"] == "success"
+    assert up_der["serial_number"] == "333"
+    assert (isolated_arca_dir / "arca.crt").read_bytes().startswith(b"-----BEGIN CERTIFICATE-----")
+
+    # Rechazo de archivo > 64 KB
+    with pytest.raises(HTTPException) as exc_big:
+        upload_arca_certificate_endpoint(
+            crt_file=UploadFile(filename="giant.crt", file=io.BytesIO(b"A" * (65 * 1024))),
+            current_user=None,
+        )
+    assert exc_big.value.status_code == 400
+
+    # 4. Recuperación automática de CAE vía FECompConsultar ante fallo HTTP 502 en FECAESolicitar
+    arca_service.save_arca_config({"environment": "homologacion", "cuit": "33693450239", "punto_venta_default": 2})
+    monkeypatch.setattr(ArcaService, "obtener_ticket_acceso", lambda self, service="wsfe": {"token": "T", "sign": "S"})
+
+    def fake_soap_recovery(environment, action, body_xml):
+        if action == "FECompUltimoAutorizado":
+            return ET.fromstring(
+                '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body>'
+                '<FECompUltimoAutorizadoResponse xmlns="http://ar.gov.afip.dif.FEV1/">'
+                '<FECompUltimoAutorizadoResult><CbteNro>20</CbteNro></FECompUltimoAutorizadoResult>'
+                '</FECompUltimoAutorizadoResponse></soap:Body></soap:Envelope>'
+            )
+        if action == "FECAESolicitar":
+            raise ArcaServiceError("Timeout esperando respuesta de ARCA", status_http=502)
+        if action == "FECompConsultar":
+            return ET.fromstring(
+                '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body>'
+                '<FECompConsultarResponse xmlns="http://ar.gov.afip.dif.FEV1/">'
+                '<FECompConsultarResult><ResultGet>'
+                '<CodAutorizacion>75000088889999</CodAutorizacion>'
+                '<FchVto>20261127</FchVto>'
+                '<CbteFch>20261117</CbteFch>'
+                '<ImpTotal>1210.00</ImpTotal>'
+                '<Resultado>A</Resultado>'
+                '</ResultGet></FECompConsultarResult>'
+                '</FECompConsultarResponse></soap:Body></soap:Envelope>'
+            )
+        raise AssertionError(f"Unexpected SOAP action {action}")
+
+    monkeypatch.setattr(arca_service, "_call_wsfev1_soap", fake_soap_recovery)
+    svc = ArcaService(use_mock=False)
+    res_rec = svc.emitir_factura(
+        punto_venta=2,
+        tipo_comprobante=1,
+        importe_total=1210.0,
+        cuit_cliente="33693450239",
+        condicion_iva_receptor="Responsable Inscripto",
+    )
+    assert res_rec["nro_comprobante"] == 21
+    assert res_rec["cae"] == "75000088889999"
+    assert "FECompConsultar" in res_rec["observaciones_arca"][0]
+
+    # 5. Bitácora de contingencia CAE local
+    registrar_cae_contingencia(res_rec, "DB connection lost")
+    recovery_file = isolated_arca_dir / "cae_recovery.jsonl"
+    assert recovery_file.is_file()
+    assert "75000088889999" in recovery_file.read_text(encoding="utf-8")
+
+
 

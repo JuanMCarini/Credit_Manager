@@ -23,8 +23,13 @@ const CONDICIONES_IVA = [
   'Consumidor Final',
   'Monotributista',
   'IVA Exento',
+  'IVA No Alcanzado',
+  'Monotributista Social',
+  'Monotributo Promovido',
   'Sujeto No Categorizado',
+  'IVA Liberado',
   'Cliente del Exterior',
+  'Proveedor del Exterior',
 ];
 
 const ALICUOTAS_IVA = [
@@ -93,6 +98,7 @@ const FacturacionArcaFinanzasPage = () => {
     punto_venta_default: 1,
     cbu_fce_default: '',
     fce_sistema_circulacion: 'ADC',
+    condicion_iva_emisor: 'RESPONSABLE_INSCRIPTO',
   });
   const [consultingPadron, setConsultingPadron] = useState(false);
   const [padronMsg, setPadronMsg] = useState('');
@@ -153,6 +159,7 @@ const FacturacionArcaFinanzasPage = () => {
           punto_venta_default: resStatus.data.punto_venta_default || 1,
           cbu_fce_default: resStatus.data.cbu_fce_default || '',
           fce_sistema_circulacion: resStatus.data.fce_sistema_circulacion || 'ADC',
+          condicion_iva_emisor: resStatus.data.condicion_iva_emisor || 'RESPONSABLE_INSCRIPTO',
           condicion_iva_emisor_label: resStatus.data.condicion_iva_emisor_label || '',
         });
       }
@@ -215,8 +222,12 @@ const FacturacionArcaFinanzasPage = () => {
 
   const tiposPorClase = useMemo(() => {
     const groups = {};
+    const soloClaseC = ['MONOTRIBUTISTA', 'EXENTO'].includes(arcaStatus.condicion_iva_emisor);
     tiposComprobante.forEach((t) => {
       if (arcaStatus.environment !== 'mock' && [19, 20, 21].includes(Number(t.codigo))) {
+        return;
+      }
+      if (soloClaseC && t.letra !== 'C') {
         return;
       }
       const cl = t.clase || 'Otros';
@@ -224,7 +235,7 @@ const FacturacionArcaFinanzasPage = () => {
       groups[cl].push(t);
     });
     return groups;
-  }, [tiposComprobante, arcaStatus.environment]);
+  }, [tiposComprobante, arcaStatus.environment, arcaStatus.condicion_iva_emisor]);
 
   const receptoresFiltrados = useMemo(() => {
     if (!receptorSearch.trim()) return receptores.slice(0, 150);
@@ -355,6 +366,7 @@ const FacturacionArcaFinanzasPage = () => {
     const ptoVtaDefault = Number(arcaStatus.punto_venta_default) || 1;
     const cbuDefault = arcaStatus.cbu_fce_default || '';
     const fceCircDefault = arcaStatus.fce_sistema_circulacion || 'ADC';
+    const soloClaseC = ['MONOTRIBUTISTA', 'EXENTO'].includes(arcaStatus.condicion_iva_emisor);
 
     if (presetFactura) {
       const ncCodigo = NC_CODE_BY_FACTURA[presetFactura.tipo_comprobante] || 3;
@@ -407,7 +419,7 @@ const FacturacionArcaFinanzasPage = () => {
     } else {
       setFormData({
         punto_venta: ptoVtaDefault,
-        tipo_comprobante: 1,
+        tipo_comprobante: soloClaseC ? 11 : 1,
         fecha_emision: getLocalDateISO(),
         concepto_arca: 2,
         fecha_servicio_desde: getLocalDateISO(),
@@ -417,7 +429,7 @@ const FacturacionArcaFinanzasPage = () => {
         cuit_cliente: '',
         razon_social_receptor: '',
         domicilio_receptor: '',
-        condicion_iva_receptor: 'Responsable Inscripto',
+        condicion_iva_receptor: soloClaseC ? 'Consumidor Final' : 'Responsable Inscripto',
         provincia_id: '',
         comprobante_asociado_id: '',
         comprobante_asociado_str: '',
@@ -433,7 +445,7 @@ const FacturacionArcaFinanzasPage = () => {
         otros_impuestos: 0,
         observaciones: '',
       });
-      setItems([{ descripcion: '', cantidad: 1, precio_unitario: 0, alicuota_iva: '21' }]);
+      setItems([{ descripcion: '', cantidad: 1, precio_unitario: 0, alicuota_iva: soloClaseC ? 'EXENTO' : '21' }]);
     }
 
     setIsModalOpen(true);
@@ -461,7 +473,7 @@ const FacturacionArcaFinanzasPage = () => {
         provincia_id: d.provincia_id_sugerida || prev.provincia_id,
       }));
       setPadronMsg(
-        `✅ Padrón ARCA: ${d.razon_social} — ${d.condicion_iva} (${d.estado_clave || 'ACTIVO'})`
+        `✅ Padrón ARCA: ${d.razon_social} — ${d.condicion_iva} (${d.estado_clave || d.estadoClave || 'ACTIVO'})`
       );
     } catch (err) {
       setPadronMsg(
@@ -1045,9 +1057,38 @@ const FacturacionArcaFinanzasPage = () => {
                       required
                       className="form-control"
                       value={formData.tipo_comprobante}
-                      onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, tipo_comprobante: Number(e.target.value) }))
-                      }
+                      onChange={(e) => {
+                        const nuevoCodigo = Number(e.target.value);
+                        const infoNuevo = tiposComprobante.find((t) => Number(t.codigo) === nuevoCodigo);
+                        setFormData((prev) => {
+                          let nuevaCondIva = prev.condicion_iva_receptor;
+                          if (infoNuevo?.letra === 'A' || infoNuevo?.letra === 'M') {
+                            if (
+                              ![
+                                'Responsable Inscripto',
+                                'Monotributista',
+                                'Monotributista Social',
+                                'Monotributo Promovido',
+                              ].includes(nuevaCondIva)
+                            ) {
+                              nuevaCondIva = 'Responsable Inscripto';
+                            }
+                          } else if (infoNuevo?.letra === 'B') {
+                            if (nuevaCondIva === 'Responsable Inscripto') {
+                              nuevaCondIva = 'Consumidor Final';
+                            }
+                          } else if (infoNuevo?.letra === 'E') {
+                            if (!['Cliente del Exterior', 'Proveedor del Exterior'].includes(nuevaCondIva)) {
+                              nuevaCondIva = 'Cliente del Exterior';
+                            }
+                          }
+                          return {
+                            ...prev,
+                            tipo_comprobante: nuevoCodigo,
+                            condicion_iva_receptor: nuevaCondIva,
+                          };
+                        });
+                      }}
                     >
                       {Object.entries(tiposPorClase).map(([clase, lista]) => (
                         <optgroup key={clase} label={clase}>

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import extract, func
+from sqlalchemy import extract, func, or_
 from typing import List, Optional
 from datetime import date
 from decimal import Decimal
@@ -49,16 +49,21 @@ def calcular_posicion(
     from sqlalchemy.orm import joinedload
     from src.database.models.creditos.facturacion import CODIGOS_NOTA_CREDITO
     from src.api.routes.facturacion import _extract_factura_breakdown
+    from src.services.arca_service import get_arca_config
 
-    facturas_mes = (
+    facturas_query = (
         db.query(Factura)
         .options(joinedload(Factura.cobranza))
         .filter(
             extract('year', Factura.fecha_emision) == anio,
             extract('month', Factura.fecha_emision) == mes,
         )
-        .all()
     )
+    if get_arca_config().get("environment") in ("homologacion", "produccion"):
+        facturas_query = facturas_query.filter(
+            or_(Factura.estado_arca.is_(None), Factura.estado_arca != "MOCK")
+        )
+    facturas_mes = facturas_query.all()
 
     iva_ventas = 0.0
     for fac in facturas_mes:

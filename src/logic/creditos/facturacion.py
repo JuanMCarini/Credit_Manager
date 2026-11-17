@@ -4,9 +4,42 @@ from typing import Any
 from sqlalchemy.orm import Session
 from src.database.models.creditos.cobranzas import Cobranza
 from src.database.models.creditos.facturacion import Factura
-from src.services.arca_service import ArcaService, _clean_cuit
+from src.services.arca_service import (
+    ArcaService,
+    ArcaServiceError,
+    _clean_cuit,
+    registrar_cae_contingencia,
+)
 
 logger = logging.getLogger(__name__)
+
+STRUCTURAL_ARCA_CODES = {"600", "601", "602", "11002", "10004", "10005", "10049", "10152", "CLASE_E_NO_SOPORTADA"}
+STRUCTURAL_ARCA_MSG_PATTERNS = (
+    "faltan los archivos de certificado",
+    "no coincide matemáticamente con la clave privada",
+    "certificado almacenado",
+    "error soap wsaa",
+    "error de red al conectar",
+    "solo puede emitir comprobantes clase c",
+    "10049",
+    "10152",
+)
+
+
+def _es_error_estructural_arca(exc: Exception) -> bool:
+    """
+    Determina si un fallo al emitir en ARCA es global/estructural (red caída,
+    autenticación WSAA/certificado inválido, punto de venta no habilitado o fecha
+    del lote rechazada) en cuyo caso no tiene sentido reintentar el resto del lote.
+    """
+    if isinstance(exc, ArcaServiceError):
+        if exc.status_http == 502:
+            return True
+        if str(exc.code or "").strip() in STRUCTURAL_ARCA_CODES:
+            return True
+
+    msg_lower = str(exc).lower()
+    return any(pattern in msg_lower for pattern in STRUCTURAL_ARCA_MSG_PATTERNS)
 
 
 def procesar_facturacion_pendiente(
@@ -45,6 +78,8 @@ def procesar_facturacion_pendiente(
                     "procesadas": 0,
                     "emitidas": [],
                     "errores": [],
+                    "lote_abortado": False,
+                    "motivo_aborto": None,
                     "environment": arca_service.environment,
                     "punto_venta": pv_eff,
                     "tipo_comprobante": tipo_eff,
@@ -61,6 +96,8 @@ def procesar_facturacion_pendiente(
                 "procesadas": 0,
                 "emitidas": [],
                 "errores": [],
+                "lote_abortado": False,
+                "motivo_aborto": None,
                 "environment": arca_service.environment,
                 "punto_venta": pv_eff,
                 "tipo_comprobante": tipo_eff,
@@ -70,8 +107,12 @@ def procesar_facturacion_pendiente(
     facturadas = 0
     emitidas_list: list[dict[str, Any]] = []
     errores_list: list[dict[str, Any]] = []
+    lote_abortado = False
+    motivo_aborto: str | None = None
 
     for cobranza in cobranzas_pendientes:
+        cob_id = cobranza.id
+        res: dict[str, Any] | None = None
         try:
             cuit_cliente = None
             razon_social_receptor = "Consumidor Final"
@@ -80,7 +121,7 @@ def procesar_facturacion_pendiente(
 
             if cobranza.cuota and cobranza.cuota.credito and cobranza.cuota.credito.cliente:
                 cli = cobranza.cuota.credito.cliente
-                cuit_cliente = cli.cuil
+                cuit_cliente = cli.cuil or cli.documento
                 razon_social_receptor = f"{cli.apellido}, {cli.nombre}"
                 provincia_id = cli.id_provincia
                 if cli.calle:
@@ -116,6 +157,7 @@ def procesar_facturacion_pendiente(
                 importe_exento=0.0,
                 neto_gravado_21=interes_val,
                 iva_21=iva_val,
+                fecha_vencimiento_pago=max(fecha_emision or date.today(), date.today()),
             )
 
             nueva_factura = Factura(
@@ -169,17 +211,30 @@ def procesar_facturacion_pendiente(
 
         except Exception as e:
             db.rollback()
-            logger.error(f"Error facturando cobranza {cobranza.id}: {str(e)}")
+            err_msg = str(e)
+            if isinstance(res, dict) and res.get("cae"):
+                registrar_cae_contingencia(res, err_msg)
+                logger.critical(
+                    f"[ARCA CRITICAL] CAE {res.get('cae')} otorgado para cobranza {cob_id} pero falló commit en BD: {err_msg}"
+                )
+            logger.error(f"Error facturando cobranza {cob_id}: {err_msg}")
             errores_list.append(
                 {
-                    "cobranza_id": cobranza.id,
-                    "error": str(e),
+                    "cobranza_id": cob_id,
+                    "error": err_msg,
                 }
             )
+            if _es_error_estructural_arca(e):
+                lote_abortado = True
+                motivo_aborto = err_msg
+                logger.warning(
+                    f"Lote de facturación detenido automáticamente tras fallo estructural en cobranza {cob_id}: {err_msg}"
+                )
+                break
             continue
 
     logger.info(
-        f"Se facturaron exitosamente {facturadas} cobranzas (errores: {len(errores_list)})."
+        f"Se facturaron exitosamente {facturadas} cobranzas (errores: {len(errores_list)}, abortado: {lote_abortado})."
     )
 
     if retornar_detalle:
@@ -187,6 +242,8 @@ def procesar_facturacion_pendiente(
             "procesadas": facturadas,
             "emitidas": emitidas_list,
             "errores": errores_list,
+            "lote_abortado": lote_abortado,
+            "motivo_aborto": motivo_aborto,
             "environment": arca_service.environment,
             "punto_venta": pv_eff,
             "tipo_comprobante": tipo_eff,

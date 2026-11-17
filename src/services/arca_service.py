@@ -6,6 +6,7 @@ import logging
 import os
 import random
 import re
+import ssl
 import threading
 import time
 import xml.etree.ElementTree as ET
@@ -182,6 +183,8 @@ FEV1_NS = "http://ar.gov.afip.dif.FEV1/"
 _GLOBAL_LOCK_GUARD = threading.Lock()
 _THREAD_LOCKS: dict[str, threading.RLock] = {}
 _THREAD_LOCAL_HELD = threading.local()
+_WSFE_HTTP_CLIENT_LOCK = threading.Lock()
+_WSFE_HTTP_CLIENT: httpx.Client | None = None
 
 
 class ArcaServiceError(ValueError):
@@ -205,6 +208,89 @@ def _ensure_arca_dir() -> Path:
     """Crea el directorio local data/certs/arca/ si no existe."""
     ARCA_CERTS_DIR.mkdir(parents=True, exist_ok=True)
     return ARCA_CERTS_DIR
+
+
+def _create_arca_ssl_context() -> ssl.SSLContext | bool:
+    """
+    Crea un contexto SSL compatible con los servidores de ARCA/AFIP bajo OpenSSL 3+,
+    permitiendo ciphers con SECLEVEL=1 (ej. evita DH_KEY_TOO_SMALL).
+    """
+    try:
+        ctx = ssl.create_default_context()
+        try:
+            ctx.set_ciphers("DEFAULT@SECLEVEL=1")
+        except ssl.SSLError:
+            pass
+        return ctx
+    except Exception:
+        return True
+
+
+def _active_backup_key_path() -> Path:
+    """Ruta de respaldo de la clave privada activa al generar un nuevo CSR."""
+    return ARCA_KEY_PATH.parent / "arca.active_backup.key"
+
+
+def _key_matches_cert(cert: x509.Certificate, key_path: Path) -> bool:
+    """Verifica si la clave privada almacenada en key_path corresponde al certificado."""
+    if not key_path.is_file():
+        return False
+    try:
+        private_key = serialization.load_pem_private_key(key_path.read_bytes(), password=None)
+        return cert.public_key().public_numbers() == private_key.public_key().public_numbers()
+    except Exception:
+        return False
+
+
+def _current_cert_serial() -> str | None:
+    """Obtiene el serial_number del certificado activo (arca.crt) o None si no existe."""
+    if not ARCA_CRT_PATH.is_file():
+        return None
+    try:
+        cert = x509.load_pem_x509_certificate(ARCA_CRT_PATH.read_bytes())
+        return str(cert.serial_number)
+    except Exception:
+        return None
+
+
+def _get_wsfe_http_client() -> httpx.Client:
+    """Retorna un cliente httpx compartido para reutilizar conexiones TLS con ARCA."""
+    global _WSFE_HTTP_CLIENT
+    with _WSFE_HTTP_CLIENT_LOCK:
+        if _WSFE_HTTP_CLIENT is None or _WSFE_HTTP_CLIENT.is_closed:
+            _WSFE_HTTP_CLIENT = httpx.Client(
+                timeout=30.0,
+                verify=_create_arca_ssl_context(),
+                limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
+            )
+        return _WSFE_HTTP_CLIENT
+
+
+def registrar_cae_contingencia(datos_cae: dict[str, Any], error_db: str) -> None:
+    """
+    Persiste en un log append-only (cae_recovery.jsonl) cualquier CAE otorgado por ARCA
+    que haya fallado al guardarse en PostgreSQL para permitir su recuperación fiscal.
+    """
+    try:
+        _ensure_arca_dir()
+        recovery_path = ARCA_CERTS_DIR / "cae_recovery.jsonl"
+        entry = {
+            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+            "punto_venta": datos_cae.get("punto_venta"),
+            "tipo_comprobante": datos_cae.get("tipo_comprobante"),
+            "nro_comprobante": datos_cae.get("nro_comprobante"),
+            "cae": datos_cae.get("cae"),
+            "vencimiento_cae": str(datos_cae.get("vencimiento_cae") or ""),
+            "fecha_emision": str(datos_cae.get("fecha_emision") or ""),
+            "importe_total": datos_cae.get("importe_total"),
+            "cuit_cliente": datos_cae.get("cuit_cliente"),
+            "error_db": error_db,
+        }
+        with _arca_lock("cae_recovery_log"):
+            with open(recovery_path, "a", encoding="utf-8") as fh:
+                fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception as exc:
+        logger.critical(f"No se pudo escribir cae_recovery.jsonl: {exc}")
 
 
 @contextlib.contextmanager
@@ -256,10 +342,15 @@ def _arca_lock(lock_name: str, timeout: float = 30.0):
                         fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
                     locked_os = True
                     break
-                except OSError:
+                except OSError as lock_err:
                     if time.monotonic() >= deadline:
-                        logger.warning(f"Timeout esperando lock de archivo ARCA '{safe_name}'")
-                        break
+                        logger.error(f"Timeout esperando lock exclusivo de archivo ARCA '{safe_name}'")
+                        raise ArcaServiceError(
+                            "Existe otra operación con ARCA en curso sobre el mismo recurso. "
+                            "Por favor, aguarde unos segundos y reintente.",
+                            code="ARCA_LOCK_TIMEOUT",
+                            status_http=409,
+                        ) from lock_err
                     time.sleep(0.05)
             yield
         finally:
@@ -288,6 +379,51 @@ def _clean_cuit(cuit: str | int | None) -> str:
     if cuit is None:
         return ""
     return "".join(filter(str.isdigit, str(cuit)))
+
+
+def validar_cuit_mod11(cuit: str | int | None) -> bool:
+    """Valida longitud (11 dígitos) y dígito verificador Módulo 11 de un CUIT/CUIL."""
+    clean = _clean_cuit(cuit)
+    if len(clean) != 11 or not clean.isdigit():
+        return False
+    pesos = (5, 4, 3, 2, 7, 6, 5, 4, 3, 2)
+    suma = sum(int(d) * p for d, p in zip(clean[:10], pesos))
+    resto = suma % 11
+    verificador = 0 if resto == 0 else (9 if resto == 1 else 11 - resto)
+    return int(clean[10]) == verificador
+
+
+def validar_compatibilidad_iva_receptor_comprobante(
+    condicion_iva_id: int,
+    tipo_comprobante: int,
+) -> None:
+    """Verifica que CondicionIVAReceptorId sea compatible con la clase del comprobante según RG 5616."""
+    cbte = int(tipo_comprobante)
+    if cbte in CODIGOS_CLASE_A:
+        clase = "A"
+    elif cbte in CODIGOS_CLASE_B:
+        clase = "B"
+    elif cbte in CODIGOS_CLASE_C:
+        clase = "C"
+    elif cbte in CODIGOS_CLASE_M:
+        clase = "M"
+    elif cbte in CODIGOS_CLASE_E:
+        clase = "E"
+    else:
+        return
+
+    entry = next(
+        (it for it in CONDICIONES_IVA_RECEPTOR_CATALOGO if it["id"] == int(condicion_iva_id)),
+        None,
+    )
+    if entry and clase not in entry["clases_permitidas"]:
+        raise ArcaServiceError(
+            f"La condición frente al IVA del receptor ('{entry['descripcion']}', Cód. {condicion_iva_id}) "
+            f"no es válida para comprobantes Clase {clase} según RG 5616 (clases admitidas: "
+            f"{', '.join(entry['clases_permitidas'])}).",
+            code="RG5616_CLASE_INCOMPATIBLE",
+            status_http=400,
+        )
 
 
 def normalize_condicion_iva_emisor(val: str | None) -> str:
@@ -507,6 +643,8 @@ def save_arca_config(data: dict[str, Any]) -> dict[str, Any]:
         json.dumps(new_config, indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
+    if env_val != current.get("environment") or cuit_val != current.get("cuit"):
+        invalidate_ta_cache()
     return new_config
 
 
@@ -530,6 +668,21 @@ def generar_key_y_csr(cuit: str | int, razon_social: str, alias: str) -> dict[st
         raise ValueError("El alias (Common Name) es obligatorio para generar el CSR.")
 
     _ensure_arca_dir()
+
+    # Si ya existe un certificado vigente vinculado a la clave actual, respaldar la clave activa
+    # para no interrumpir la firma WSAA mientras se tramita el nuevo .crt en ARCA.
+    if ARCA_CRT_PATH.is_file() and ARCA_KEY_PATH.is_file():
+        try:
+            existing_cert = x509.load_pem_x509_certificate(ARCA_CRT_PATH.read_bytes())
+            if _key_matches_cert(existing_cert, ARCA_KEY_PATH):
+                backup_path = _active_backup_key_path()
+                backup_path.write_bytes(ARCA_KEY_PATH.read_bytes())
+                try:
+                    os.chmod(backup_path, 0o600)
+                except OSError:
+                    pass
+        except Exception:
+            pass
 
     private_key = rsa.generate_private_key(
         public_exponent=65537,
@@ -559,7 +712,18 @@ def generar_key_y_csr(cuit: str | int, razon_social: str, alias: str) -> dict[st
     csr_pem = csr.public_bytes(serialization.Encoding.PEM)
 
     ARCA_KEY_PATH.write_bytes(key_pem)
+    try:
+        os.chmod(ARCA_KEY_PATH, 0o600)
+    except OSError:
+        pass
     ARCA_CSR_PATH.write_bytes(csr_pem)
+
+    try:
+        cfg = get_arca_config()
+        if cfg.get("cuit") == "30000000000" and clean_cuit != "30000000000":
+            save_arca_config({"cuit": clean_cuit})
+    except Exception:
+        pass
 
     return {
         "key_path": str(ARCA_KEY_PATH),
@@ -584,6 +748,16 @@ def _extract_cert_metadata(cert: x509.Certificate) -> dict[str, Any]:
     else:
         dias_restantes = (vencimiento_utc.date() - now_utc.date()).days
 
+    cuit_certificado = None
+    try:
+        for attr in cert.subject.get_attributes_for_oid(NameOID.SERIAL_NUMBER):
+            digits = _clean_cuit(attr.value)
+            if len(digits) == 11:
+                cuit_certificado = digits
+                break
+    except Exception:
+        cuit_certificado = None
+
     return {
         "subject": cert.subject.rfc4514_string(),
         "issuer": cert.issuer.rfc4514_string(),
@@ -591,6 +765,7 @@ def _extract_cert_metadata(cert: x509.Certificate) -> dict[str, Any]:
         "fecha_emision": emision_utc.isoformat(),
         "fecha_vencimiento": vencimiento_utc.isoformat(),
         "dias_restantes": dias_restantes,
+        "cuit_certificado": cuit_certificado,
     }
 
 
@@ -616,8 +791,13 @@ def guardar_y_validar_certificado(
 
     try:
         cert = x509.load_pem_x509_certificate(crt_raw)
-    except Exception as exc:
-        raise ValueError("El archivo proporcionado no es un certificado X.509 PEM válido.") from exc
+    except Exception:
+        try:
+            cert = x509.load_der_x509_certificate(crt_raw)
+        except Exception as exc:
+            raise ValueError(
+                "El archivo proporcionado no es un certificado X.509 válido (PEM o DER)."
+            ) from exc
 
     _ensure_arca_dir()
 
@@ -656,8 +836,18 @@ def guardar_y_validar_certificado(
 
     if key_bytes is not None:
         ARCA_KEY_PATH.write_bytes(key_raw)
+    try:
+        os.chmod(ARCA_KEY_PATH, 0o600)
+    except OSError:
+        pass
 
     ARCA_CRT_PATH.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
+
+    try:
+        _active_backup_key_path().unlink(missing_ok=True)
+    except OSError:
+        pass
+    invalidate_ta_cache()
 
     return _extract_cert_metadata(cert)
 
@@ -681,6 +871,8 @@ def get_certificate_status() -> dict[str, Any]:
             "has_private_key": ARCA_KEY_PATH.exists(),
             "has_csr": ARCA_CSR_PATH.exists(),
             "has_certificate": False,
+            "key_matches_cert": None,
+            "cuit_certificado": None,
             "subject": None,
             "issuer": None,
             "serial_number": None,
@@ -696,6 +888,9 @@ def get_certificate_status() -> dict[str, Any]:
     meta = _extract_cert_metadata(cert)
     dias_restantes = meta["dias_restantes"]
     alerta_vencimiento = bool(dias_restantes <= dias_alerta)
+    key_matches = _key_matches_cert(cert, ARCA_KEY_PATH) or _key_matches_cert(
+        cert, _active_backup_key_path()
+    )
 
     if dias_restantes < 0:
         estado = "VENCIDO"
@@ -712,6 +907,7 @@ def get_certificate_status() -> dict[str, Any]:
         "has_private_key": ARCA_KEY_PATH.exists(),
         "has_csr": ARCA_CSR_PATH.exists(),
         "has_certificate": True,
+        "key_matches_cert": key_matches,
         **meta,
     }
 
@@ -725,10 +921,11 @@ def generar_login_ticket_request(service: str = "wsfe") -> str:
     """
     Genera el documento XML loginTicketRequest (TRA) requerido por WSAA.
     """
-    now_utc = datetime.now(timezone.utc)
-    gen_time = (now_utc - timedelta(minutes=10)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    exp_time = (now_utc + timedelta(hours=12)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    unique_id = int(now_utc.timestamp())
+    tz_ar = timezone(timedelta(hours=-3))
+    now_ar = datetime.now(tz_ar)
+    gen_time = (now_ar - timedelta(minutes=10)).isoformat(timespec="seconds")
+    exp_time = (now_ar + timedelta(minutes=20)).isoformat(timespec="seconds")
+    unique_id = ((int(now_ar.timestamp()) & 0x0FFFFFFF) * 10) + random.randint(0, 9)
 
     return (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
@@ -749,13 +946,23 @@ def firmar_tra_cms(tra_xml: str | bytes) -> str:
     usando el certificado (arca.crt) y clave privada (arca.key) locales, y
     retorna el CMS codificado en Base64 listo para enviar a LoginCms.
     """
-    if not ARCA_CRT_PATH.exists() or not ARCA_KEY_PATH.exists():
+    if not ARCA_CRT_PATH.exists() or (
+        not ARCA_KEY_PATH.exists() and not _active_backup_key_path().exists()
+    ):
         raise ValueError(
             "Faltan los archivos de certificado (arca.crt) o clave privada (arca.key) en data/certs/arca/."
         )
 
     cert = x509.load_pem_x509_certificate(ARCA_CRT_PATH.read_bytes())
-    private_key = serialization.load_pem_private_key(ARCA_KEY_PATH.read_bytes(), password=None)
+    if _key_matches_cert(cert, ARCA_KEY_PATH):
+        key_path_to_use = ARCA_KEY_PATH
+    elif _key_matches_cert(cert, _active_backup_key_path()):
+        key_path_to_use = _active_backup_key_path()
+    else:
+        raise ValueError(
+            "El certificado digital almacenado (arca.crt) no coincide matemáticamente con la clave privada (arca.key)."
+        )
+    private_key = serialization.load_pem_private_key(key_path_to_use.read_bytes(), password=None)
 
     tra_bytes = tra_xml.encode("utf-8") if isinstance(tra_xml, str) else bytes(tra_xml)
 
@@ -768,10 +975,20 @@ def firmar_tra_cms(tra_xml: str | bytes) -> str:
     return base64.b64encode(cms_der).decode("ascii")
 
 
+def invalidate_ta_cache() -> None:
+    """Elimina el caché local de Tickets de Acceso WSAA (arca_ta_cache.json)."""
+    with _arca_lock("ta_cache_file"):
+        try:
+            if ARCA_TA_CACHE_PATH.exists():
+                ARCA_TA_CACHE_PATH.unlink(missing_ok=True)
+        except OSError as exc:
+            logger.warning(f"No se pudo invalidar caché local de TA ARCA: {exc}")
+
+
 def _load_cached_ta(environment: str, service: str = "wsfe") -> dict[str, Any] | None:
     """
     Lee el Ticket de Acceso (Token y Sign) desde la caché local en data/certs/arca/
-    si existe y aún se encuentra vigente.
+    si existe y aún se encuentra vigente para el CUIT y certificado actuales.
     """
     if not ARCA_TA_CACHE_PATH.exists():
         return None
@@ -781,6 +998,11 @@ def _load_cached_ta(environment: str, service: str = "wsfe") -> dict[str, Any] |
         key = f"{environment}:{service}"
         entry = cache_data.get(key)
         if not isinstance(entry, dict):
+            return None
+
+        cuit_actual = get_arca_config().get("cuit")
+        serial_actual = _current_cert_serial()
+        if entry.get("cuit") != cuit_actual or entry.get("cert_serial") != serial_actual:
             return None
 
         token = entry.get("token")
@@ -832,6 +1054,8 @@ def _save_cached_ta(
             "token": token,
             "sign": sign,
             "expiration_time": expiration_time,
+            "cuit": get_arca_config().get("cuit"),
+            "cert_serial": _current_cert_serial(),
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
         ARCA_TA_CACHE_PATH.write_text(
@@ -905,7 +1129,7 @@ def login_cms_wsaa(environment: str, service: str = "wsfe") -> dict[str, Any]:
         }
 
         try:
-            with httpx.Client(timeout=30.0) as client:
+            with httpx.Client(timeout=30.0, verify=_create_arca_ssl_context()) as client:
                 response = client.post(
                     wsaa_url, content=soap_envelope.encode("utf-8"), headers=headers
                 )
@@ -927,6 +1151,13 @@ def login_cms_wsaa(environment: str, service: str = "wsfe") -> dict[str, Any]:
         fault_string = _find_text_local(root, "faultstring")
         if fault_string:
             fault_code = _find_text_local(root, "faultcode")
+            if "alreadyauthenticated" in str(fault_code or "").lower() or "alreadyauthenticated" in fault_string.lower():
+                raise ArcaServiceError(
+                    f"WSAA ({env_clean}) ya posee un Ticket de Acceso reciente activo para este certificado "
+                    f"y servicio '{service}' ({fault_string}). Aguarde unos minutos para que expire o reutilice el TA previo.",
+                    code=fault_code,
+                    status_http=400,
+                )
             raise ArcaServiceError(
                 f"Error SOAP WSAA ({env_clean}): {fault_string}",
                 code=fault_code,
@@ -1007,12 +1238,12 @@ def _call_wsfev1_soap(environment: str, action: str, body_inner_xml: str) -> ET.
     }
 
     try:
-        with httpx.Client(timeout=30.0) as client:
-            response = client.post(
-                WSFEV1_URLS[env_clean],
-                content=soap_envelope.encode("utf-8"),
-                headers=headers,
-            )
+        client = _get_wsfe_http_client()
+        response = client.post(
+            WSFEV1_URLS[env_clean],
+            content=soap_envelope.encode("utf-8"),
+            headers=headers,
+        )
     except httpx.HTTPError as exc:
         raise ArcaServiceError(
             f"Error de red al conectar con WSFEv1 ({action} en {env_clean}): {exc}",
@@ -1475,10 +1706,13 @@ class ArcaService:
         ta = self.obtener_ticket_acceso("wsfe")
         cuit_emisor = _clean_cuit(cfg.get("cuit") or COMPANY_DATA.cuit)
 
-        concepto = int(kwargs.get("concepto_arca", 2) or 2)
+        concepto = int(kwargs.get("concepto_arca") or kwargs.get("concepto") or 2)
         clean_doc = _clean_cuit(cuit_cliente)
         tipo_doc_str = str(kwargs.get("tipo_doc_receptor", "")).upper().strip()
-        if clean_doc and len(clean_doc) == 11 and tipo_doc_str != "DNI":
+        if tipo_doc_str in ("CF", "CONSUMIDOR FINAL", "CONSUMIDOR_FINAL", "99"):
+            doc_tipo = 99
+            doc_nro = 0
+        elif clean_doc and len(clean_doc) == 11 and tipo_doc_str != "DNI":
             doc_tipo = 86 if tipo_doc_str == "CUIL" else 80
             doc_nro = int(clean_doc)
         elif clean_doc and len(clean_doc) >= 7 and clean_doc != "0" * len(clean_doc):
@@ -1493,6 +1727,7 @@ class ArcaService:
             tipo_comprobante=cbte_tipo_int,
             doc_tipo=doc_tipo,
         )
+        validar_compatibilidad_iva_receptor_comprobante(condicion_iva_id, cbte_tipo_int)
 
         imp_total = round(float(importe_total), 2)
         imp_no_gravado = round(float(kwargs.get("importe_no_gravado", 0.0) or 0.0), 2)
@@ -1538,6 +1773,19 @@ class ArcaService:
                 neto_21 = imp_neto
                 iva_21 = imp_iva
 
+            # Si se informó neto gravado a una alícuota con IVA = 0 (ej. cobranza sin IVA),
+            # reclasificar a neto_0 (Id=3) para evitar enviar AlicIva 21%/10.5%/27% con Importe=0.00
+            if neto_21 > 0 and iva_21 == 0:
+                neto_0 = round(neto_0 + neto_21, 2)
+                neto_21 = 0.0
+            if neto_105 > 0 and iva_105 == 0:
+                neto_0 = round(neto_0 + neto_105, 2)
+                neto_105 = 0.0
+            if neto_27 > 0 and iva_27 == 0:
+                neto_0 = round(neto_0 + neto_27, 2)
+                neto_27 = 0.0
+            imp_neto = round(neto_0 + neto_21 + neto_105 + neto_27, 2)
+
             # Ajuste automático de $0.01 por redondeo en Factura B cuando ImpTotal difiere por 1 centavo
             suma_partes = round(imp_no_gravado + imp_exento + imp_neto + imp_iva + imp_trib, 2)
             diff_cent = round(imp_total - suma_partes, 2)
@@ -1553,7 +1801,11 @@ class ArcaService:
         cbte_fch = fecha_eff.strftime("%Y%m%d")
         f_desde = kwargs.get("fecha_servicio_desde") or fecha_eff
         f_hasta = kwargs.get("fecha_servicio_hasta") or fecha_eff
-        f_vto = kwargs.get("fecha_vencimiento_pago") or fecha_eff
+        f_vto_raw = kwargs.get("fecha_vencimiento_pago")
+        if f_vto_raw is None:
+            f_vto = max(fecha_eff, date.today())
+        else:
+            f_vto = max(f_vto_raw, fecha_eff)
 
         serv_xml = ""
         if concepto in (2, 3):
@@ -1594,11 +1846,11 @@ class ArcaService:
         if cbtes_asoc_list:
             asoc_nodes: list[str] = []
             for item in cbtes_asoc_list:
-                t_asoc = int(item.get("tipo_comprobante") or item.get("Tipo") or 1)
-                pv_asoc = int(item.get("punto_venta") or item.get("PtoVta") or punto_venta)
-                nro_asoc = int(item.get("nro_comprobante") or item.get("Nro") or 1)
+                t_asoc = int(item.get("tipo_comprobante") or item.get("Tipo") or item.get("tipo") or 1)
+                pv_asoc = int(item.get("punto_venta") or item.get("PtoVta") or item.get("pto_vta") or punto_venta)
+                nro_asoc = int(item.get("nro_comprobante") or item.get("Nro") or item.get("nro") or 1)
                 cuit_asoc = _clean_cuit(item.get("cuit") or item.get("Cuit") or cuit_emisor)
-                fch_asoc_raw = item.get("fecha_emision") or item.get("CbteFch")
+                fch_asoc_raw = item.get("fecha_emision") or item.get("CbteFch") or item.get("fecha")
                 fch_asoc_xml = ""
                 if isinstance(fch_asoc_raw, date):
                     fch_asoc_xml = f"<CbteFch>{fch_asoc_raw.strftime('%Y%m%d')}</CbteFch>"
@@ -1792,7 +2044,42 @@ class ArcaService:
             "</FECAESolicitar>"
         )
 
-        root = _call_wsfev1_soap(self.environment, "FECAESolicitar", body_xml)
+        try:
+            root = _call_wsfev1_soap(self.environment, "FECAESolicitar", body_xml)
+        except ArcaServiceError as soap_exc:
+            if soap_exc.status_http == 502:
+                try:
+                    recuperado = self.fe_comp_consultar(
+                        punto_venta=int(punto_venta),
+                        tipo_comprobante=cbte_tipo_int,
+                        nro_comprobante=int(nro_comprobante),
+                    )
+                    if recuperado and recuperado.get("cae") and (recuperado.get("resultado") or "A") == "A":
+                        logger.warning(
+                            f"[ARCA RECOVERY] CAE recuperado vía FECompConsultar tras fallo de red en FECAESolicitar: "
+                            f"PV={punto_venta} Tipo={cbte_tipo_int} Nro={nro_comprobante} CAE={recuperado['cae']}"
+                        )
+                        vto_str = recuperado.get("vencimiento_cae") or ""
+                        vto_date = (
+                            datetime.strptime(vto_str, "%Y%m%d").date()
+                            if len(vto_str) == 8 and vto_str.isdigit()
+                            else fecha_eff + timedelta(days=10)
+                        )
+                        return {
+                            "nro_comprobante": int(nro_comprobante),
+                            "cae": recuperado["cae"],
+                            "vencimiento_cae": vto_date,
+                            "fecha_emision": fecha_eff,
+                            "importe_total": imp_total,
+                            "punto_venta": int(punto_venta),
+                            "tipo_comprobante": cbte_tipo_int,
+                            "cuit_cliente": cuit_cliente,
+                            "condicion_iva_receptor_id": condicion_iva_id,
+                            "observaciones_arca": ["Recuperado automáticamente vía FECompConsultar"],
+                        }
+                except Exception as rec_exc:
+                    logger.warning(f"No se pudo verificar estado vía FECompConsultar: {rec_exc}")
+            raise
         resultado = _find_text_local(root, "Resultado")
         cae = _find_text_local(root, "CAE")
         cae_vto_str = _find_text_local(root, "CAEFchVto")

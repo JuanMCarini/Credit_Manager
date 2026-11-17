@@ -251,3 +251,5 @@ scratch/
 *.fdb_latexmk
 *.synctex.gz
 *.run.xml
+
+/prompts
