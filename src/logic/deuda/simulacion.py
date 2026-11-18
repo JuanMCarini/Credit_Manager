@@ -4,14 +4,32 @@ from src.logic.deuda.series import resumen_general
 
 def simulacion_comisiones(tna: float, plazo: int, fecha_lim: str | None | pd.Period = pd.Period.now("D"), iva: float = 0.21):
 
+    if plazo <= 0:
+        raise ValueError("El plazo de simulación debe ser mayor a 0.")
+
     df_sim = resumen_general(True)
 
     if fecha_lim is None:
+        fecha_lim = pd.Period.now("D")
+    elif not isinstance(fecha_lim, pd.Period):
         fecha_lim = pd.Period(fecha_lim, freq="D")
+
+    if df_sim.empty:
+        return pd.DataFrame(columns=["Capital", "Interés", "Total", "Comisión", "Comisión c/IVA"])
+
     s_vencida = []
+    sim_counter = 1
     while not df_sim.loc[(~df_sim.index.isin(s_vencida)) & (df_sim["Fecha Vencimiento"] <= fecha_lim)].empty:
-        for s, row  in df_sim.loc[~df_sim.index.isin(s_vencida) & (df_sim["Fecha Vencimiento"] <= fecha_lim)].iterrows():
-            new_serie = max(df_sim.index.astype(int)) + 1
+        for s, row in df_sim.loc[~df_sim.index.isin(s_vencida) & (df_sim["Fecha Vencimiento"] <= fecha_lim)].iterrows():
+            idx_strs = [str(x) for x in df_sim.index]
+            if all(x.isdigit() for x in idx_strs):
+                new_serie = max(int(x) for x in idx_strs) + 1
+            else:
+                new_serie = f"SIM_{sim_counter}"
+                while new_serie in df_sim.index:
+                    sim_counter += 1
+                    new_serie = f"SIM_{sim_counter}"
+                sim_counter += 1
             df_sim.loc[new_serie] = {
                 "Fecha Suscripción": row["Fecha Vencimiento"],
                 "TNA": tna,

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Save, X } from 'lucide-react';
 import axiosClient from '../../api/axiosClient';
 import CurrencyInput from '../CurrencyInput';
+import { getLocalDateISO } from '../../utils/dates';
 
 // Newton-Raphson para calcular la tasa (equivalente a npf.rate)
 const calculateRate = (nper, pmt, pv) => {
@@ -19,7 +20,7 @@ const calculateRate = (nper, pmt, pv) => {
 const PlanPagoForm = ({ isOpen, onClose, proveedores, conceptos, editPlan, onSave }) => {
     const [formData, setFormData] = useState({
         id_origen: '',
-        fecha: new Date().toISOString().split('T')[0],
+        fecha: getLocalDateISO(),
         proveedor_id: '',
         concepto_id: '',
         capital: 0,
@@ -70,7 +71,7 @@ const PlanPagoForm = ({ isOpen, onClose, proveedores, conceptos, editPlan, onSav
             if (editPlan) {
                 setFormData({
                     id_origen: editPlan.id_origen || '',
-                    fecha: editPlan.fecha || new Date().toISOString().split('T')[0],
+                    fecha: editPlan.fecha || getLocalDateISO(),
                     proveedor_id: editPlan.proveedor_id || '',
                     concepto_id: editPlan.concepto_id || '',
                     capital: editPlan.capital || 0,
@@ -85,7 +86,7 @@ const PlanPagoForm = ({ isOpen, onClose, proveedores, conceptos, editPlan, onSav
             } else {
                 setFormData({
                     id_origen: '',
-                    fecha: new Date().toISOString().split('T')[0],
+                    fecha: getLocalDateISO(),
                     proveedor_id: '',
                     concepto_id: '',
                     capital: 0,
@@ -150,7 +151,7 @@ const PlanPagoForm = ({ isOpen, onClose, proveedores, conceptos, editPlan, onSav
             // Reset form
             setFormData({
                 id_origen: '',
-                fecha: new Date().toISOString().split('T')[0],
+                fecha: getLocalDateISO(),
                 proveedor_id: '',
                 concepto_id: '',
                 capital: 0,

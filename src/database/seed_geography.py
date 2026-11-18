@@ -44,17 +44,21 @@ def seed_provincias(db: Session) -> None:
 
     registros_insertados = 0
 
-    for data in provincias_data:
-        # Check if the ID already exists to prevent IntegrityError
-        provincia_existente = db.query(Provincia).filter_by(id=data["id"]).first()
+    try:
+        for data in provincias_data:
+            # Check if the ID already exists to prevent IntegrityError
+            provincia_existente = db.query(Provincia).filter_by(id=data["id"]).first()
 
-        if not provincia_existente:
-            nueva_provincia = Provincia(id=data["id"], nombre=data["nombre"])
-            db.add(nueva_provincia)
-            registros_insertados += 1
+            if not provincia_existente:
+                nueva_provincia = Provincia(id=data["id"], nombre=data["nombre"])
+                db.add(nueva_provincia)
+                registros_insertados += 1
 
-    db.commit()
-    print(f"✅ {registros_insertados} provinces inserted successfully.")
+        db.commit()
+        print(f"✅ {registros_insertados} provinces inserted successfully.")
+    except Exception as e:
+        db.rollback()
+        print(f"❌ Error populating provinces: {e}")
 
 
 if __name__ == "__main__":

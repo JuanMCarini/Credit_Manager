@@ -21,6 +21,7 @@ const ChequesPage = () => {
   const [showOperarCheque, setShowOperarCheque] = useState(false);
   const [showNuevoOperador, setShowNuevoOperador] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   
   const [selectedCheque, setSelectedCheque] = useState(null);
   const [imagenFile, setImagenFile] = useState(null);
@@ -155,6 +156,8 @@ const ChequesPage = () => {
 
   const handleCrearCheque = async (e) => {
     e.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
     try {
       const isEditing = editingChequeId !== null;
       const url = isEditing ? `/api/cheques/${editingChequeId}` : '/api/cheques/';
@@ -179,6 +182,8 @@ const ChequesPage = () => {
     } catch (err) {
       console.error(err);
       alert(err.response?.data?.detail || err.message);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -195,6 +200,8 @@ const ChequesPage = () => {
 
   const handleCrearOperador = async (e) => {
     e.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
     try {
       await axiosClient.post('/api/cheques/operadores', operadorForm);
       setShowNuevoOperador(false);
@@ -203,11 +210,15 @@ const ChequesPage = () => {
     } catch (err) {
       console.error(err);
       alert(err.response?.data?.detail || err.message);
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const handleOperarCheque = async (e) => {
     e.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
     try {
       const tipo = editingOperacionId 
            ? operacionForm.tipo_operacion 
@@ -240,6 +251,8 @@ const ChequesPage = () => {
     } catch (err) {
       console.error(err);
       alert(err.response?.data?.detail || err.message);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -381,7 +394,8 @@ const ChequesPage = () => {
 
   const handleUploadImagenIndependiente = async (e) => {
     e.preventDefault();
-    if (!imagenFile) return;
+    if (!imagenFile || submitting) return;
+    setSubmitting(true);
     try {
       const formData = new FormData();
       formData.append('file', imagenFile);
@@ -393,6 +407,8 @@ const ChequesPage = () => {
     } catch (err) {
       console.error(err);
       alert(err.response?.data?.detail || err.message);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -656,7 +672,7 @@ const ChequesPage = () => {
               </div>
               <div className="modal-footer" style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => { setShowNuevoCheque(false); setEditingChequeId(null); setChequeForm(initialChequeForm); setImagenFile(null); }}>Cancelar</button>
-                <button type="submit" className="btn btn-primary">{editingChequeId ? 'Guardar Cambios' : 'Crear Cheque'}</button>
+                <button type="submit" className="btn btn-primary" disabled={submitting}>{editingChequeId ? 'Guardar Cambios' : 'Crear Cheque'}</button>
               </div>
             </form>
           </div>
@@ -808,7 +824,7 @@ const ChequesPage = () => {
 
               <div className="modal-footer" style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => { setShowOperarCheque(false); setOperacionForm(initialOperacionForm); }}>Cancelar</button>
-                <button type="submit" className="btn btn-primary">Registrar Operación</button>
+                <button type="submit" className="btn btn-primary" disabled={submitting}>Registrar Operación</button>
               </div>
             </form>
           </div>
@@ -851,7 +867,7 @@ const ChequesPage = () => {
               </div>
               <div className="modal-footer" style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => { setShowNuevoOperador(false); setOperadorForm(initialOperadorForm); }}>Cancelar</button>
-                <button type="submit" className="btn btn-primary">Crear</button>
+                <button type="submit" className="btn btn-primary" disabled={submitting}>Crear</button>
               </div>
             </form>
           </div>
@@ -893,7 +909,7 @@ const ChequesPage = () => {
               </div>
               <div className="modal-footer" style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => { setShowImageModal(false); setImagenFile(null); }}>Cerrar</button>
-                <button type="submit" className="btn btn-primary">Subir</button>
+                <button type="submit" className="btn btn-primary" disabled={submitting}>Subir</button>
               </div>
             </form>
           </div>

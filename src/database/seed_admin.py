@@ -11,7 +11,8 @@ logger = logging.getLogger(__name__)
 
 
 def seed_admin(db: Session = None):
-    auth.Base.metadata.create_all(bind=engine)
+    bind_engine = db.get_bind() if db is not None else engine
+    auth.Base.metadata.create_all(bind=bind_engine)
     
     session = db if db else SessionLocal()
     

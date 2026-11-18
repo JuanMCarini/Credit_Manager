@@ -105,10 +105,11 @@ def preview_venta_cartera(data: VentaCarteraRequest, db: Session = Depends(get_d
             if not data.iva:
                 iva_val = 0.0
                 
-            total_c = round(round(float(c.capital), 2) + round(float(c.interes), 2), 2)
+            flujo_va = round(round(float(c.capital), 2) + round(float(c.interes), 2), 2)
+            total_c = round(flujo_va + round(iva_val, 2), 2)
             va_cuota = 0.0
             if incluida:
-                va_cuota = calculate_va(total_c, c.fecha_vencimiento)
+                va_cuota = calculate_va(flujo_va, c.fecha_vencimiento)
                 va_por_credito[c.credito_id] += va_cuota
                 
             cuotas_res.append({
@@ -148,7 +149,8 @@ def preview_venta_cartera(data: VentaCarteraRequest, db: Session = Depends(get_d
             df_vendidas['total_cuota'] = df_vendidas['capital'] + df_vendidas['interes'] + df_vendidas['iva']
             
             def calc_va_row(row):
-                return calculate_va(row['total_cuota'], row['fecha_vencimiento'])
+                flujo_va_row = round(float(row['capital']) + float(row['interes']), 2)
+                return calculate_va(flujo_va_row, row['fecha_vencimiento'])
                 
             df_vendidas['valor_actual'] = df_vendidas.apply(calc_va_row, axis=1)
             
@@ -586,8 +588,9 @@ def get_compra_preview(cartera_id: int, db: Session = Depends(get_db)):
     
     for c in cuotas:
         comprada = cuota_comprada_map.get(c.id, False)
+        flujo_va = round(float(c.capital) + float(c.interes), 2)
         total = round(float(c.capital) + float(c.interes) + float(c.iva), 2)
-        va = calculate_va(total, c.fecha_vencimiento) if comprada else 0.0
+        va = calculate_va(flujo_va, c.fecha_vencimiento) if comprada else 0.0
         
         if comprada:
             va_por_credito[c.credito_id] += va

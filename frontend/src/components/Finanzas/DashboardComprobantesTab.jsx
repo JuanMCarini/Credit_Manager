@@ -1,15 +1,16 @@
 import { useState, useMemo } from 'react';
 import { FileText, AlertCircle, CheckCircle, TrendingUp, Calendar } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { getLocalDateISO } from '../../utils/dates';
 
 const COLORS = ['#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#64748b'];
 
 const DashboardComprobantesTab = ({ comprobantes }) => {
-  const getToday = () => new Date().toISOString().split('T')[0];
+  const getToday = () => getLocalDateISO();
   const getFirstDayOfMonth = () => {
     const d = new Date();
     d.setDate(1);
-    return d.toISOString().split('T')[0];
+    return getLocalDateISO(d);
   };
 
   const [fechaDesde, setFechaDesde] = useState(getFirstDayOfMonth());

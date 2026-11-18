@@ -7,7 +7,7 @@ from decimal import Decimal
 
 from src.database import get_db
 from src.database.models.finance.posicion_iva import PosicionIva
-from src.database.models.finance.comprobantes import Comprobante
+from src.database.models.finance.comprobantes import Comprobante, TipoComprobante
 from src.database.models.creditos.facturacion import Factura
 from src.database.models.finance.bancos import Movimiento, Concepto
 from src.api.schemas.posicion_iva import PosicionIvaCreate, PosicionIvaUpdate, PosicionIvaResponse
@@ -27,23 +27,21 @@ def calcular_posicion(
     mes: int = Query(...),
     db: Session = Depends(get_db)
 ):
-    # 1. Calcular IVA Compras y Percepciones (de la tabla Comprobantes)
-    comprobantes_result = db.query(
-        func.sum(Comprobante.iva_21).label("iva_21"),
-        func.sum(Comprobante.iva_105).label("iva_105"),
-        func.sum(Comprobante.iva_27).label("iva_27"),
-        func.sum(Comprobante.percepcion_iva).label("percepcion_iva")
-    ).filter(
+    # 1. Calcular IVA Compras y Percepciones (de la tabla Comprobantes, restando Notas de Crédito)
+    comprobantes_mes = db.query(Comprobante).filter(
         extract('year', Comprobante.fecha_contable) == anio,
         extract('month', Comprobante.fecha_contable) == mes
-    ).first()
+    ).all()
 
-    iva_compras = sum([
-        comprobantes_result.iva_21 or 0,
-        comprobantes_result.iva_105 or 0,
-        comprobantes_result.iva_27 or 0
-    ])
-    percepciones_compras = comprobantes_result.percepcion_iva or 0
+    iva_compras = 0.0
+    percepciones_compras = 0.0
+    for comp in comprobantes_mes:
+        signo = -1.0 if comp.tipo_comprobante in (TipoComprobante.NOTA_CREDITO_A, TipoComprobante.NOTA_CREDITO_B) else 1.0
+        iva_comp = float(comp.iva_21 or 0) + float(comp.iva_105 or 0) + float(comp.iva_27 or 0)
+        iva_compras += signo * iva_comp
+        percepciones_compras += signo * float(comp.percepcion_iva or 0)
+    iva_compras = round(iva_compras, 2)
+    percepciones_compras = round(percepciones_compras, 2)
 
     # 2. Calcular IVA Ventas (de Facturas emitidas: cobranzas + individuales de Finanzas, restando Notas de Crédito)
     from sqlalchemy.orm import joinedload
@@ -73,20 +71,20 @@ def calcular_posicion(
     iva_ventas = round(iva_ventas, 2)
 
     # 3. Retenciones Bancarias
-    # Buscamos movimientos del mes donde el concepto contenga "IVA"
+    # Buscamos movimientos del mes donde el concepto contenga "IVA" excluyendo pagos VEP
     retenciones_result = db.query(
         func.sum(Movimiento.monto).label("retenciones")
     ).join(Concepto).filter(
         extract('year', Movimiento.fecha) == anio,
         extract('month', Movimiento.fecha) == mes,
-        Concepto.name.ilike('%iva%')
+        Concepto.name.ilike('%iva%'),
+        ~Concepto.name.ilike('%vep%')
     ).first()
 
-    retenciones_bancarias = abs(retenciones_result.retenciones) if retenciones_result and retenciones_result.retenciones else 0
+    retenciones_bancarias = float(abs(retenciones_result.retenciones)) if retenciones_result and retenciones_result.retenciones else 0.0
 
     # 4. Pagos VEP de IVA
     # Buscamos comprobantes tipo VEP asociados a conceptos de IVA
-    from src.database.models.finance.comprobantes import TipoComprobante
     vep_result = db.query(
         func.sum(Comprobante.importe_total).label("total_vep")
     ).join(Concepto, Comprobante.concepto_id == Concepto.id).filter(
@@ -127,7 +125,7 @@ def calcular_posicion(
         "percepciones_compras": percepciones_compras,
         "pagos_vep": pagos_vep,
         "saldo_anterior": saldo_anterior,
-        "saldo_a_pagar": float(iva_ventas) - float(iva_compras) - float(retenciones_bancarias) - float(percepciones_compras) + float(saldo_anterior)
+        "saldo_a_pagar": round(float(iva_ventas) - float(iva_compras) - float(retenciones_bancarias) - float(percepciones_compras) + float(saldo_anterior) - float(pagos_vep), 2)
     }
 
 @router.post("", response_model=PosicionIvaResponse)

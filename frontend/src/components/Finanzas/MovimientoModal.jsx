@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Save } from 'lucide-react';
 import axiosClient from '../../api/axiosClient';
+import { getLocalDateISO } from '../../utils/dates';
 
 const CategoriaMovimientoOpciones = [
   "Ingreso",
@@ -17,7 +18,7 @@ const MovimientoModal = ({ isOpen, onClose, onSaved, movimiento = null, cuentaId
   const [clasificaciones, setClasificaciones] = useState([]);
   const [formData, setFormData] = useState({
     cuenta_id: cuentaIdDefault,
-    fecha: new Date().toISOString().substring(0, 10),
+    fecha: getLocalDateISO(),
     nro_comprobante: '',
     concepto_id: '',
     descripcion: ''
@@ -51,7 +52,7 @@ const MovimientoModal = ({ isOpen, onClose, onSaved, movimiento = null, cuentaId
       } else {
         setFormData({
           cuenta_id: cuentaIdDefault,
-          fecha: new Date().toISOString().substring(0, 10),
+          fecha: getLocalDateISO(),
           monto: '',
           nro_comprobante: '',
           concepto_id: '',
@@ -95,7 +96,11 @@ const MovimientoModal = ({ isOpen, onClose, onSaved, movimiento = null, cuentaId
     if (!nuevoConcepto.name.trim()) return;
     try {
       setLoading(true);
-      const res = await axiosClient.post('/api/finanzas/conceptos', nuevoConcepto);
+      const payload = {
+        ...nuevoConcepto,
+        clasificacion_id: nuevoConcepto.clasificacion_id ? parseInt(nuevoConcepto.clasificacion_id, 10) : null,
+      };
+      const res = await axiosClient.post('/api/finanzas/conceptos', payload);
       await fetchConceptos();
       setFormData({ ...formData, concepto_id: res.data.id });
       setShowNewConcepto(false);
@@ -121,10 +126,15 @@ const MovimientoModal = ({ isOpen, onClose, onSaved, movimiento = null, cuentaId
     setLoading(true);
     setError('');
     try {
+      const payload = {
+        ...formData,
+        cuenta_id: parseInt(formData.cuenta_id, 10),
+        concepto_id: parseInt(formData.concepto_id, 10),
+      };
       if (movimiento) {
-        await axiosClient.put(`/api/finanzas/movimientos/${movimiento.id}`, formData);
+        await axiosClient.put(`/api/finanzas/movimientos/${movimiento.id}`, payload);
       } else {
-        await axiosClient.post('/api/finanzas/movimientos', formData);
+        await axiosClient.post('/api/finanzas/movimientos', payload);
       }
       onSaved();
       onClose();

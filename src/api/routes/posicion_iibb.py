@@ -27,15 +27,17 @@ def calcular_posicion(
     mes: int = Query(...),
     db: Session = Depends(get_db)
 ):
-    # 1. Calcular Percepciones IIBB de Compras (de la tabla Comprobantes)
-    comprobantes_result = db.query(
-        func.sum(Comprobante.percepcion_iibb).label("percepcion_iibb")
-    ).filter(
+    # 1. Calcular Percepciones IIBB de Compras (de la tabla Comprobantes, restando Notas de Crédito)
+    comprobantes_mes = db.query(Comprobante).filter(
         extract('year', Comprobante.fecha_contable) == anio,
         extract('month', Comprobante.fecha_contable) == mes
-    ).first()
+    ).all()
 
-    percepciones_compras = float(comprobantes_result.percepcion_iibb or 0)
+    percepciones_compras = 0.0
+    for comp in comprobantes_mes:
+        signo = -1.0 if comp.tipo_comprobante in (TipoComprobante.NOTA_CREDITO_A, TipoComprobante.NOTA_CREDITO_B) else 1.0
+        percepciones_compras += signo * float(comp.percepcion_iibb or 0)
+    percepciones_compras = round(percepciones_compras, 2)
 
     # 2. Calcular IIBB Ventas por Provincia (Cobranzas sobre interés + Facturas individuales de Finanzas, restando Notas de Crédito)
     from sqlalchemy.orm import joinedload

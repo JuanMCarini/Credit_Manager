@@ -29,6 +29,8 @@ def patch_session_local(db_session, monkeypatch):
     monkeypatch.setattr("src.logic.deuda.vencimiento.SessionLocal", factory)
     monkeypatch.setattr("src.logic.deuda.ctas_ctes.SessionLocal", factory)
     monkeypatch.setattr("src.logic.deuda.series.SessionLocal", factory, raising=False)
+    monkeypatch.setattr("src.logic.deuda.comision.SessionLocal", factory, raising=False)
+    monkeypatch.setattr("src.logic.deuda.reportes.SessionLocal", factory, raising=False)
     return db_session
 
 
@@ -128,3 +130,65 @@ def test_renovacion_preserva_comision(db_session):
         assert asociaciones[0].id_comision == comision_obj.id
     finally:
         tmp_path.unlink(missing_ok=True)
+
+
+def test_comision_resumen_general_y_reportes_con_decimal(db_session):
+    import pandas as pd
+    from src.logic.deuda.comision import calcular as calcular_comision
+    from src.logic.deuda.series import resumen_general
+    from src.logic.deuda.reportes import estado as reporte_estado
+
+    db = db_session
+    hoy = date.today()
+    sc1 = SocioComercial(cuit="30700000011", razon_social="Socio Com A")
+    sc2 = SocioComercial(cuit="30700000012", razon_social="Socio Com B")
+    db.add_all([sc1, sc2])
+    db.flush()
+
+    c1 = Comision(fecha=hoy, id_socio_comercial=sc1.id, porcentaje=0.02)
+    c2 = Comision(fecha=hoy, id_socio_comercial=sc2.id, porcentaje=0.01)
+    db.add_all([c1, c2])
+    db.flush()
+
+    serie_viva = Serie(
+        name="Serie MultiCom Activa",
+        fecha_suscripcion=hoy,
+        tna=0.365,
+        plazo=365,
+        comision=True,
+    )
+    db.add(serie_viva)
+    db.flush()
+
+    db.add(ComisionesSerie(id_serie=serie_viva.id, id_comision=c1.id))
+    db.add(ComisionesSerie(id_serie=serie_viva.id, id_comision=c2.id))
+
+    cta = CuentaComitente(id_externo="5551", conjunta=False)
+    db.add(cta)
+    db.flush()
+
+    db.add(
+        MovimientoDeuda(
+            id_cuenta_comitente=cta.id,
+            id_serie=serie_viva.id,
+            fecha=hoy,
+            monto=100000.00,
+            tipo_movimiento=TipoMovimiento.SUSCRIPCION,
+        )
+    )
+    db.commit()
+
+    df_com = calcular_comision(periodo=pd.Period(hoy, freq="M"))
+    assert not df_com.empty
+    assert float(df_com.loc[("Socio Com A", "Serie MultiCom Activa"), "Comisión"]) == 2000.0
+
+    df_res = resumen_general(True)
+    assert "Serie MultiCom Activa" in df_res.index
+    row = df_res.loc["Serie MultiCom Activa"]
+    assert float(row["Capital"]) == 100000.0
+    assert abs(float(row["% Comisión"]) - 0.03) < 1e-6
+    assert abs(float(row["Comisión"]) - 3000.0) < 0.01
+
+    df_est = reporte_estado(periodo=pd.Period(hoy, freq="M"))
+    assert "Serie MultiCom Activa" in df_est.index
+    assert float(df_est.loc["Serie MultiCom Activa", "Capital"]) == 100000.0

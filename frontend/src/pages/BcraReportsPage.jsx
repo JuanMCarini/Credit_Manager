@@ -210,7 +210,7 @@ const BcraReportsPage = () => {
             <select name="sit_mora" value={filters.sit_mora} onChange={handleChange}>
               <option value="Todas">Todas</option>
               <option value="01">01 - Normal (0 a 31 días)</option>
-              <option value="02">02 - Riesgo Bajo (32 a 90 días)</option>
+              <option value="21">21 - Riesgo Bajo (32 a 90 días)</option>
               <option value="03">03 - Riesgo Medio (91 a 180 días)</option>
               <option value="04">04 - Riesgo Alto (181 a 365 días)</option>
               <option value="05">05 - Irrecuperable (&gt; 365 días)</option>

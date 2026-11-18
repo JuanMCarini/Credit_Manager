@@ -17,11 +17,29 @@ def get_df() -> pd.DataFrame:
             )
             .join(OperacionCartera, Cartera.id == OperacionCartera.cartera_id)
             .join(Cuota, OperacionCartera.cuota_id == Cuota.id)
-            .filter(Cartera.tipo_operacion == TipoOperacionCartera.VENTA)
+            .filter(
+                Cartera.tipo_operacion == TipoOperacionCartera.VENTA,
+                OperacionCartera.cuota_comercializada == True,
+            )
         )
         df = pd.read_sql(query.statement, db.get_bind())
 
-    if not df.empty and "estado_cartera" in df.columns:
+    if df.empty:
+        return pd.DataFrame(
+            columns=[
+                "cartera",
+                "estado_cartera",
+                "tna_descuento",
+                "fecha_compra",
+                "importe_nominal",
+                "fecha_vencimiento",
+                "dias_al_vto",
+                "tna_decimal",
+                "valor_actual",
+            ]
+        )
+
+    if "estado_cartera" in df.columns:
         df["estado_cartera"] = df["estado_cartera"].apply(
             lambda x: x.value if hasattr(x, "value") else str(x)
         )

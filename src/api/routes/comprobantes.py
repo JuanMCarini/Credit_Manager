@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session, joinedload
-from typing import List
+from typing import List, Optional
 import os
 import shutil
 import uuid
@@ -91,35 +91,51 @@ def get_comprobantes(db: Session = Depends(get_db)):
             db.rollback()
     return comprobantes
 
+from decimal import Decimal
+
+
+def _autocalcular_iva_y_total(db_comp: Comprobante, importe_total_recibido: Optional[Decimal], is_create: bool = False) -> None:
+    """Completa IVA automático cuando hay neto gravado sin IVA explícito y recalcula importe_total en A/M."""
+    alicuotas = (
+        ("neto_gravado_21", "iva_21", Decimal("0.21")),
+        ("neto_gravado_105", "iva_105", Decimal("0.105")),
+        ("neto_gravado_27", "iva_27", Decimal("0.27")),
+    )
+    for neto_field, iva_field, tasa in alicuotas:
+        neto_val = Decimal(str(getattr(db_comp, neto_field) or 0))
+        iva_val = Decimal(str(getattr(db_comp, iva_field) or 0))
+        if neto_val > Decimal("0.0") and iva_val == Decimal("0.0"):
+            setattr(db_comp, iva_field, round(neto_val * tasa, 2))
+
+    if db_comp.tipo_comprobante in [TipoComprobante.A, TipoComprobante.M, TipoComprobante.NOTA_DEBITO_A, TipoComprobante.NOTA_CREDITO_A]:
+        calculado = sum([
+            Decimal(str(db_comp.importe_no_gravado or 0)),
+            Decimal(str(db_comp.importe_exento or 0)),
+            Decimal(str(db_comp.neto_gravado_21 or 0)),
+            Decimal(str(db_comp.neto_gravado_105 or 0)),
+            Decimal(str(db_comp.neto_gravado_27 or 0)),
+            Decimal(str(db_comp.iva_21 or 0)),
+            Decimal(str(db_comp.iva_105 or 0)),
+            Decimal(str(db_comp.iva_27 or 0)),
+            Decimal(str(db_comp.percepcion_iva or 0)),
+            Decimal(str(db_comp.percepcion_iibb or 0)),
+            Decimal(str(db_comp.percepcion_ganancias or 0)),
+            Decimal(str(db_comp.otros_impuestos or 0)),
+        ])
+        if importe_total_recibido is not None and abs(importe_total_recibido - calculado) <= Decimal("1.00"):
+            db_comp.importe_total = importe_total_recibido
+        else:
+            db_comp.importe_total = calculado
+    elif is_create:
+        db_comp.importe_total = importe_total_recibido or Decimal("0.0")
+    elif importe_total_recibido is not None:
+        db_comp.importe_total = importe_total_recibido
+
+
 @router.post("/comprobantes", response_model=ComprobanteResponse)
 def create_comprobante(comprobante: ComprobanteCreate, db: Session = Depends(get_db)):
-    from decimal import Decimal
     db_comprobante = Comprobante(**comprobante.model_dump())
-    
-    def _calc_total(comp):
-        return sum([
-            comp.importe_no_gravado or Decimal('0.0'),
-            comp.importe_exento or Decimal('0.0'),
-            comp.neto_gravado_21 or Decimal('0.0'),
-            comp.neto_gravado_105 or Decimal('0.0'),
-            comp.neto_gravado_27 or Decimal('0.0'),
-            comp.iva_21 or Decimal('0.0'),
-            comp.iva_105 or Decimal('0.0'),
-            comp.iva_27 or Decimal('0.0'),
-            comp.percepcion_iva or Decimal('0.0'),
-            comp.percepcion_iibb or Decimal('0.0'),
-            comp.percepcion_ganancias or Decimal('0.0'),
-            comp.otros_impuestos or Decimal('0.0')
-        ])
-        
-    if db_comprobante.tipo_comprobante in [TipoComprobante.A, TipoComprobante.M, TipoComprobante.NOTA_DEBITO_A, TipoComprobante.NOTA_CREDITO_A]:
-        calculado = _calc_total(db_comprobante)
-        if comprobante.importe_total is not None and abs(comprobante.importe_total - calculado) <= Decimal('1.00'):
-            db_comprobante.importe_total = comprobante.importe_total
-        else:
-            db_comprobante.importe_total = calculado
-    else:
-        db_comprobante.importe_total = comprobante.importe_total or Decimal('0.0')
+    _autocalcular_iva_y_total(db_comprobante, comprobante.importe_total, is_create=True)
     
     db.add(db_comprobante)
     try:
@@ -143,29 +159,7 @@ def update_comprobante(comprobante_id: int, comprobante: ComprobanteUpdate, db: 
     for key, value in comprobante.model_dump(exclude_unset=True).items():
         setattr(db_comprobante, key, value)
         
-    from decimal import Decimal
-    if db_comprobante.tipo_comprobante in [TipoComprobante.A, TipoComprobante.M, TipoComprobante.NOTA_DEBITO_A, TipoComprobante.NOTA_CREDITO_A]:
-        calculado = sum([
-            db_comprobante.importe_no_gravado or Decimal('0.0'),
-            db_comprobante.importe_exento or Decimal('0.0'),
-            db_comprobante.neto_gravado_21 or Decimal('0.0'),
-            db_comprobante.neto_gravado_105 or Decimal('0.0'),
-            db_comprobante.neto_gravado_27 or Decimal('0.0'),
-            db_comprobante.iva_21 or Decimal('0.0'),
-            db_comprobante.iva_105 or Decimal('0.0'),
-            db_comprobante.iva_27 or Decimal('0.0'),
-            db_comprobante.percepcion_iva or Decimal('0.0'),
-            db_comprobante.percepcion_iibb or Decimal('0.0'),
-            db_comprobante.percepcion_ganancias or Decimal('0.0'),
-            db_comprobante.otros_impuestos or Decimal('0.0')
-        ])
-        if comprobante.importe_total is not None and abs(comprobante.importe_total - calculado) <= Decimal('1.00'):
-            db_comprobante.importe_total = comprobante.importe_total
-        else:
-            db_comprobante.importe_total = calculado
-    else:
-        if comprobante.importe_total is not None:
-            db_comprobante.importe_total = comprobante.importe_total
+    _autocalcular_iva_y_total(db_comprobante, comprobante.importe_total, is_create=False)
     
     try:
         db.commit()
@@ -194,6 +188,56 @@ def delete_comprobante(comprobante_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"message": "Comprobante eliminado exitosamente"}
 
+def _validar_y_preparar_cancelacion(
+    db: Session,
+    db_comprobante: Comprobante,
+    importe_raw,
+    movimiento_id: Optional[int],
+    cancelacion_actual_id: Optional[int] = None,
+    prev_importe: Decimal = Decimal("0.0"),
+) -> tuple[Decimal, Decimal]:
+    """Valida importe positivo, tope contra saldo del comprobante y saldo disponible del movimiento."""
+    raw = Decimal(str(importe_raw))
+    if raw <= Decimal("0.0"):
+        raise HTTPException(status_code=400, detail="El importe de la cancelación debe ser mayor a 0")
+
+    importe_cancelacion = abs(raw)
+    current_cancelado = Decimal(str(db_comprobante.importe_cancelado or 0))
+    nuevo_cancelado = current_cancelado - Decimal(str(prev_importe or 0)) + importe_cancelacion
+    total_comp = Decimal(str(db_comprobante.importe_total or 0))
+
+    if nuevo_cancelado > total_comp + Decimal("0.05"):
+        raise HTTPException(status_code=400, detail="El importe cancelado supera el saldo pendiente del comprobante")
+
+    if movimiento_id is not None:
+        from sqlalchemy import func
+        from src.database.models.finance.bancos import Movimiento
+        mov = db.query(Movimiento).filter(Movimiento.id == movimiento_id).first()
+        if not mov:
+            raise HTTPException(status_code=404, detail="Movimiento bancario no encontrado")
+
+        q_asignado = db.query(func.sum(CancelacionComprobante.importe)).filter(
+            CancelacionComprobante.movimiento_id == movimiento_id
+        )
+        if cancelacion_actual_id is not None:
+            q_asignado = q_asignado.filter(CancelacionComprobante.id != cancelacion_actual_id)
+        asignado_prev = Decimal(str(q_asignado.scalar() or 0))
+        if asignado_prev + importe_cancelacion > abs(Decimal(str(mov.monto))) + Decimal("0.05"):
+            raise HTTPException(status_code=400, detail="El importe supera el saldo disponible del movimiento bancario")
+
+    return importe_cancelacion, nuevo_cancelado
+
+
+def _aplicar_estado_comprobante(db_comprobante: Comprobante, nuevo_cancelado: Decimal) -> None:
+    db_comprobante.importe_cancelado = nuevo_cancelado
+    if db_comprobante.importe_total and nuevo_cancelado >= db_comprobante.importe_total:
+        db_comprobante.estado = EstadoComprobante.PAGADO
+    elif nuevo_cancelado > 0:
+        db_comprobante.estado = EstadoComprobante.PARCIAL
+    else:
+        db_comprobante.estado = EstadoComprobante.PENDIENTE
+
+
 # -------------------------------------------------------------------
 # Cancelaciones de Comprobantes
 # -------------------------------------------------------------------
@@ -203,20 +247,16 @@ def create_cancelacion(
     cancelacion: CancelacionCreate, 
     db: Session = Depends(get_db)
 ):
-    from decimal import Decimal
     db_comprobante = db.query(Comprobante).filter(Comprobante.id == comprobante_id).first()
     if not db_comprobante:
         raise HTTPException(status_code=404, detail="Comprobante no encontrado")
         
-    # Ajustar el signo del importe según el movimiento bancario si existe
-    importe_cancelacion = Decimal(str(cancelacion.importe))
-    if cancelacion.movimiento_id:
-        from src.database.models.finance.bancos import Movimiento
-        mov = db.query(Movimiento).filter(Movimiento.id == cancelacion.movimiento_id).first()
-        if mov and mov.monto < 0:
-            importe_cancelacion = -abs(importe_cancelacion)
-        else:
-            importe_cancelacion = abs(importe_cancelacion)
+    importe_cancelacion, nuevo_cancelado = _validar_y_preparar_cancelacion(
+        db=db,
+        db_comprobante=db_comprobante,
+        importe_raw=cancelacion.importe,
+        movimiento_id=cancelacion.movimiento_id,
+    )
             
     db_cancelacion = CancelacionComprobante(
         comprobante_id=comprobante_id,
@@ -226,17 +266,7 @@ def create_cancelacion(
     )
     
     db.add(db_cancelacion)
-    
-    # Update importe_cancelado of parent Comprobante
-    current_cancelado = db_comprobante.importe_cancelado or Decimal('0.0')
-    nuevo_cancelado = current_cancelado + importe_cancelacion
-    db_comprobante.importe_cancelado = nuevo_cancelado
-    if db_comprobante.importe_total and nuevo_cancelado >= db_comprobante.importe_total:
-        db_comprobante.estado = EstadoComprobante.PAGADO
-    elif nuevo_cancelado > 0:
-        db_comprobante.estado = EstadoComprobante.PARCIAL
-    else:
-        db_comprobante.estado = EstadoComprobante.PENDIENTE
+    _aplicar_estado_comprobante(db_comprobante, nuevo_cancelado)
     
     try:
         db.commit()
@@ -280,33 +310,21 @@ def update_cancelacion(cancelacion_id: int, cancelacion: CancelacionCreate, db: 
         raise HTTPException(status_code=404, detail="Cancelación no encontrada")
     
     db_comprobante = db.query(Comprobante).filter(Comprobante.id == db_cancelacion.comprobante_id).first()
+    mov_id = cancelacion.movimiento_id if 'movimiento_id' in cancelacion.model_fields_set else db_cancelacion.movimiento_id
     
-    # Ajustar el signo del importe según el movimiento bancario si existe
-    from decimal import Decimal
-    importe_cancelacion = Decimal(str(cancelacion.importe))
-    mov_id = cancelacion.movimiento_id if hasattr(cancelacion, 'movimiento_id') else db_cancelacion.movimiento_id
-    if mov_id:
-        from src.database.models.finance.bancos import Movimiento
-        mov = db.query(Movimiento).filter(Movimiento.id == mov_id).first()
-        if mov and mov.monto < 0:
-            importe_cancelacion = -abs(importe_cancelacion)
-        else:
-            importe_cancelacion = abs(importe_cancelacion)
-            
-    # Update importe_cancelado of parent Comprobante
-    current_cancelado = db_comprobante.importe_cancelado or Decimal('0.0')
-    current_cancelado = current_cancelado - Decimal(str(db_cancelacion.importe)) + importe_cancelacion
-    db_comprobante.importe_cancelado = current_cancelado
-    if db_comprobante.importe_total and current_cancelado >= db_comprobante.importe_total:
-        db_comprobante.estado = EstadoComprobante.PAGADO
-    elif current_cancelado > 0:
-        db_comprobante.estado = EstadoComprobante.PARCIAL
-    else:
-        db_comprobante.estado = EstadoComprobante.PENDIENTE
+    importe_cancelacion, current_cancelado = _validar_y_preparar_cancelacion(
+        db=db,
+        db_comprobante=db_comprobante,
+        importe_raw=cancelacion.importe,
+        movimiento_id=mov_id,
+        cancelacion_actual_id=cancelacion_id,
+        prev_importe=Decimal(str(db_cancelacion.importe)),
+    )
+    _aplicar_estado_comprobante(db_comprobante, current_cancelado)
     
     db_cancelacion.importe = importe_cancelacion
     db_cancelacion.fecha_cancelacion = cancelacion.fecha_cancelacion
-    if hasattr(cancelacion, 'movimiento_id'):
+    if 'movimiento_id' in cancelacion.model_fields_set:
         db_cancelacion.movimiento_id = cancelacion.movimiento_id
     
     db.commit()
@@ -320,18 +338,8 @@ def delete_cancelacion(cancelacion_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Cancelación no encontrada")
     
     db_comprobante = db.query(Comprobante).filter(Comprobante.id == db_cancelacion.comprobante_id).first()
-    
-    # Update importe_cancelado of parent Comprobante
-    from decimal import Decimal
-    current_cancelado = db_comprobante.importe_cancelado or Decimal('0.0')
-    current_cancelado = current_cancelado - Decimal(str(db_cancelacion.importe))
-    db_comprobante.importe_cancelado = current_cancelado
-    if db_comprobante.importe_total and current_cancelado >= db_comprobante.importe_total:
-        db_comprobante.estado = EstadoComprobante.PAGADO
-    elif current_cancelado > 0:
-        db_comprobante.estado = EstadoComprobante.PARCIAL
-    else:
-        db_comprobante.estado = EstadoComprobante.PENDIENTE
+    current_cancelado = Decimal(str(db_comprobante.importe_cancelado or 0)) - Decimal(str(db_cancelacion.importe))
+    _aplicar_estado_comprobante(db_comprobante, current_cancelado)
     
     db.delete(db_cancelacion)
     db.commit()

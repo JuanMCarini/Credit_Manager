@@ -36,13 +36,15 @@ def crear_sesion_bcra() -> requests.Session:
         
     return sesion
 
-session_bcra = crear_sesion_bcra()
+session_bcra = None
 
 def consultar_cuit_api(cuit: str) -> dict:
     """
     Consulta la API del BCRA utilizando curl_cffi con una sesión persistente.
     """
     global session_bcra
+    if session_bcra is None:
+        session_bcra = crear_sesion_bcra()
     url = f"https://api.bcra.gob.ar/CentralDeDeudores/v1.0/Deudas/{cuit}"
     
     def _intentar():

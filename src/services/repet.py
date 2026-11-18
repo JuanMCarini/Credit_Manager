@@ -28,10 +28,15 @@ async def sync_repet_data(db: Session):
     try:
         async with httpx.AsyncClient() as client:
             response_per = await client.get("https://repet.jus.gob.ar/xml/personas.json", timeout=60.0)
+            response_per.raise_for_status()
             data_per = response_per.json()
             
             response_ent = await client.get("https://repet.jus.gob.ar/xml/entidades.json", timeout=60.0)
+            response_ent.raise_for_status()
             data_ent = response_ent.json()
+
+        if not isinstance(data_per, list) or not isinstance(data_ent, list) or len(data_per) == 0:
+            raise ValueError("Formato inválido o listado vacío recibido desde RePET")
             
         # Limpiamos tabla actual y repoblamos
         db.query(RepetPerson).delete()
@@ -116,6 +121,7 @@ def screen_person(db: Session, full_name: str, cuil_cliente: str, user_id: Optio
     hoy = date.today()
     existing_log = db.query(RepetAuditLog).filter(
         RepetAuditLog.searched_name == full_name,
+        RepetAuditLog.cuil_cliente == cuil_cliente,
         cast(RepetAuditLog.timestamp, Date) == hoy
     ).first()
     
@@ -128,33 +134,46 @@ def screen_person(db: Session, full_name: str, cuil_cliente: str, user_id: Optio
         }
 
     target = normalize_text(full_name)
+    digits_cuil = "".join(c for c in str(cuil_cliente or "") if c.isdigit())
+    dni_cliente = digits_cuil[2:10].lstrip("0") if len(digits_cuil) == 11 else digits_cuil.lstrip("0")
     
-    # Extraemos nombres normalizados
-    personas = db.query(RepetPerson.id, RepetPerson.nombre_normalizado).all()
-    db_names = {p.id: p.nombre_normalizado for p in personas}
+    # Extraemos nombres normalizados y documentos
+    personas = db.query(RepetPerson.id, RepetPerson.nombre_normalizado, RepetPerson.documento).all()
+    db_names = {p.id: p.nombre_normalizado for p in personas if p.nombre_normalizado}
     
-    if not db_names:
+    if not personas:
         logger.warning("La tabla de RePET está vacía. Ejecute sync_repet_data().")
         return {"status": "CLEAN", "score": 0, "message": "Listado RePET vacío."}
-        
-    best_match = process.extractOne(
-        target,
-        db_names,
-        scorer=fuzz.token_set_ratio,
-        score_cutoff=REPET_THRESHOLD
-    )
-    
+
     is_match = False
     score = 0.0
     matched_id = None
     status = "CLEAN"
     message = "Sin coincidencias en RePET."
-    
-    if best_match:
-        match_string, score, matched_id = best_match
-        is_match = True
-        status = "ALERT"
-        message = "¡Coincidencia encontrada en RePET!"
+
+    if dni_cliente:
+        for p in personas:
+            doc_norm = "".join(c for c in str(p.documento or "") if c.isdigit()).lstrip("0")
+            if doc_norm and doc_norm == dni_cliente:
+                is_match = True
+                score = 100.0
+                matched_id = p.id
+                status = "ALERT"
+                message = "¡Coincidencia exacta de documento encontrada en RePET!"
+                break
+
+    if not is_match and db_names:
+        best_match = process.extractOne(
+            target,
+            db_names,
+            scorer=fuzz.token_set_ratio,
+            score_cutoff=REPET_THRESHOLD
+        )
+        if best_match:
+            match_string, score, matched_id = best_match
+            is_match = True
+            status = "ALERT"
+            message = "¡Coincidencia encontrada en RePET!"
         
     # Guardamos Pista de Auditoría
     audit_log = RepetAuditLog(

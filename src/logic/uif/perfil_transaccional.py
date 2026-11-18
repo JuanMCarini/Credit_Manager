@@ -1,4 +1,4 @@
-from pandas import Period, read_sql
+from pandas import DataFrame, Period, read_sql, to_numeric
 from decimal import Decimal
 from typing import Union
 from datetime import date
@@ -78,6 +78,12 @@ def capital_neto_maximo(cuil: str, periodo: Union[Period, date], socio: Union[So
             TasaYComision.estado == EstadoComisionEnum.ACTIVA
         )
         df = read_sql(tasas.statement, db.get_bind())
+        if df.empty:
+            return DataFrame(columns=["id", "plazo", "tna_c_iva", "cap_neto_max"])
+
+        for col in ["plazo", "tna_c_iva", "porcentaje_sellado", "gasto_1_porcentaje", "gasto_2_porcentaje"]:
+            df[col] = to_numeric(df[col], errors="coerce").fillna(0.0)
+
         df["tem"] = df["tna_c_iva"] * 30 / 365
         # Cuota = Capital_Bruto * factor_cuota
         df["factor_cuota"] = df["tem"] / (1 - (1 + df["tem"]) ** (-df["plazo"]))
@@ -86,7 +92,7 @@ def capital_neto_maximo(cuil: str, periodo: Union[Period, date], socio: Union[So
         df["cap_bruto_max"] = cupo / df["factor_cuota"]
         
         # Capital Neto Max = Capital Bruto Max * (1 - gastos)
-        gastos = df["porcentaje_sellado"].fillna(0) + df["gasto_1_porcentaje"].fillna(0) + df["gasto_2_porcentaje"].fillna(0)
+        gastos = df["porcentaje_sellado"] + df["gasto_1_porcentaje"] + df["gasto_2_porcentaje"]
         df["cap_neto_max"] = df["cap_bruto_max"] * (1 - gastos)
         
         df.sort_values(by=["plazo"], inplace=True)

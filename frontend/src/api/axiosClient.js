@@ -29,6 +29,19 @@ axiosClient.interceptors.request.use(
 
 let isRedirecting401 = false;
 
+// Normalize FastAPI/Pydantic error details into a plain display string
+const formatErrorDetail = (detail) => {
+  if (Array.isArray(detail)) {
+    return detail
+      .map((d) => (d && typeof d === 'object' ? (d?.msg || JSON.stringify(d)) : String(d)))
+      .join('; ');
+  }
+  if (detail && typeof detail === 'object') {
+    return JSON.stringify(detail);
+  }
+  return detail;
+};
+
 // Response interceptor for centralized error handling
 axiosClient.interceptors.response.use(
   (response) => response,
@@ -46,8 +59,18 @@ axiosClient.interceptors.response.use(
         window.location.href = '/login';
       }
     }
-    
-    const message = error.response?.data?.detail || error.message || "An unknown error occurred";
+
+    if (
+      error.response?.data &&
+      typeof error.response.data === 'object' &&
+      !(error.response.data instanceof Blob) &&
+      error.response.data.detail !== undefined
+    ) {
+      error.response.data.detail = formatErrorDetail(error.response.data.detail);
+    }
+
+    const rawDetail = error.response?.data instanceof Blob ? null : error.response?.data?.detail;
+    const message = rawDetail || error.message || "An unknown error occurred";
     const customError = new Error(message);
     customError.response = error.response;
     return Promise.reject(customError);
@@ -84,6 +107,31 @@ export const downloadFile = async (url, params = {}, defaultFilename = 'download
     window.URL.revokeObjectURL(urlBlob);
   } catch (error) {
     console.error("Error downloading file:", error);
+    if (error.response?.data instanceof Blob) {
+      let extractedMessage = null;
+      try {
+        const text = await error.response.data.text();
+        if (text) {
+          extractedMessage = text;
+          try {
+            const parsed = JSON.parse(text);
+            if (parsed && parsed.detail !== undefined) {
+              extractedMessage = formatErrorDetail(parsed.detail);
+              error.response.data = { ...parsed, detail: extractedMessage };
+            }
+          } catch {
+            // Keep plain text when response body is not JSON
+          }
+        }
+      } catch {
+        // Ignore Blob read failures and fall through to original error
+      }
+      if (extractedMessage) {
+        const blobError = new Error(extractedMessage);
+        blobError.response = error.response;
+        throw blobError;
+      }
+    }
     throw error;
   }
 };

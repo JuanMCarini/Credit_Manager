@@ -11,34 +11,42 @@ from src.logic.deuda.utils import mov_exp
 
 def buscar(id_cuenta_comitente: str | int):
 
+    db = SessionLocal()
     try:
-            
-        db = SessionLocal()
-        
-        conditions = [CuentaComitente.id_externo == str(id_cuenta_comitente)]
-        try:
-            id_as_int = int(id_cuenta_comitente)
-            conditions.append(CuentaComitente.id == id_as_int)
-        except (ValueError, TypeError):
-            pass
+        cc_obj = None
+        if isinstance(id_cuenta_comitente, int):
+            cc_obj = db.query(CuentaComitente).filter(CuentaComitente.id == id_cuenta_comitente).first()
+            if not cc_obj:
+                cc_obj = db.query(CuentaComitente).filter(CuentaComitente.id_externo == str(id_cuenta_comitente)).first()
+        else:
+            id_str = str(id_cuenta_comitente).strip()
+            cc_obj = db.query(CuentaComitente).filter(CuentaComitente.id_externo == id_str).first()
+            if not cc_obj:
+                try:
+                    id_as_int = int(id_str)
+                    cc_obj = db.query(CuentaComitente).filter(CuentaComitente.id == id_as_int).first()
+                except (ValueError, TypeError):
+                    pass
+
+        if not cc_obj:
+            raise ValueError(f"Cuenta comitente {id_cuenta_comitente} no encontrada")
 
         rows = (db.query(CuentaComitente, Inversor.id, Inversor.razon_social, Inversor.cuit, Inversor.domicilio_legal, TitularidadCuentaComitente.orden)
                .join(TitularidadCuentaComitente, TitularidadCuentaComitente.id_cuenta_comitente == CuentaComitente.id)
                .join(Inversor, Inversor.id == TitularidadCuentaComitente.id_inversor)
-               .filter(or_(*conditions)).all())
-        
-        if not rows:
-            raise ValueError(f"Cuenta comitente {id_cuenta_comitente} no encontrada")
-            
-        cc_obj = rows[0][0]
-        
-        data = [
-            {"ID Cta. Cte.": cc.id, "ID Externo": cc.id_externo, "ID Inversor": id_inv, "Orden": orden, "Nombre Inversor": nombre, "CUIL/CUIT": cuit, "Domicilio": dom}
-            for cc, id_inv, nombre, cuit, dom, orden in rows
-        ]
-        df_inversor = pd.DataFrame(data)
-        df_inversor.sort_values(by="Orden", inplace=True)
-        df_inversor.set_index(["ID Cta. Cte.", "ID Externo", "ID Inversor"], inplace=True)
+               .filter(CuentaComitente.id == cc_obj.id).all())
+
+        if rows:
+            data = [
+                {"ID Cta. Cte.": cc.id, "ID Externo": cc.id_externo, "ID Inversor": id_inv, "Orden": orden, "Nombre Inversor": nombre, "CUIL/CUIT": cuit, "Domicilio": dom}
+                for cc, id_inv, nombre, cuit, dom, orden in rows
+            ]
+            df_inversor = pd.DataFrame(data)
+            df_inversor.sort_values(by="Orden", inplace=True)
+            df_inversor.set_index(["ID Cta. Cte.", "ID Externo", "ID Inversor"], inplace=True)
+        else:
+            df_inversor = pd.DataFrame(columns=["ID Cta. Cte.", "ID Externo", "ID Inversor", "Orden", "Nombre Inversor", "CUIL/CUIT", "Domicilio"])
+            df_inversor.set_index(["ID Cta. Cte.", "ID Externo", "ID Inversor"], inplace=True)
 
         movs = (db.query(MovimientoDeuda).options(
             joinedload(MovimientoDeuda.serie),
@@ -74,7 +82,7 @@ def buscar(id_cuenta_comitente: str | int):
             df = pd.DataFrame(columns=['ID', 'Serie', 'Fecha Suscripción', 'Fecha Vencimiento', 'Fecha', 'Cta. Cte.', 'Tipo Movimiento', 'Inversores', 'Capital', "Interés", "Total"])
             return df_inversor, df
 
-        df["fecha_vencimiento"] = pd.to_datetime(df["fecha_suscripcion"]) + pd.to_timedelta(df["plazo"], unit="d")
+        df["fecha_vencimiento"] = pd.to_datetime(df["fecha_suscripcion"]) + pd.to_timedelta(df["plazo"], unit="D")
         df["monto"] = df["monto"].astype(float) * df["tipo_movimiento"].map(mov_exp)
         df["tipo_movimiento"] = df["tipo_movimiento"].apply(lambda x: x.name)
         df.rename(columns={

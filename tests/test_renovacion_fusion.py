@@ -294,3 +294,95 @@ def test_fusion_rescate_total_columna_total_bruto(db_session):
         assert tot_7772 == round(5398904.11 + 3236712.33, 2)
     finally:
         tmp_path.unlink(missing_ok=True)
+
+
+def test_read_file_string_money_and_fusion_exact_rounding(db_session):
+    from src.logic.deuda.utils import read_file
+
+    # 1. Verificar que read_file suma montos formateados como texto sin concatenar
+    csv_sum = (
+        "Cta;Titular;CUIT;Dir;Cap;Int;Tot\n"
+        "1001;Inversor Suma;20111111111;Dir 1;$ 100.000,00;$ 10.000,00;$ 110.000,00\n"
+        "1001;Inversor Suma;20111111111;Dir 1;$ 50.000,00;$ 5.000,00;$ 55.000,00\n"
+    )
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".csv", mode="w", encoding="utf-8") as tmp:
+        tmp.write(csv_sum)
+        tmp_sum_path = Path(tmp.name)
+
+    try:
+        df_read = read_file(tmp_sum_path)
+        assert len(df_read) == 1
+        assert df_read.loc[0, "Capital"] == 150000.0
+        assert df_read.loc[0, "Interés"] == 15000.0
+        assert df_read.loc[0, "Total"] == 165000.0
+    finally:
+        tmp_sum_path.unlink(missing_ok=True)
+
+    # 2. Verificar cuadre al centavo al prorratear Rescate/Renovación entre 3 series
+    db = db_session
+    fecha_ini = date(2025, 1, 1)
+    fecha_vto = date(2026, 1, 1)
+    series_old = [
+        Serie(name="Serie Prorrateo 1", fecha_suscripcion=fecha_ini, tna=0.365, plazo=365),
+        Serie(name="Serie Prorrateo 2", fecha_suscripcion=fecha_ini, tna=0.365, plazo=365),
+        Serie(name="Serie Prorrateo 3", fecha_suscripcion=fecha_ini, tna=0.365, plazo=365),
+    ]
+    db.add_all(series_old)
+    inv = Inversor(cuit="20666666661", razon_social="Inversor Prorrateo")
+    cta = CuentaComitente(id_externo="6661", conjunta=False)
+    db.add_all([inv, cta])
+    db.flush()
+    db.add(TitularidadCuentaComitente(id_cuenta_comitente=cta.id, id_inversor=inv.id, orden=1))
+
+    for s in series_old:
+        db.add(
+            MovimientoDeuda(
+                id_cuenta_comitente=cta.id,
+                id_serie=s.id,
+                fecha=fecha_ini,
+                monto=100000.00,
+                tipo_movimiento=TipoMovimiento.SUSCRIPCION,
+            )
+        )
+    db.commit()
+
+    # Cap total = 300000, Int total = 109500 (300000 * 0.365), Rescate = 100.00 -> Renovación = 409400.00
+    csv_ren = (
+        "Cta;Titular;CUIT;Dir;Cap;Int;Tot;Res;Susc;Obs\n"
+        "6661;Inversor Prorrateo;20666666661;Calle 1;300000;109500;409400;100;0;Prorrateo\n"
+    )
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".csv", mode="w", encoding="utf-8") as tmp2:
+        tmp2.write(csv_ren)
+        tmp_ren_path = Path(tmp2.name)
+
+    try:
+        renovación(
+            serie_vieja=[s.name for s in series_old],
+            serie_nueva="Serie Prorrateo Destino",
+            fecha=fecha_vto,
+            tna=0.40,
+            plazo=180,
+            path=tmp_ren_path,
+        )
+
+        old_ids = [s.id for s in series_old]
+        movs_rescate = db.query(MovimientoDeuda).filter(
+            MovimientoDeuda.id_serie.in_(old_ids),
+            MovimientoDeuda.tipo_movimiento == TipoMovimiento.RESCATE,
+        ).all()
+        movs_renov_sal = db.query(MovimientoDeuda).filter(
+            MovimientoDeuda.id_serie.in_(old_ids),
+            MovimientoDeuda.tipo_movimiento == TipoMovimiento.RENOVACION_RESCATE,
+        ).all()
+        new_serie = db.query(Serie).filter(Serie.name == "Serie Prorrateo Destino").one()
+        movs_renov_ent = db.query(MovimientoDeuda).filter(
+            MovimientoDeuda.id_serie == new_serie.id,
+            MovimientoDeuda.tipo_movimiento == TipoMovimiento.RENOVACION_SUSCRIPCION,
+        ).all()
+
+        assert round(sum(float(m.monto) for m in movs_rescate), 2) == 100.00
+        assert round(sum(float(m.monto) for m in movs_renov_sal), 2) == round(
+            sum(float(m.monto) for m in movs_renov_ent), 2
+        )
+    finally:
+        tmp_ren_path.unlink(missing_ok=True)

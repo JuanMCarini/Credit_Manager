@@ -9,8 +9,11 @@ import shutil
 from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
+from pathlib import Path
 from typing import Dict
+
+from sqlalchemy import text
 
 # Import routers
 from src.api.routes.reportes import router as reportes_router
@@ -51,12 +54,44 @@ import src.database.models.system  # noqa: F401
 from src.api.dependencies.auth import enforce_rbac, get_current_user
 from src.api.routes.system import download_uploaded_file, PUBLIC_ASSETS_DIR, UPLOADS_BASE_DIR
 from src.database.models.auth import Usuario
-from src.api.scheduler import start_scheduler, stop_scheduler
+from src.api.scheduler import advisory_file_lock, start_scheduler, stop_scheduler
 from src.database.seed_admin import seed_admin
 from src.database.seed_geography import seed_provincias
 from src.database.seed_conceptos import seed_conceptos
 from src.database.seed_bancos import seed_bancos
 from src.database.seed_modulos import seed_modulos
+
+_STARTUP_LOCK_ID = 74839201
+_STARTUP_LOCK_FILE = Path("data/.startup.lock")
+
+
+@contextmanager
+def _startup_db_lock(bind_engine):
+    """Serializa la creación de esquema y seeds iniciales entre workers concurrentes."""
+    with advisory_file_lock(_STARTUP_LOCK_FILE, blocking=True):
+        pg_conn = None
+        pg_locked = False
+        if bind_engine is not None and bind_engine.dialect.name == "postgresql":
+            try:
+                pg_conn = bind_engine.connect()
+                pg_conn.execute(text(f"SELECT pg_advisory_lock({_STARTUP_LOCK_ID})"))
+                pg_locked = True
+            except Exception as exc:
+                print(f"⚠️ No se pudo adquirir advisory lock de PostgreSQL al iniciar: {exc}")
+                if pg_conn is not None:
+                    pg_conn.close()
+                    pg_conn = None
+        try:
+            yield
+        finally:
+            if pg_conn is not None:
+                try:
+                    if pg_locked:
+                        pg_conn.execute(text(f"SELECT pg_advisory_unlock({_STARTUP_LOCK_ID})"))
+                except Exception:
+                    pass
+                finally:
+                    pg_conn.close()
 
 
 def init_main_company():
@@ -84,25 +119,33 @@ def init_main_company():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    try:
-        Base.metadata.create_all(bind=engine)
-        from src.database.models.creditos.facturacion import ensure_facturas_schema
-        ensure_facturas_schema(engine)
-    except Exception as e:
-        print(f"⚠️ Error creando esquema de base de datos: {e}")
+    with _startup_db_lock(engine):
+        try:
+            Base.metadata.create_all(bind=engine)
+            from src.database.models.creditos.facturacion import ensure_facturas_schema
+            ensure_facturas_schema(engine)
+        except Exception as e:
+            print(f"⚠️ Error creando esquema de base de datos: {e}")
 
-    init_main_company()
-    seed_admin()
-    seed_bancos()
-    
-    try:
-        with SessionLocal() as db:
-            seed_provincias(db)
-            seed_conceptos(db)
-            seed_modulos(db)
-    except Exception as e:
-        print(f"⚠️ Error executing seeds: {e}")
-        
+        init_main_company()
+        seed_admin()
+        seed_bancos()
+
+        try:
+            with SessionLocal() as db:
+                for seed_name, seed_fn in (
+                    ("provincias", seed_provincias),
+                    ("conceptos", seed_conceptos),
+                    ("modulos", seed_modulos),
+                ):
+                    try:
+                        seed_fn(db)
+                    except Exception as e:
+                        db.rollback()
+                        print(f"⚠️ Error executing seed '{seed_name}': {e}")
+        except Exception as e:
+            print(f"⚠️ Error abriendo sesión para seeds iniciales: {e}")
+
     start_scheduler()
     yield
     # Shutdown

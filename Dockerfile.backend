@@ -11,14 +11,14 @@ WORKDIR /app
 # Install system dependencies needed for postgres/pg8000, TLS/ARCA (ca-certificates, openssl, tzdata) and libreoffice for PDF generation
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        ca-certificates \
-        openssl \
-        tzdata \
-        gcc \
-        libreoffice-core \
-        libreoffice-writer \
-        default-jre-headless \
-        fonts-liberation && \
+    ca-certificates \
+    openssl \
+    tzdata \
+    gcc \
+    libreoffice-core \
+    libreoffice-writer \
+    default-jre-headless \
+    fonts-liberation && \
     update-ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
@@ -44,4 +44,4 @@ USER appuser
 EXPOSE 8000
 
 # Start server using Gunicorn with Uvicorn workers
-CMD ["gunicorn", "src.api.main:app", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "-b", "0.0.0.0:8000"]
+CMD ["gunicorn", "src.api.main:app", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "--timeout", "600", "--graceful-timeout", "30", "--keep-alive", "5", "-b", "0.0.0.0:8000"]

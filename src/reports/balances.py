@@ -68,6 +68,13 @@ def saldos(
         index_col="cuota_id",
     )
 
+    for col in ["capital", "interes", "iva", "punitorios"]:
+        if col in df_ctas.columns:
+            df_ctas[col] = pd.to_numeric(df_ctas[col], errors="coerce").fillna(0.0)
+    for col in ["capital", "interes", "iva", "punitorios", "no_aplicado"]:
+        if col in df_cobr.columns:
+            df_cobr[col] = pd.to_numeric(df_cobr[col], errors="coerce").fillna(0.0)
+
     # 2. Data Mapping
     for col in ["fecha_emision", "cliente_cuil", "cartera_id", "socio_originador_id", "tipo_credito", "estado"]:
         df_ctas[col] = df_ctas["credito_id"].map(df_crts[col])
@@ -88,7 +95,11 @@ def saldos(
     df_ctas.loc[mask_penalty, "Originador"] = "PENALTY"
 
     # 3. Financial Calculations
-    df_cobr_sum = df_cobr.groupby("cuota_id")[["capital", "interes", "iva"]].sum()
+    if df_cobr.empty:
+        df_cobr_sum = pd.DataFrame(columns=["capital", "interes", "iva"], dtype=float)
+        df_cobr_sum.index.name = "cuota_id"
+    else:
+        df_cobr_sum = df_cobr.groupby("cuota_id")[["capital", "interes", "iva"]].sum()
     df = df_ctas.merge(
         df_cobr_sum,
         left_index=True,
@@ -98,9 +109,11 @@ def saldos(
     ).fillna(0.0)
 
     for col in ["capital", "interes", "iva"]:
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
+        df[f"{col}_cobr"] = pd.to_numeric(df[f"{col}_cobr"], errors="coerce").fillna(0.0)
         df[col] = (df[col].round(2) - df[f"{col}_cobr"].round(2)).round(2)
 
-    df["total"] = df[["capital", "interes", "iva"]].sum(axis=1)
+    df["total"] = df[["capital", "interes", "iva"]].sum(axis=1).astype(float)
 
     # 3.5. Recalcular estados a la fecha de corte
     df["_vencida"] = pd.to_datetime(df["fecha_vencimiento"]) < pd.to_datetime(fecha_str)
@@ -278,6 +291,10 @@ def cobranzas_recibidas(meses: int = 12, fecha: datetime | None = None):
     if df_cobr.empty:
         return pd.DataFrame()
 
+    for col in ["capital", "interes", "iva", "punitorios", "no_aplicado"]:
+        if col in df_cobr.columns:
+            df_cobr[col] = pd.to_numeric(df_cobr[col], errors="coerce").fillna(0.0)
+
     df_ctas = pd.read_sql_query(text("SELECT * FROM cuotas"), engine, index_col="id")
     df_crts = pd.read_sql_query(text("SELECT * FROM creditos"), engine, index_col="id")
     df_cart = pd.read_sql("carteras", engine, index_col="id")
@@ -355,6 +372,10 @@ def cuotas_teoricas(meses: int = 12, fecha: datetime | None = None):
     if df_ctas.empty:
         return pd.DataFrame()
 
+    for col in ["capital", "interes", "iva", "punitorios"]:
+        if col in df_ctas.columns:
+            df_ctas[col] = pd.to_numeric(df_ctas[col], errors="coerce").fillna(0.0)
+
     df_crts = pd.read_sql_query(text("SELECT * FROM creditos"), engine, index_col="id")
     df_cart = pd.read_sql("carteras", engine, index_col="id")
     df_socios = pd.read_sql("socios_comerciales", engine, index_col="id")
@@ -404,14 +425,17 @@ def cuotas_teoricas(meses: int = 12, fecha: datetime | None = None):
         params={"fecha_fin": fecha_fin_str}
     )
     if not df_cobr_teo.empty:
+        for col in ["capital", "interes", "iva"]:
+            if col in df_cobr_teo.columns:
+                df_cobr_teo[col] = pd.to_numeric(df_cobr_teo[col], errors="coerce").fillna(0.0)
         cobr_grouped = df_cobr_teo.groupby('cuota_id')[['capital', 'interes', 'iva']].sum()
-        df_ctas['cobr_capital'] = df_ctas.index.map(cobr_grouped['capital']).fillna(0)
-        df_ctas['cobr_interes'] = df_ctas.index.map(cobr_grouped['interes']).fillna(0)
-        df_ctas['cobr_iva'] = df_ctas.index.map(cobr_grouped['iva']).fillna(0)
+        df_ctas['cobr_capital'] = pd.to_numeric(df_ctas.index.map(cobr_grouped['capital']), errors="coerce").fillna(0.0)
+        df_ctas['cobr_interes'] = pd.to_numeric(df_ctas.index.map(cobr_grouped['interes']), errors="coerce").fillna(0.0)
+        df_ctas['cobr_iva'] = pd.to_numeric(df_ctas.index.map(cobr_grouped['iva']), errors="coerce").fillna(0.0)
     else:
-        df_ctas['cobr_capital'] = 0
-        df_ctas['cobr_interes'] = 0
-        df_ctas['cobr_iva'] = 0
+        df_ctas['cobr_capital'] = 0.0
+        df_ctas['cobr_interes'] = 0.0
+        df_ctas['cobr_iva'] = 0.0
 
     agrupado = df_ctas.groupby(['periodo', 'Dueño', 'Originador'], dropna=False)[
         ['capital', 'interes', 'iva', 'cobr_capital', 'cobr_interes', 'cobr_iva']

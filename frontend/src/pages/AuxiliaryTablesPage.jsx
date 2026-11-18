@@ -478,7 +478,7 @@ const AuxiliaryTablesPage = () => {
                   </tr>
                 ) : (
                   sortedData.map((row) => (
-                    <tr key={row.id}>
+                    <tr key={row[currentTableConfig.idField || 'id']}>
                       {columns.map(col => (
                         <td key={col}>{formatCellValue(col, row[col])}</td>
                       ))}

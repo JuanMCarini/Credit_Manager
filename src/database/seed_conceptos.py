@@ -127,23 +127,27 @@ def seed_conceptos(db: Session) -> None:
         }
     ]
 
-    for c_data in conceptos_base:
-        existing = db.query(Concepto).filter_by(name=c_data["name"]).first()
-        if not existing:
-            nuevo = Concepto(
-                name=c_data["name"],
-                tipo_movimiento=c_data["tipo_movimiento"],
-                descripcion=c_data["descripcion"],
-                is_system=True
-            )
-            db.add(nuevo)
-        else:
-            existing.tipo_movimiento = c_data["tipo_movimiento"]
-            existing.descripcion = c_data["descripcion"]
-            existing.is_system = True
-    
-    db.commit()
-    print("Seeder de conceptos finalizado.")
+    try:
+        for c_data in conceptos_base:
+            existing = db.query(Concepto).filter_by(name=c_data["name"]).first()
+            if not existing:
+                nuevo = Concepto(
+                    name=c_data["name"],
+                    tipo_movimiento=c_data["tipo_movimiento"],
+                    descripcion=c_data["descripcion"],
+                    is_system=True
+                )
+                db.add(nuevo)
+            else:
+                existing.tipo_movimiento = c_data["tipo_movimiento"]
+                existing.descripcion = c_data["descripcion"]
+                existing.is_system = True
+
+        db.commit()
+        print("Seeder de conceptos finalizado.")
+    except Exception as e:
+        db.rollback()
+        print(f"⚠️ Error en seeder de conceptos: {e}")
 
 if __name__ == "__main__":
     from src.database import SessionLocal

@@ -325,31 +325,32 @@ def get_cuenta_kpis(
     
     for m in movs:
         cat = m.concepto.tipo_movimiento
+        monto = float(m.monto)
         
         # Saldo
         if cat in (CategoriaMovimiento.INGRESO, CategoriaMovimiento.RESCATE_FCI, CategoriaMovimiento.PLAZO_FIJO_EGRESOS):
-            saldo += m.monto
+            saldo += monto
         elif cat in (CategoriaMovimiento.EGRESO, CategoriaMovimiento.SUSCRIPCION_FCI, CategoriaMovimiento.PLAZO_FIJO_INGRESOS):
-            saldo -= m.monto
+            saldo -= monto
             
         # FCI
         if cat == CategoriaMovimiento.SUSCRIPCION_FCI:
-            saldo_fci += m.monto
+            saldo_fci += monto
         elif cat == CategoriaMovimiento.RESCATE_FCI:
-            saldo_fci -= m.monto
+            saldo_fci -= monto
         saldo_fci = max(0.0, saldo_fci)
             
         # PF
         if cat == CategoriaMovimiento.PLAZO_FIJO_INGRESOS:
-            saldo_pf += m.monto
+            saldo_pf += monto
         elif cat == CategoriaMovimiento.PLAZO_FIJO_EGRESOS:
-            saldo_pf -= m.monto
+            saldo_pf -= monto
         saldo_pf = max(0.0, saldo_pf)
 
     return {
-        "saldo": saldo,
-        "saldo_fci": saldo_fci,
-        "saldo_plazo_fijo": saldo_pf,
+        "saldo": round(saldo, 2),
+        "saldo_fci": round(saldo_fci, 2),
+        "saldo_plazo_fijo": round(saldo_pf, 2),
         "fecha_desde": fecha_desde,
         "fecha_hasta": fecha_hasta
     }
@@ -586,7 +587,7 @@ def get_movimientos(
         
         for mov in res:
             mov.monto_asignado = asignados_dict.get(mov.id, 0.0)
-            mov.saldo_disponible = abs(mov.monto) - mov.monto_asignado
+            mov.saldo_disponible = round(abs(float(mov.monto)) - mov.monto_asignado, 2)
 
     return {"items": res, "total": total}
 
@@ -652,20 +653,21 @@ def get_kpis_globales(
     
     for m in movs_saldos:
         cat = m.concepto.tipo_movimiento
+        monto = float(m.monto)
         if cat in (CategoriaMovimiento.INGRESO, CategoriaMovimiento.RESCATE_FCI, CategoriaMovimiento.PLAZO_FIJO_EGRESOS):
-            saldo += m.monto
+            saldo += monto
         elif cat in (CategoriaMovimiento.EGRESO, CategoriaMovimiento.SUSCRIPCION_FCI, CategoriaMovimiento.PLAZO_FIJO_INGRESOS):
-            saldo -= m.monto
+            saldo -= monto
             
         if cat == CategoriaMovimiento.SUSCRIPCION_FCI:
-            saldo_fci += m.monto
+            saldo_fci += monto
         elif cat == CategoriaMovimiento.RESCATE_FCI:
-            saldo_fci -= m.monto
+            saldo_fci -= monto
             
         if cat == CategoriaMovimiento.PLAZO_FIJO_INGRESOS:
-            saldo_pf += m.monto
+            saldo_pf += monto
         elif cat == CategoriaMovimiento.PLAZO_FIJO_EGRESOS:
-            saldo_pf -= m.monto
+            saldo_pf -= monto
 
     # 2. Flujo del Período (aplicando fecha_desde y fecha_hasta)
     query_flujo = db.query(Movimiento).join(Concepto)
@@ -681,18 +683,19 @@ def get_kpis_globales(
     
     for m in movs_flujo:
         cat = m.concepto.tipo_movimiento
+        monto = float(m.monto)
         if cat in (CategoriaMovimiento.INGRESO, CategoriaMovimiento.RESCATE_FCI, CategoriaMovimiento.PLAZO_FIJO_EGRESOS):
-            ingresos += m.monto
+            ingresos += monto
         elif cat in (CategoriaMovimiento.EGRESO, CategoriaMovimiento.SUSCRIPCION_FCI, CategoriaMovimiento.PLAZO_FIJO_INGRESOS):
-            egresos += m.monto
+            egresos += monto
 
     return {
-        "saldo": saldo,
-        "saldo_fci": max(0.0, saldo_fci),
-        "saldo_plazo_fijo": max(0.0, saldo_pf),
-        "ingresos_periodo": ingresos,
-        "egresos_periodo": egresos,
-        "flujo_neto": ingresos - egresos,
+        "saldo": round(saldo, 2),
+        "saldo_fci": round(max(0.0, saldo_fci), 2),
+        "saldo_plazo_fijo": round(max(0.0, saldo_pf), 2),
+        "ingresos_periodo": round(ingresos, 2),
+        "egresos_periodo": round(egresos, 2),
+        "flujo_neto": round(ingresos - egresos, 2),
         "fecha_desde": fecha_desde,
         "fecha_hasta": fecha_hasta
     }

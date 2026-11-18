@@ -59,21 +59,23 @@ def read_file(path: Path | None):
 
     if len(df.columns) == 7:
         df.columns = ["ID Cta. Cte.", "Razón Social", "CUIT/CUIL", "Dirección", "Capital", "Interés", "Total"]
-        df = df.groupby(["ID Cta. Cte.", "CUIT/CUIL"]).agg({"Razón Social": 'first', "Dirección": 'first', "Capital": 'sum', "Interés": 'sum', "Total": 'sum'}).reset_index()
+        df = df.dropna(subset=["ID Cta. Cte.", "CUIT/CUIL", "Capital"]).copy()
+        for col in ["Capital", "Interés", "Total"]:
+            df[col] = df[col].apply(clean_money).astype(float).fillna(0.0)
+        df = df.groupby(["ID Cta. Cte.", "CUIT/CUIL"], as_index=False).agg({"Razón Social": 'first', "Dirección": 'first', "Capital": 'sum', "Interés": 'sum', "Total": 'sum'})
     elif len(df.columns) == 10:
         df.columns = ["ID Cta. Cte.", "Razón Social", "CUIT/CUIL", "Dirección", "Capital", "Interés", "Total", "Rescate", "Suscripción", "Observación"]
-        df = df.groupby(["ID Cta. Cte.", "CUIT/CUIL"]).agg({"Razón Social": 'first', "Dirección": 'first', "Capital": 'sum', "Interés": 'sum', "Total": 'sum', "Rescate": 'sum', "Suscripción": 'sum', "Observación": 'first'}).reset_index()
+        df = df.dropna(subset=["ID Cta. Cte.", "CUIT/CUIL", "Capital"]).copy()
+        for col in ["Capital", "Interés", "Total", "Rescate", "Suscripción"]:
+            df[col] = df[col].apply(clean_money).astype(float).fillna(0.0)
+        df = df.groupby(["ID Cta. Cte.", "CUIT/CUIL"], as_index=False).agg({"Razón Social": 'first', "Dirección": 'first', "Capital": 'sum', "Interés": 'sum', "Total": 'sum', "Rescate": 'sum', "Suscripción": 'sum', "Observación": 'first'})
     else:
         raise ValueError("El archivo, para nueva serie, debe tener 7 o 10 columnas")
 
     for col in ["Capital", "Interés", "Total", "Rescate", "Suscripción"]:
         if col in df.columns:
-            df[col] = df[col].apply(clean_money).astype(float)
-            df[col] = df[col].fillna(0.0)
-            df[col] = df[col].apply(lambda x: 0.0 if abs(x) < 0.005 else round(x, 2))
+            df[col] = df[col].apply(lambda x: 0.0 if abs(x) < 0.005 else round(float(x), 2))
 
-    # Limpiamos filas completamente vacías al final del archivo
-    df = df.dropna(subset=["ID Cta. Cte.", "CUIT/CUIL", "Capital"])
     df["Conjunta"] = False
     df = df.reset_index(drop=True).reset_index(names="ID Movimiento")
 

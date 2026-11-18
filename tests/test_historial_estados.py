@@ -304,3 +304,116 @@ def test_api_endpoints_historial(db_session, test_user):
         ]
         assert len(data_cli) >= 1
         assert data_cli[0]["cliente_cuil"] == "27999999981"
+
+
+def test_update_cliente_registra_historial_y_reactiva_incobrable(db_session, test_user):
+    from datetime import timedelta
+    from src.api.routes.clientes import update_cliente
+    from src.api.routes.creditos import update_credito_estado
+    from src.api.schemas.clientes import ClienteCreate
+    from src.api.schemas.creditos import CreditoEstadoUpdate
+
+    cli = Cliente(
+        cuil="20888888887",
+        documento="88888887",
+        apellido="Cascada",
+        nombre="Tester",
+        estado=EstadoClienteEnum.ACTIVO,
+    )
+    db_session.add(cli)
+    db_session.flush()
+
+    cred = Credito(
+        cliente_cuil=cli.cuil,
+        capital=10000.0,
+        tna_c_iva=0.50,
+        plazo=1,
+        fecha_emision=date.today(),
+        estado=EstadoCredito.ACTIVO,
+        dia_vencimiento=28,
+    )
+    db_session.add(cred)
+    db_session.flush()
+
+    cuota_futura = Cuota(
+        credito_id=cred.id,
+        nro_cuota=1,
+        fecha_vencimiento=date.today() + timedelta(days=30),
+        capital=10000.0,
+        interes=500.0,
+        iva=105.0,
+        estado=EstadoCuota.PENDIENTE,
+    )
+    db_session.add(cuota_futura)
+    db_session.commit()
+
+    # 1. Pasar cliente a INCOBRABLE via update_cliente
+    update_cliente(
+        cuil=cli.cuil,
+        cliente_data=ClienteCreate(
+            cuil=cli.cuil,
+            documento=cli.documento,
+            apellido=cli.apellido,
+            nombre=cli.nombre,
+            estado=EstadoClienteEnum.INCOBRABLE,
+            motivo_estado="Declarado incobrable",
+        ),
+        db=db_session,
+        current_user=test_user,
+    )
+
+    db_session.refresh(cli)
+    db_session.refresh(cred)
+    db_session.refresh(cuota_futura)
+    assert cli.estado == EstadoClienteEnum.INCOBRABLE
+    assert cred.estado == EstadoCredito.INCOBRABLE
+    assert cuota_futura.estado == EstadoCuota.INCOBRABLE
+
+    hist_cli = db_session.query(HistorialEstadoCliente).filter_by(cliente_cuil=cli.cuil).all()
+    assert any(h.estado_anterior == "ACTIVO" and h.estado_nuevo == "INCOBRABLE" for h in hist_cli)
+
+    # 2. Reactivar cliente a ACTIVO via update_cliente
+    update_cliente(
+        cuil=cli.cuil,
+        cliente_data=ClienteCreate(
+            cuil=cli.cuil,
+            documento=cli.documento,
+            apellido=cli.apellido,
+            nombre=cli.nombre,
+            estado=EstadoClienteEnum.ACTIVO,
+            motivo_estado="Rehabilitación de cuenta",
+        ),
+        db=db_session,
+        current_user=test_user,
+    )
+
+    db_session.refresh(cli)
+    db_session.refresh(cred)
+    db_session.refresh(cuota_futura)
+    assert cli.estado == EstadoClienteEnum.ACTIVO
+    assert cred.estado == EstadoCredito.ACTIVO
+    assert cuota_futura.estado == EstadoCuota.PENDIENTE
+
+    hist_cred = db_session.query(HistorialEstadoCredito).filter_by(credito_id=cred.id).all()
+    assert any(h.estado_anterior == "INCOBRABLE" and h.estado_nuevo == "ACTIVO" for h in hist_cred)
+
+    # 3. Verificar reactivación directa vía update_credito_estado
+    update_credito_estado(
+        credito_id=cred.id,
+        data=CreditoEstadoUpdate(estado="INCOBRABLE", motivo="Prueba directa"),
+        db=db_session,
+        current_user=test_user,
+    )
+    db_session.refresh(cuota_futura)
+    assert cuota_futura.estado == EstadoCuota.INCOBRABLE
+
+    update_credito_estado(
+        credito_id=cred.id,
+        data=CreditoEstadoUpdate(estado="ACTIVO", motivo="Reactivación directa"),
+        db=db_session,
+        current_user=test_user,
+    )
+    db_session.refresh(cred)
+    db_session.refresh(cuota_futura)
+    assert cred.estado == EstadoCredito.ACTIVO
+    assert cuota_futura.estado == EstadoCuota.PENDIENTE

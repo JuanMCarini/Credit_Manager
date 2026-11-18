@@ -22,7 +22,7 @@ def normalize_text(text: str) -> str:
 
 def format_bcra_amount(amount: float) -> str:
     """Format amount to thousands of pesos (rounded)."""
-    thousands = int(amount / 1000.0)
+    thousands = int(float(amount or 0.0) / 1000.0)
     return f"{thousands:012d}"
 
 
@@ -233,7 +233,7 @@ def generate_bcra_files(
         importes_txt = "\r\n".join(importes_lines) + "\r\n"
         
         if min_tna_val is not None:
-            tna_formatted = f"{min_tna_val * 100:06.2f}".replace(".", ",")
+            tna_formatted = f"{float(min_tna_val) * 100:06.2f}".replace(".", ",")
             tasa_txt = f"1;{tna_formatted}\r\n"
         else:
             tasa_txt = "1;000,00\r\n"
@@ -324,7 +324,7 @@ def generar_reporte_personalizado_excel(
             tasa_data.append({"Tipo": "0", "TNA": "000,00"})
         else:
             if min_tna_val is not None:
-                tna_formatted = f"{min_tna_val * 100:06.2f}".replace(".", ",")
+                tna_formatted = f"{float(min_tna_val) * 100:06.2f}".replace(".", ",")
                 tasa_data.append({"Tipo": "1", "TNA": tna_formatted})
             else:
                 tasa_data.append({"Tipo": "1", "TNA": "000,00"})

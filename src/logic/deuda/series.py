@@ -9,13 +9,19 @@ def resumen(serie: int | str):
     
     db = SessionLocal()
     try:
-        filters = [Serie.name == str(serie)]
-        try:
-            filters.append(Serie.id == int(serie))
-        except ValueError:
-            pass
-            
-        serie_obj = db.query(Serie).filter(or_(*filters)).first()
+        serie_obj = None
+        if isinstance(serie, int):
+            serie_obj = db.query(Serie).filter(Serie.id == serie).first()
+            if not serie_obj:
+                serie_obj = db.query(Serie).filter(Serie.name == str(serie)).first()
+        else:
+            serie_obj = db.query(Serie).filter(Serie.name == str(serie)).first()
+            if not serie_obj:
+                try:
+                    serie_obj = db.query(Serie).filter(Serie.id == int(serie)).first()
+                except (ValueError, TypeError):
+                    pass
+
         if not serie_obj:
             raise ValueError(f"Serie {serie} no encontrada")
 
@@ -51,14 +57,28 @@ def resumen_general(comisiones: bool) -> pd.DataFrame:
                 Serie.tna.label("TNA"),
                 Serie.plazo.label("Plazo"),
                 Comision.porcentaje.label("% Comisión"))
-            .join(Serie.comisiones_asociadas) # Va a ComisionesSerie
-            .join(ComisionesSerie.comision)   # Va a Comision
+            .outerjoin(Serie.comisiones_asociadas) # Va a ComisionesSerie
+            .outerjoin(ComisionesSerie.comision)   # Va a Comision
             .filter(Serie.comision == comisiones)
         )
 
         df = pd.read_sql(query.statement, db.get_bind())
     finally:
         db.close()
+
+    if df.empty:
+        return pd.DataFrame(
+            columns=["Fecha Suscripción", "TNA", "Plazo", "% Comisión", "Fecha Vencimiento", "Capital", "Interés", "Total", "Comisión"]
+        )
+
+    df["TNA"] = pd.to_numeric(df["TNA"], errors="coerce").fillna(0.0)
+    df["% Comisión"] = pd.to_numeric(df["% Comisión"], errors="coerce").fillna(0.0)
+    df = df.groupby("Serie", as_index=False).agg({
+        "Fecha Suscripción": "first",
+        "TNA": "first",
+        "Plazo": "first",
+        "% Comisión": "sum",
+    })
 
     df["Fecha Suscripción"] = pd.to_datetime(df["Fecha Suscripción"]).dt.to_period("D")
     df["Fecha Vencimiento"] = df["Fecha Suscripción"] + df["Plazo"]
@@ -71,6 +91,6 @@ def resumen_general(comisiones: bool) -> pd.DataFrame:
         df_s = resumen(s)
         if not df_s.empty:
             df.loc[s, ["Capital", "Interés", "Total"]] = df_s[["Capital", "Interés", "Total"]].sum().round(2)
-    df["Comisión"] = df["Capital"] * df["% Comisión"]/365 * df["Plazo"]
+    df["Comisión"] = (df["Capital"] * df["% Comisión"]/365 * df["Plazo"]).round(2)
 
     return df

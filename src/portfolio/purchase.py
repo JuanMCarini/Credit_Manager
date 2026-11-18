@@ -7,6 +7,7 @@ Date: 2026-05-12
 
 import math
 import os
+import re
 import tempfile
 from datetime import date, datetime
 from pathlib import Path
@@ -735,7 +736,7 @@ class PortfolioPurchase:
                 # Instantiation with protected casting in all columns
                 nuevo_cliente = Cliente(
                     cuil=cuil_clean,
-                    documento=doc_str.replace(r"\D", "") if doc_str else None,
+                    documento=re.sub(r"\D", "", doc_str) if doc_str else None,
                     apellido=self.safe_str(row.get("Apellido")).upper()
                     if self.safe_str(row.get("Apellido"))
                     else "",

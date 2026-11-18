@@ -118,9 +118,20 @@ def validar_y_preparar_renovacion(
     # 2) Total bruto vencido: Capital + Interés (frecuente en liquidaciones cuando se informa el total de la posición o rescates totales)
     # Si viene como bruto vencido, normalizamos 'Total' en df al neto resultante para la nueva serie.
     bad_tot_rows = []
+    bad_sign_rows = []
     for idx, r in df.iterrows():
-        calc_neto = round(float(r["Capital"]) + float(r["Interés"]) - float(r.get("Rescate", 0.0)) + float(r.get("Suscripción", 0.0)), 2)
-        calc_bruto = round(float(r["Capital"]) + float(r["Interés"]), 2)
+        cap_r = float(r["Capital"])
+        int_r = float(r["Interés"])
+        resc_r = float(r.get("Rescate", 0.0))
+        susc_r = float(r.get("Suscripción", 0.0))
+
+        if resc_r < -0.005 or susc_r < -0.005:
+            bad_sign_rows.append(f"Cta {r['ID Cta. Cte.']}: Rescate={resc_r:.2f}, Suscripción={susc_r:.2f} no pueden ser negativos")
+        elif resc_r > cap_r + int_r + 0.05:
+            bad_sign_rows.append(f"Cta {r['ID Cta. Cte.']}: Rescate ({resc_r:.2f}) supera la posición vencida ({cap_r + int_r:.2f})")
+
+        calc_neto = round(cap_r + int_r - resc_r + susc_r, 2)
+        calc_bruto = round(cap_r + int_r, 2)
         tot_archivo = round(float(r["Total"]), 2)
 
         if abs(tot_archivo - calc_neto) <= 0.05:
@@ -129,6 +140,9 @@ def validar_y_preparar_renovacion(
             df.at[idx, "Total"] = 0.0 if abs(calc_neto) < 0.005 else calc_neto
         else:
             bad_tot_rows.append((r["ID Cta. Cte."], calc_neto, tot_archivo))
+
+    if bad_sign_rows:
+        raise ValueError(f"Valores inválidos en el archivo de renovación: {'; '.join(bad_sign_rows[:5])}.")
 
     if bad_tot_rows:
         detalles = [
@@ -365,14 +379,21 @@ def renovación(
             total_vencido_cuenta = sum(saldos_por_serie.values())
 
             if total_vencido_cuenta > 0.005:
-                # Si hay múltiples series, distribuimos a prorrata
-                for s in old_series:
+                # Si hay múltiples series, distribuimos a prorrata y ajustamos el residuo de redondeo en la última
+                series_activas = [s for s in old_series if saldos_por_serie[s.id] >= 0.005]
+                rescate_acum = 0.0
+                renov_acum = 0.0
+                for idx_s, s in enumerate(series_activas):
                     saldo_serie = saldos_por_serie[s.id]
-                    if saldo_serie < 0.005:
-                        continue
-                    ratio = saldo_serie / total_vencido_cuenta
-                    rescate_serie = round(total_rescate * ratio, 2)
-                    renov_serie = round(total_renovacion * ratio, 2)
+                    if idx_s == len(series_activas) - 1:
+                        rescate_serie = round(total_rescate - rescate_acum, 2)
+                        renov_serie = round(total_renovacion - renov_acum, 2)
+                    else:
+                        ratio = saldo_serie / total_vencido_cuenta
+                        rescate_serie = round(total_rescate * ratio, 2)
+                        renov_serie = round(total_renovacion * ratio, 2)
+                        rescate_acum += rescate_serie
+                        renov_acum += renov_serie
 
                     if rescate_serie >= 0.01:
                         new_movimiento(db, cuenta.id, s.id, fecha_dt, rescate_serie, TipoMovimiento.RESCATE, inversores_de_la_fila)

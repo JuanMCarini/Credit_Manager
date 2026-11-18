@@ -261,6 +261,41 @@ def test_sensitive_pii_exports_and_downloads_are_audited(db_session, admin_user)
     assert bcra_log.direccion_ip == "198.51.100.88"
     assert bcra_log.detalles == {"periodo": "202605"}
 
+    # 1b. Rutas reales Excel de BCRA (/api/v1/bcra/excel) y Saldos (/api/v1/reports/balances/excel)
+    req_bcra_xlsx = _make_fake_request(
+        method="GET",
+        path="/api/v1/bcra/excel",
+        token=token,
+        headers={"X-Real-IP": "198.51.100.77"},
+    )
+    _run_coro_sync(enforce_rbac(req_bcra_xlsx, db=db_session))
+    bcra_xlsx_log = (
+        db_session.query(RegistroAuditoria)
+        .filter(RegistroAuditoria.endpoint == "/api/v1/bcra/excel")
+        .order_by(RegistroAuditoria.id.desc())
+        .first()
+    )
+    assert bcra_xlsx_log is not None
+    assert bcra_xlsx_log.accion == "Exportación Masiva BCRA"
+    assert bcra_xlsx_log.direccion_ip == "198.51.100.77"
+
+    req_bal_xlsx = _make_fake_request(
+        method="GET",
+        path="/api/v1/reports/balances/excel",
+        token=token,
+        headers={"X-Real-IP": "198.51.100.78"},
+    )
+    _run_coro_sync(enforce_rbac(req_bal_xlsx, db=db_session))
+    bal_xlsx_log = (
+        db_session.query(RegistroAuditoria)
+        .filter(RegistroAuditoria.endpoint == "/api/v1/reports/balances/excel")
+        .order_by(RegistroAuditoria.id.desc())
+        .first()
+    )
+    assert bal_xlsx_log is not None
+    assert bal_xlsx_log.accion == "Exportación Masiva de Saldos"
+    assert bal_xlsx_log.direccion_ip == "198.51.100.78"
+
     # 2. Descarga de legajo confidencial (GET)
     req_doc = _make_fake_request(
         method="GET",
@@ -340,4 +375,68 @@ def test_phase4_infrastructure_and_security_headers():
     ]
     unpinned = [line for line in requirements_lines if "==" not in line]
     assert unpinned == [], f"Dependencias sin fijar versión en requirements.txt: {unpinned}"
+
+
+def test_login_client_ip_and_company_cuit_validation(db_session, tmp_path, monkeypatch):
+    from fastapi import HTTPException
+    from pydantic import ValidationError
+    from src.api.routes.auth import _get_client_ip
+    from src.api.routes.system import CompanyUpdateSchema, update_company_info
+    from src.database.models.socios import SocioComercial
+    import src.config as config_mod
+
+    # 1. _get_client_ip usa X-Real-IP si X-Forwarded-For viene vacío o con separador inicial
+    req_real_ip = _make_fake_request(
+        method="POST",
+        path="/api/auth/login",
+        headers={"X-Forwarded-For": " , 10.0.0.1", "X-Real-IP": "198.51.100.55"},
+        client_host="127.0.0.1",
+    )
+    assert _get_client_ip(req_real_ip) == "198.51.100.55"
+    assert _get_client_ip(None) == "unknown"
+
+    # 2. CompanyUpdateSchema limpia guiones en CUIT/CBU y rechaza CUITs inválidos
+    with pytest.raises(ValidationError):
+        CompanyUpdateSchema(razon_social="Empresa Test SA", cuit="12345")
+
+    schema_ok = CompanyUpdateSchema(
+        razon_social="Empresa Test SA",
+        cuit="30-71234567-8",
+        cbu="07200007-20000000123456",
+    )
+    assert schema_ok.cuit == "30712345678"
+    assert schema_ok.cbu == "0720000720000000123456"
+
+    # 3. update_company_info actualiza SocioComercial sin DataError y maneja colisiones como HTTP 400
+    fake_env = tmp_path / ".env"
+    fake_env.write_text('COMPANY_RAZON_SOCIAL="Old"\nCOMPANY_CUIT=30000000000\n', encoding="utf-8")
+    monkeypatch.setattr(config_mod, "ENV_PATH", str(fake_env))
+    orig_cuit = config_mod.COMPANY_DATA.cuit
+    orig_rs = config_mod.COMPANY_DATA.razon_social
+    try:
+        socio = SocioComercial(razon_social="Original SA", cuit="30999888776")
+        other = SocioComercial(razon_social="Otra SA", cuit="30111222334")
+        db_session.add_all([socio, other])
+        db_session.commit()
+
+        monkeypatch.setattr(config_mod.COMPANY_DATA, "cuit", "30999888776")
+        res = update_company_info(
+            CompanyUpdateSchema(razon_social="Actualizada SA", cuit="30-71234567-8"),
+            db=db_session,
+        )
+        assert res["status"] == "success"
+        db_session.refresh(socio)
+        assert socio.cuit == "30712345678"
+
+        # Intentar cambiar al CUIT duplicado de `other` debe retornar HTTP 400 (no 500)
+        with pytest.raises(HTTPException) as exc_dup:
+            update_company_info(
+                CompanyUpdateSchema(razon_social="Actualizada SA", cuit="30-11122233-4"),
+                db=db_session,
+            )
+        assert exc_dup.value.status_code == 400
+    finally:
+        config_mod.COMPANY_DATA.cuit = orig_cuit
+        config_mod.COMPANY_DATA.razon_social = orig_rs
+
 

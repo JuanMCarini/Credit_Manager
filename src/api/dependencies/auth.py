@@ -252,11 +252,11 @@ def _resolve_sensitive_read_action(path: str, method: str) -> str | None:
     """
     if method != "GET":
         return None
-    if path in ("/api/v1/bcra/export", "/api/v1/bcra/export-excel"):
+    if path in ("/api/v1/bcra/export", "/api/v1/bcra/export-excel", "/api/v1/bcra/excel"):
         return "Exportación Masiva BCRA"
     if path.startswith("/api/v1/reports/uif"):
         return "Exportación Regulatoria UIF"
-    if path.startswith("/api/v1/reports/balances/export"):
+    if path.startswith(("/api/v1/reports/balances/export", "/api/v1/reports/balances/excel")):
         return "Exportación Masiva de Saldos"
     if path.startswith(("/api/v1/uploads/", "/api/v1/system/uploads/")):
         return f"Descarga de Documento ({path.split('/')[-1]})"

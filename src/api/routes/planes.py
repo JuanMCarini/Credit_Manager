@@ -104,7 +104,7 @@ def update_plan(plan_id: int, plan_in: PlanCreate, db: Session = Depends(get_db)
             "numero_comprobante": plan.id*1000+i,
             "fecha_contable": plan.fecha,
             "fecha_emision": plan.fecha,
-            "fecha_vencimiento": plan.primer_vencimiento + relativedelta(months=i),
+            "fecha_vencimiento": plan.primer_vencimiento + relativedelta(months=i-1),
             "importe_total": plan.valor_cuota,
             "estado": "pendiente",
             "created_at": datetime.datetime.now(),

@@ -73,10 +73,15 @@ const ProveedorModal = ({ isOpen, onClose, onSave, proveedor = null, conceptos =
     setLoading(true);
     setError('');
     try {
+      const payload = {
+        ...formData,
+        provincia_id: parseInt(formData.provincia_id, 10),
+        concepto_id: formData.concepto_id ? parseInt(formData.concepto_id, 10) : null,
+      };
       if (proveedor) {
-        await axiosClient.put(`/api/finanzas/proveedores/${proveedor.id}`, formData);
+        await axiosClient.put(`/api/finanzas/proveedores/${proveedor.id}`, payload);
       } else {
-        await axiosClient.post('/api/finanzas/proveedores', formData);
+        await axiosClient.post('/api/finanzas/proveedores', payload);
       }
       onSave();
     } catch (err) {

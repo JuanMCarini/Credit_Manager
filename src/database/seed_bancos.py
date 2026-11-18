@@ -47,24 +47,25 @@ BANCOS_ARGENTINA = [
     "Wilobank",
 ]
 
-def seed_bancos():
-    db = SessionLocal()
+def seed_bancos(db=None):
+    session = db if db is not None else SessionLocal()
     try:
-        bancos_existentes = {b.nombre_banco for b in db.query(Banco).all()}
+        bancos_existentes = {b.nombre_banco for b in session.query(Banco).all()}
         nuevos = 0
         for nombre in BANCOS_ARGENTINA:
             if nombre not in bancos_existentes:
                 nuevo_banco = Banco(nombre_banco=nombre)
-                db.add(nuevo_banco)
+                session.add(nuevo_banco)
                 nuevos += 1
         
-        db.commit()
+        session.commit()
         logger.info(f"Se insertaron {nuevos} bancos nuevos.")
     except Exception as e:
-        db.rollback()
+        session.rollback()
         logger.error(f"Error al sembrar bancos: {e}")
     finally:
-        db.close()
+        if db is None:
+            session.close()
 
 if __name__ == "__main__":
     seed_bancos()

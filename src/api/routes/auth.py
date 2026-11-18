@@ -10,6 +10,7 @@ from src.api.dependencies.auth import (
     login_rate_limiter,
     revoke_token,
     extract_token_from_request,
+    extract_client_ip,
     ACCESS_TOKEN_EXPIRE_MINUTES,
 )
 from src.api.schemas.auth import Token
@@ -20,14 +21,7 @@ router = APIRouter(prefix="/api/auth", tags=["Autenticacion"])
 
 
 def _get_client_ip(request: Request | None) -> str:
-    if request is None:
-        return "unknown"
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    if request.client and request.client.host:
-        return request.client.host
-    return "unknown"
+    return extract_client_ip(request) or "unknown"
 
 
 @router.post("/login", response_model=Token)

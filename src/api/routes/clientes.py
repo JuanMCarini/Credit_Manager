@@ -555,7 +555,8 @@ def update_cliente(
         motivo_estado = update_data.pop("motivo_estado", None)
         
         for key, value in update_data.items():
-            setattr(cliente, key, value)
+            if key != "estado":
+                setattr(cliente, key, value)
 
         nuevo_estado = update_data.get("estado")
         if nuevo_estado:
@@ -597,11 +598,22 @@ def update_cliente(
                 for cred in cliente.creditos:
                     c_est = cred.estado.value if hasattr(cred.estado, "value") else str(cred.estado)
                     if c_est == EstadoCredito.INCOBRABLE.value:
+                        cred.estado = EstadoCredito.ACTIVO
                         for cuota in cred.cuotas:
                             cuota_est = cuota.estado.value if hasattr(cuota.estado, "value") else str(cuota.estado)
                             if cuota_est == EstadoCuota.INCOBRABLE.value:
+                                cuota.estado = EstadoCuota.PENDIENTE
                                 cuota.actualizar_estado(hoy)
-                        cred.actualizar_estado()
+                        nuevo_cred_est = cred.actualizar_estado()
+                        cred.estado = EstadoCredito.INCOBRABLE
+                        registrar_cambio_estado_credito(
+                            db=db,
+                            credito=cred,
+                            nuevo_estado=EstadoCredito(nuevo_cred_est),
+                            usuario_id=current_user.id if current_user else None,
+                            motivo=f"Reactivado por estado ACTIVO del cliente (CUIL {cliente.cuil})",
+                            origen="CASCADA_CLIENTE"
+                        )
             
         import asyncio
         from src.services.repet import screen_person, sync_repet_data

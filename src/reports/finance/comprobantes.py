@@ -41,10 +41,11 @@ def pendientes(fecha_corte: date | str | None = None):
 
         df_pagos_hist = pd.read_sql(query_pagos.statement, db.get_bind())
 
-    df_pagos_hist.rename(columns={"pagado_historico": "importe_cancelado"}, inplace=True)
+    df["importe_total"] = pd.to_numeric(df["importe_total"], errors="coerce").fillna(0.0)
+    df_pagos_hist["importe_cancelado"] = pd.to_numeric(df_pagos_hist.get("pagado_historico"), errors="coerce").fillna(0.0) if not df_pagos_hist.empty else pd.Series(dtype=float)
 
-    df_result = df.merge(df_pagos_hist, on="comprobante_id", how="left")
-    df_result["importe_cancelado"] = df_result["importe_cancelado"].fillna(0)
+    df_result = df.merge(df_pagos_hist[["comprobante_id", "importe_cancelado"]] if "importe_cancelado" in df_pagos_hist.columns else df_pagos_hist.rename(columns={"pagado_historico": "importe_cancelado"}), on="comprobante_id", how="left")
+    df_result["importe_cancelado"] = pd.to_numeric(df_result["importe_cancelado"], errors="coerce").fillna(0.0)
     df_result["saldo"] = df_result["importe_total"] - df_result["importe_cancelado"]
 
     return df_result[df_result["saldo"] > 0]
@@ -67,13 +68,20 @@ def get_comprobantes() -> pd.DataFrame:
             .outerjoin(Concepto, Comprobante.concepto_id == Concepto.id)
             .outerjoin(Clasificacion, Concepto.clasificacion_id == Clasificacion.id)
         )
-        return pd.read_sql(query.statement, db.get_bind())
+        df = pd.read_sql(query.statement, db.get_bind())
+        for col in ["importe_no_gravado", "neto_gravado_21", "iva_21", "importe_total"]:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
+        return df
 
 
 def get_pagos() -> pd.DataFrame:
     with SessionLocal() as db:
         query_pagos = db.query(CancelacionComprobante)
-        return pd.read_sql(query_pagos.statement, db.get_bind())
+        df = pd.read_sql(query_pagos.statement, db.get_bind())
+        if "importe" in df.columns:
+            df["importe"] = pd.to_numeric(df["importe"], errors="coerce").fillna(0.0)
+        return df
 
 
 def __getattr__(name: str):

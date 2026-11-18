@@ -14,6 +14,7 @@ from src.config import DATABASE_SETTINGS
 engine = create_engine(
     DATABASE_SETTINGS.database_url,
     pool_pre_ping=True,
+    pool_recycle=1800,
 )
 
 # Create a session factory

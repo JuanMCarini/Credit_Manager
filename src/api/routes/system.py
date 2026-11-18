@@ -86,7 +86,7 @@ def sync_system_states(db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 class CompanyUpdateSchema(BaseModel):
     razon_social: str
@@ -98,6 +98,24 @@ class CompanyUpdateSchema(BaseModel):
     nombre_banco: str | None = None
     cbu: str | None = None
     dia_corte: int | None = None
+
+    @field_validator("cuit")
+    @classmethod
+    def validate_cuit(cls, v: str) -> str:
+        clean_cuit = "".join(filter(str.isdigit, str(v or "")))
+        if len(clean_cuit) != 11:
+            raise ValueError("El CUIT debe contener exactamente 11 dígitos numéricos.")
+        return clean_cuit
+
+    @field_validator("cbu")
+    @classmethod
+    def sanitize_cbu(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        clean_cbu = "".join(filter(str.isdigit, str(v)))
+        if clean_cbu and len(clean_cbu) > 22:
+            raise ValueError("El CBU no puede superar los 22 dígitos numéricos.")
+        return clean_cbu
 
 @router.get("/company")
 def get_company_info(db: Session = Depends(get_db)):
@@ -123,20 +141,23 @@ def update_company_info(data: CompanyUpdateSchema, db: Session = Depends(get_db)
     # 1. Update DB record if exists (which also calls update_company_env)
     socio = db.query(SocioComercial).filter(SocioComercial.cuit == COMPANY_DATA.cuit).first()
     if socio:
-        socio = SocioComercial.update_socio(
-            socio_id=socio.id,
-            db=db,
-            razon_social=data.razon_social,
-            cuit=data.cuit,
-            domicilio_legal=data.domicilio,
-            mail=data.email_contacto,
-            telefono=data.telefono,
-            nro_cuenta_bancaria=data.nro_cuenta_bancaria,
-            nombre_banco=data.nombre_banco,
-            cbu=data.cbu,
-            dia_corte=data.dia_corte or 28
-        )
-        update_company_env(socio)
+        try:
+            socio = SocioComercial.update_socio(
+                socio_id=socio.id,
+                db=db,
+                razon_social=data.razon_social,
+                cuit=data.cuit,
+                domicilio_legal=data.domicilio,
+                mail=data.email_contacto,
+                telefono=data.telefono,
+                nro_cuenta_bancaria=data.nro_cuenta_bancaria,
+                nombre_banco=data.nombre_banco,
+                cbu=data.cbu,
+                dia_corte=data.dia_corte or 28
+            )
+            update_company_env(socio)
+        except (ValueError, RuntimeError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
     else:
         # 2. Update .env file directly with sanitized values
         if os.path.exists(ENV_PATH):

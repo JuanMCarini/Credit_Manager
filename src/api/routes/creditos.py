@@ -329,6 +329,7 @@ def update_credito_estado(
         for cuota in credito.cuotas:
             cuota_est = cuota.estado.value if hasattr(cuota.estado, "value") else str(cuota.estado)
             if cuota_est == EstadoCuota.INCOBRABLE.value:
+                cuota.estado = EstadoCuota.PENDIENTE
                 cuota.actualizar_estado(hoy)
 
     db.commit()

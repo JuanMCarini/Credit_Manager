@@ -57,11 +57,12 @@ def reporte(fecha_corte: str | date, n_periodos: int = 2, salto_meses: int = 1, 
         pendientes = df_comp_pend.groupby("concepto")["saldo"].sum() if not df_comp_pend.empty else pd.Series(dtype=float)
         facturas_adeudadas = 0.0
         for concepto, saldo in pendientes.items():
+            saldo_val = float(saldo)
             if concepto in ["Ganancias", "IIBB", "IVA"]:
                 datos.append(
-                    {"Categoria": "Pasivos", "Detalle": f"Planes de Pago {concepto}", periodo: saldo})
+                    {"Categoria": "Pasivos", "Detalle": f"Planes de Pago {concepto}", periodo: saldo_val})
             else:
-                facturas_adeudadas += saldo
+                facturas_adeudadas += saldo_val
         
         if facturas_adeudadas > 0:
             datos.append(
@@ -81,18 +82,18 @@ def reporte(fecha_corte: str | date, n_periodos: int = 2, salto_meses: int = 1, 
             {"Categoria": "Activos", "Detalle": "Interés (Cartera Activa)", periodo: df_saldos["VA Interés"].sum()})
     
     
-        carteras_vendidas_a_cobrar = df_carteras.loc[filtro_cartera, 'valor_actual_total'].sum()
+        carteras_vendidas_a_cobrar = float(df_carteras.loc[filtro_cartera, 'valor_actual_total'].sum())
         filtro_bcos_cartera = (df_bcos["fecha"] <= fecha) & (df_bcos["concepto_nombre"] == "Venta Cartera") if not df_bcos.empty else pd.Series(dtype=bool)
-        monto_bcos_cartera = df_bcos.loc[filtro_bcos_cartera, "monto"].sum() if not df_bcos.empty else 0.0
+        monto_bcos_cartera = float(df_bcos.loc[filtro_bcos_cartera, "monto"].sum()) if not df_bcos.empty else 0.0
         carteras_vendidas_a_cobrar -= monto_bcos_cartera
-        filtro_comp_venta = (df_comp["fecha_emision"] <= fecha) & (df_comp["concepto"] == "Venta Cartera") if not df_comp.empty else pd.Series(dtype=bool)
-        iva_comp_venta = df_comp.loc[filtro_comp_venta, "iva_21"].sum() if not df_comp.empty else 0.0
+        filtro_comp_venta = (pd.to_datetime(df_comp["fecha_emision"]).dt.date <= fecha) & (df_comp["concepto"] == "Venta Cartera") if not df_comp.empty else pd.Series(dtype=bool)
+        iva_comp_venta = float(df_comp.loc[filtro_comp_venta, "iva_21"].sum()) if not df_comp.empty else 0.0
         carteras_vendidas_a_cobrar -= iva_comp_venta
         if round(carteras_vendidas_a_cobrar, 0) != 0.0:
             datos.append(
                 {"Categoria": "Activos", "Detalle": "Ventas de Cartera a Cobrar", periodo: carteras_vendidas_a_cobrar})
 
-        venta_cartera_a_ceder = monto_bcos_cartera - (df_carteras.loc[filtro_cartera, 'valor_actual_total'].sum() + iva_comp_venta)
+        venta_cartera_a_ceder = monto_bcos_cartera - (float(df_carteras.loc[filtro_cartera, 'valor_actual_total'].sum()) + iva_comp_venta)
         if round(-venta_cartera_a_ceder, 0) < 0.0:
             datos.append(
                 {"Categoria": "Pasivos", "Detalle": "Valor Actual de Cartera a Ceder", periodo: -venta_cartera_a_ceder})
@@ -149,18 +150,22 @@ def reporte(fecha_corte: str | date, n_periodos: int = 2, salto_meses: int = 1, 
                         LiquidacionCuotaCedida.fecha_pago)
                       .join(Cobranza, LiquidacionCuotaCedida.cobranza_id == Cobranza.id))
             df_lqcc = pd.read_sql(query.statement, db_session.get_bind())
-            df_lqcc['fecha_cobranza'] = pd.to_datetime(df_lqcc['fecha_cobranza']).dt.to_period("M")
-            df_lqcc['fecha_pago'] = pd.to_datetime(df_lqcc['fecha_pago']).dt.to_period("M")
-            periodo_filtro = pd.Period(fecha, freq='M')
-            df_lqcc_tipo_liq = df_lqcc['tipo_liquidacion'].apply(lambda x: getattr(x, "value", str(x)))
-            bca_values = [TipoLiquidacionEnum.BCA.value, TipoLiquidacionEnum.BCA.name, "BCA"]
-            filtro = (
-                (df_lqcc['fecha_cobranza'] <= periodo_filtro) & 
-                (~df_lqcc_tipo_liq.isin(bca_values)) & 
-                ((df_lqcc["fecha_pago"] > periodo_filtro) | 
-                (df_lqcc["fecha_pago"].isna()))
-                )
-            cdc_inpaga = df_lqcc.loc[filtro, ["capital", "interes", "iva"]].sum().sum()
+            cdc_inpaga = 0.0
+            if not df_lqcc.empty:
+                for col in ["capital", "interes", "iva"]:
+                    df_lqcc[col] = pd.to_numeric(df_lqcc[col], errors="coerce").fillna(0.0)
+                df_lqcc['fecha_cobranza'] = pd.to_datetime(df_lqcc['fecha_cobranza']).dt.to_period("M")
+                df_lqcc['fecha_pago'] = pd.to_datetime(df_lqcc['fecha_pago']).dt.to_period("M")
+                periodo_filtro = pd.Period(fecha, freq='M')
+                df_lqcc_tipo_liq = df_lqcc['tipo_liquidacion'].apply(lambda x: getattr(x, "value", str(x)))
+                bca_values = [TipoLiquidacionEnum.BCA.value, TipoLiquidacionEnum.BCA.name, "BCA"]
+                filtro = (
+                    (df_lqcc['fecha_cobranza'] <= periodo_filtro) & 
+                    (~df_lqcc_tipo_liq.isin(bca_values)) & 
+                    ((df_lqcc["fecha_pago"] > periodo_filtro) | 
+                    (df_lqcc["fecha_pago"].isna()))
+                    )
+                cdc_inpaga = float(df_lqcc.loc[filtro, ["capital", "interes", "iva"]].sum().sum())
 
             query = (db_session
                      .query(Cobranza)
@@ -180,7 +185,10 @@ def reporte(fecha_corte: str | date, n_periodos: int = 2, salto_meses: int = 1, 
                          ]))
                     )
             df_cobr = pd.read_sql(query.statement, db_session.get_bind())
-            cdc_inpaga += df_cobr[["capital", "interes", "iva"]].sum().sum()
+            if not df_cobr.empty:
+                for col in ["capital", "interes", "iva"]:
+                    df_cobr[col] = pd.to_numeric(df_cobr[col], errors="coerce").fillna(0.0)
+                cdc_inpaga += float(df_cobr[["capital", "interes", "iva"]].sum().sum())
 
         finally:
             db_session.close()
@@ -211,11 +219,14 @@ def reporte(fecha_corte: str | date, n_periodos: int = 2, salto_meses: int = 1, 
 
     df = pd.DataFrame(datos)
     df = df.groupby(["Categoria", "Detalle"]).sum()
-    df.loc["Pasivos"] *= -1
+    if "Pasivos" in df.index:
+        df.loc["Pasivos"] *= -1
     
     df.loc[("", "Total"), :] = df.sum()
-    df.loc[("Activos", "Total"), :] = df.loc["Activos"].sum()
-    df.loc[("Pasivos", "Total"), :] = df.loc["Pasivos"].sum()
+    if "Activos" in df.index:
+        df.loc[("Activos", "Total"), :] = df.loc["Activos"].sum()
+    if "Pasivos" in df.index:
+        df.loc[("Pasivos", "Total"), :] = df.loc["Pasivos"].sum()
     
     df = df.reset_index()
     df['cat_order'] = df['Categoria'].map({'Activos': 0, 'Pasivos': 1, '': 2}).fillna(3)

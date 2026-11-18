@@ -14,6 +14,9 @@ def estado(periodo: pd.Period = pd.Period.now("D")):
     try:
         query = db.query(Serie.name.label("Serie"), Serie.fecha_suscripcion.label("Fecha Suscripción"), Serie.tna.label("TNA"), Serie.plazo.label("Plazo"))
         df = pd.read_sql(query.statement, db.get_bind())
+        if df.empty:
+            return pd.DataFrame(columns=["Fecha Suscripción", "TNA", "Plazo", "Fecha Vencimiento", "Capital", "Interés", "Total", "Int. Dev.", "Deuda Dev. Total"])
+        df["TNA"] = pd.to_numeric(df["TNA"], errors="coerce").fillna(0.0)
         df["Fecha Suscripción"] = pd.to_datetime(df["Fecha Suscripción"]).dt.to_period("D")
         df["Fecha Vencimiento"] = df["Fecha Suscripción"] + df["Plazo"]
         df.set_index("Serie", inplace=True)
@@ -30,7 +33,7 @@ def estado(periodo: pd.Period = pd.Period.now("D")):
             df_serie = df_serie[df_serie["Fecha"] <= fin_mes]
             if df_serie.empty:
                 continue
-            dias_devengados = (min(row["Fecha Vencimiento"], fin_mes) - row["Fecha Suscripción"]).n
+            dias_devengados = max(0, (min(row["Fecha Vencimiento"], fin_mes) - row["Fecha Suscripción"]).n)
             df_serie["Int. Dev."] = df_serie["Capital"] * row["TNA"]/365 * dias_devengados
             df.loc[_, ["Capital", "Interés", "Total", "Int. Dev."]] = df_serie[["Capital", "Interés", "Total", "Int. Dev."]].sum().round(0)
         df["Deuda Dev. Total"] = df["Capital"] + df["Int. Dev."]
