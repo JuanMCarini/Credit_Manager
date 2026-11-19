@@ -530,6 +530,19 @@ def get_credito_transferencias(credito_id: int, db: Session = Depends(get_db)):
         })
     return result
 
+def _get_primer_vencimiento(cuotas: List[Cuota]) -> str:
+    cuotas_con_fecha = [cuota for cuota in cuotas if cuota.fecha_vencimiento is not None]
+    if not cuotas_con_fecha:
+        return "-"
+    primera = next((cuota for cuota in cuotas_con_fecha if cuota.nro_cuota == 1), None)
+    if primera is None:
+        cuotas_normales = [cuota for cuota in cuotas_con_fecha if cuota.nro_cuota != 99]
+        candidatas = cuotas_normales or cuotas_con_fecha
+        primera = min(candidatas, key=lambda cuota: cuota.nro_cuota)
+    fv = primera.fecha_vencimiento
+    return fv.strftime("%Y-%m-%d") if hasattr(fv, "strftime") else str(fv)
+
+
 @router.get("/api/v1/creditos")
 def get_creditos_list(
     skip: int = 0,
@@ -656,6 +669,7 @@ def get_creditos_list(
             "TNA con IVA": float(c.tna_c_iva) if c.tna_c_iva is not None else 0.0,
             "Plazo": c.plazo if c.plazo is not None else 0,
             "Fecha Emisión": c.fecha_emision.strftime("%Y-%m-%d") if hasattr(c.fecha_emision, 'strftime') else str(c.fecha_emision),
+            "Primer Vencimiento": _get_primer_vencimiento(c.cuotas),
             "Estado": c.estado.value if hasattr(c.estado, 'value') else str(c.estado) if c.estado else "-",
             "Tipo Crédito": c.tipo_credito.value if hasattr(c.tipo_credito, 'value') else str(c.tipo_credito) if c.tipo_credito else "-",
             "Día Vto": c.dia_vencimiento,

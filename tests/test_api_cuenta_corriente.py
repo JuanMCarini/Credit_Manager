@@ -72,3 +72,88 @@ def test_api_cuenta_corriente(db_session, dummy_cliente):
     assert data[1]["total_cobrado"] == 0.0
     assert data[1]["saldo_pendiente"] == 5121.0
     assert len(data[1]["detalle_cobranzas"]) == 0
+
+
+def test_get_creditos_list_primer_vencimiento(db_session, dummy_cliente):
+    from src.api.routes.creditos import get_creditos_list
+
+    cred_normal = Credito(
+        cliente_cuil=dummy_cliente.cuil,
+        capital=10000.0,
+        tna_c_iva=0.45,
+        plazo=2,
+        fecha_emision=date(2026, 6, 1),
+        estado=EstadoCredito.ACTIVO,
+        dia_vencimiento=28,
+    )
+    cred_sin_cuota1 = Credito(
+        cliente_cuil=dummy_cliente.cuil,
+        capital=5000.0,
+        tna_c_iva=0.45,
+        plazo=1,
+        fecha_emision=date(2026, 6, 5),
+        estado=EstadoCredito.ACTIVO,
+        dia_vencimiento=28,
+    )
+    cred_sin_cuotas = Credito(
+        cliente_cuil=dummy_cliente.cuil,
+        capital=3000.0,
+        tna_c_iva=0.45,
+        plazo=1,
+        fecha_emision=date(2026, 6, 10),
+        estado=EstadoCredito.APROBADO,
+        dia_vencimiento=28,
+    )
+    db_session.add_all([cred_normal, cred_sin_cuota1, cred_sin_cuotas])
+    db_session.flush()
+
+    db_session.add_all([
+        Cuota(
+            credito_id=cred_normal.id,
+            nro_cuota=2,
+            fecha_vencimiento=date(2026, 9, 28),
+            capital=5000.0,
+            interes=100.0,
+            iva=21.0,
+            estado=EstadoCuota.PENDIENTE,
+        ),
+        Cuota(
+            credito_id=cred_normal.id,
+            nro_cuota=1,
+            fecha_vencimiento=date(2026, 8, 28),
+            capital=5000.0,
+            interes=200.0,
+            iva=42.0,
+            estado=EstadoCuota.PENDIENTE,
+        ),
+        Cuota(
+            credito_id=cred_sin_cuota1.id,
+            nro_cuota=99,
+            fecha_vencimiento=date(2026, 6, 15),
+            capital=0.0,
+            interes=300.0,
+            iva=63.0,
+            estado=EstadoCuota.PENDIENTE,
+        ),
+        Cuota(
+            credito_id=cred_sin_cuota1.id,
+            nro_cuota=2,
+            fecha_vencimiento=date(2026, 10, 28),
+            capital=5000.0,
+            interes=150.0,
+            iva=31.5,
+            estado=EstadoCuota.PENDIENTE,
+        ),
+    ])
+    db_session.commit()
+
+    res = get_creditos_list(
+        fecha_corte=date(2026, 7, 1),
+        id=f"{cred_normal.id},{cred_sin_cuota1.id},{cred_sin_cuotas.id}",
+        db=db_session,
+    )
+    by_id = {item["ID"]: item for item in res["items"]}
+
+    assert by_id[cred_normal.id]["Primer Vencimiento"] == "2026-08-28"
+    assert by_id[cred_sin_cuota1.id]["Primer Vencimiento"] == "2026-10-28"
+    assert by_id[cred_sin_cuotas.id]["Primer Vencimiento"] == "-"

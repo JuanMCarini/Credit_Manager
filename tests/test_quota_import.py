@@ -162,3 +162,107 @@ def test_import_credits_and_transfers_with_mapping(db_session):
     assert len(res_transf["errores"]) == 0, f"Errores transf: {res_transf['errores']}"
     assert res_transf["importadas"] == 17
 
+
+def test_process_quota_documents_transfer_formats(db_session, tmp_path):
+    from src.database.models import DocumentoLegajo, EstadoCredito
+
+    df_clts = pd.read_csv(io.StringIO(CLIENTES_CSV_SAMPLE))
+    df_clts.columns = [str(c).strip() for c in df_clts.columns]
+    quota.import_clients_from_dataframe(df_clts, db_session)
+
+    socio_quota = SocioComercial(razon_social="SISTEMA QUOTA", cuit="30000000001", dia_corte=28)
+    socio_amjar = SocioComercial(razon_social="ASOCIACION MUTUAL JULIO ARGENTINO ROCA", cuit="30676983348", dia_corte=28)
+    db_session.add_all([socio_quota, socio_amjar])
+    db_session.commit()
+
+    Relacion.add_single_mapping(
+        socio_id=socio_quota.id,
+        tabla="socios_comerciales",
+        id_local=socio_amjar.id,
+        id_foraneo="AMJAR",
+        db=db_session,
+    )
+
+    for plazo, tasa in [(18, 1.25), (9, 1.37), (24, 1.20)]:
+        db_session.add(
+            TasaYComision(
+                fecha=date(2026, 1, 1),
+                socio_originador_id=socio_amjar.id,
+                socio_intermediario_id=socio_amjar.id,
+                plazo=plazo,
+                tna_c_iva=tasa,
+                colocacion_originador=0.0,
+            )
+        )
+    db_session.commit()
+
+    df_crts = pd.read_csv(io.StringIO(CREDITOS_CSV_SAMPLE))
+    df_crts.columns = [str(c).strip() for c in df_crts.columns]
+    quota.update_clients_from_crts_dataframe(df_crts, db_session)
+
+    map_socios = Relacion.get_external_mapping_cache(socio_quota.id, "socios_comerciales", db_session)
+    res_crts = quota.import_credits_from_dataframe(df_crts, db_session, map_socios=map_socios)
+    nuevos_ids = res_crts["nuevos_ids_externos"]
+
+    df_transf = pd.read_csv(
+        io.StringIO(TRANSFERENCIAS_CSV_SAMPLE),
+        sep=";",
+        header=None,
+        names=["CBU/CVU", "Fecha", "Monto", "CUIT/CUIL", "ID Quota", "Razon Social"],
+    )
+    quota.import_transfers_from_dataframe(df_transf, df_crts, db_session, nuevos_ids_externos=nuevos_ids)
+
+    src_dir = tmp_path / "src"
+    upload_dir = tmp_path / "uploads"
+    src_dir.mkdir()
+
+    filenames = [
+        "014801 - AMJAR - FERNANDEZ JULIO OSCAR.pdf",
+        "T-14801-1.pdf",
+        "T - 14801 - 2.pdf",
+        "14801.3.pdf",
+        "014800 - AMJAR - GIMENEZ CLARA AMELIA.pdf",
+        "14800 - 1.pdf",
+        "14800-2.pdf",
+        "T-14800-3.pdf",
+        "T - 14800 - 4.pdf",
+        "14800.5.pdf",
+    ]
+    file_paths = []
+    for name in filenames:
+        fp = src_dir / name
+        fp.write_bytes(b"%PDF-1.4 dummy")
+        file_paths.append(str(fp))
+
+    res_docs = quota.process_quota_documents(
+        file_paths=file_paths,
+        df_crts=df_crts,
+        session=db_session,
+        upload_dir=str(upload_dir),
+        nuevos_ids_externos=nuevos_ids,
+    )
+    assert len(res_docs["errores"]) == 0, f"Errores docs: {res_docs['errores']}"
+    assert len(res_docs["procesados"]) == len(filenames)
+
+    cred_14801 = db_session.query(Credito).filter_by(id_externo="CH_142207").first()
+    cred_14800 = db_session.query(Credito).filter_by(id_externo="CH_142180").first()
+
+    docs_14801 = db_session.query(DocumentoLegajo).filter_by(credito_id=cred_14801.id).all()
+    assert sum(1 for d in docs_14801 if d.transferencia_id is None) == 1
+    assert sum(1 for d in docs_14801 if d.transferencia_id is not None) == 3
+
+    docs_14800 = db_session.query(DocumentoLegajo).filter_by(credito_id=cred_14800.id).all()
+    assert sum(1 for d in docs_14800 if d.transferencia_id is None) == 1
+    assert sum(1 for d in docs_14800 if d.transferencia_id is not None) == 5
+
+    df_crts_subset = df_crts[df_crts["Crédito"].astype(str).isin(["14800", "14801"])].copy()
+    res_estados = quota.verify_and_update_credit_states(df_crts_subset, db_session)
+    assert len(res_estados["errores"]) == 0, f"Errores estados: {res_estados['errores']}"
+    assert res_estados["pasados_a_firmado"] == 2
+    assert res_estados["pasados_a_activo"] == 2
+
+    db_session.refresh(cred_14801)
+    db_session.refresh(cred_14800)
+    assert cred_14801.estado == EstadoCredito.ACTIVO
+    assert cred_14800.estado == EstadoCredito.ACTIVO
+

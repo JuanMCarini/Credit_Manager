@@ -439,8 +439,12 @@ def process_quota_documents(file_paths: list, df_crts: pd.DataFrame, session: Se
             filename = os.path.basename(file_path)
             name_without_ext, ext = os.path.splitext(filename)
             
-            # 1. Match Transferencia -> ID.NUM.ext
-            transfer_match = re.search(r"^(\d+)\.(\d+)$", name_without_ext)
+            # 1. Match Transferencia -> ID.NUM.ext, ID-NUM.ext, ID - NUM.ext, T-ID-NUM.ext, T - ID - NUM.ext
+            transfer_match = re.search(
+                r"^(?:T\s*[-.]?\s*)?(\d+)\s*[.-]\s*(\d+)$",
+                name_without_ext.strip(),
+                re.IGNORECASE,
+            )
             # 2. Match Legajo -> ID - LINEA - NOMBRE COMPLETO.ext
             legajo_match = re.search(r"^(\d+)\s*-\s*", name_without_ext)
 

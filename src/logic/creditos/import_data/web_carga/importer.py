@@ -334,7 +334,11 @@ def procesar_documentos_web_carga(file_paths: list, db_session: Session, upload_
             # Transferencia: ID_WEB_CARGA.INDEX.ext
             # Legajo: ID_WEB_CARGA - LINEA - NOMBRE.ext
             # Legajo Sistema Venta: Legajo Nro. ID - ...
-            transfer_match = re.search(r"^(\d+)\.(\d+)$", name_without_ext)
+            transfer_match = re.search(
+                r"^(?:T\s*[-.]?\s*)?(\d+)\s*[.-]\s*(\d+)$",
+                name_without_ext.strip(),
+                re.IGNORECASE,
+            )
             legajo_match = re.search(r"^(\d+)\s*-\s*", name_without_ext)
             sistema_venta_match = re.search(r"^Legajo Nro\.?\s+(\d+)\s+-", name_without_ext, re.IGNORECASE)
 

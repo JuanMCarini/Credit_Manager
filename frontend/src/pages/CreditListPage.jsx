@@ -28,7 +28,7 @@ const CreditListPage = () => {
   const { user } = useAuthStore();
   const isAuditor = user?.rol === 'Auditor / Solo Lectura';
   
-  const [filter, setFilter] = useState({ ID: [], IdExterno: '', Originador: '', CUIL: '', Capital: {}, Plazo: '', TNA: '', IdTasa: '', Estado: [], Fecha: [], TipoCredito: [], SaldoMora: {}, DiasMora: {} });
+  const [filter, setFilter] = useState({ ID: [], IdExterno: '', Originador: '', CUIL: '', Capital: {}, Plazo: '', TNA: '', IdTasa: '', Estado: [], Fecha: [], PrimerVto: [], TipoCredito: [], SaldoMora: {}, DiasMora: {} });
   const debouncedFilter = useDebounce(filter, 500);
 
   const [sortConfig, setSortConfig] = useState({ key: 'ID', direction: 'desc' });
@@ -175,6 +175,9 @@ const CreditListPage = () => {
     if (ignoreKey !== 'Fecha' && f.Fecha && f.Fecha.length > 0) {
       result = result.filter(c => f.Fecha.includes(c["Fecha Emisión"]));
     }
+    if (ignoreKey !== 'PrimerVto' && f.PrimerVto && f.PrimerVto.length > 0) {
+      result = result.filter(c => f.PrimerVto.includes(c["Primer Vencimiento"]));
+    }
     return result;
   };
 
@@ -209,6 +212,10 @@ const CreditListPage = () => {
 
   const AVAILABLE_FECHAS_EMISION = useMemo(() => {
     return [...new Set(getFilteredData('Fecha').map(c => c["Fecha Emisión"]).filter(Boolean))].sort();
+  }, [creditos, debouncedFilter]);
+
+  const AVAILABLE_PRIMEROS_VTOS = useMemo(() => {
+    return [...new Set(getFilteredData('PrimerVto').map(c => c["Primer Vencimiento"]).filter(v => v && v !== '-'))].sort();
   }, [creditos, debouncedFilter]);
 
   const totalCapital = useMemo(() => {
@@ -246,7 +253,7 @@ const CreditListPage = () => {
           </button>
           <button 
             className="btn-secondary" 
-            onClick={() => setFilter({ ID: [], IdExterno: '', Originador: '', CUIL: '', Capital: {}, Plazo: '', TNA: '', IdTasa: '', Estado: [], Fecha: [], TipoCredito: [], SaldoMora: {}, DiasMora: {} })}
+            onClick={() => setFilter({ ID: [], IdExterno: '', Originador: '', CUIL: '', Capital: {}, Plazo: '', TNA: '', IdTasa: '', Estado: [], Fecha: [], PrimerVto: [], TipoCredito: [], SaldoMora: {}, DiasMora: {} })}
             title="Limpiar todos los filtros"
             style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
           >
@@ -367,7 +374,7 @@ const CreditListPage = () => {
                     />
                   </div>
                 </th>
-                <th onClick={() => handleSort('Fecha Emisión')} style={{ cursor: 'pointer' }}>
+                <th onClick={() => handleSort('Fecha Emisión')} style={{ cursor: 'pointer', minWidth: '110px' }}>
                   Fecha Emisión <SortIcon columnKey="Fecha Emisión" />
                   <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
                     <ExcelDateFilter 
@@ -377,13 +384,23 @@ const CreditListPage = () => {
                     />
                   </div>
                 </th>
+                <th onClick={() => handleSort('Primer Vencimiento')} style={{ cursor: 'pointer', minWidth: '110px' }}>
+                  1er Vencimiento <SortIcon columnKey="Primer Vencimiento" />
+                  <div style={{ marginTop: '5px' }} onClick={e => e.stopPropagation()}>
+                    <ExcelDateFilter 
+                      availableDates={AVAILABLE_PRIMEROS_VTOS}
+                      selectedDates={filter.PrimerVto}
+                      onChange={dates => setFilter({ ...filter, PrimerVto: dates })}
+                    />
+                  </div>
+                </th>
                 <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
               {filteredAndSortedCreditos.length === 0 ? (
                 <tr>
-                  <td colSpan="14" className="text-center empty-state" style={{ padding: '40px' }}>
+                  <td colSpan="15" className="text-center empty-state" style={{ padding: '40px' }}>
                     {loading ? "Cargando..." : "No hay créditos para mostrar con los filtros actuales."}
                   </td>
                 </tr>
@@ -411,7 +428,8 @@ const CreditListPage = () => {
                     </td>
                     <td>{formatCurrency(c["Saldo en Mora"])}</td>
                     <td>{c["Días de Mora"]}</td>
-                    <td>{c["Fecha Emisión"]}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{c["Fecha Emisión"]}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{c["Primer Vencimiento"] || '-'}</td>
                     <td>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, max-content)', gap: '6px', justifyContent: 'center', alignItems: 'center' }}>
                         <button className="btn-secondary" onClick={() => navigate(`/dashboard-clientes?cuil=${c["Cliente CUIL"]}&credito_id=${c.ID}`)} style={{ padding: '4px 8px', fontSize: '14px' }} title="Dashboard de Cliente">
@@ -467,7 +485,7 @@ const CreditListPage = () => {
                 <td>{formatCurrency(totalCapital)}</td>
                 <td colSpan="5"></td>
                 <td>{formatCurrency(totalMora)}</td>
-                <td colSpan="3"></td>
+                <td colSpan="4"></td>
               </tr>
             </tfoot>
           </table>
