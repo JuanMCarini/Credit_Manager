@@ -417,3 +417,124 @@ def test_update_cliente_registra_historial_y_reactiva_incobrable(db_session, tes
     db_session.refresh(cuota_futura)
     assert cred.estado == EstadoCredito.ACTIVO
     assert cuota_futura.estado == EstadoCuota.PENDIENTE
+
+
+def test_delete_credito_aprobado_y_firmado_con_historial(db_session, test_user, tmp_path, monkeypatch):
+    from datetime import timedelta
+    from fastapi import HTTPException
+    from src.api.routes.creditos import delete_credito
+    from src.database.models import DocumentoLegajo, Transferencia
+
+    monkeypatch.setattr("src.api.routes.creditos.UPLOAD_DIR", str(tmp_path))
+
+    cli = Cliente(
+        cuil="20777777771",
+        documento="77777771",
+        apellido="Delete",
+        nombre="Tester",
+        estado=EstadoClienteEnum.ACTIVO,
+    )
+    db_session.add(cli)
+    db_session.commit()
+
+    def _crear_credito_con_dependencias(estado_inicial: EstadoCredito, suffix: str) -> tuple[Credito, str]:
+        cred = Credito(
+            cliente_cuil=cli.cuil,
+            capital=15000.0,
+            tna_c_iva=0.50,
+            plazo=1,
+            fecha_emision=date.today(),
+            estado=EstadoCredito.APROBADO,
+            dia_vencimiento=28,
+        )
+        db_session.add(cred)
+        db_session.flush()
+
+        cuota = Cuota(
+            credito_id=cred.id,
+            nro_cuota=1,
+            fecha_vencimiento=date.today() + timedelta(days=30),
+            capital=15000.0,
+            interes=750.0,
+            iva=157.5,
+            estado=EstadoCuota.PENDIENTE,
+        )
+        transf = Transferencia(
+            cbu="0110285930028521696929",
+            monto=15000.0,
+            cuit=cli.cuil,
+            credito_id=cred.id,
+            razon_social="Delete Tester",
+        )
+        db_session.add_all([cuota, transf])
+        db_session.flush()
+
+        filename = f"legajo_{suffix}.pdf"
+        stored_name = f"{cred.id}_{filename}"
+        file_path = tmp_path / stored_name
+        file_path.write_bytes(b"%PDF-1.4 test")
+
+        doc = DocumentoLegajo(
+            credito_id=cred.id,
+            nombre_archivo=filename,
+            ruta_archivo=str(file_path),
+            tipo_archivo="application/pdf",
+            transferencia_id=transf.id,
+        )
+        db_session.add(doc)
+
+        registrar_cambio_estado_credito(
+            db=db_session,
+            credito=cred,
+            nuevo_estado=EstadoCredito.APROBADO,
+            usuario_id=test_user.id,
+            origen="ORIGINACION",
+            motivo="Alta inicial",
+            forzar_registro=True,
+        )
+        if estado_inicial != EstadoCredito.APROBADO:
+            registrar_cambio_estado_credito(
+                db=db_session,
+                credito=cred,
+                nuevo_estado=estado_inicial,
+                usuario_id=test_user.id,
+                origen="MANUAL",
+                motivo=f"Paso a {estado_inicial.value}",
+            )
+        db_session.commit()
+        return cred, str(file_path)
+
+    # 1. Eliminar crédito en estado APROBADO con historial, cuota, transferencia y documento
+    cred_aprobado, path_aprobado = _crear_credito_con_dependencias(EstadoCredito.APROBADO, "aprobado")
+    cred_aprobado_id = cred_aprobado.id
+    res_aprobado = delete_credito(credito_id=cred_aprobado_id, db=db_session)
+    assert res_aprobado["status"] == "success"
+    assert db_session.query(Credito).filter_by(id=cred_aprobado_id).first() is None
+    assert db_session.query(Cuota).filter_by(credito_id=cred_aprobado_id).count() == 0
+    assert db_session.query(Transferencia).filter_by(credito_id=cred_aprobado_id).count() == 0
+    assert db_session.query(DocumentoLegajo).filter_by(credito_id=cred_aprobado_id).count() == 0
+    assert db_session.query(HistorialEstadoCredito).filter_by(credito_id=cred_aprobado_id).count() == 0
+    assert not (tmp_path / f"{cred_aprobado_id}_legajo_aprobado.pdf").exists()
+
+    # 2. Eliminar crédito en estado FIRMADO con historial, cuota, transferencia y documento
+    cred_firmado, path_firmado = _crear_credito_con_dependencias(EstadoCredito.FIRMADO, "firmado")
+    cred_firmado_id = cred_firmado.id
+    res_firmado = delete_credito(credito_id=cred_firmado_id, db=db_session)
+    assert res_firmado["status"] == "success"
+    assert db_session.query(Credito).filter_by(id=cred_firmado_id).first() is None
+    assert db_session.query(Cuota).filter_by(credito_id=cred_firmado_id).count() == 0
+    assert db_session.query(Transferencia).filter_by(credito_id=cred_firmado_id).count() == 0
+    assert db_session.query(DocumentoLegajo).filter_by(credito_id=cred_firmado_id).count() == 0
+    assert db_session.query(HistorialEstadoCredito).filter_by(credito_id=cred_firmado_id).count() == 0
+    assert not (tmp_path / f"{cred_firmado_id}_legajo_firmado.pdf").exists()
+
+    db_session.refresh(cli)
+    assert cli.estado == EstadoClienteEnum.INACTIVO
+
+    # 3. Rechazar eliminación de crédito en estado ACTIVO
+    cred_activo, _ = _crear_credito_con_dependencias(EstadoCredito.ACTIVO, "activo")
+    with pytest.raises(HTTPException) as exc_info:
+        delete_credito(credito_id=cred_activo.id, db=db_session)
+    assert exc_info.value.status_code == 400
+    assert "APROBADO o FIRMADO" in exc_info.value.detail
+    assert db_session.query(Credito).filter_by(id=cred_activo.id).first() is not None

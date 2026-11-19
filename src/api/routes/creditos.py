@@ -13,7 +13,16 @@ from pypdf import PdfWriter, PdfReader
 from PIL import Image
 
 from src.database import get_db, Credito, Transferencia
-from src.database.models import EstadoCredito, Cuota, DocumentoLegajo, EstadoCuota, HistorialEstadoCredito
+from src.database.models import (
+    Cliente,
+    Cuota,
+    DocumentoLegajo,
+    EstadoCredito,
+    EstadoCuota,
+    HistorialEstadoCredito,
+    LiquidacionCuotaCedida,
+    OperacionCartera,
+)
 from src.api.schemas.creditos import CreditoCreate, CreditoEstadoUpdate, CreditoCorrerVencimientos, DocumentoLegajoOut, HistorialEstadoCreditoOut
 from src.logic.creditos.origination import LoanOriginator
 from src.logic.creditos.amortization import AmortizationEngine
@@ -660,37 +669,110 @@ def get_creditos_list(
         "total": len(result)
     }
 
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+UPLOAD_DIR = os.path.join(project_root, "data", "uploads", "legajos")
+
+
 @router.delete("/api/v1/creditos/{credito_id:int}")
 def delete_credito(credito_id: int, db: Session = Depends(get_db)):
-    credito = db.query(Credito).options(joinedload(Credito.cuotas).joinedload(Cuota.cobranzas)).filter(Credito.id == credito_id).first()
+    credito = (
+        db.query(Credito)
+        .options(joinedload(Credito.cuotas).joinedload(Cuota.cobranzas))
+        .filter(Credito.id == credito_id)
+        .first()
+    )
     if not credito:
         raise HTTPException(status_code=404, detail="Crédito no encontrado")
-        
-    if credito.estado != EstadoCredito.APROBADO:
+
+    estado_actual = credito.estado.value if hasattr(credito.estado, "value") else str(credito.estado)
+    if estado_actual not in (EstadoCredito.APROBADO.value, EstadoCredito.FIRMADO.value):
         raise HTTPException(
             status_code=400,
-            detail="Solo se puede eliminar un crédito si su estado es APROBADO."
+            detail="Solo se puede eliminar un crédito si su estado es APROBADO o FIRMADO."
         )
-        
+
     has_cobranzas = any(len(cuota.cobranzas) > 0 for cuota in credito.cuotas)
     if has_cobranzas:
         raise HTTPException(
-            status_code=400, 
+            status_code=400,
             detail="No se puede eliminar el crédito porque ya tiene cobranzas asociadas."
         )
-        
+
+    cuota_ids = [c.id for c in credito.cuotas]
+    if cuota_ids:
+        has_liquidaciones = (
+            db.query(LiquidacionCuotaCedida)
+            .filter(LiquidacionCuotaCedida.cuota_id.in_(cuota_ids))
+            .first()
+        )
+        if has_liquidaciones:
+            raise HTTPException(
+                status_code=400,
+                detail="No se puede eliminar el crédito porque ya tiene liquidaciones asociadas."
+            )
+
+    cliente_cuil = credito.cliente_cuil
+    docs = db.query(DocumentoLegajo).filter(DocumentoLegajo.credito_id == credito_id).all()
+    doc_files = [
+        (
+            doc.nombre_archivo,
+            os.path.basename(doc.ruta_archivo.replace("\\", "/")) if doc.ruta_archivo else None,
+        )
+        for doc in docs
+    ]
+
     try:
-        db.delete(credito)
+        if cuota_ids:
+            db.query(OperacionCartera).filter(OperacionCartera.cuota_id.in_(cuota_ids)).delete(
+                synchronize_session=False
+            )
+        db.query(DocumentoLegajo).filter(DocumentoLegajo.credito_id == credito_id).delete(
+            synchronize_session=False
+        )
+        db.query(Transferencia).filter(Transferencia.credito_id == credito_id).delete(
+            synchronize_session=False
+        )
+        db.query(Cuota).filter(Cuota.credito_id == credito_id).delete(
+            synchronize_session=False
+        )
+        db.query(HistorialEstadoCredito).filter(
+            HistorialEstadoCredito.credito_id == credito_id
+        ).delete(synchronize_session=False)
+        db.query(Credito).filter(Credito.id == credito_id).delete(synchronize_session=False)
+
+        db.flush()
+        db.expire_all()
+
+        if cliente_cuil:
+            cliente = db.query(Cliente).filter(Cliente.cuil == cliente_cuil).first()
+            if cliente:
+                cliente.actualizar_estado()
+
         db.commit()
-        return {"status": "success", "message": "Crédito eliminado exitosamente."}
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error eliminando el crédito: {str(e)}")
 
-# --- LEGAJO DOCUMENTOS ENDPOINTS ---
+    for nombre_archivo, basename in doc_files:
+        if not basename:
+            continue
+        still_referenced = (
+            db.query(DocumentoLegajo)
+            .filter(DocumentoLegajo.nombre_archivo == nombre_archivo)
+            .first()
+        )
+        if still_referenced:
+            continue
+        full_path = os.path.join(UPLOAD_DIR, basename)
+        if os.path.isfile(full_path):
+            try:
+                os.remove(full_path)
+            except OSError:
+                pass
 
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-UPLOAD_DIR = os.path.join(project_root, "data", "uploads", "legajos")
+    return {"status": "success", "message": "Crédito eliminado exitosamente."}
+
+# --- LEGAJO DOCUMENTOS ENDPOINTS ---
 @router.post("/api/v1/creditos/{credito_id:int}/documentos", response_model=DocumentoLegajoOut)
 async def upload_documento(
     credito_id: int,

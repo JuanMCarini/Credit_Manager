@@ -84,7 +84,7 @@ const CreditListPage = () => {
       alert('Crédito eliminado con éxito.');
       queryClient.invalidateQueries({ queryKey: ['creditos'] });
     } catch (error) {
-      alert("Error eliminando crédito: " + error.message);
+      alert("Error eliminando crédito: " + (error.response?.data?.detail || error.message));
     }
   };
 
@@ -437,7 +437,18 @@ const CreditListPage = () => {
                             <button className="btn-secondary" onClick={() => setEditCredito({ id: c.ID, estado: c.Estado })} style={{ padding: '4px 8px', fontSize: '14px' }} title="Editar Estado">
                               ✏️
                             </button>
-                            <button className="btn-secondary" onClick={() => handleDelete(c.ID)} style={{ padding: '4px 8px', fontSize: '14px', color: 'var(--danger-color)' }} title="Eliminar">
+                            <button
+                              className="btn-secondary"
+                              onClick={() => handleDelete(c.ID)}
+                              disabled={!['APROBADO', 'FIRMADO'].includes(c.Estado)}
+                              style={{
+                                padding: '4px 8px',
+                                fontSize: '14px',
+                                color: 'var(--danger-color)',
+                                opacity: ['APROBADO', 'FIRMADO'].includes(c.Estado) ? 1 : 0.4
+                              }}
+                              title={['APROBADO', 'FIRMADO'].includes(c.Estado) ? "Eliminar" : "Solo se puede eliminar en estado APROBADO o FIRMADO"}
+                            >
                               🗑️
                             </button>
                           </>
