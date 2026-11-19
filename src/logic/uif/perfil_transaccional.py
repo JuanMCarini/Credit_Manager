@@ -73,16 +73,25 @@ def capital_neto_maximo(cuil: str, periodo: Union[Period, date], socio: Union[So
     db = SessionLocal()
     socio_id = socio.id if hasattr(socio, 'id') else socio
     try:
-        tasas = db.query(TasaYComision.id, TasaYComision.plazo, TasaYComision.tna_c_iva, TasaYComision.gasto_1_porcentaje , TasaYComision.gasto_2_porcentaje, TasaYComision.porcentaje_sellado).filter(
+        tasas = db.query(
+            TasaYComision.id,
+            TasaYComision.plazo,
+            TasaYComision.gracia,
+            TasaYComision.tna_c_iva,
+            TasaYComision.gasto_1_porcentaje,
+            TasaYComision.gasto_2_porcentaje,
+            TasaYComision.porcentaje_sellado,
+        ).filter(
             TasaYComision.socio_originador_id == socio_id,
             TasaYComision.estado == EstadoComisionEnum.ACTIVA
         )
         df = read_sql(tasas.statement, db.get_bind())
         if df.empty:
-            return DataFrame(columns=["id", "plazo", "tna_c_iva", "cap_neto_max"])
+            return DataFrame(columns=["id", "plazo", "gracia", "tna_c_iva", "cap_neto_max"])
 
         for col in ["plazo", "tna_c_iva", "porcentaje_sellado", "gasto_1_porcentaje", "gasto_2_porcentaje"]:
             df[col] = to_numeric(df[col], errors="coerce").fillna(0.0)
+        df["gracia"] = to_numeric(df["gracia"], errors="coerce").fillna(2).astype(int)
 
         df["tem"] = df["tna_c_iva"] * 30 / 365
         # Cuota = Capital_Bruto * factor_cuota
@@ -95,7 +104,7 @@ def capital_neto_maximo(cuil: str, periodo: Union[Period, date], socio: Union[So
         gastos = df["porcentaje_sellado"] + df["gasto_1_porcentaje"] + df["gasto_2_porcentaje"]
         df["cap_neto_max"] = df["cap_bruto_max"] * (1 - gastos)
         
-        df.sort_values(by=["plazo"], inplace=True)
+        df.sort_values(by=["plazo", "gracia"], inplace=True)
 
         regla = db.query(ReglasPerfilTransaccional).filter(ReglasPerfilTransaccional.id_socio_comercial == socio_id).first()
         if regla:
@@ -105,4 +114,4 @@ def capital_neto_maximo(cuil: str, periodo: Union[Period, date], socio: Union[So
     finally:
         db.close()
 
-    return df[["id", "plazo", "tna_c_iva", "cap_neto_max"]]
+    return df[["id", "plazo", "gracia", "tna_c_iva", "cap_neto_max"]]

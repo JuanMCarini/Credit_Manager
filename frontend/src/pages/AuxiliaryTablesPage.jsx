@@ -59,7 +59,7 @@ const AuxiliaryTablesPage = () => {
     operadores: { name: 'Operadores de Cheques', data: operadores, endpoint: 'operadores', basePath: '/api/cheques', idField: 'cuit', schema: ['cuit', 'razon_social', 'calificacion', 'telefono', 'email'] },
     empleadores: { name: 'Empleadores', data: empleadores, endpoint: 'empleadores', schema: ['id', 'cuit', 'razon_social', 'es_pasivo', 'domicilio_calle', 'domicilio_nro', 'domicilio_piso', 'domicilio_depto', 'id_provincia', 'id_codigo_postal', 'localidad', 'telefono', 'socio_comercial_id'] },
     socios: { name: 'Socios Comerciales', data: socios, endpoint: 'socios', schema: ['id', 'razon_social', 'cuit', 'domicilio_legal', 'contacto_nombre', 'mail', 'telefono', 'dia_corte', 'cbu', 'nro_cuenta_bancaria', 'nombre_banco', 'anticipo_vigente', 'codigo_descuento', 'capital_neto_maximo'] },
-    tasasYComisiones: { name: 'Tasas y Comisiones', data: tasasYComisiones, endpoint: 'tasas_y_comisiones', schema: ['id', 'fecha', 'estado', 'socio_originador_id', 'socio_intermediario_id', 'colocacion_originador', 'colocacion_intermediario', 'cobranza_originador', 'cobranza_intermediario', 'colocacion_propia', 'gasto_1_porcentaje', 'gasto_1_socio_id', 'gasto_2_porcentaje', 'gasto_2_socio_id', 'porcentaje_sellado', 'plazo', 'tna_c_iva', 'multiplicador_punitorio'] },
+    tasasYComisiones: { name: 'Tasas y Comisiones', data: tasasYComisiones, endpoint: 'tasas_y_comisiones', schema: ['id', 'fecha', 'estado', 'socio_originador_id', 'socio_intermediario_id', 'colocacion_originador', 'colocacion_intermediario', 'cobranza_originador', 'cobranza_intermediario', 'colocacion_propia', 'gasto_1_porcentaje', 'gasto_1_socio_id', 'gasto_2_porcentaje', 'gasto_2_socio_id', 'porcentaje_sellado', 'plazo', 'gracia', 'tna_c_iva', 'multiplicador_punitorio'] },
     relaciones: { name: 'Relaciones Mapeadas', data: relaciones, endpoint: 'relaciones', schema: ['id', 'socio_id', 'tabla', 'id_local', 'id_foraneo'] },
     comercializadores: { name: 'Comercializadores', data: comercializadores, endpoint: 'comercializadores', schema: ['id', 'nombre'] },
     bancos: { name: 'Bancos', data: bancos, endpoint: 'bancos', basePath: '/api/finanzas', schema: ['id', 'nombre_banco', 'parser_type'] },
@@ -121,6 +121,8 @@ const AuxiliaryTablesPage = () => {
           emptyForm[c] = getLocalDateISO();
         } else if (c === 'moneda') {
           emptyForm[c] = 'Pesos Argentinos $';
+        } else if (c === 'gracia' && currentTableConfig.endpoint === 'tasas_y_comisiones') {
+          emptyForm[c] = 2;
         } else if (c === 'anticipo_vigente') {
           emptyForm[c] = 0;
         } else {
@@ -171,6 +173,8 @@ const AuxiliaryTablesPage = () => {
         if (cleanedData[key] === '') {
           cleanedData[key] = null;
         } else if (relationMaps[key]) {
+          cleanedData[key] = parseInt(cleanedData[key], 10);
+        } else if (['plazo', 'gracia'].includes(key) && cleanedData[key] !== null) {
           cleanedData[key] = parseInt(cleanedData[key], 10);
         } else if (percentFields.includes(key) && cleanedData[key] !== null) {
           cleanedData[key] = parseFloat(cleanedData[key]) / 100.0;
@@ -408,6 +412,7 @@ const AuxiliaryTablesPage = () => {
                     else if (col === 'id_provincia' || col === 'provincia_id') headerText = 'PROVINCIA';
                     else if (col === 'es_pasivo') headerText = 'ES PASIVO';
                     else if (col === 'id_socio_comercial') headerText = 'SOCIO COMERCIAL';
+                    else if (col === 'gracia') headerText = 'MESES GRACIA';
                     return (
                       <th key={col} onClick={() => handleSort(col)} style={{ cursor: 'pointer', verticalAlign: 'top' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}>
@@ -608,7 +613,7 @@ const AuxiliaryTablesPage = () => {
                           <option value="">Seleccione Registro Local...</option>
                           {localOptions.map(opt => (
                             <option key={opt.id} value={opt.id}>
-                              {opt.id} - {localLabel === 'id' ? `Plazo: ${opt.plazo} TNA: ${(opt.tna_c_iva * 100).toFixed(2)}%` : opt[localLabel]}
+                              {opt.id} - {localLabel === 'id' ? `Plazo: ${opt.plazo} | Gracia: ${opt.gracia ?? 2} | TNA: ${(opt.tna_c_iva * 100).toFixed(2)}%` : opt[localLabel]}
                             </option>
                           ))}
                         </select>
@@ -743,11 +748,12 @@ const AuxiliaryTablesPage = () => {
                         className="input-field" required
                       />
                     );
-                  } else if (col === 'plazo') {
+                  } else if (col === 'plazo' || col === 'gracia') {
                     inputElement = (
                       <input
                         type="number"
                         step="1"
+                        min={col === 'gracia' ? "0" : "1"}
                         value={editFormData[col] ?? ''}
                         onChange={(e) => handleEditChange(col, e.target.value)}
                         className="input-field" required
@@ -843,6 +849,7 @@ const AuxiliaryTablesPage = () => {
                   if (col === 'es_pasivo') labelText = 'ES PASIVO';
                   if (col === 'cap_min') labelText = 'CAPITAL NETO MÍNIMO';
                   if (col === 'cap_max') labelText = 'CAPITAL NETO MÁXIMO';
+                  if (col === 'gracia') labelText = 'MESES DE GRACIA';
 
                   const formGroup = (
                     <div key={col} className="form-group">

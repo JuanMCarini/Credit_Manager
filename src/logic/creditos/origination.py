@@ -13,6 +13,7 @@ from src.database.models import (
     Credito,
     EstadoCredito,
     SocioComercial,
+    TasaYComision,
     TipoCredito,
     Transferencia,
 )
@@ -83,6 +84,7 @@ class LoanOriginator:
         comision_id: int | None = None,
         id_externo: str | None = None,
         strict_policy: bool = True,
+        gracia: int | None = None,
     ) -> list:
         """
         =============================================================================
@@ -109,6 +111,14 @@ class LoanOriginator:
         self.db.add(self.credit)
         self.db.flush()  # Generate Credit ID for installments
 
+        resolved_gracia = gracia
+        if resolved_gracia is None and comision_id is not None:
+            tasa_obj = self.db.get(TasaYComision, comision_id)
+            if tasa_obj is not None and getattr(tasa_obj, "gracia", None) is not None:
+                resolved_gracia = int(tasa_obj.gracia)
+        if resolved_gracia is None:
+            resolved_gracia = 2
+
         if type == TipoCredito.FRANCES:
             installments = AmortizationEngine.generate_french_schedule(
                 credito_id=self.credit.id,
@@ -117,6 +127,7 @@ class LoanOriginator:
                 plazo=term,
                 fecha_emision=issuance_date,
                 dia_vencimiento=due_day,
+                gracia=resolved_gracia,
                 dia_corte=cutoff_day,
             )
         else:
@@ -173,6 +184,7 @@ class LoanOriginator:
         transferencias_data: list = None,
         commit: bool = True,
         strict_policy: bool = True,
+        gracia: int | None = None,
     ) -> tuple[Credito, list] | Credito:
         """
         =============================================================================
@@ -187,7 +199,7 @@ class LoanOriginator:
             self._validate_client(client_cuil)
             cutoff_day = self._get_partner_cutoff_day(partner_id)
             observaciones = self._generate_credit_and_schedule(
-                capital, tna_c_iva, term, partner_id, issuance_date, due_day, cutoff_day, type, comercializador_id, comision_id, id_externo, strict_policy
+                capital, tna_c_iva, term, partner_id, issuance_date, due_day, cutoff_day, type, comercializador_id, comision_id, id_externo, strict_policy, gracia=gracia
             )
 
 
@@ -246,6 +258,7 @@ class LoanOriginator:
         transferencias_data: list = None,
         commit: bool = True,
         strict_policy: bool = True,
+        gracia: int | None = None,
     ) -> tuple[Credito, list] | Credito:
         """
         =============================================================================
@@ -284,7 +297,8 @@ class LoanOriginator:
                 None,
                 comision_id,
                 id_externo,
-                strict_policy
+                strict_policy,
+                gracia=gracia,
             )
 
 

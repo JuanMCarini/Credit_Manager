@@ -24,3 +24,14 @@ export const useAuthStore = create((set) => ({
     set({ user: null, token: null });
   }
 }));
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (event) => {
+    if (event.key === 'token' || event.key === 'user' || event.key === null) {
+      useAuthStore.setState({
+        user: getSafeUser(),
+        token: localStorage.getItem('token') || null,
+      });
+    }
+  });
+}

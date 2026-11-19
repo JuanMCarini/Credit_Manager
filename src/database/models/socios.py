@@ -11,7 +11,9 @@ from sqlalchemy import (
     Numeric,
     String,
     UniqueConstraint,
-    func
+    func,
+    inspect,
+    text,
 )
 from sqlalchemy.orm import Session, relationship
 
@@ -260,6 +262,7 @@ class TasaYComision(Base):
     socio_intermediario_id = Column(Integer, ForeignKey("socios_comerciales.id"), nullable=False)
 
     plazo = Column(Integer, nullable=False, default=12)
+    gracia = Column(Integer, nullable=False, default=2)
     tna_c_iva = Column(Numeric(15, 6), nullable=False, default=0.0)
 
     colocacion_originador = Column(Numeric(15, 6), nullable=False, default=0.0)
@@ -302,3 +305,19 @@ class PoliticaCrediticia(Base):
     antiguedad_empleado = Column(Integer, nullable=False)
 
     socio_originador = relationship("SocioComercial", foreign_keys=[socio_originador_id], back_populates="politicas_crediticias")
+
+
+def ensure_tasas_comisiones_schema(engine) -> None:
+    """Asegura de forma idempotente que la tabla `tasas_y_comisiones` cuente con la columna `gracia`."""
+    try:
+        inspector = inspect(engine)
+        if not inspector.has_table("tasas_y_comisiones"):
+            return
+        existing_cols = {col["name"] for col in inspector.get_columns("tasas_y_comisiones")}
+        if "gracia" not in existing_cols:
+            with engine.begin() as conn:
+                conn.execute(
+                    text("ALTER TABLE tasas_y_comisiones ADD COLUMN gracia INTEGER NOT NULL DEFAULT 2")
+                )
+    except Exception as exc:
+        print(f"⚠️ Warning al verificar esquema de tasas_y_comisiones: {exc}")

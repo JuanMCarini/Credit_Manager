@@ -45,18 +45,51 @@ const formatErrorDetail = (detail) => {
 // Response interceptor for centralized error handling
 axiosClient.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     console.error("API Error:", error.response || error.message);
     
     // Redirect to login if token is expired or unauthorized
     if (error.response && error.response.status === 401) {
-      if (!isRedirecting401) {
-        isRedirecting401 = true;
-        alert("Su sesión ha expirado por inactividad. Por favor, vuelva a iniciar sesión.");
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        localStorage.removeItem('userRole');
-        window.location.href = '/login';
+      const requestUrl = error.config?.url || '';
+      const isAuthEndpoint =
+        requestUrl.includes('/api/auth/logout') || requestUrl.includes('/api/auth/login');
+
+      if (!isAuthEndpoint) {
+        const originalConfig = error.config;
+        const sentAuth =
+          originalConfig?.headers?.Authorization ||
+          originalConfig?.headers?.authorization ||
+          (typeof originalConfig?.headers?.get === 'function'
+            ? originalConfig.headers.get('Authorization')
+            : null);
+        const latestToken = localStorage.getItem('token');
+        const latestAuth = latestToken ? `Bearer ${latestToken}` : null;
+
+        if (
+          originalConfig &&
+          !originalConfig._retriedAfterRefresh &&
+          latestAuth &&
+          sentAuth &&
+          sentAuth !== latestAuth
+        ) {
+          originalConfig._retriedAfterRefresh = true;
+          originalConfig.headers = originalConfig.headers || {};
+          if (typeof originalConfig.headers.set === 'function') {
+            originalConfig.headers.set('Authorization', latestAuth);
+          } else {
+            originalConfig.headers['Authorization'] = latestAuth;
+          }
+          return axiosClient(originalConfig);
+        }
+
+        if (!isRedirecting401) {
+          isRedirecting401 = true;
+          alert("Su sesión ha expirado por inactividad. Por favor, vuelva a iniciar sesión.");
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          localStorage.removeItem('userRole');
+          window.location.href = '/login';
+        }
       }
     }
 

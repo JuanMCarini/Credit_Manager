@@ -133,11 +133,9 @@ def refresh_token(
     current_user: Usuario = Depends(get_current_user),
 ):
     """
-    Renueva el token JWT activo revocando el anterior si fue provisto.
+    Renueva el token JWT activo sin revocar inmediatamente el anterior para evitar
+    falsos 401 en peticiones concurrentes o pestañas abiertas (la revocación explícita ocurre en /logout).
     """
-    old_token = extract_token_from_request(request)
-    if old_token:
-        revoke_token(old_token)
     access_token = create_access_token(
         data={"sub": current_user.email, "rol": current_user.rol.nombre}
     )

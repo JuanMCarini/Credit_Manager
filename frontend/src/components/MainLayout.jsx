@@ -8,6 +8,10 @@ import ChangeMyPasswordModal from './ChangeMyPasswordModal';
 import { useAuthStore } from '../store/useAuthStore';
 import axiosClient from '../api/axiosClient';
 
+const INACTIVITY_TIME = 30 * 60 * 1000; // 30 minutes
+const REFRESH_INTERVAL = 14 * 60 * 1000; // 14 minutes (before backend expiration)
+const ACTIVITY_THROTTLE_MS = 1000; // Throttle timer resets for high-frequency events
+
 const MainLayout = () => {
   const { fetchAuxiliares, checkApiStatus, fetchSystemModules } = useAppStore();
   const { user, login, logout } = useAuthStore();
@@ -18,11 +22,13 @@ const MainLayout = () => {
 
   const timeoutRef = useRef(null);
   const intervalRef = useRef(null);
-  const INACTIVITY_TIME = 30 * 60 * 1000; // 30 minutes
-  const REFRESH_INTERVAL = 14 * 60 * 1000; // 14 minutes (before 30 min backend expiration)
+  const lastActivityRef = useRef(0);
+  const handleLogoutRef = useRef(null);
 
   const handleLogout = useCallback(async (isAuto = false) => {
     const auto = isAuto === true;
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    if (intervalRef.current) clearInterval(intervalRef.current);
     try {
       await axiosClient.post('/api/auth/logout');
     } catch (e) {
@@ -35,10 +41,21 @@ const MainLayout = () => {
     navigate('/login');
   }, [logout, navigate]);
 
-  const handleActivity = useCallback(() => {
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    timeoutRef.current = setTimeout(() => handleLogout(true), INACTIVITY_TIME);
+  useEffect(() => {
+    handleLogoutRef.current = handleLogout;
   }, [handleLogout]);
+
+  const resetInactivityTimer = useCallback((force = false) => {
+    const now = Date.now();
+    if (!force && now - lastActivityRef.current < ACTIVITY_THROTTLE_MS) {
+      return;
+    }
+    lastActivityRef.current = now;
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => {
+      handleLogoutRef.current?.(true);
+    }, INACTIVITY_TIME);
+  }, []);
 
   useEffect(() => {
     checkApiStatus();
@@ -73,10 +90,18 @@ const MainLayout = () => {
 
   useEffect(() => {
     const events = ['mousemove', 'keydown', 'click', 'scroll'];
-    events.forEach(event => window.addEventListener(event, handleActivity));
+    const onActivity = () => resetInactivityTimer(false);
+    events.forEach((event) => window.addEventListener(event, onActivity, { passive: true }));
 
-    handleActivity();
+    resetInactivityTimer(true);
 
+    return () => {
+      events.forEach((event) => window.removeEventListener(event, onActivity));
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, [resetInactivityTimer]);
+
+  useEffect(() => {
     intervalRef.current = setInterval(async () => {
       try {
         const response = await axiosClient.post('/api/auth/refresh');
@@ -90,11 +115,9 @@ const MainLayout = () => {
     }, REFRESH_INTERVAL);
 
     return () => {
-      events.forEach(event => window.removeEventListener(event, handleActivity));
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [handleActivity, login]);
+  }, [login]);
 
 
   return (

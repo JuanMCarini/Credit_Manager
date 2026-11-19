@@ -271,11 +271,14 @@ const CreditOriginationPage = () => {
       const capitalBruto = capitalNeto / (1 - g1 - g2 - ps);
       setComputedCapitalBruto(capitalBruto);
 
+      const socioObj = socios.find(s => String(s.id) === String(creditoForm.socio_id));
       const params = new URLSearchParams({
         credito_id: 0,
         capital: capitalBruto,
         tna_c_iva: selectedTasa.tna_c_iva,
         plazo: selectedTasa.plazo,
+        gracia: selectedTasa.gracia ?? 2,
+        dia_corte: socioObj?.dia_corte ?? 28,
         fecha_emision: creditoForm.fecha_emision || null
       });
       const res = await axiosClient.get(`/api/v1/creditos/simular-cuotas?${params.toString()}`);
@@ -665,6 +668,7 @@ const CreditOriginationPage = () => {
                             <thead>
                               <tr>
                                 <th style={{ textAlign: 'center' }}>Plazo</th>
+                                <th style={{ textAlign: 'center' }}>Gracia</th>
                                 <th style={{ textAlign: 'center' }}>TNA</th>
                                 <th style={{ textAlign: 'center' }}>Cap. Neto Máx</th>
                               </tr>
@@ -673,6 +677,7 @@ const CreditOriginationPage = () => {
                               {cuotaAfectableData.maximos.map((row, idx) => (
                                 <tr key={idx}>
                                   <td>{row.plazo} m</td>
+                                  <td>{row.gracia ?? 2} m</td>
                                   <td>{(row.tna_c_iva * 100).toFixed(2)}%</td>
                                   <td style={{ color: 'var(--success-color)', fontWeight: 'bold' }}>{formatCurrency(row.cap_neto_max)}</td>
                                 </tr>
@@ -786,9 +791,9 @@ const CreditOriginationPage = () => {
                         }
                         return true;
                       })
-                      .sort((a, b) => a.plazo - b.plazo)
+                      .sort((a, b) => a.plazo - b.plazo || (a.gracia ?? 2) - (b.gracia ?? 2))
                       .map(t => (
-                        <option key={t.id} value={t.id}>{t.plazo} meses - TNA: {(t.tna_c_iva * 100).toFixed(2)}%</option>
+                        <option key={t.id} value={t.id}>{t.plazo} meses - TNA: {(t.tna_c_iva * 100).toFixed(2)}% - Gracia: {t.gracia ?? 2} m</option>
                       ))}
                   </select>
                 </div>

@@ -158,6 +158,58 @@ INSECURE_SECRET_KEYS = {
     "secret",
 }
 
+_DEV_FALLBACK_SECRET_KEY = (
+    "credit_manager_dev_persistent_jwt_secret_key_not_for_production"
+)
+
+
+def _get_default_secret_key() -> str:
+    """
+    Retorna la clave JWT por defecto. En producción exige provisión explícita
+    vía API_SECRET_KEY; en desarrollo/testing persiste una clave compartida en
+    data/.jwt_secret_key para que múltiples workers y recargas usen la misma firma.
+    """
+    if os.getenv("ENV", os.getenv("API_ENV", "development")).strip().lower() == "production":
+        return ""
+
+    secret_file = ROOT_DIR / "data" / ".jwt_secret_key"
+    try:
+        if secret_file.is_file():
+            existing = secret_file.read_text(encoding="utf-8").strip()
+            if len(existing) >= 32 and existing not in INSECURE_SECRET_KEYS:
+                return existing
+
+        secret_file.parent.mkdir(parents=True, exist_ok=True)
+        generated = secrets.token_urlsafe(32)
+        tmp_file = secret_file.parent / f".jwt_secret_key.{os.getpid()}.{secrets.token_hex(4)}.tmp"
+        try:
+            tmp_file.write_text(generated, encoding="utf-8")
+            try:
+                os.link(tmp_file, secret_file)
+                return generated
+            except FileExistsError:
+                existing = secret_file.read_text(encoding="utf-8").strip()
+                if len(existing) >= 32 and existing not in INSECURE_SECRET_KEYS:
+                    return existing
+            except OSError:
+                fd = os.open(str(secret_file), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+                try:
+                    os.write(fd, generated.encode("utf-8"))
+                finally:
+                    os.close(fd)
+                return generated
+        finally:
+            tmp_file.unlink(missing_ok=True)
+    except (OSError, FileExistsError):
+        try:
+            if secret_file.is_file():
+                existing = secret_file.read_text(encoding="utf-8").strip()
+                if len(existing) >= 32 and existing not in INSECURE_SECRET_KEYS:
+                    return existing
+        except OSError:
+            pass
+    return _DEV_FALLBACK_SECRET_KEY
+
 
 class APIConfig(BaseSettings):
     """
@@ -173,11 +225,7 @@ class APIConfig(BaseSettings):
         description="List of allowed origins for CORS."
     )
     secret_key: str = Field(
-        default_factory=lambda: (
-            ""
-            if os.getenv("ENV", os.getenv("API_ENV", "development")).strip().lower() == "production"
-            else secrets.token_urlsafe(32)
-        ),
+        default_factory=_get_default_secret_key,
         min_length=32,
         alias="API_SECRET_KEY",
         description="Secret key for JWT signing (minimum 32 characters)."

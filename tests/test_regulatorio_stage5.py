@@ -197,7 +197,7 @@ def test_uif_capital_neto_maximo_decimal_and_empty_rates(db_session, dummy_clien
     # 1. Sin tasas activas: retorna DataFrame vacío con esquema esperado
     df_empty = capital_neto_maximo(dummy_cliente.cuil, periodo, dummy_socio)
     assert df_empty.empty
-    assert list(df_empty.columns) == ["id", "plazo", "tna_c_iva", "cap_neto_max"]
+    assert list(df_empty.columns) == ["id", "plazo", "gracia", "tna_c_iva", "cap_neto_max"]
 
     # 2. Con tasa Decimal activa: no debe fallar por float / Decimal
     tasa = TasaYComision(
@@ -221,6 +221,7 @@ def test_uif_capital_neto_maximo_decimal_and_empty_rates(db_session, dummy_clien
 
     df_res = capital_neto_maximo(dummy_cliente.cuil, periodo, dummy_socio)
     assert len(df_res) == 1
+    assert df_res.iloc[0]["gracia"] == 2
     assert float(df_res.iloc[0]["cap_neto_max"]) > 0.0
 
 
