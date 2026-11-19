@@ -1,6 +1,6 @@
 import enum
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Date, Float, Numeric, Enum as SQLEnum, Boolean
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Date, Float, Numeric, Enum as SQLEnum, Boolean, inspect, text
+from sqlalchemy.orm import relationship, Session
 from sqlalchemy.sql import func
 from src.database import Base
 
@@ -18,11 +18,13 @@ class Banco(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     nombre_banco = Column(String(100), nullable=False)
     parser_type = Column(String(50), nullable=True)
+    socio_id = Column(Integer, ForeignKey("socios_comerciales.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
-    # Relación a Cuentas
+    # Relaciones
     cuentas = relationship("Cuenta", back_populates="banco")
+    socio = relationship("SocioComercial")
 
 class TipoMoneda(enum.Enum):
     PESOS = "Pesos Argentinos $"
@@ -134,6 +136,7 @@ class Movimiento(Base):
     monto = Column(Numeric(15, 2), nullable=False)
     concepto_id = Column(Integer, ForeignKey("conceptos.id"), nullable=True)
     descripcion = Column(String(255), nullable=True)
+    info_adicional = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
@@ -145,3 +148,83 @@ class Movimiento(Base):
     @property
     def cheque_id(self):
         return self.cheques[0].id if self.cheques else None
+
+
+def find_socio_for_banco(db: Session, banco: Banco):
+    """Busca el SocioComercial existente vinculado a un Banco (sin crear uno nuevo) y asegura banco.socio_id."""
+    from src.database.models.socios import SocioComercial
+
+    if banco.socio_id:
+        socio = db.query(SocioComercial).filter(SocioComercial.id == banco.socio_id).first()
+        if socio:
+            return socio
+
+    nombre_lower = (banco.nombre_banco or "").strip().lower()
+    if not nombre_lower:
+        return None
+
+    socio = db.query(SocioComercial).filter(func.lower(SocioComercial.razon_social) == nombre_lower).first()
+    if socio:
+        banco.socio_id = socio.id
+        db.flush()
+        return socio
+
+    keyword = nombre_lower
+    for prefix in ("banco de la ", "banco de ", "banco del ", "banco "):
+        if keyword.startswith(prefix):
+            keyword = keyword[len(prefix):].strip()
+            break
+
+    if len(keyword) >= 3:
+        matches = (
+            db.query(SocioComercial)
+            .filter(SocioComercial.razon_social.ilike(f"%{keyword}%"))
+            .all()
+        )
+        if len(matches) == 1:
+            socio = matches[0]
+            banco.socio_id = socio.id
+            db.flush()
+            return socio
+
+    return None
+
+
+get_or_create_socio_for_banco = find_socio_for_banco
+
+
+def ensure_bancos_schema(engine) -> None:
+    """Asegura de forma idempotente la columna `socio_id` (ON DELETE SET NULL) en `bancos` y la restricción actualizada en `relaciones`."""
+    try:
+        inspector = inspect(engine)
+        if inspector.has_table("bancos"):
+            existing_cols = {col["name"] for col in inspector.get_columns("bancos")}
+            if "socio_id" not in existing_cols:
+                with engine.begin() as conn:
+                    conn.execute(
+                        text("ALTER TABLE bancos ADD COLUMN socio_id INTEGER REFERENCES socios_comerciales(id) ON DELETE SET NULL")
+                    )
+            elif engine.dialect.name == "postgresql":
+                with engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE bancos DROP CONSTRAINT IF EXISTS bancos_socio_id_fkey"))
+                    conn.execute(
+                        text(
+                            "ALTER TABLE bancos ADD CONSTRAINT bancos_socio_id_fkey "
+                            "FOREIGN KEY (socio_id) REFERENCES socios_comerciales(id) ON DELETE SET NULL"
+                        )
+                    )
+        if inspector.has_table("movimientos"):
+            mov_cols = {col["name"] for col in inspector.get_columns("movimientos")}
+            if "info_adicional" not in mov_cols:
+                with engine.begin() as conn:
+                    conn.execute(
+                        text("ALTER TABLE movimientos ADD COLUMN info_adicional VARCHAR(255)")
+                    )
+        if inspector.has_table("relaciones") and engine.dialect.name == "postgresql":
+            with engine.begin() as conn:
+                conn.execute(
+                    text("ALTER TABLE relaciones DROP CONSTRAINT IF EXISTS uq_socio_tabla_local")
+                )
+    except Exception as exc:
+        print(f"⚠️ Warning al verificar esquema de bancos/relaciones: {exc}")
+

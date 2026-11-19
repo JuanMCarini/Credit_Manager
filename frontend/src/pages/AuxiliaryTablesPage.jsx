@@ -62,7 +62,7 @@ const AuxiliaryTablesPage = () => {
     tasasYComisiones: { name: 'Tasas y Comisiones', data: tasasYComisiones, endpoint: 'tasas_y_comisiones', schema: ['id', 'fecha', 'estado', 'socio_originador_id', 'socio_intermediario_id', 'colocacion_originador', 'colocacion_intermediario', 'cobranza_originador', 'cobranza_intermediario', 'colocacion_propia', 'gasto_1_porcentaje', 'gasto_1_socio_id', 'gasto_2_porcentaje', 'gasto_2_socio_id', 'porcentaje_sellado', 'plazo', 'gracia', 'tna_c_iva', 'multiplicador_punitorio'] },
     relaciones: { name: 'Relaciones Mapeadas', data: relaciones, endpoint: 'relaciones', schema: ['id', 'socio_id', 'tabla', 'id_local', 'id_foraneo'] },
     comercializadores: { name: 'Comercializadores', data: comercializadores, endpoint: 'comercializadores', schema: ['id', 'nombre'] },
-    bancos: { name: 'Bancos', data: bancos, endpoint: 'bancos', basePath: '/api/finanzas', schema: ['id', 'nombre_banco', 'parser_type'] },
+    bancos: { name: 'Bancos', data: bancos, endpoint: 'bancos', basePath: '/api/finanzas', schema: ['id', 'nombre_banco', 'parser_type', 'socio_id'] },
     cuentas: { name: 'Cuentas Bancarias', data: cuentas, endpoint: 'cuentas', basePath: '/api/finanzas', schema: ['id', 'nombre', 'banco_id', 'nro', 'cbu', 'alias', 'tipo_cuenta', 'moneda'] },
     conceptos: { name: 'Conceptos', data: conceptos, endpoint: 'conceptos', basePath: '/api/finanzas', schema: ['id', 'name', 'clasificacion_id', 'tipo_movimiento', 'descripcion'] },
     clasificaciones: { name: 'Clasificaciones de Conceptos', data: clasificaciones, endpoint: 'clasificaciones', basePath: '/api/finanzas', schema: ['id', 'name', 'descripcion'] },
@@ -174,7 +174,7 @@ const AuxiliaryTablesPage = () => {
           cleanedData[key] = null;
         } else if (relationMaps[key]) {
           cleanedData[key] = parseInt(cleanedData[key], 10);
-        } else if (['plazo', 'gracia'].includes(key) && cleanedData[key] !== null) {
+        } else if (['plazo', 'gracia', 'id_local'].includes(key) && cleanedData[key] !== null) {
           cleanedData[key] = parseInt(cleanedData[key], 10);
         } else if (percentFields.includes(key) && cleanedData[key] !== null) {
           cleanedData[key] = parseFloat(cleanedData[key]) / 100.0;
@@ -270,11 +270,15 @@ const AuxiliaryTablesPage = () => {
   const bulkFactoresTotal = bulkFactoresData.reduce((acc, f) => acc + f.peso_pct, 0);
   const isBulkFactoresValid = Math.abs(bulkFactoresTotal - 100) < 0.01;
 
-  const formatCellValue = (col, value) => {
+  const formatCellValue = (col, value, row = null) => {
     if (value === null || value === undefined) return '-';
-    if (['socio_comercial_id', 'socio_originador_id', 'socio_intermediario_id', 'gasto_1_socio_id', 'gasto_2_socio_id', 'id_socio_comercial'].includes(col)) {
+    if (['socio_id', 'socio_comercial_id', 'socio_originador_id', 'socio_intermediario_id', 'gasto_1_socio_id', 'gasto_2_socio_id', 'id_socio_comercial'].includes(col)) {
       const socio = socios.find(s => s.id === value);
       return socio ? socio.razon_social : value;
+    }
+    if (activeTable === 'relaciones' && col === 'id_local' && row?.tabla === 'conceptos') {
+      const concepto = conceptos.find(c => c.id === value);
+      return concepto ? `${value} - ${concepto.name}` : value;
     }
     if (col === 'id_riesgo') {
       const factor = factoresRiesgo.find(f => f.id === value);
@@ -318,7 +322,7 @@ const AuxiliaryTablesPage = () => {
     return columns.every(col => {
       const filterValue = columnFilters[col];
       if (!filterValue) return true;
-      const val = formatCellValue(col, row[col]);
+      const val = formatCellValue(col, row[col], row);
 
       if (col === 'clasificacion_id' && filterValue === 'Sin Clasificar') {
         return val === '-';
@@ -485,7 +489,7 @@ const AuxiliaryTablesPage = () => {
                   sortedData.map((row) => (
                     <tr key={row[currentTableConfig.idField || 'id']}>
                       {columns.map(col => (
-                        <td key={col}>{formatCellValue(col, row[col])}</td>
+                        <td key={col}>{formatCellValue(col, row[col], row)}</td>
                       ))}
                       <td>
                         <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
@@ -560,7 +564,7 @@ const AuxiliaryTablesPage = () => {
 
                   if (currentTableConfig.endpoint === 'relaciones' && col === 'tabla') {
                     const tableOptions = [
-                      'codigos_postales', 'empleadores', 'provincias',
+                      'codigos_postales', 'conceptos', 'empleadores', 'provincias',
                       'socios_comerciales', 'tasas_y_comisiones', 'comercializadores'
                     ];
                     inputElement = (
@@ -595,6 +599,9 @@ const AuxiliaryTablesPage = () => {
                     } else if (selectedTabla === 'comercializadores') {
                       localOptions = comercializadores;
                       localLabel = 'nombre';
+                    } else if (selectedTabla === 'conceptos') {
+                      localOptions = conceptos;
+                      localLabel = 'name';
                     }
 
                     if (!selectedTabla) {

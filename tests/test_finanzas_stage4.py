@@ -384,3 +384,261 @@ def test_reportes_finance_comprobantes_cartera_y_esp(db_session, dummy_cliente, 
     df_esp = rep_esp.reporte(date(2026, 8, 31), n_periodos=1)
     assert not df_esp.empty
     assert ("Pasivos", "Facturas adeudadas") in df_esp.index
+
+
+def test_import_extract_via_tabla_relaciones_y_clasificacion(db_session, monkeypatch):
+    import io
+    import pandas as pd
+    from src.database.models.socios import Relacion, SocioComercial
+    from src.database.seed_bancos import seed_bancos
+    from src.database.seed_conceptos import seed_conceptos
+    from src.logic.creditos.import_data.bancos.bica import import_extract as bica_import
+    from src.logic.creditos.import_data.bancos.pampa import import_extract as pampa_import
+    from src.logic.creditos.import_data.bancos.santander import import_extract as santander_import
+    from src.api.routes.finanzas import update_movimiento, update_movimiento_bulk
+    from src.api.routes.auxiliares import delete_aux_record
+    from src.api.schemas.bancos import MovimientoUpdate, MovimientoBulkConceptoUpdate
+
+    factory = lambda: _NonClosingSessionProxy(db_session)
+    monkeypatch.setattr("src.logic.creditos.import_data.bancos.bica.SessionLocal", factory)
+    monkeypatch.setattr("src.logic.creditos.import_data.bancos.pampa.SessionLocal", factory)
+    monkeypatch.setattr("src.logic.creditos.import_data.bancos.santander.SessionLocal", factory)
+
+    seed_conceptos(db_session)
+    seed_bancos(db_session)
+
+    # Verificar que seed_bancos no auto-crea socios comerciales duplicados
+    assert db_session.query(SocioComercial).count() == 0
+
+    socio_bica = SocioComercial(razon_social="BANCO BICA S.A.", cuit="30500057430")
+    socio_santander = SocioComercial(razon_social="Banco Santander", cuit="30500008454")
+    socio_pampa = SocioComercial(razon_social="Banco de La Pampa", cuit="30500010912")
+    db_session.add_all([socio_bica, socio_santander, socio_pampa])
+    db_session.commit()
+
+    seed_bancos(db_session)
+    assert db_session.query(SocioComercial).count() == 3
+
+    conc_imp_debito = Concepto(
+        name="Impuesto al Debito",
+        tipo_movimiento=CategoriaMovimiento.EGRESO,
+        descripcion="Impuesto Ley 25.413",
+    )
+    conc_gastos_bco = Concepto(
+        name="Gastos Bancarios",
+        tipo_movimiento=CategoriaMovimiento.EGRESO,
+    )
+    db_session.add_all([conc_imp_debito, conc_gastos_bco])
+    db_session.commit()
+
+    banco_bica = db_session.query(Banco).filter_by(nombre_banco="Banco Bica").first()
+    assert banco_bica is not None
+    assert banco_bica.parser_type == "bica"
+    assert banco_bica.socio_id == socio_bica.id
+
+    cuenta_bica = Cuenta(
+        nombre="Bica CC",
+        banco_id=banco_bica.id,
+        nro="1001",
+        cbu="1111111111111111111111",
+        alias="bica.test",
+        tipo_cuenta="Cuenta Corriente",
+        moneda=TipoMoneda.PESOS,
+    )
+    db_session.add(cuenta_bica)
+    db_session.commit()
+
+    # 1. Primera importación Bica sin relaciones cargadas -> todo debe ir directo a NO CLASIFICADO
+    df_bica_1 = pd.DataFrame([
+        {
+            "Fec.Operación": "01/09/2026",
+            "Fecha Real": "01/09/2026",
+            "Transacción": "Impuesto al Débito Ley 25.413",
+            "Info Adicional": None,
+            "Comprobante": "101",
+            "Importe": -1500.00,
+        },
+        {
+            "Fec.Operación": "01/09/2026",
+            "Fecha Real": "01/09/2026",
+            "Transacción": "Comisión por Servicio de Cuenta",
+            "Info Adicional": None,
+            "Comprobante": "102",
+            "Importe": -500.00,
+        },
+        {
+            "Fec.Operación": "01/09/2026",
+            "Fecha Real": "01/09/2026",
+            "Transacción": "Acreditación Transferencia",
+            "Info Adicional": "CUIT 30-12345678-9",
+            "Comprobante": "103",
+            "Importe": 25000.00,
+        },
+    ])
+    excel_buf_1 = io.BytesIO()
+    df_bica_1.to_excel(excel_buf_1, index=False)
+    excel_buf_1.seek(0)
+    bica_import(excel_buf_1, cuenta_bica.id)
+
+    movs_1 = db_session.query(Movimiento).filter_by(cuenta_id=cuenta_bica.id).order_by(Movimiento.id).all()
+    assert len(movs_1) == 3
+    assert movs_1[0].concepto.name == "EGRESO NO CLASIFICADO"
+    assert movs_1[1].concepto.name == "EGRESO NO CLASIFICADO"
+    assert movs_1[2].concepto.name == "INGRESO NO CLASIFICADO"
+    assert movs_1[2].descripcion == "Acreditación Transferencia"
+    assert movs_1[2].info_adicional == "CUIT 30-12345678-9"
+
+    # 2. Clasificación individual con guardar_relacion=True -> guarda relación en tabla relaciones
+    update_movimiento(
+        movs_1[0].id,
+        MovimientoUpdate(concepto_id=conc_imp_debito.id, guardar_relacion=True),
+        db=db_session,
+    )
+    rel_1 = (
+        db_session.query(Relacion)
+        .filter_by(
+            socio_id=banco_bica.socio_id,
+            tabla="conceptos",
+            id_foraneo="Impuesto al Débito Ley 25.413",
+        )
+        .first()
+    )
+    assert rel_1 is not None
+    assert rel_1.id_local == conc_imp_debito.id
+
+    # También debe permitir mapear otro detalle distinto al mismo concepto (sin uq_socio_tabla_local)
+    update_movimiento_bulk(
+        MovimientoBulkConceptoUpdate(
+            movimiento_ids=[movs_1[1].id],
+            concepto_id=conc_imp_debito.id,
+            guardar_relacion=True,
+        ),
+        db=db_session,
+    )
+    rel_2 = (
+        db_session.query(Relacion)
+        .filter_by(
+            socio_id=banco_bica.socio_id,
+            tabla="conceptos",
+            id_foraneo="Comisión por Servicio de Cuenta",
+        )
+        .first()
+    )
+    assert rel_2 is not None
+    assert rel_2.id_local == conc_imp_debito.id
+
+    # 3. Segunda importación Bica -> existentes toman relación; los nuevos sin relación van a NO CLASIFICADO
+    df_bica_2 = pd.DataFrame([
+        {
+            "Fec.Operación": "02/09/2026",
+            "Fecha Real": "02/09/2026",
+            "Transacción": "Impuesto al Débito Ley 25.413",
+            "Info Adicional": None,
+            "Comprobante": "201",
+            "Importe": -2200.00,
+        },
+        {
+            "Fec.Operación": "02/09/2026",
+            "Fecha Real": "02/09/2026",
+            "Transacción": "Comisión por Servicio de Cuenta",
+            "Info Adicional": None,
+            "Comprobante": "202",
+            "Importe": -600.00,
+        },
+        {
+            "Fec.Operación": "02/09/2026",
+            "Fecha Real": "02/09/2026",
+            "Transacción": "Débito Nuevo Desconocido",
+            "Info Adicional": None,
+            "Comprobante": "203",
+            "Importe": -900.00,
+        },
+    ])
+    excel_buf_2 = io.BytesIO()
+    df_bica_2.to_excel(excel_buf_2, index=False)
+    excel_buf_2.seek(0)
+    bica_import(excel_buf_2, cuenta_bica.id)
+
+    mov_201 = db_session.query(Movimiento).filter_by(cuenta_id=cuenta_bica.id, nro_comprobante="201").first()
+    mov_202 = db_session.query(Movimiento).filter_by(cuenta_id=cuenta_bica.id, nro_comprobante="202").first()
+    mov_203 = db_session.query(Movimiento).filter_by(cuenta_id=cuenta_bica.id, nro_comprobante="203").first()
+    assert mov_201.concepto_id == conc_imp_debito.id
+    assert mov_202.concepto_id == conc_imp_debito.id
+    assert mov_203.concepto.name == "EGRESO NO CLASIFICADO"
+
+    # 4. Verificar también Santander (limpieza de Ref) y Pampa usando tabla relaciones
+    banco_santander = db_session.query(Banco).filter_by(nombre_banco="Banco Santander").first()
+    cuenta_sant = Cuenta(
+        nombre="Santander CC",
+        banco_id=banco_santander.id,
+        nro="2001",
+        cbu="2222222222222222222222",
+        alias="sant.test",
+        tipo_cuenta="Cuenta Corriente",
+        moneda=TipoMoneda.PESOS,
+    )
+    banco_pampa = db_session.query(Banco).filter_by(nombre_banco="Banco de La Pampa").first()
+    cuenta_pampa = Cuenta(
+        nombre="Pampa CC",
+        banco_id=banco_pampa.id,
+        nro="3001",
+        cbu="3333333333333333333333",
+        alias="pampa.test",
+        tipo_cuenta="Cuenta Corriente",
+        moneda=TipoMoneda.PESOS,
+    )
+    db_session.add_all([cuenta_sant, cuenta_pampa])
+    db_session.commit()
+
+    sant_csv_1 = (
+        "Fecha;Concepto;Referencia;Cod. Operativo;Importe\n"
+        "01/09/2026;Comision Mantenimiento;999;10;(1.000,00)\n"
+    )
+    santander_import(io.StringIO(sant_csv_1), cuenta_sant.id)
+    mov_s1 = db_session.query(Movimiento).filter_by(cuenta_id=cuenta_sant.id).first()
+    assert mov_s1.concepto.name == "EGRESO NO CLASIFICADO"
+    assert mov_s1.descripcion == "Comision Mantenimiento"
+    assert mov_s1.info_adicional == "Ref: 999"
+
+    # Clasificamos el movimiento de Santander -> guarda relación limpia ("Comision Mantenimiento", sin "- Ref: 999")
+    update_movimiento_bulk(
+        MovimientoBulkConceptoUpdate(
+            movimiento_ids=[mov_s1.id],
+            concepto_id=conc_gastos_bco.id,
+            guardar_relacion=True,
+        ),
+        db=db_session,
+    )
+    sant_csv_2 = (
+        "Fecha;Concepto;Referencia;Cod. Operativo;Importe\n"
+        "02/09/2026;Comision Mantenimiento;1000;11;(1.200,00)\n"
+    )
+    santander_import(io.StringIO(sant_csv_2), cuenta_sant.id)
+    mov_s2 = db_session.query(Movimiento).filter_by(cuenta_id=cuenta_sant.id, nro_comprobante="1000").first()
+    assert mov_s2.concepto_id == conc_gastos_bco.id
+
+    Relacion.add_single_mapping(
+        socio_id=banco_pampa.socio_id,
+        tabla="conceptos",
+        id_local=conc_imp_debito.id,
+        id_foraneo="IMP. DEBITOS Y CRED",
+        db=db_session,
+    )
+    pampa_csv = (
+        "Fecha;Concepto;Comprobante;Importe\n"
+        "01/09/2026;IMP. DEBITOS Y CRED;555;$ -400,00\n"
+        "01/09/2026;TRANSFERENCIA RECIBIDA;556;$ 5.000,00\n"
+    )
+    pampa_import(io.StringIO(pampa_csv), cuenta_pampa.id)
+    mov_p1 = db_session.query(Movimiento).filter_by(cuenta_id=cuenta_pampa.id, nro_comprobante="555").first()
+    mov_p2 = db_session.query(Movimiento).filter_by(cuenta_id=cuenta_pampa.id, nro_comprobante="556").first()
+    assert mov_p1.concepto_id == conc_imp_debito.id
+    assert mov_p2.concepto.name == "INGRESO NO CLASIFICADO"
+
+    # 5. Eliminar un Socio Comercial vinculado a un banco debe desvincular el banco sin error de FK
+    res_del = delete_aux_record("socios", socio_bica.id, db=db_session)
+    assert res_del["status"] == "success"
+    db_session.refresh(banco_bica)
+    assert banco_bica.socio_id is None
+    assert db_session.query(SocioComercial).filter_by(id=socio_bica.id).first() is None
+

@@ -126,6 +126,8 @@ async def lifespan(app: FastAPI):
             ensure_facturas_schema(engine)
             from src.database.models.socios import ensure_tasas_comisiones_schema
             ensure_tasas_comisiones_schema(engine)
+            from src.database.models.finance.bancos import ensure_bancos_schema
+            ensure_bancos_schema(engine)
         except Exception as e:
             print(f"⚠️ Error creando esquema de base de datos: {e}")
 

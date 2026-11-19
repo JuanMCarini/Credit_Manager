@@ -179,7 +179,6 @@ class Relacion(Base):
     socio = relationship("SocioComercial", back_populates="relaciones")
 
     __table_args__ = (
-        UniqueConstraint("socio_id", "tabla", "id_local", name="uq_socio_tabla_local"),
         UniqueConstraint("socio_id", "tabla", "id_foraneo", name="uq_socio_tabla_foraneo"),
     )
 
@@ -191,6 +190,7 @@ class Relacion(Base):
         id_local: int,
         id_foraneo: str | int,
         db: Session | None = None,
+        update_if_exists: bool = False,
     ) -> "Relacion":
         session = db if db else SessionLocal()
         id_foraneo_str = str(id_foraneo).strip()
@@ -202,6 +202,10 @@ class Relacion(Base):
                 .first()
             )
             if existe:
+                if update_if_exists and existe.id_local != int(id_local):
+                    existe.id_local = int(id_local)
+                    session.commit()
+                    session.refresh(existe)
                 return existe
 
             nueva_relacion = cls(

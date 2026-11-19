@@ -8,10 +8,18 @@ from typing import Dict, Any, List, Optional
 from src.database import get_db
 from src.database.models.creditos.creditos import Credito, Cuota
 from src.database.models.creditos.cobranzas import Cobranza, TipoCobranzaEnum, Proceso, EstadoProcesoEnum
-from src.database.models.socios import TasaYComision
+from src.database.models.socios import TasaYComision, Relacion
 
 # Nuevos imports para Bancos
-from src.database.models.finance.bancos import Banco, Cuenta, Concepto, Clasificacion, Movimiento, CategoriaMovimiento
+from src.database.models.finance.bancos import (
+    Banco,
+    Cuenta,
+    Concepto,
+    Clasificacion,
+    Movimiento,
+    CategoriaMovimiento,
+    find_socio_for_banco,
+)
 from src.api.schemas.bancos import (
     BancoCreate, BancoUpdate, BancoResponse,
     CuentaCreate, CuentaUpdate, CuentaResponse,
@@ -19,9 +27,12 @@ from src.api.schemas.bancos import (
     MovimientoCreate, MovimientoUpdate, MovimientoResponse, MovimientoBulkConceptoUpdate,
     ClasificacionCreate, ClasificacionUpdate, ClasificacionResponse
 )
+from src.logic.creditos.import_data.bancos import extract_clean_detalle
 from src.logic.creditos.import_data.bancos.bica import import_extract as bica_import
 from src.logic.creditos.import_data.bancos.santander import import_extract as santander_import
 from src.logic.creditos.import_data.bancos.pampa import import_extract as pampa_import
+
+UNCLASSIFIED_CONCEPT_NAMES = ("ingreso no clasificado", "egreso no clasificado")
 
 PARSERS = {
     'bica': bica_import,
@@ -266,6 +277,9 @@ def get_bancos(db: Session = Depends(get_db)):
 def create_banco(banco: BancoCreate, db: Session = Depends(get_db)):
     db_banco = Banco(**banco.model_dump())
     db.add(db_banco)
+    db.flush()
+    if db_banco.socio_id is None:
+        find_socio_for_banco(db, db_banco)
     db.commit()
     db.refresh(db_banco)
     return db_banco
@@ -277,6 +291,8 @@ def update_banco(banco_id: int, banco: BancoUpdate, db: Session = Depends(get_db
         raise HTTPException(status_code=404, detail="Banco no encontrado")
     for key, value in banco.model_dump(exclude_unset=True).items():
         setattr(db_banco, key, value)
+    if db_banco.socio_id is None:
+        find_socio_for_banco(db, db_banco)
     db.commit()
     db.refresh(db_banco)
     return db_banco
@@ -361,6 +377,10 @@ def create_cuenta(cuenta: CuentaCreate, db: Session = Depends(get_db)):
     db_cuenta = Cuenta(**cuenta.model_dump())
     db.add(db_cuenta)
     try:
+        db.flush()
+        banco = db.query(Banco).filter(Banco.id == db_cuenta.banco_id).first()
+        if banco and not banco.socio_id:
+            find_socio_for_banco(db, banco)
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -377,6 +397,10 @@ def update_cuenta(cuenta_id: int, cuenta: CuentaUpdate, db: Session = Depends(ge
     for key, value in cuenta.model_dump(exclude_unset=True).items():
         setattr(db_cuenta, key, value)
     try:
+        db.flush()
+        banco = db.query(Banco).filter(Banco.id == db_cuenta.banco_id).first()
+        if banco and not banco.socio_id:
+            find_socio_for_banco(db, banco)
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -515,6 +539,7 @@ def get_movimientos(
     clasificacion_nombre: Optional[str] = None,
     nro_comprobante: Optional[str] = None,
     descripcion: Optional[str] = None,
+    info_adicional: Optional[str] = None,
     ingreso_str: Optional[str] = None,
     egreso_str: Optional[str] = None,
     db: Session = Depends(get_db)
@@ -536,6 +561,8 @@ def get_movimientos(
         query = query.filter(Movimiento.nro_comprobante.ilike(f"%{nro_comprobante}%"))
     if descripcion:
         query = query.filter(Movimiento.descripcion.ilike(f"%{descripcion}%"))
+    if info_adicional:
+        query = query.filter(Movimiento.info_adicional.ilike(f"%{info_adicional}%"))
         
     # We apply concept and classification filters by joining if needed, but since we already joinedload, we can do explicit join for filtering if necessary.
     # To keep it simple, we will fetch and filter in Python since some fields like 'ingreso_str' and 'egreso_str' depend on formatted values.
@@ -610,6 +637,37 @@ def update_movimiento_bulk(data: MovimientoBulkConceptoUpdate, db: Session = Dep
     updated_count = db.query(Movimiento).filter(Movimiento.id.in_(data.movimiento_ids)).update(
         update_data, synchronize_session=False
     )
+
+    if data.guardar_relacion and (concepto.name or "").strip().lower() not in UNCLASSIFIED_CONCEPT_NAMES and data.movimiento_ids:
+        movs = (
+            db.query(Movimiento)
+            .options(joinedload(Movimiento.cuenta).joinedload(Cuenta.banco))
+            .filter(Movimiento.id.in_(data.movimiento_ids))
+            .all()
+        )
+        seen_pairs = set()
+        for mov in movs:
+            if not mov.descripcion or not mov.cuenta or not mov.cuenta.banco:
+                continue
+            detalle = extract_clean_detalle(mov.descripcion)
+            if not detalle:
+                continue
+            socio = find_socio_for_banco(db, mov.cuenta.banco)
+            if not socio:
+                continue
+            pair = (socio.id, detalle)
+            if pair in seen_pairs:
+                continue
+            seen_pairs.add(pair)
+            Relacion.add_single_mapping(
+                socio_id=socio.id,
+                tabla="conceptos",
+                id_local=data.concepto_id,
+                id_foraneo=detalle,
+                db=db,
+                update_if_exists=True,
+            )
+
     db.commit()
     return {"message": f"Se actualizaron {updated_count} movimientos correctamente"}
 
@@ -618,10 +676,33 @@ def update_movimiento(movimiento_id: int, movimiento: MovimientoUpdate, db: Sess
     db_mov = db.query(Movimiento).filter(Movimiento.id == movimiento_id).first()
     if not db_mov:
         raise HTTPException(status_code=404, detail="Movimiento no encontrado")
-    for key, value in movimiento.model_dump(exclude_unset=True).items():
+    update_fields = movimiento.model_dump(
+        exclude_unset=True,
+        exclude={"guardar_relacion", "detalle_foraneo"},
+    )
+    for key, value in update_fields.items():
         setattr(db_mov, key, value)
     db.commit()
     db.refresh(db_mov)
+
+    if movimiento.guardar_relacion and db_mov.concepto_id:
+        concepto = db.query(Concepto).filter(Concepto.id == db_mov.concepto_id).first()
+        if concepto and (concepto.name or "").strip().lower() not in UNCLASSIFIED_CONCEPT_NAMES:
+            detalle = (movimiento.detalle_foraneo or extract_clean_detalle(db_mov.descripcion) or "").strip()
+            cuenta = db.query(Cuenta).options(joinedload(Cuenta.banco)).filter(Cuenta.id == db_mov.cuenta_id).first()
+            if detalle and cuenta and cuenta.banco:
+                socio = find_socio_for_banco(db, cuenta.banco)
+                if socio:
+                    Relacion.add_single_mapping(
+                        socio_id=socio.id,
+                        tabla="conceptos",
+                        id_local=db_mov.concepto_id,
+                        id_foraneo=detalle,
+                        db=db,
+                        update_if_exists=True,
+                    )
+                    db.refresh(db_mov)
+
     return db_mov
 
 @router.delete("/movimientos/{movimiento_id}")

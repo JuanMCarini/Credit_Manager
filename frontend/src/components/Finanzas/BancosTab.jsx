@@ -9,6 +9,7 @@ import ExcelDateFilter from '../ExcelDateFilter';
 import ExcelListFilter from '../ExcelListFilter';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { useDebounce } from '../../hooks/useDebounce';
+import useAppStore from '../../store/useAppStore';
 
 const FilterInput = ({ col, columnFilters, setColumnFilters }) => (
   <div onClick={e => e.stopPropagation()}>
@@ -49,6 +50,7 @@ const BancosTab = () => {
   const [selectedMovimientoIds, setSelectedMovimientoIds] = useState([]);
   const [conceptosOptions, setConceptosOptions] = useState([]);
   const [bulkConceptoId, setBulkConceptoId] = useState('');
+  const [bulkGuardarRelacion, setBulkGuardarRelacion] = useState(true);
   const [bulkUpdating, setBulkUpdating] = useState(false);
 
   const fetchCuentas = useCallback(async () => {
@@ -87,6 +89,7 @@ const BancosTab = () => {
       fecha_hasta: hasta || undefined,
       ...(filters.nro_comprobante && { nro_comprobante: filters.nro_comprobante }),
       ...(filters.descripcion && { descripcion: filters.descripcion }),
+      ...(filters.info_adicional && { info_adicional: filters.info_adicional }),
       ...(filters.concepto && filters.concepto.length > 0 && { concepto_nombre: filters.concepto.join(',') }),
       ...(filters.clasificacion && filters.clasificacion.length > 0 && { clasificacion_nombre: filters.clasificacion.join(',') }),
       ...(filters.ingreso && { ingreso_str: filters.ingreso }),
@@ -183,11 +186,16 @@ const BancosTab = () => {
     try {
       await axiosClient.put('/api/finanzas/movimientos/bulk-concepto', {
         movimiento_ids: selectedMovimientoIds,
-        concepto_id: parseInt(bulkConceptoId)
+        concepto_id: parseInt(bulkConceptoId),
+        guardar_relacion: bulkGuardarRelacion
       });
       setSelectedMovimientoIds([]);
       setBulkConceptoId('');
+      fetchKpis();
       queryClient.invalidateQueries({ queryKey: ['movimientos'] });
+      if (useAppStore.getState().fetchAuxiliares) {
+        useAppStore.getState().fetchAuxiliares();
+      }
     } catch (err) {
       console.error(err);
       alert('Error al actualizar los movimientos.');
@@ -437,6 +445,14 @@ const BancosTab = () => {
                 <option key={c.id} value={c.id}>{c.name} ({c.tipo_movimiento})</option>
               ))}
             </select>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={bulkGuardarRelacion}
+                onChange={(e) => setBulkGuardarRelacion(e.target.checked)}
+              />
+              Guardar relación para futuras importaciones
+            </label>
             <button 
               className="btn btn-primary" 
               style={{ padding: '6px 12px', fontSize: '13px', width: 'auto' }}
@@ -502,6 +518,10 @@ const BancosTab = () => {
                   <div>Descripción</div>
                   <FilterInput col="descripcion" columnFilters={columnFilters} setColumnFilters={setColumnFilters} />
                 </th>
+                <th style={{ verticalAlign: 'top' }}>
+                  <div>Info Adicional</div>
+                  <FilterInput col="info_adicional" columnFilters={columnFilters} setColumnFilters={setColumnFilters} />
+                </th>
                 <th style={{ textAlign: 'right', verticalAlign: 'top' }}>
                   <div>Ingreso</div>
                   <FilterInput col="ingreso" columnFilters={columnFilters} setColumnFilters={setColumnFilters} />
@@ -516,17 +536,17 @@ const BancosTab = () => {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan="9" style={{ textAlign: 'center', padding: '30px' }}><span className="spinner"></span></td>
+                  <td colSpan="10" style={{ textAlign: 'center', padding: '30px' }}><span className="spinner"></span></td>
                 </tr>
               ) : filteredMovimientos.length === 0 ? (
                 <tr>
-                  <td colSpan="9" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>No hay movimientos en esta cuenta para los filtros seleccionados.</td>
+                  <td colSpan="10" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>No hay movimientos en esta cuenta para los filtros seleccionados.</td>
                 </tr>
               ) : (
                 filteredMovimientos.map((mov) => {
                   const cat = mov.concepto?.tipo_movimiento;
                   const isIngreso = cat === 'Ingreso' || cat === 'Rescate FCI' || cat === 'Egresos de plazo fijo';
-                  const isUnclassified = !mov.concepto || mov.concepto.name.includes('NO CLASIFICADO');
+                  const isUnclassified = !mov.concepto || (mov.concepto.name || '').toUpperCase().includes('NO CLASIFICADO');
                   
                   let rowStyle = {};
                   if (selectedMovimientoIds.includes(mov.id)) {
@@ -554,6 +574,7 @@ const BancosTab = () => {
                       <td>{mov.concepto?.clasificacion?.name || '-'}</td>
                       <td>{mov.nro_comprobante || '-'}</td>
                       <td>{mov.descripcion || '-'}</td>
+                      <td>{mov.info_adicional || '-'}</td>
                       <td style={{ textAlign: 'right', color: isIngreso ? 'var(--success-color)' : 'inherit', fontWeight: isIngreso ? 'bold' : 'normal' }}>
                         {isIngreso ? formatCurrency(mov.monto) : '-'}
                       </td>
@@ -590,7 +611,7 @@ const BancosTab = () => {
               )}
               {hasNextPage && (
                 <tr>
-                  <td colSpan="9" style={{ textAlign: 'center', padding: '15px' }}>
+                  <td colSpan="10" style={{ textAlign: 'center', padding: '15px' }}>
                     <button 
                       className="btn-primary" 
                       onClick={() => fetchNextPage()}
@@ -606,7 +627,7 @@ const BancosTab = () => {
             {filteredMovimientos.length > 0 && (
               <tfoot>
                 <tr>
-                  <td colSpan="6" style={{ textAlign: 'right', padding: '16px', fontWeight: 'bold' }}>TOTALES (Mostrando {filteredMovimientos.length} de {totalItems}):</td>
+                  <td colSpan="7" style={{ textAlign: 'right', padding: '16px', fontWeight: 'bold' }}>TOTALES (Mostrando {filteredMovimientos.length} de {totalItems}):</td>
                   <td style={{ textAlign: 'right', color: 'var(--success-color)', padding: '16px', fontWeight: 'bold' }}>
                     {formatCurrency(subtotals.ingresos)}
                   </td>
@@ -634,6 +655,9 @@ const BancosTab = () => {
         onSaved={() => {
           fetchKpis();
           queryClient.invalidateQueries({ queryKey: ['movimientos'] });
+          if (useAppStore.getState().fetchAuxiliares) {
+            useAppStore.getState().fetchAuxiliares();
+          }
         }}
         movimiento={editingMovimiento}
         cuentaIdDefault={selectedCuentaId}

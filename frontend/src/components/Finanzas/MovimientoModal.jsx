@@ -21,10 +21,13 @@ const MovimientoModal = ({ isOpen, onClose, onSaved, movimiento = null, cuentaId
     fecha: getLocalDateISO(),
     nro_comprobante: '',
     concepto_id: '',
-    descripcion: ''
+    descripcion: '',
+    info_adicional: ''
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [guardarRelacion, setGuardarRelacion] = useState(false);
+  const [detalleForaneo, setDetalleForaneo] = useState('');
 
   // Nuevo Concepto State
   const [showNewConcepto, setShowNewConcepto] = useState(false);
@@ -47,8 +50,12 @@ const MovimientoModal = ({ isOpen, onClose, onSaved, movimiento = null, cuentaId
           monto: movimiento.monto,
           nro_comprobante: movimiento.nro_comprobante || '',
           concepto_id: movimiento.concepto_id || '',
-          descripcion: movimiento.descripcion || ''
+          descripcion: movimiento.descripcion || '',
+          info_adicional: movimiento.info_adicional || ''
         });
+        const isUnclassified = !movimiento.concepto || (movimiento.concepto.name || '').toUpperCase().includes('NO CLASIFICADO');
+        setGuardarRelacion(isUnclassified);
+        setDetalleForaneo((movimiento.descripcion || '').split(' - Ref: ')[0].trim());
       } else {
         setFormData({
           cuenta_id: cuentaIdDefault,
@@ -56,8 +63,11 @@ const MovimientoModal = ({ isOpen, onClose, onSaved, movimiento = null, cuentaId
           monto: '',
           nro_comprobante: '',
           concepto_id: '',
-          descripcion: ''
+          descripcion: '',
+          info_adicional: ''
         });
+        setGuardarRelacion(false);
+        setDetalleForaneo('');
       }
       setShowNewConcepto(false);
       setNuevoConcepto({ name: '', tipo_movimiento: 'Ingreso', descripcion: '', clasificacion_id: '' });
@@ -132,6 +142,8 @@ const MovimientoModal = ({ isOpen, onClose, onSaved, movimiento = null, cuentaId
         concepto_id: parseInt(formData.concepto_id, 10),
       };
       if (movimiento) {
+        payload.guardar_relacion = guardarRelacion;
+        payload.detalle_foraneo = detalleForaneo;
         await axiosClient.put(`/api/finanzas/movimientos/${movimiento.id}`, payload);
       } else {
         await axiosClient.post('/api/finanzas/movimientos', payload);
@@ -235,6 +247,36 @@ const MovimientoModal = ({ isOpen, onClose, onSaved, movimiento = null, cuentaId
             <label className="form-label">Descripción / Referencia</label>
             <input type="text" name="descripcion" value={formData.descripcion} onChange={handleChange} className="form-control" placeholder="Detalles adicionales..." />
           </div>
+
+          <div>
+            <label className="form-label">Información Adicional</label>
+            <input type="text" name="info_adicional" value={formData.info_adicional} onChange={handleChange} className="form-control" placeholder="Info adicional del extracto (opcional)..." />
+          </div>
+
+          {movimiento && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px', borderRadius: '8px', background: 'var(--background-color)', border: '1px solid var(--border-color)' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '500' }}>
+                <input
+                  type="checkbox"
+                  checked={guardarRelacion}
+                  onChange={(e) => setGuardarRelacion(e.target.checked)}
+                />
+                Guardar relación en tabla de Relaciones para futuras importaciones
+              </label>
+              {guardarRelacion && (
+                <div>
+                  <label className="form-label" style={{ fontSize: '12px' }}>Detalle del extracto a vincular (ID Foráneo)</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={detalleForaneo}
+                    onChange={(e) => setDetalleForaneo(e.target.value)}
+                    placeholder="Ej: Impuesto al Débito Ley 25.413"
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '16px' }}>
             <button type="button" className="btn btn-outline" onClick={onClose} disabled={loading}>

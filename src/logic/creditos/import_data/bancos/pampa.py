@@ -1,7 +1,8 @@
 import pandas as pd
 from typing import List
 from src.database import SessionLocal
-from src.database.models.finance.bancos import Movimiento, Concepto
+from src.database.models.finance.bancos import Movimiento
+from src.logic.creditos.import_data.bancos import load_bank_concepto_resolver
 from sqlalchemy import func
 import typing
 
@@ -69,15 +70,8 @@ def import_extract(
         # Ordenar cronológicamente
         df = df.sort_values(by=["Fecha"])
 
-        # Cargamos el mapa de conceptos desde la base de datos
-        conceptos_db = session.query(Concepto).all()
-        mapa_conceptos = {c.name: c.id for c in conceptos_db}
-        
-        id_ingreso_nc = mapa_conceptos.get("Ingreso NO CLASIFICADO")
-        id_egreso_nc = mapa_conceptos.get("EGRESO NO CLASIFICADO")
-        
-        if not id_ingreso_nc or not id_egreso_nc:
-            raise ValueError("Faltan los conceptos de 'NO CLASIFICADO' en la base de datos.")
+        # Cargamos el resolver de conceptos basado en la tabla de relaciones del banco
+        resolve_concepto_id = load_bank_concepto_resolver(session, cuenta_id)
 
         movimientos = []
         
@@ -90,25 +84,15 @@ def import_extract(
                 continue
                 
             transaccion = str(row["Concepto"]).strip()
-            
-            # Intentamos matchear la transacción con un nombre de concepto exacto
-            concepto_id = mapa_conceptos.get(transaccion)
-            
-            # Si no existe, usamos reglas para Pampa o lo mandamos a los no clasificados
-            if not concepto_id:
-                if "MANTENIMIENTO DE CUENTA" in transaccion.upper() or "COM." in transaccion.upper():
-                    concepto_id = mapa_conceptos.get("Servicio de Cuenta")
-                elif "IVA" in transaccion.upper() or "IMP. DEBITOS Y CRED" in transaccion.upper():
-                    concepto_id = mapa_conceptos.get("ARCA - IVA")
-                    
-                if not concepto_id:
-                    if row["Importe"] < 0:
-                        concepto_id = id_egreso_nc
-                    else:
-                        concepto_id = id_ingreso_nc
 
             # Armamos la descripción
             desc = transaccion
+
+            concepto_id = resolve_concepto_id(
+                transaccion=transaccion,
+                importe=row["Importe"],
+                desc=desc,
+            )
                 
             # Verificamos que no exista ya en la base de datos
             fecha_mov = row["Fecha"].date()

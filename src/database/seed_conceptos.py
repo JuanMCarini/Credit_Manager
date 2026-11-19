@@ -1,38 +1,10 @@
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from src.database.models.finance.bancos import Concepto, CategoriaMovimiento
 
 def seed_conceptos(db: Session) -> None:
     print("Iniciando seeder de conceptos...")
     conceptos_base = [
-        # --- Saldos Iniciales ---
-        {
-            "name": "Saldo Inicial",
-            "tipo_movimiento": CategoriaMovimiento.INGRESO,
-            "descripcion": "Saldo Inicial de Cuenta"
-        },
-        {
-            "name": "Saldo Inicial FCI",
-            "tipo_movimiento": CategoriaMovimiento.INGRESO,
-            "descripcion": "Saldo Inicial FCI"
-        },
-        {
-            "name": "Saldo Inicial Plazo Fijo",
-            "tipo_movimiento": CategoriaMovimiento.INGRESO,
-            "descripcion": "Saldo Inicial Plazo Fijo"
-        },
-
-        # --- Cobranzas y Operaciones ---
-        {
-            "name": "Cobranza de Cuotas",
-            "tipo_movimiento": CategoriaMovimiento.INGRESO,
-            "descripcion": "Cobranza de cuotas de créditos"
-        },
-        {
-            "name": "Venta Cartera",
-            "tipo_movimiento": CategoriaMovimiento.INGRESO,
-            "descripcion": "Venta de Cartera"
-        },
-       
         # --- Inversiones ---
         {
             "name": "Suscripción FCI",
@@ -54,62 +26,10 @@ def seed_conceptos(db: Session) -> None:
             "tipo_movimiento": CategoriaMovimiento.PLAZO_FIJO_EGRESOS,
             "descripcion": "Vencimiento de Plazo Fijo"
         },
-        {
-            "name": "Intereses Ganados",
-            "tipo_movimiento": CategoriaMovimiento.INGRESO,
-            "descripcion": "Intereses ganados por inversiones"
-        },
-
-        # --- Impuestos, Comisiones y Gastos ---
-        {
-            "name": "Comisión Colocación",
-            "tipo_movimiento": CategoriaMovimiento.EGRESO,
-            "descripcion": "Comisiones por colocación"
-        },
-        {
-            "name": "Comisión transferencia HB",
-            "tipo_movimiento": CategoriaMovimiento.EGRESO,
-            "descripcion": "Comisión transferencia HB"
-        },
-        {
-            "name": "Comisión por Pago a Prov Ctas Otros Bcos",
-            "tipo_movimiento": CategoriaMovimiento.EGRESO,
-            "descripcion": "Comisión por Pago a Prov Ctas Otros Bcos"
-        },
-        {
-            "name": "Mantenimiento de Cuenta",
-            "tipo_movimiento": CategoriaMovimiento.EGRESO,
-            "descripcion": "Mantenimiento de Cuenta"
-        },
-        {
-            "name": "Impuesto Crédito",
-            "tipo_movimiento": CategoriaMovimiento.EGRESO,
-            "descripcion": "Impuesto Crédito"
-        },
-        {
-            "name": "Impuesto Débito",
-            "tipo_movimiento": CategoriaMovimiento.EGRESO,
-            "descripcion": "Impuesto Débito"
-        },
-        {
-            "name": "IVA Resp. Inscripto",
-            "tipo_movimiento": CategoriaMovimiento.EGRESO,
-            "descripcion": "IVA Resp. Inscripto"
-        },
-        {
-            "name": "VEP ARCA",
-            "tipo_movimiento": CategoriaMovimiento.EGRESO,
-            "descripcion": "VEP de ARCA"
-        },
-        {
-            "name": "Servicio de Cuenta",
-            "tipo_movimiento": CategoriaMovimiento.EGRESO,
-            "descripcion": "Comisión por Servicio de Cuenta"
-        },
 
         # --- No Clasificados ---
         {
-            "name": "Ingreso NO CLASIFICADO",
+            "name": "INGRESO NO CLASIFICADO",
             "tipo_movimiento": CategoriaMovimiento.INGRESO,
             "descripcion": "Ingreso no clasificado"
         },
@@ -118,18 +38,15 @@ def seed_conceptos(db: Session) -> None:
             "tipo_movimiento": CategoriaMovimiento.EGRESO,
             "descripcion": "Egreso no clasificado"
         },
-
-        # --- Colocación de Créditos
-        {
-            "name": "Colocación de Créditos",
-            "tipo_movimiento": CategoriaMovimiento.EGRESO,
-            "descripcion": "Pago capital por crédito vendido"
-        }
     ]
 
     try:
         for c_data in conceptos_base:
-            existing = db.query(Concepto).filter_by(name=c_data["name"]).first()
+            existing = (
+                db.query(Concepto)
+                .filter(func.lower(Concepto.name) == c_data["name"].lower())
+                .first()
+            )
             if not existing:
                 nuevo = Concepto(
                     name=c_data["name"],
@@ -139,6 +56,7 @@ def seed_conceptos(db: Session) -> None:
                 )
                 db.add(nuevo)
             else:
+                existing.name = c_data["name"]
                 existing.tipo_movimiento = c_data["tipo_movimiento"]
                 existing.descripcion = c_data["descripcion"]
                 existing.is_system = True

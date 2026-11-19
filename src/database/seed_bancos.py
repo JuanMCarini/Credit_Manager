@@ -1,9 +1,15 @@
 from src.database.connection import SessionLocal
-from src.database.models.finance.bancos import Banco
+from src.database.models.finance.bancos import Banco, find_socio_for_banco
 import logging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+DEFAULT_PARSERS = {
+    "Banco Santander": "santander",
+    "Banco de La Pampa": "pampa",
+    "Banco Bica": "bica",
+}
 
 BANCOS_ARGENTINA = [
     "Banco de la Nación Argentina",
@@ -54,10 +60,22 @@ def seed_bancos(db=None):
         nuevos = 0
         for nombre in BANCOS_ARGENTINA:
             if nombre not in bancos_existentes:
-                nuevo_banco = Banco(nombre_banco=nombre)
+                nuevo_banco = Banco(
+                    nombre_banco=nombre,
+                    parser_type=DEFAULT_PARSERS.get(nombre),
+                )
                 session.add(nuevo_banco)
                 nuevos += 1
-        
+
+        session.flush()
+
+        for banco in session.query(Banco).all():
+            if banco.nombre_banco in DEFAULT_PARSERS and banco.parser_type is None:
+                banco.parser_type = DEFAULT_PARSERS[banco.nombre_banco]
+
+            if not banco.socio_id:
+                find_socio_for_banco(session, banco)
+
         session.commit()
         logger.info(f"Se insertaron {nuevos} bancos nuevos.")
     except Exception as e:

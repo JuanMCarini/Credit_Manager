@@ -1,7 +1,8 @@
 import pandas as pd
 from typing import List
 from src.database import SessionLocal
-from src.database.models.finance.bancos import Movimiento, Concepto
+from src.database.models.finance.bancos import Movimiento
+from src.logic.creditos.import_data.bancos import load_bank_concepto_resolver
 from sqlalchemy import func
 import typing
 
@@ -78,15 +79,8 @@ def import_extract(
         # Ordenar cronológicamente
         df = df.sort_values(by=["Fecha"])
 
-        # Cargamos el mapa de conceptos desde la base de datos
-        conceptos_db = session.query(Concepto).all()
-        mapa_conceptos = {c.name: c.id for c in conceptos_db}
-        
-        id_ingreso_nc = mapa_conceptos.get("Ingreso NO CLASIFICADO")
-        id_egreso_nc = mapa_conceptos.get("EGRESO NO CLASIFICADO")
-        
-        if not id_ingreso_nc or not id_egreso_nc:
-            raise ValueError("Faltan los conceptos de 'NO CLASIFICADO' en la base de datos.")
+        # Cargamos el resolver de conceptos basado en la tabla de relaciones del banco
+        resolve_concepto_id = load_bank_concepto_resolver(session, cuenta_id)
 
         movimientos = []
         
@@ -99,39 +93,18 @@ def import_extract(
                 continue
                 
             transaccion = str(row["Concepto"]).strip()
-            
-            # Intentamos matchear la transacción con un nombre de concepto exacto
-            concepto_id = mapa_conceptos.get(transaccion)
-            
-            # Si no existe, usamos reglas para Santander o lo mandamos a los no clasificados
-            if not concepto_id:
-                trans_lower = transaccion.lower()
-                if "rescate" in trans_lower and "fci" in trans_lower:
-                    concepto_id = mapa_conceptos.get("Rescate FCI")
-                elif "suscrip" in trans_lower and "fci" in trans_lower:
-                    concepto_id = mapa_conceptos.get("Suscripción FCI")
-                elif "mantenimiento" in trans_lower or "comision" in trans_lower:
-                    concepto_id = mapa_conceptos.get("Servicio de Cuenta")
-                elif "iva " in trans_lower:
-                    concepto_id = mapa_conceptos.get("ARCA - IVA")
-                elif "ley 25.413" in trans_lower:
-                    concepto_id = mapa_conceptos.get("Impuesto Débito") or mapa_conceptos.get("ARCA - IVA")
-                elif "iibb" in trans_lower:
-                    concepto_id = mapa_conceptos.get("ARBA - IIBB")
-                
-                if not concepto_id:
-                    if row["Importe"] < 0:
-                        concepto_id = id_egreso_nc
-                    else:
-                        concepto_id = id_ingreso_nc
 
-            # Armamos la descripción
-            desc = transaccion
-            
+            info_adicional = None
             if "Referencia" in row and pd.notna(row["Referencia"]):
                 ref = str(row["Referencia"]).strip()
                 if ref and ref != "0":
-                    desc += f" - Ref: {ref}"
+                    info_adicional = f"Ref: {ref}"[:255]
+
+            concepto_id = resolve_concepto_id(
+                transaccion=transaccion,
+                importe=row["Importe"],
+                desc=transaccion,
+            )
 
             # Verificamos que no exista ya en la base de datos
             fecha_mov = row["Fecha"].date()
@@ -154,7 +127,8 @@ def import_extract(
                 nro_comprobante=nro_comprobante,
                 monto=monto,
                 concepto_id=concepto_id,
-                descripcion=desc[:255]
+                descripcion=transaccion[:255],
+                info_adicional=info_adicional,
             )
             movimientos.append(nuevo_movimiento)
         

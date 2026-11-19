@@ -9,6 +9,7 @@ from src.database.models.finance.bancos import CategoriaMovimiento, TipoMoneda
 class BancoBase(BaseModel):
     nombre_banco: str
     parser_type: Optional[str] = None
+    socio_id: Optional[int] = None
 
 class BancoCreate(BancoBase):
     pass
@@ -115,6 +116,7 @@ class MovimientoBase(BaseModel):
     monto: float
     concepto_id: Optional[int] = None
     descripcion: Optional[str] = None
+    info_adicional: Optional[str] = None
 
 class MovimientoCreate(MovimientoBase):
     pass
@@ -126,10 +128,14 @@ class MovimientoUpdate(BaseModel):
     monto: Optional[float] = None
     concepto_id: Optional[int] = None
     descripcion: Optional[str] = None
+    info_adicional: Optional[str] = None
+    guardar_relacion: Optional[bool] = False
+    detalle_foraneo: Optional[str] = None
 
 class MovimientoBulkConceptoUpdate(BaseModel):
     movimiento_ids: List[int]
     concepto_id: int
+    guardar_relacion: bool = True
 
 class MovimientoResponse(MovimientoBase):
     id: int

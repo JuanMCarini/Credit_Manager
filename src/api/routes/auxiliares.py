@@ -277,6 +277,12 @@ def delete_aux_record(tabla: str, record_id: int, db: Session = Depends(get_db))
             )
 
     try:
+        if tabla == "socios":
+            from src.database.models.finance.bancos import Banco
+            db.query(Banco).filter(Banco.socio_id == record_id).update(
+                {"socio_id": None}, synchronize_session=False
+            )
+            db.flush()
         db.delete(record)
         db.commit()
         return {"status": "success", "message": "Registro eliminado exitosamente."}
