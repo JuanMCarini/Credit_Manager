@@ -12,6 +12,19 @@ class CategoriaMovimiento(enum.Enum):
     PLAZO_FIJO_INGRESOS = "Ingresos a plazo fijo"
     PLAZO_FIJO_EGRESOS = "Egresos de plazo fijo"
 
+
+class RolSistemaConcepto(enum.Enum):
+    INGRESO_NO_CLASIFICADO = "INGRESO_NO_CLASIFICADO"
+    EGRESO_NO_CLASIFICADO = "EGRESO_NO_CLASIFICADO"
+    VENTA_CARTERA = "VENTA_CARTERA"
+    PLAN_PAGO_GANANCIAS = "PLAN_PAGO_GANANCIAS"
+    PLAN_PAGO_IIBB = "PLAN_PAGO_IIBB"
+    PLAN_PAGO_IVA = "PLAN_PAGO_IVA"
+    RETENCION_IVA = "RETENCION_IVA"
+    VEP_IVA = "VEP_IVA"
+    RETENCION_IIBB = "RETENCION_IIBB"
+    VEP_IIBB = "VEP_IIBB"
+
 class Banco(Base):
     __tablename__ = "bancos"
 
@@ -105,6 +118,7 @@ class Concepto(Base):
     tipo_movimiento = Column(SQLEnum(CategoriaMovimiento), nullable=False)
     descripcion = Column(String(255), nullable=True)
     is_system = Column(Boolean, default=False, nullable=False)
+    rol_sistema = Column(String(50), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
@@ -220,6 +234,25 @@ def ensure_bancos_schema(engine) -> None:
                     conn.execute(
                         text("ALTER TABLE movimientos ADD COLUMN info_adicional VARCHAR(255)")
                     )
+        if inspector.has_table("conceptos"):
+            conc_cols = {col["name"] for col in inspector.get_columns("conceptos")}
+            if "rol_sistema" not in conc_cols:
+                with engine.begin() as conn:
+                    conn.execute(
+                        text("ALTER TABLE conceptos ADD COLUMN rol_sistema VARCHAR(50)")
+                    )
+            with engine.begin() as conn:
+                backfill_statements = [
+                    "UPDATE conceptos SET rol_sistema = 'INGRESO_NO_CLASIFICADO' WHERE rol_sistema IS NULL AND LOWER(TRIM(name)) = 'ingreso no clasificado'",
+                    "UPDATE conceptos SET rol_sistema = 'EGRESO_NO_CLASIFICADO' WHERE rol_sistema IS NULL AND LOWER(TRIM(name)) = 'egreso no clasificado'",
+                    "UPDATE conceptos SET rol_sistema = 'VENTA_CARTERA' WHERE rol_sistema IS NULL AND LOWER(TRIM(name)) IN ('venta cartera', 'venta de cartera')",
+                    "UPDATE conceptos SET rol_sistema = 'PLAN_PAGO_GANANCIAS' WHERE rol_sistema IS NULL AND LOWER(TRIM(name)) = 'ganancias'",
+                    "UPDATE conceptos SET rol_sistema = 'PLAN_PAGO_IIBB' WHERE rol_sistema IS NULL AND LOWER(TRIM(name)) = 'iibb'",
+                    "UPDATE conceptos SET rol_sistema = 'PLAN_PAGO_IVA' WHERE rol_sistema IS NULL AND LOWER(TRIM(name)) = 'iva'",
+                    "UPDATE conceptos SET rol_sistema = 'RETENCION_IIBB' WHERE rol_sistema IS NULL AND LOWER(name) LIKE '%sircreb%'",
+                ]
+                for stmt in backfill_statements:
+                    conn.execute(text(stmt))
         if inspector.has_table("relaciones") and engine.dialect.name == "postgresql":
             with engine.begin() as conn:
                 conn.execute(

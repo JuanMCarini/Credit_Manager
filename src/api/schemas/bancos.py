@@ -89,6 +89,7 @@ class ConceptoBase(BaseModel):
     descripcion: Optional[str] = None
     clasificacion_id: Optional[int] = None
     is_system: bool = False
+    rol_sistema: Optional[str] = None
 
 class ConceptoCreate(ConceptoBase):
     pass
@@ -98,6 +99,7 @@ class ConceptoUpdate(BaseModel):
     tipo_movimiento: Optional[CategoriaMovimiento] = None
     descripcion: Optional[str] = None
     clasificacion_id: Optional[int] = None
+    rol_sistema: Optional[str] = None
 
 class ConceptoResponse(ConceptoBase):
     id: int

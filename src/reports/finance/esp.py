@@ -13,6 +13,7 @@ from src.logic.deuda.reportes import estado as deuda_estado
 
 from src.database import SessionLocal
 from src.database.models import LiquidacionCuotaCedida, Cobranza, TipoLiquidacionEnum, TipoCobranzaEnum, EstadoCuotaCedida, Cuota
+from src.database.models.finance.bancos import RolSistemaConcepto
 from src.database.models.finance.posicion_iva import PosicionIva
 from src.database.models.finance.posicion_iibb import PosicionIibb
 from src.database.models.cheques.main import Cheque, OperacionCheque, TipoOperacionCheque
@@ -52,17 +53,27 @@ def reporte(fecha_corte: str | date, n_periodos: int = 2, salto_meses: int = 1, 
         fci_saldo = max(0.0, bancos.fci(fecha))
         datos.append(
             {"Categoria": "Activos", "Detalle": "Inversiones (FCI)", periodo: fci_saldo})
+
+        pf_saldo = max(0.0, bancos.plazo_fijo(fecha))
+        datos.append(
+            {"Categoria": "Activos", "Detalle": "Inversiones (Plazo Fijo)", periodo: pf_saldo})
     
         df_comp_pend = comprobantes.pendientes(fecha)
-        pendientes = df_comp_pend.groupby("concepto")["saldo"].sum() if not df_comp_pend.empty else pd.Series(dtype=float)
+        plan_role_labels = {
+            RolSistemaConcepto.PLAN_PAGO_GANANCIAS.value: "Planes de Pago Ganancias",
+            RolSistemaConcepto.PLAN_PAGO_IIBB.value: "Planes de Pago IIBB",
+            RolSistemaConcepto.PLAN_PAGO_IVA.value: "Planes de Pago IVA",
+        }
         facturas_adeudadas = 0.0
-        for concepto, saldo in pendientes.items():
-            saldo_val = float(saldo)
-            if concepto in ["Ganancias", "IIBB", "IVA"]:
-                datos.append(
-                    {"Categoria": "Pasivos", "Detalle": f"Planes de Pago {concepto}", periodo: saldo_val})
-            else:
-                facturas_adeudadas += saldo_val
+        if not df_comp_pend.empty:
+            pendientes = df_comp_pend.groupby("concepto_rol_sistema", dropna=False)["saldo"].sum()
+            for rol, saldo in pendientes.items():
+                saldo_val = float(saldo)
+                if rol in plan_role_labels:
+                    datos.append(
+                        {"Categoria": "Pasivos", "Detalle": plan_role_labels[rol], periodo: saldo_val})
+                else:
+                    facturas_adeudadas += saldo_val
         
         if facturas_adeudadas > 0:
             datos.append(
@@ -83,10 +94,10 @@ def reporte(fecha_corte: str | date, n_periodos: int = 2, salto_meses: int = 1, 
     
     
         carteras_vendidas_a_cobrar = float(df_carteras.loc[filtro_cartera, 'valor_actual_total'].sum())
-        filtro_bcos_cartera = (df_bcos["fecha"] <= fecha) & (df_bcos["concepto_nombre"] == "Venta Cartera") if not df_bcos.empty else pd.Series(dtype=bool)
+        filtro_bcos_cartera = (df_bcos["fecha"] <= fecha) & (df_bcos["concepto_rol_sistema"] == RolSistemaConcepto.VENTA_CARTERA.value) if not df_bcos.empty else pd.Series(dtype=bool)
         monto_bcos_cartera = float(df_bcos.loc[filtro_bcos_cartera, "monto"].sum()) if not df_bcos.empty else 0.0
         carteras_vendidas_a_cobrar -= monto_bcos_cartera
-        filtro_comp_venta = (pd.to_datetime(df_comp["fecha_emision"]).dt.date <= fecha) & (df_comp["concepto"] == "Venta Cartera") if not df_comp.empty else pd.Series(dtype=bool)
+        filtro_comp_venta = (pd.to_datetime(df_comp["fecha_emision"]).dt.date <= fecha) & (df_comp["concepto_rol_sistema"] == RolSistemaConcepto.VENTA_CARTERA.value) if not df_comp.empty else pd.Series(dtype=bool)
         iva_comp_venta = float(df_comp.loc[filtro_comp_venta, "iva_21"].sum()) if not df_comp.empty else 0.0
         carteras_vendidas_a_cobrar -= iva_comp_venta
         if round(carteras_vendidas_a_cobrar, 0) != 0.0:
@@ -234,10 +245,11 @@ def reporte(fecha_corte: str | date, n_periodos: int = 2, salto_meses: int = 1, 
     detalle_order_map = {
         'Bancos/Caja': 1,
         'Inversiones (FCI)': 2,
-        'Cheques a Cobrar': 3,
-        'Capital (Cartera Activa)': 4,
-        'Interés (Cartera Activa)': 5,
-        'Ventas de Cartera a Cobrar': 6,
+        'Inversiones (Plazo Fijo)': 3,
+        'Cheques a Cobrar': 4,
+        'Capital (Cartera Activa)': 5,
+        'Interés (Cartera Activa)': 6,
+        'Ventas de Cartera a Cobrar': 7,
         'Cheques a Pagar': 1,
         'Valor Actual de Cartera a Ceder': 2,
         'Caída de Cuotas Adeudadas': 3,
@@ -245,7 +257,9 @@ def reporte(fecha_corte: str | date, n_periodos: int = 2, salto_meses: int = 1, 
         "Interés Inversores": 5,
         'IVA Adeudado': 6,
         'IIBB Adeudado': 7,
-        'Planes de Ganancias': 8,
+        'Planes de Pago Ganancias': 8,
+        'Planes de Pago IIBB': 9,
+        'Planes de Pago IVA': 10,
     }
 
     # Asignar orden por detalle, o 99 si no está mapeado. 'Total' va siempre al final (100)

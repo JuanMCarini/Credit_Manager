@@ -546,7 +546,9 @@ const BancosTab = () => {
                 filteredMovimientos.map((mov) => {
                   const cat = mov.concepto?.tipo_movimiento;
                   const isIngreso = cat === 'Ingreso' || cat === 'Rescate FCI' || cat === 'Egresos de plazo fijo';
-                  const isUnclassified = !mov.concepto || (mov.concepto.name || '').toUpperCase().includes('NO CLASIFICADO');
+                  const isUnclassified = !mov.concepto
+                    || ['INGRESO_NO_CLASIFICADO', 'EGRESO_NO_CLASIFICADO'].includes(mov.concepto.rol_sistema)
+                    || (mov.concepto.name || '').toUpperCase().includes('NO CLASIFICADO');
                   
                   let rowStyle = {};
                   if (selectedMovimientoIds.includes(mov.id)) {

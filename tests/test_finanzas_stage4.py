@@ -10,6 +10,7 @@ from src.database.models.finance.bancos import (
     Clasificacion,
     Movimiento,
     CategoriaMovimiento,
+    RolSistemaConcepto,
     TipoMoneda,
 )
 from src.database.models.finance.comprobantes import (
@@ -236,10 +237,27 @@ def test_posicion_iva_e_iibb_notas_credito_vep_y_retenciones(db_session):
     _, cuenta = _setup_banco_y_cuenta(db_session)
     proveedor = _setup_proveedor(db_session)
 
-    c_ret_iva = Concepto(name="ARCA - Retención IVA", tipo_movimiento=CategoriaMovimiento.EGRESO)
-    c_vep_iva = Concepto(name="Pago VEP IVA", tipo_movimiento=CategoriaMovimiento.EGRESO)
-    c_sircreb = Concepto(name="SIRCREB Bancario", tipo_movimiento=CategoriaMovimiento.EGRESO)
-    db_session.add_all([c_ret_iva, c_vep_iva, c_sircreb])
+    c_ret_iva = Concepto(
+        name="ARCA - Retención IVA",
+        tipo_movimiento=CategoriaMovimiento.EGRESO,
+        rol_sistema=RolSistemaConcepto.RETENCION_IVA.value,
+    )
+    c_iva_gasto = Concepto(
+        name="IVA Resp. Inscripto",
+        tipo_movimiento=CategoriaMovimiento.EGRESO,
+        rol_sistema=None,
+    )
+    c_vep_iva = Concepto(
+        name="Pago VEP IVA",
+        tipo_movimiento=CategoriaMovimiento.EGRESO,
+        rol_sistema=RolSistemaConcepto.VEP_IVA.value,
+    )
+    c_sircreb = Concepto(
+        name="Débito Bancario Jurisdiccional",
+        tipo_movimiento=CategoriaMovimiento.EGRESO,
+        rol_sistema=RolSistemaConcepto.RETENCION_IIBB.value,
+    )
+    db_session.add_all([c_ret_iva, c_iva_gasto, c_vep_iva, c_sircreb])
     db_session.flush()
 
     # Factura A: IVA=210, Percepcion IIBB=30
@@ -281,9 +299,10 @@ def test_posicion_iva_e_iibb_notas_credito_vep_y_retenciones(db_session):
     )
     db_session.add_all([fac_a, nc_a, vep_iva])
 
-    # Movimientos bancarios: la retención IVA suma 20, el pago VEP IVA (50) NO debe duplicarse como retención
+    # Movimientos bancarios: la retención IVA suma 20; ni VEP IVA (50) ni "IVA Resp. Inscripto" (100 sin rol) deben contarse como retención
     db_session.add_all([
         Movimiento(cuenta_id=cuenta.id, fecha=date(2026, 8, 10), monto=Decimal("20.00"), concepto_id=c_ret_iva.id),
+        Movimiento(cuenta_id=cuenta.id, fecha=date(2026, 8, 11), monto=Decimal("100.00"), concepto_id=c_iva_gasto.id),
         Movimiento(cuenta_id=cuenta.id, fecha=date(2026, 8, 12), monto=Decimal("50.00"), concepto_id=c_vep_iva.id),
         Movimiento(cuenta_id=cuenta.id, fecha=date(2026, 8, 12), monto=Decimal("15.00"), concepto_id=c_sircreb.id),
     ])
@@ -349,15 +368,30 @@ def test_reportes_finance_comprobantes_cartera_y_esp(db_session, dummy_cliente, 
         OperacionCartera(cuota_id=q2.id, cartera_id=cartera_v.id, cuota_comercializada=False, fecha_registro=date(2026, 8, 1)),
     ])
 
+    _, cuenta = _setup_banco_y_cuenta(db_session)
     proveedor = _setup_proveedor(db_session)
     clasif_gastos = Clasificacion(name="Gastos Generales")
     db_session.add(clasif_gastos)
     db_session.flush()
     conc_gastos = Concepto(name="Factura Proveedor", tipo_movimiento=CategoriaMovimiento.EGRESO, clasificacion_id=clasif_gastos.id)
-    db_session.add(conc_gastos)
+    conc_plan_gan = Concepto(
+        name="Plan Mis Facilidades Ganancias",
+        tipo_movimiento=CategoriaMovimiento.EGRESO,
+        rol_sistema=RolSistemaConcepto.PLAN_PAGO_GANANCIAS.value,
+    )
+    conc_venta = Concepto(
+        name="Cobro Cesión de Cartera",
+        tipo_movimiento=CategoriaMovimiento.INGRESO,
+        rol_sistema=RolSistemaConcepto.VENTA_CARTERA.value,
+    )
+    conc_pf_in = Concepto(
+        name="Constitución Plazo Fijo Test",
+        tipo_movimiento=CategoriaMovimiento.PLAZO_FIJO_INGRESOS,
+    )
+    db_session.add_all([conc_gastos, conc_plan_gan, conc_venta, conc_pf_in])
     db_session.flush()
 
-    db_session.add(
+    db_session.add_all([
         Comprobante(
             proveedor_id=proveedor.id,
             concepto_id=conc_gastos.id,
@@ -369,8 +403,30 @@ def test_reportes_finance_comprobantes_cartera_y_esp(db_session, dummy_cliente, 
             neto_gravado_21=Decimal("1000.00"),
             iva_21=Decimal("210.00"),
             importe_total=Decimal("1210.00"),
-        )
-    )
+        ),
+        Comprobante(
+            proveedor_id=proveedor.id,
+            concepto_id=conc_plan_gan.id,
+            tipo_comprobante=TipoComprobante.CUOTA,
+            punto_venta=1,
+            numero_comprobante=302,
+            fecha_contable=date(2026, 8, 5),
+            fecha_emision=date(2026, 8, 5),
+            importe_total=Decimal("400.00"),
+        ),
+        Movimiento(
+            cuenta_id=cuenta.id,
+            fecha=date(2026, 8, 10),
+            monto=Decimal("500.00"),
+            concepto_id=conc_pf_in.id,
+        ),
+        Movimiento(
+            cuenta_id=cuenta.id,
+            fecha=date(2026, 8, 12),
+            monto=Decimal("50.00"),
+            concepto_id=conc_venta.id,
+        ),
+    ])
     db_session.commit()
 
     df_cart = rep_cart.get_df()
@@ -378,12 +434,17 @@ def test_reportes_finance_comprobantes_cartera_y_esp(db_session, dummy_cliente, 
     assert float(df_cart.iloc[0]["importe_nominal"]) == 110.0
 
     df_pend = rep_comp.pendientes(date(2026, 8, 31))
-    assert len(df_pend) == 1
-    assert float(df_pend.iloc[0]["saldo"]) == 1210.0
+    assert len(df_pend) == 2
 
     df_esp = rep_esp.reporte(date(2026, 8, 31), n_periodos=1)
     assert not df_esp.empty
+    col = df_esp.columns[0]
     assert ("Pasivos", "Facturas adeudadas") in df_esp.index
+    assert float(df_esp.loc[("Pasivos", "Facturas adeudadas"), col]) == -1210.0
+    assert ("Pasivos", "Planes de Pago Ganancias") in df_esp.index
+    assert float(df_esp.loc[("Pasivos", "Planes de Pago Ganancias"), col]) == -400.0
+    assert ("Activos", "Inversiones (Plazo Fijo)") in df_esp.index
+    assert float(df_esp.loc[("Activos", "Inversiones (Plazo Fijo)"), col]) == 500.0
 
 
 def test_import_extract_via_tabla_relaciones_y_clasificacion(db_session, monkeypatch):

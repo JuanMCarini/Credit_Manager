@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session, joinedload
 from src.database.models.finance.bancos import (
     Concepto,
     Cuenta,
+    RolSistemaConcepto,
     find_socio_for_banco,
 )
 from src.database.models.socios import Relacion
@@ -52,10 +53,19 @@ def load_bank_concepto_resolver(
     mapa_conceptos_lower = {
         (c.name or "").strip().lower(): c.id for c in conceptos_db
     }
+    mapa_conceptos_rol = {
+        c.rol_sistema: c.id for c in conceptos_db if c.rol_sistema
+    }
     valid_concepto_ids = {c.id for c in conceptos_db}
 
-    id_ingreso_nc = mapa_conceptos_lower.get("ingreso no clasificado")
-    id_egreso_nc = mapa_conceptos_lower.get("egreso no clasificado")
+    id_ingreso_nc = (
+        mapa_conceptos_rol.get(RolSistemaConcepto.INGRESO_NO_CLASIFICADO.value)
+        or mapa_conceptos_lower.get("ingreso no clasificado")
+    )
+    id_egreso_nc = (
+        mapa_conceptos_rol.get(RolSistemaConcepto.EGRESO_NO_CLASIFICADO.value)
+        or mapa_conceptos_lower.get("egreso no clasificado")
+    )
 
     if not id_ingreso_nc or not id_egreso_nc:
         raise ValueError("Faltan los conceptos de 'NO CLASIFICADO' en la base de datos.")

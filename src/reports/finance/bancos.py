@@ -14,6 +14,7 @@ def get_df() -> pd.DataFrame:
                 Movimiento.monto,
                 Concepto.name.label("concepto_nombre"),
                 Concepto.tipo_movimiento.label("tipo_movimiento"),
+                Concepto.rol_sistema.label("concepto_rol_sistema"),
                 Clasificacion.name.label("clasificacion_nombre"),
             )
             .select_from(Movimiento)
@@ -76,6 +77,35 @@ def fci(fecha: str | date | None = None):
 
     saldo = 0.0
     for monto in df_fci["monto"]:
+        saldo -= float(monto)
+        saldo = max(saldo, 0.0)
+
+    return saldo
+
+
+def plazo_fijo(fecha: str | date | None = None):
+    df = get_df()
+    if df.empty:
+        return 0.0
+    if isinstance(fecha, str):
+        fecha = pd.to_datetime(fecha).date()
+    if fecha is None:
+        fecha = df["fecha"].max()
+    filtro = (pd.to_datetime(df["fecha"]).dt.date <= pd.to_datetime(fecha).date()) & (
+        df["tipo_movimiento"].isin([
+            CategoriaMovimiento.PLAZO_FIJO_INGRESOS,
+            CategoriaMovimiento.PLAZO_FIJO_EGRESOS,
+            CategoriaMovimiento.PLAZO_FIJO_INGRESOS.name,
+            CategoriaMovimiento.PLAZO_FIJO_EGRESOS.name,
+            CategoriaMovimiento.PLAZO_FIJO_INGRESOS.value,
+            CategoriaMovimiento.PLAZO_FIJO_EGRESOS.value,
+        ])
+    )
+
+    df_pf = df[filtro].sort_values(by="fecha")
+
+    saldo = 0.0
+    for monto in df_pf["monto"]:
         saldo -= float(monto)
         saldo = max(saldo, 0.0)
 

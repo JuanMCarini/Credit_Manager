@@ -4,6 +4,19 @@ import axiosClient from '../api/axiosClient';
 import ExportExcelButton from '../components/ExportExcelButton';
 import { getLocalDateISO } from '../utils/dates';
 
+const ROL_SISTEMA_OPTIONS = [
+  { value: 'VENTA_CARTERA', label: 'Venta de Cartera (ESP)' },
+  { value: 'PLAN_PAGO_GANANCIAS', label: 'Plan de Pago Ganancias (ESP)' },
+  { value: 'PLAN_PAGO_IIBB', label: 'Plan de Pago IIBB (ESP)' },
+  { value: 'PLAN_PAGO_IVA', label: 'Plan de Pago IVA (ESP)' },
+  { value: 'RETENCION_IVA', label: 'Retención Bancaria IVA' },
+  { value: 'VEP_IVA', label: 'Pago VEP IVA' },
+  { value: 'RETENCION_IIBB', label: 'Retención Bancaria IIBB / SIRCREB' },
+  { value: 'VEP_IIBB', label: 'Pago VEP IIBB' },
+  { value: 'INGRESO_NO_CLASIFICADO', label: 'Ingreso No Clasificado' },
+  { value: 'EGRESO_NO_CLASIFICADO', label: 'Egreso No Clasificado' },
+];
+
 const AuxiliaryTablesPage = () => {
   const { nacionalidades, provincias, empleadores, socios, operadores, tasasYComisiones, relaciones, comercializadores, bancos, cuentas, conceptos, clasificaciones, comisionesDeuda, factoresRiesgo, multiplicadoresRiesgo, reglasPerfilesTransaccionales, penalties, politicasCrediticias, fetchAuxiliares } = useAppStore();
 
@@ -64,7 +77,7 @@ const AuxiliaryTablesPage = () => {
     comercializadores: { name: 'Comercializadores', data: comercializadores, endpoint: 'comercializadores', schema: ['id', 'nombre'] },
     bancos: { name: 'Bancos', data: bancos, endpoint: 'bancos', basePath: '/api/finanzas', schema: ['id', 'nombre_banco', 'parser_type', 'socio_id'] },
     cuentas: { name: 'Cuentas Bancarias', data: cuentas, endpoint: 'cuentas', basePath: '/api/finanzas', schema: ['id', 'nombre', 'banco_id', 'nro', 'cbu', 'alias', 'tipo_cuenta', 'moneda'] },
-    conceptos: { name: 'Conceptos', data: conceptos, endpoint: 'conceptos', basePath: '/api/finanzas', schema: ['id', 'name', 'clasificacion_id', 'tipo_movimiento', 'descripcion'] },
+    conceptos: { name: 'Conceptos', data: conceptos, endpoint: 'conceptos', basePath: '/api/finanzas', schema: ['id', 'name', 'clasificacion_id', 'tipo_movimiento', 'rol_sistema', 'descripcion'] },
     clasificaciones: { name: 'Clasificaciones de Conceptos', data: clasificaciones, endpoint: 'clasificaciones', basePath: '/api/finanzas', schema: ['id', 'name', 'descripcion'] },
     comisionesDeuda: { name: 'Comisiones Deuda', data: comisionesDeuda, endpoint: 'comisiones_deuda', schema: ['id', 'fecha', 'id_socio_comercial', 'porcentaje'] },
     factoresRiesgo: { name: 'Factores de Riesgo', data: factoresRiesgo, endpoint: 'factores_riesgo', schema: ['id', 'codigo', 'detalle', 'peso'] },
@@ -299,6 +312,10 @@ const AuxiliaryTablesPage = () => {
     if (col === 'clasificacion_id') {
       const clasificacion = clasificaciones.find(c => c.id === value);
       return clasificacion ? clasificacion.name : value;
+    }
+    if (col === 'rol_sistema') {
+      const opt = ROL_SISTEMA_OPTIONS.find(o => o.value === value);
+      return opt ? opt.label : value;
     }
     if (col === 'sueldo_tipo' && value) {
       return String(value).toUpperCase();
@@ -719,6 +736,19 @@ const AuxiliaryTablesPage = () => {
                       >
                         <option value="">Seleccione...</option>
                         {["Ingreso", "Egreso", "Suscripción FCI", "Rescate FCI", "Ingresos a plazo fijo", "Egresos de plazo fijo"].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                      </select>
+                    );
+                  } else if (col === 'rol_sistema') {
+                    inputElement = (
+                      <select
+                        value={editFormData[col] ?? ''}
+                        onChange={(e) => handleEditChange(col, e.target.value)}
+                        className="input-field"
+                      >
+                        <option value="">Ninguno (General)</option>
+                        {ROL_SISTEMA_OPTIONS.map(opt => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
                       </select>
                     );
                   } else if (col === 'lista_gafi') {

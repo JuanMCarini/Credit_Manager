@@ -20,6 +20,7 @@ def pendientes(fecha_corte: date | str | None = None):
                 Proveedor.razon_social,
                 Comprobante.fecha_emision,
                 Clasificacion.name.label("concepto"),
+                Concepto.rol_sistema.label("concepto_rol_sistema"),
                 Comprobante.importe_total,
             )
             .join(Proveedor, Comprobante.proveedor_id == Proveedor.id)
@@ -59,6 +60,7 @@ def get_comprobantes() -> pd.DataFrame:
                 Proveedor.razon_social,
                 Comprobante.fecha_emision,
                 Clasificacion.name.label("concepto"),
+                Concepto.rol_sistema.label("concepto_rol_sistema"),
                 Comprobante.importe_no_gravado,
                 Comprobante.neto_gravado_21,
                 Comprobante.iva_21,

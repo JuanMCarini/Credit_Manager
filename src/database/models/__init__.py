@@ -12,7 +12,7 @@ from .creditos.repet import RepetPerson, RepetEntity, RepetAuditLog
 from .creditos.facturacion import Factura
 from .creditos.perfil_trans import PerfilTransaccional, ReglasPerfilTransaccional
 from .creditos.penalty import Penalty, TipoInteres
-from .finance.bancos import Banco, Cuenta, Concepto, Clasificacion, Movimiento, CategoriaMovimiento
+from .finance.bancos import Banco, Cuenta, Concepto, Clasificacion, Movimiento, CategoriaMovimiento, RolSistemaConcepto
 from .finance.comprobantes import Proveedor, Comprobante, EstadoComprobante
 from .finance.planes import Plan, SistemaMatematico, Denominador
 from .finance.posicion_iva import PosicionIva, EstadoPosicionIva
@@ -31,7 +31,7 @@ __all__ = [
     "TipoProcesoEnum", "EstadoProcesoEnum", "Proceso", "TipoCobranzaEnum", "Cobranza", "TipoLiquidacionEnum", "LiquidacionCuotaCedida",
     "TipoRolEnum", "Rol", "Usuario", "RegistroAuditoria", "Transferencia", "DocumentoLegajo",
     "DocumentoPapeleria", "DocumentoVariable", "RepetPerson", "RepetEntity", "RepetAuditLog", "Factura",
-    "Banco", "Cuenta", "Concepto", "Clasificacion", "Movimiento", "CategoriaMovimiento", "EstadoComprobante",
+    "Banco", "Cuenta", "Concepto", "Clasificacion", "Movimiento", "CategoriaMovimiento", "RolSistemaConcepto", "EstadoComprobante",
     "Proveedor", "Comprobante", "Plan", "SistemaMatematico", "Denominador", "PosicionIva", "EstadoPosicionIva", "PosicionIibb", "EstadoPosicionIibb",
     "EstadoCheque", "CalificacionEmisor", "OperadorCheque", "Cheque", "TipoOperacionCheque", "OperacionCheque",
     "ModuloSistema", "Serie", "Comision", "ComisionesSerie",

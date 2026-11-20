@@ -9,7 +9,7 @@ from src.database import get_db
 from src.database.models.finance.posicion_iibb import PosicionIibb, EstadoPosicionIibb
 from src.database.models.finance.comprobantes import Comprobante, TipoComprobante
 from src.database.models.creditos.facturacion import Factura
-from src.database.models.finance.bancos import Movimiento, Concepto
+from src.database.models.finance.bancos import Movimiento, Concepto, RolSistemaConcepto
 from src.api.schemas.posicion_iibb import PosicionIibbCreate, PosicionIibbUpdate, PosicionIibbResponse
 
 router = APIRouter(
@@ -112,42 +112,35 @@ def calcular_posicion(
 
 
     # 3. Retenciones Bancarias
-    # Buscamos movimientos del mes donde el concepto contenga "iibb" o "sircreb"
+    # Buscamos movimientos del mes cuyo concepto tenga rol_sistema = RETENCION_IIBB
     retenciones_result = db.query(
         func.sum(Movimiento.monto).label("retenciones")
     ).join(Concepto).filter(
         extract('year', Movimiento.fecha) == anio,
         extract('month', Movimiento.fecha) == mes,
-        or_(
-            Concepto.name.ilike('%sircreb%'), 
-            and_(Concepto.name.ilike('%iibb%'), Concepto.name.ilike('%retencion%'))
-        )
+        Concepto.rol_sistema == RolSistemaConcepto.RETENCION_IIBB.value
     ).first()
 
     retenciones_bancarias = abs(retenciones_result.retenciones) if retenciones_result and retenciones_result.retenciones else 0
 
     # 4. Pagos VEP de IIBB
-    # Buscamos comprobantes tipo VEP asociados a conceptos de IIBB
+    # Buscamos comprobantes tipo VEP asociados a conceptos con rol_sistema = VEP_IIBB
     vep_comprobantes_result = db.query(
         func.sum(Comprobante.importe_total).label("total_vep")
     ).join(Concepto, Comprobante.concepto_id == Concepto.id).filter(
         extract('year', Comprobante.fecha_contable) == anio,
         extract('month', Comprobante.fecha_contable) == mes,
         Comprobante.tipo_comprobante == TipoComprobante.VEP,
-        Concepto.name.ilike('%iibb%')
+        Concepto.rol_sistema == RolSistemaConcepto.VEP_IIBB.value
     ).first()
 
-    # Y buscamos movimientos bancarios que correspondan a pagos de IIBB (VEP o Pago de Servicio)
+    # Y buscamos movimientos bancarios cuyo concepto tenga rol_sistema = VEP_IIBB
     vep_movs_result = db.query(
         func.sum(Movimiento.monto).label("total_vep_mov")
     ).join(Concepto, Movimiento.concepto_id == Concepto.id).filter(
         extract('year', Movimiento.fecha) == anio,
         extract('month', Movimiento.fecha) == mes,
-        or_(
-            and_(Concepto.name.ilike('%vep%'), Concepto.name.ilike('%iibb%')),
-            and_(Movimiento.descripcion.ilike('%pago%'), Concepto.name.ilike('%iibb%')),
-            and_(Movimiento.descripcion.ilike('%vep%'), Concepto.name.ilike('%iibb%'))
-        )
+        Concepto.rol_sistema == RolSistemaConcepto.VEP_IIBB.value
     ).first()
 
     total_veps_comp = float(vep_comprobantes_result.total_vep or 0)

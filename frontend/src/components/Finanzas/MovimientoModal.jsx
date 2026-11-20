@@ -12,6 +12,17 @@ const CategoriaMovimientoOpciones = [
   "Egresos de plazo fijo"
 ];
 
+const RolSistemaOpciones = [
+  { value: 'VENTA_CARTERA', label: 'Venta de Cartera (ESP)' },
+  { value: 'PLAN_PAGO_GANANCIAS', label: 'Plan de Pago Ganancias (ESP)' },
+  { value: 'PLAN_PAGO_IIBB', label: 'Plan de Pago IIBB (ESP)' },
+  { value: 'PLAN_PAGO_IVA', label: 'Plan de Pago IVA (ESP)' },
+  { value: 'RETENCION_IVA', label: 'Retención Bancaria IVA' },
+  { value: 'VEP_IVA', label: 'Pago VEP IVA' },
+  { value: 'RETENCION_IIBB', label: 'Retención Bancaria IIBB / SIRCREB' },
+  { value: 'VEP_IIBB', label: 'Pago VEP IIBB' },
+];
+
 const MovimientoModal = ({ isOpen, onClose, onSaved, movimiento = null, cuentaIdDefault = '' }) => {
   const [cuentas, setCuentas] = useState([]);
   const [conceptos, setConceptos] = useState([]);
@@ -35,7 +46,8 @@ const MovimientoModal = ({ isOpen, onClose, onSaved, movimiento = null, cuentaId
     name: '',
     tipo_movimiento: 'Ingreso',
     descripcion: '',
-    clasificacion_id: ''
+    clasificacion_id: '',
+    rol_sistema: ''
   });
 
   useEffect(() => {
@@ -53,7 +65,9 @@ const MovimientoModal = ({ isOpen, onClose, onSaved, movimiento = null, cuentaId
           descripcion: movimiento.descripcion || '',
           info_adicional: movimiento.info_adicional || ''
         });
-        const isUnclassified = !movimiento.concepto || (movimiento.concepto.name || '').toUpperCase().includes('NO CLASIFICADO');
+        const isUnclassified = !movimiento.concepto
+          || ['INGRESO_NO_CLASIFICADO', 'EGRESO_NO_CLASIFICADO'].includes(movimiento.concepto.rol_sistema)
+          || (movimiento.concepto.name || '').toUpperCase().includes('NO CLASIFICADO');
         setGuardarRelacion(isUnclassified);
         setDetalleForaneo((movimiento.descripcion || '').split(' - Ref: ')[0].trim());
       } else {
@@ -70,7 +84,7 @@ const MovimientoModal = ({ isOpen, onClose, onSaved, movimiento = null, cuentaId
         setDetalleForaneo('');
       }
       setShowNewConcepto(false);
-      setNuevoConcepto({ name: '', tipo_movimiento: 'Ingreso', descripcion: '', clasificacion_id: '' });
+      setNuevoConcepto({ name: '', tipo_movimiento: 'Ingreso', descripcion: '', clasificacion_id: '', rol_sistema: '' });
       setError('');
     }
   }, [isOpen, movimiento, cuentaIdDefault]);
@@ -109,12 +123,13 @@ const MovimientoModal = ({ isOpen, onClose, onSaved, movimiento = null, cuentaId
       const payload = {
         ...nuevoConcepto,
         clasificacion_id: nuevoConcepto.clasificacion_id ? parseInt(nuevoConcepto.clasificacion_id, 10) : null,
+        rol_sistema: nuevoConcepto.rol_sistema || null,
       };
       const res = await axiosClient.post('/api/finanzas/conceptos', payload);
       await fetchConceptos();
       setFormData({ ...formData, concepto_id: res.data.id });
       setShowNewConcepto(false);
-      setNuevoConcepto({ name: '', tipo_movimiento: 'Ingreso', descripcion: '', clasificacion_id: '' });
+      setNuevoConcepto({ name: '', tipo_movimiento: 'Ingreso', descripcion: '', clasificacion_id: '', rol_sistema: '' });
     } catch (err) {
       console.error(err);
       setError('Error al crear el concepto.');
@@ -222,6 +237,10 @@ const MovimientoModal = ({ isOpen, onClose, onSaved, movimiento = null, cuentaId
                   <select className="form-control" value={nuevoConcepto.clasificacion_id} onChange={(e) => setNuevoConcepto({...nuevoConcepto, clasificacion_id: e.target.value})}>
                     <option value="">Sin Clasificación (Opcional)</option>
                     {clasificaciones.map(cl => <option key={cl.id} value={cl.id}>{cl.name}</option>)}
+                  </select>
+                  <select className="form-control" value={nuevoConcepto.rol_sistema} onChange={(e) => setNuevoConcepto({...nuevoConcepto, rol_sistema: e.target.value})}>
+                    <option value="">Rol de Sistema: Ninguno (Opcional)</option>
+                    {RolSistemaOpciones.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                   </select>
                   <input type="text" className="form-control" placeholder="Descripción (Opcional)" value={nuevoConcepto.descripcion} onChange={(e) => setNuevoConcepto({...nuevoConcepto, descripcion: e.target.value})} />
                   <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>

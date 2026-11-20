@@ -18,6 +18,7 @@ from src.database.models.finance.bancos import (
     Clasificacion,
     Movimiento,
     CategoriaMovimiento,
+    RolSistemaConcepto,
     find_socio_for_banco,
 )
 from src.api.schemas.bancos import (
@@ -33,6 +34,18 @@ from src.logic.creditos.import_data.bancos.santander import import_extract as sa
 from src.logic.creditos.import_data.bancos.pampa import import_extract as pampa_import
 
 UNCLASSIFIED_CONCEPT_NAMES = ("ingreso no clasificado", "egreso no clasificado")
+UNCLASSIFIED_CONCEPT_ROLES = (
+    RolSistemaConcepto.INGRESO_NO_CLASIFICADO.value,
+    RolSistemaConcepto.EGRESO_NO_CLASIFICADO.value,
+)
+
+
+def _is_unclassified_concepto(concepto: Concepto | None) -> bool:
+    if not concepto:
+        return True
+    if concepto.rol_sistema in UNCLASSIFIED_CONCEPT_ROLES:
+        return True
+    return (concepto.name or "").strip().lower() in UNCLASSIFIED_CONCEPT_NAMES
 
 PARSERS = {
     'bica': bica_import,
@@ -638,7 +651,7 @@ def update_movimiento_bulk(data: MovimientoBulkConceptoUpdate, db: Session = Dep
         update_data, synchronize_session=False
     )
 
-    if data.guardar_relacion and (concepto.name or "").strip().lower() not in UNCLASSIFIED_CONCEPT_NAMES and data.movimiento_ids:
+    if data.guardar_relacion and not _is_unclassified_concepto(concepto) and data.movimiento_ids:
         movs = (
             db.query(Movimiento)
             .options(joinedload(Movimiento.cuenta).joinedload(Cuenta.banco))
@@ -687,7 +700,7 @@ def update_movimiento(movimiento_id: int, movimiento: MovimientoUpdate, db: Sess
 
     if movimiento.guardar_relacion and db_mov.concepto_id:
         concepto = db.query(Concepto).filter(Concepto.id == db_mov.concepto_id).first()
-        if concepto and (concepto.name or "").strip().lower() not in UNCLASSIFIED_CONCEPT_NAMES:
+        if concepto and not _is_unclassified_concepto(concepto):
             detalle = (movimiento.detalle_foraneo or extract_clean_detalle(db_mov.descripcion) or "").strip()
             cuenta = db.query(Cuenta).options(joinedload(Cuenta.banco)).filter(Cuenta.id == db_mov.cuenta_id).first()
             if detalle and cuenta and cuenta.banco:

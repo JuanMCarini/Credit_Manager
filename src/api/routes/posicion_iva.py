@@ -9,7 +9,7 @@ from src.database import get_db
 from src.database.models.finance.posicion_iva import PosicionIva
 from src.database.models.finance.comprobantes import Comprobante, TipoComprobante
 from src.database.models.creditos.facturacion import Factura
-from src.database.models.finance.bancos import Movimiento, Concepto
+from src.database.models.finance.bancos import Movimiento, Concepto, RolSistemaConcepto
 from src.api.schemas.posicion_iva import PosicionIvaCreate, PosicionIvaUpdate, PosicionIvaResponse
 
 router = APIRouter(
@@ -71,27 +71,26 @@ def calcular_posicion(
     iva_ventas = round(iva_ventas, 2)
 
     # 3. Retenciones Bancarias
-    # Buscamos movimientos del mes donde el concepto contenga "IVA" excluyendo pagos VEP
+    # Buscamos movimientos del mes cuyo concepto tenga rol_sistema = RETENCION_IVA
     retenciones_result = db.query(
         func.sum(Movimiento.monto).label("retenciones")
     ).join(Concepto).filter(
         extract('year', Movimiento.fecha) == anio,
         extract('month', Movimiento.fecha) == mes,
-        Concepto.name.ilike('%iva%'),
-        ~Concepto.name.ilike('%vep%')
+        Concepto.rol_sistema == RolSistemaConcepto.RETENCION_IVA.value
     ).first()
 
     retenciones_bancarias = float(abs(retenciones_result.retenciones)) if retenciones_result and retenciones_result.retenciones else 0.0
 
     # 4. Pagos VEP de IVA
-    # Buscamos comprobantes tipo VEP asociados a conceptos de IVA
+    # Buscamos comprobantes tipo VEP asociados a conceptos con rol_sistema = VEP_IVA
     vep_result = db.query(
         func.sum(Comprobante.importe_total).label("total_vep")
     ).join(Concepto, Comprobante.concepto_id == Concepto.id).filter(
         extract('year', Comprobante.fecha_contable) == anio,
         extract('month', Comprobante.fecha_contable) == mes,
         Comprobante.tipo_comprobante == TipoComprobante.VEP,
-        Concepto.name.ilike('%iva%')
+        Concepto.rol_sistema == RolSistemaConcepto.VEP_IVA.value
     ).first()
 
     total_veps = float(vep_result.total_vep or 0)
